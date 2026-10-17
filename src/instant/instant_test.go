@@ -3,9 +3,11 @@ package instant
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +70,7 @@ func TestAnswerStruct(t *testing.T) {
 }
 
 func TestNewManager(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	if m == nil {
 		t.Fatal("NewManager() returned nil")
 	}
@@ -94,7 +96,7 @@ func TestManagerRegister(t *testing.T) {
 }
 
 func TestManagerGetHandlers(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 
 	handlers := m.GetHandlers()
 	if len(handlers) == 0 {
@@ -103,7 +105,7 @@ func TestManagerGetHandlers(t *testing.T) {
 }
 
 func TestManagerProcessNoMatch(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 
 	ctx := context.Background()
 	result, err := m.Process(ctx, "random text that matches nothing special")
@@ -116,7 +118,7 @@ func TestManagerProcessNoMatch(t *testing.T) {
 }
 
 func TestManagerProcessMath(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 
 	ctx := context.Background()
 	result, err := m.Process(ctx, "2 + 2")
@@ -132,7 +134,7 @@ func TestManagerProcessMath(t *testing.T) {
 }
 
 func TestManagerProcessCalc(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 
 	tests := []string{
 		"calc 2+2",
@@ -160,7 +162,7 @@ func TestManagerProcessCalc(t *testing.T) {
 }
 
 func TestManagerProcessTrimWhitespace(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 
 	ctx := context.Background()
 	result, err := m.Process(ctx, "  2 + 2  ")
@@ -210,10 +212,11 @@ func TestMathHandlerCanHandle(t *testing.T) {
 		{"5 - 3", true},
 		{"3+5*10 / 2 - 20", true},
 		{"(3+5)*2", true},
+		{"sqrt(144)", true},
+		{"sin(45)", true},
+		{"2^10", true},
 		// Percentage pattern works without prefix
 		{"15% of 200", true},
-		// Expressions with letters or ^ require prefix
-		{"2^3", false},
 		{"hello world", false},
 		{"random text", false},
 		{"apt dist-upgrade", false},
@@ -642,7 +645,9 @@ func TestHashHandlerCanHandle(t *testing.T) {
 		{"md5: hello", true},
 		{"sha1: hello", true},
 		{"sha256: hello", true},
+		{"sha384: hello", true},
 		{"sha512: hello", true},
+		{"crc32: hello", true},
 		{"hash: hello", true},
 		{"hello world", false},
 	}
@@ -828,6 +833,13 @@ func TestColorHandlerCanHandle(t *testing.T) {
 		{"color: ff0000", true},
 		{"#ff0000", true},
 		{"rgb: 255, 0, 0", true},
+		{"rgb(255,87,51)", true},
+		{"hsl(11,100%,60%)", true},
+		{"red", true},
+		{"dark blue", true},
+		{"coral", true},
+		{"aliceblue", true},
+		{"rebeccapurple", true},
 		{"hello world", false},
 	}
 
@@ -962,6 +974,9 @@ func TestRandomHandlerCanHandle(t *testing.T) {
 		{"random", true},
 		{"random number", true},
 		{"random 1-100", true},
+		{"random 1 to 100", true},
+		{"random between 1 and 100", true},
+		{"pick random 1-10", true},
 		{"roll dice", true},
 		{"roll d20", true},
 		{"flip coin", true},
@@ -1077,14 +1092,26 @@ func TestPasswordHandlerHandleWithLength(t *testing.T) {
 }
 
 func TestGeneratePassword(t *testing.T) {
-	password := generatePassword(16)
+	password, err := generatePassword(16)
+	if err != nil {
+		t.Fatalf("generatePassword(16): %v", err)
+	}
 	if len(password) != 16 {
 		t.Errorf("generatePassword(16) length = %d, want 16", len(password))
 	}
 }
 
+func TestGeneratePasswordWithReaderFailure(t *testing.T) {
+	if _, err := generatePasswordWithReader(16, strings.NewReader("")); err == nil {
+		t.Fatal("generatePasswordWithReader accepted an exhausted entropy source")
+	}
+}
+
 func TestGeneratePasswordNoSpecial(t *testing.T) {
-	password := generatePasswordNoSpecial(16)
+	password, err := generatePasswordNoSpecial(16)
+	if err != nil {
+		t.Fatalf("generatePasswordNoSpecial(16): %v", err)
+	}
 	if len(password) != 16 {
 		t.Errorf("generatePasswordNoSpecial(16) length = %d, want 16", len(password))
 	}
@@ -1226,6 +1253,52 @@ func TestConvertHandlerHandleArrowPattern(t *testing.T) {
 	}
 	if answer.Type != AnswerTypeConvert {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeConvert)
+	}
+}
+
+func TestConvertHandlerSupportsIDEAUnits(t *testing.T) {
+	h := NewConvertHandler()
+	for _, query := range []string{
+		"100 sq ft to sq m",
+		"90 km/h to m/s",
+		"2 tbsp to tsp",
+		"1 mile per hour to kilometers per hour",
+		"90 degrees in radians",
+	} {
+		t.Run(query, func(t *testing.T) {
+			if !h.CanHandle(query) {
+				t.Fatalf("CanHandle(%q) = false", query)
+			}
+			answer, err := h.HandleInstantQuery(context.Background(), query)
+			if err != nil || answer == nil || answer.Type != AnswerTypeConvert {
+				t.Fatalf("HandleInstantQuery(%q) = (%v, %v), want conversion answer", query, answer, err)
+			}
+		})
+	}
+}
+
+func TestConvertAddedIDEACategories(t *testing.T) {
+	tests := []struct {
+		value, want float64
+		from, to    string
+	}{
+		{1, 43560, "acres", "square feet"},
+		{90, 25, "kilometers per hour", "meters per second"},
+		{2, 6, "tablespoons", "teaspoons"},
+		{1024, 1, "bytes", "kilobytes"},
+		{1, 14, "stones", "pounds"},
+		{180, 3.141592653589793, "degrees", "radians"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.from+"_to_"+tt.to, func(t *testing.T) {
+			got, err := convert(tt.value, tt.from, tt.to)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got-tt.want > 0.00001 || tt.want-got > 0.00001 {
+				t.Errorf("convert(%v, %q, %q) = %v, want %v", tt.value, tt.from, tt.to, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1584,8 +1657,12 @@ func TestHashHandlerHandleAllTypes(t *testing.T) {
 		{"md5: hello", "md5"},
 		{"sha1: hello", "sha1"},
 		{"sha256: hello", "sha256"},
+		{"sha384: hello", "sha384"},
 		{"sha512: hello", "sha512"},
+		{"crc32: hello", "crc32"},
 		{"hash: hello", "all"},
+		{"hash: sha384 hello", "all"},
+		{"hash: crc32 hello", "all"},
 	}
 
 	for _, tt := range tests {
@@ -1915,6 +1992,8 @@ func TestRandomHandlerHandleWithRange(t *testing.T) {
 		{"random 50-100"},
 		{"random between 1 and 100"},
 		{"random between 1 100"},
+		{"random 5 to 10"},
+		{"pick random 1-10"},
 	}
 
 	for _, tt := range tests {
@@ -1954,13 +2033,13 @@ func TestPasswordHandlerHandleLengthConstraints(t *testing.T) {
 		t.Errorf("length = %v, want 8 (minimum)", answer.Data["length"])
 	}
 
-	// Test with length > 128 (should be clamped to 128)
+	// Test with length > 64 (should be clamped to 64)
 	answer, err = h.HandleInstantQuery(ctx, "password 200")
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
-	if answer.Data["length"] != 128 {
-		t.Errorf("length = %v, want 128 (maximum)", answer.Data["length"])
+	if answer.Data["length"] != 64 {
+		t.Errorf("length = %v, want 64 (maximum)", answer.Data["length"])
 	}
 }
 
@@ -2259,6 +2338,7 @@ func TestDefinitionHandlerCanHandle(t *testing.T) {
 		{"definition: word", true},
 		{"what is word?", true},
 		{"what does word mean?", true},
+		{"serendipity definition", true},
 		{"hello world", false},
 	}
 
@@ -2386,7 +2466,7 @@ func TestMathHandlerHandleError(t *testing.T) {
 // Test for manager with empty query
 
 func TestManagerProcessEmptyQuery(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	ctx := context.Background()
 
 	result, err := m.Process(ctx, "   ")
@@ -2602,8 +2682,16 @@ func TestConvertHandlerDecimalValues(t *testing.T) {
 func TestURLHandlerParseComplete(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
+	inputURL := (&url.URL{
+		Scheme:   "https",
+		User:     url.UserPassword("test-user", "test-password"),
+		Host:     "example.com:8080",
+		Path:     "/path",
+		RawQuery: "query=value",
+		Fragment: "section",
+	}).String()
 
-	answer, err := h.HandleInstantQuery(ctx, "parse url: https://user:pass@example.com:8080/path?query=value#section")
+	answer, err := h.HandleInstantQuery(ctx, "parse url: "+inputURL)
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
@@ -2616,6 +2704,9 @@ func TestURLHandlerParseComplete(t *testing.T) {
 	}
 	if !strings.Contains(answer.Content, "example.com") {
 		t.Error("Content should contain host")
+	}
+	if strings.Count(answer.Content, `class="copy-btn"`) < 3 {
+		t.Error("URL parser fields should expose copy controls")
 	}
 }
 
@@ -2812,6 +2903,9 @@ func TestUUIDHandlerHandleFormat(t *testing.T) {
 	if uuid[8] != '-' || uuid[13] != '-' || uuid[18] != '-' || uuid[23] != '-' {
 		t.Error("UUID should have dashes in correct positions")
 	}
+	if strings.Count(answer.Content, `class="copy-btn"`) != 3 {
+		t.Errorf("UUID formats should each have a copy control: %s", answer.Content)
+	}
 }
 
 // Test password handler all patterns
@@ -2841,6 +2935,25 @@ func TestPasswordHandlerAllPatterns(t *testing.T) {
 }
 
 // Test hash handler all patterns
+
+func TestPasswordHandlerIncludesCopyControls(t *testing.T) {
+	answer, err := NewPasswordHandler().HandleInstantQuery(context.Background(), "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer == nil || strings.Count(answer.Content, `class="copy-btn"`) != 1 {
+		t.Fatalf("password output should have a copy control: %#v", answer)
+	}
+	password := answer.Data["password"].(string)
+	if !strings.Contains(answer.Content, `data-copy="`+escapeHTML(password)+`"`) {
+		t.Fatal("copy control does not contain the safely escaped password")
+	}
+	for _, fragment := range []string{"password-strength-meter", "data-action=\"regenerate-password\"", "data-password-set=\"symbols\""} {
+		if !strings.Contains(answer.Content, fragment) {
+			t.Errorf("password generator missing %q", fragment)
+		}
+	}
+}
 
 func TestHashHandlerAllPatterns(t *testing.T) {
 	h := NewHashHandler()
@@ -2994,6 +3107,28 @@ func TestRandomHandlerResultInRange(t *testing.T) {
 }
 
 // Test coin flip returns valid result
+
+func TestRandomHandlerMultipleDice(t *testing.T) {
+	h := NewRandomHandler()
+	answer, err := h.HandleInstantQuery(context.Background(), "roll 2d6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rolls, ok := answer.Data["rolls"].([]int)
+	if !ok || len(rolls) != 2 {
+		t.Fatalf("rolls = %#v, want two dice", answer.Data["rolls"])
+	}
+	for _, roll := range rolls {
+		if roll < 1 || roll > 6 {
+			t.Errorf("roll = %d, want 1..6", roll)
+		}
+	}
+	for _, fragment := range []string{`data-action="roll-again"`, `data-count="2"`} {
+		if !strings.Contains(answer.Content, fragment) {
+			t.Errorf("multi-die widget missing %q", fragment)
+		}
+	}
+}
 
 func TestRandomHandlerCoinFlipResult(t *testing.T) {
 	h := NewRandomHandler()
@@ -3994,6 +4129,11 @@ func TestQRHandlerHandle(t *testing.T) {
 	if answer == nil {
 		t.Fatal("HandleInstantQuery() returned nil")
 	}
+	for _, fragment := range []string{`download="qr-128.png"`, `download="qr-1024.png"`, `data:image/svg+xml;base64,`} {
+		if !strings.Contains(answer.Content, fragment) {
+			t.Errorf("instant QR answer missing %q", fragment)
+		}
+	}
 	if answer.Type != AnswerTypeQR {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeQR)
 	}
@@ -4091,7 +4231,9 @@ func TestGenerateQRASCII(t *testing.T) {
 // DefinitionHandler HTTP mock tests use httptest.Server to mock the dictionary API.
 
 func TestDefinitionHandlerHandleSuccess(t *testing.T) {
+	requestedPath := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`[{"word":"test","phonetic":"/test/","phonetics":[],"meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A procedure intended to establish quality.","example":"a test of strength","synonyms":[],"antonyms":[]}]}],"origin":"Old English"}]`))
@@ -4104,7 +4246,7 @@ func TestDefinitionHandlerHandleSuccess(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	answer, err := h.HandleInstantQuery(ctx, "define: test")
+	answer, err := h.HandleInstantQuery(ctx, `what does "catharsis" mean`)
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
@@ -4119,6 +4261,46 @@ func TestDefinitionHandlerHandleSuccess(t *testing.T) {
 	}
 	if answer.Source != "Free Dictionary API" {
 		t.Errorf("Source = %q, want %q", answer.Source, "Free Dictionary API")
+	}
+	if !strings.HasSuffix(requestedPath, "/catharsis") {
+		t.Errorf("dictionary lookup path = %q, want quoted term removed", requestedPath)
+	}
+}
+
+func TestDefinitionHandlerEscapesProviderHTMLAndShowsPronunciation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"<img src=x>","phonetic":"<script>bad</script>","phonetics":[{"text":"/safe/","audio":"https://api.dictionaryapi.dev/audio.mp3"}],"meanings":[{"partOfSpeech":"<svg>","definitions":[{"definition":"<script>bad</script>","example":"<img src=x>","synonyms":[],"antonyms":[]}]}],"origin":"<iframe>"}]`))
+	}))
+	defer srv.Close()
+
+	h := NewDefinitionHandler()
+	h.client = &http.Client{Transport: &redirectTransport{target: srv.URL}}
+	answer, err := h.HandleInstantQuery(context.Background(), "define: safe")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	for _, unsafe := range []string{"<img", "<script>", "<svg>", "<iframe>"} {
+		if strings.Contains(answer.Content, unsafe) {
+			t.Errorf("Content contains unescaped provider markup %q: %s", unsafe, answer.Content)
+		}
+	}
+	if !strings.Contains(answer.Content, "&lt;img") || !strings.Contains(answer.Content, `<audio controls preload="none"`) || !strings.Contains(answer.Content, "api.dictionaryapi.dev/audio.mp3") {
+		t.Errorf("Content omitted escaped text or the audio pronunciation control: %s", answer.Content)
+	}
+}
+
+func TestDefinitionHandlerRejectsInsecurePronunciationURL(t *testing.T) {
+	if got := safePronunciationURL("http://example.com/audio.mp3"); got != "" {
+		t.Errorf("safePronunciationURL() = %q, want empty for HTTP", got)
+	}
+	unsafeAudioURL := (&url.URL{Scheme: "https", User: url.UserPassword("test-user", "test-password"), Host: "example.com", Path: "/audio.mp3"}).String()
+	if got := safePronunciationURL(unsafeAudioURL); got != "" {
+		t.Errorf("safePronunciationURL() = %q, want empty for URL credentials", got)
 	}
 }
 
@@ -4241,7 +4423,10 @@ func TestSynonymHandlerHandleSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[{"word":"glad","score":100},{"word":"joyful","score":95},{"word":"cheerful","score":90}]`))
+		if r.URL.Query().Get("md") != "dp" {
+			t.Errorf("Datamuse request metadata = %q, want dp", r.URL.Query().Get("md"))
+		}
+		w.Write([]byte(`[{"word":"glad","score":100,"tags":["adj"]},{"word":"joyful","score":95,"tags":["adj"]},{"word":"cheerful","score":90,"tags":["adj"]}]`))
 	}))
 	defer srv.Close()
 
@@ -4264,8 +4449,48 @@ func TestSynonymHandlerHandleSuccess(t *testing.T) {
 	if !contains(answer.Content, "glad") {
 		t.Error("Content should contain synonym 'glad'")
 	}
+	if !contains(answer.Content, "Adjectives") {
+		t.Error("Content should group results by their part-of-speech metadata")
+	}
 	if answer.Source != "Datamuse API" {
 		t.Errorf("Source = %q, want %q", answer.Source, "Datamuse API")
+	}
+}
+
+func TestDecodeRelatedWordsRejectsMalformedAndOversizedBodies(t *testing.T) {
+	for _, body := range []string{`[{"word":`, strings.Repeat(" ", (1<<20)+1)} {
+		if _, err := decodeRelatedWords(strings.NewReader(body)); err == nil {
+			t.Errorf("decodeRelatedWords accepted invalid body with %d bytes", len(body))
+		}
+	}
+}
+
+func TestGroupRelatedWordsUsesPartOfSpeechTags(t *testing.T) {
+	words, groups := groupRelatedWords([]relatedWord{
+		{Word: "run", Tags: []string{"v"}},
+		{Word: "sprint", Tags: []string{"n", "v"}},
+		{Word: "quickly", Tags: []string{"adv"}},
+		{Word: "swift", Tags: []string{"adj"}},
+		{Word: "unknown", Tags: []string{"u"}},
+	})
+	if len(words) != 5 || len(groups["Nouns"]) != 1 || len(groups["Verbs"]) != 1 || len(groups["Adverbs"]) != 1 || len(groups["Adjectives"]) != 1 || len(groups["Other"]) != 1 {
+		t.Fatalf("groupRelatedWords() = %#v, %#v", words, groups)
+	}
+}
+
+func TestGroupRelatedWordsSeparatesDefinitionsAndEscapesLabels(t *testing.T) {
+	words, groups := groupRelatedWords([]relatedWord{
+		{Word: "bank", Tags: []string{"n"}, Definitions: []string{"n\tfinancial institution"}},
+		{Word: "depository", Tags: []string{"n"}, Definitions: []string{"n\tfinancial institution"}},
+		{Word: "bank", Tags: []string{"n"}, Definitions: []string{"n\tthe land alongside a river"}},
+		{Word: "unsafe", Tags: []string{"n"}, Definitions: []string{"n\t<script>alert(1)</script>"}},
+	})
+	if len(words) != 4 || len(groups["Nouns — financial institution"]) != 2 || len(groups["Nouns — the land alongside a river"]) != 1 {
+		t.Fatalf("sense groups = %#v, %#v", words, groups)
+	}
+	content := renderRelatedWords("Synonyms", "bank", groups)
+	if strings.Contains(content, "<script>") || !strings.Contains(content, "&lt;script&gt;") {
+		t.Fatalf("sense label was not HTML escaped: %s", content)
 	}
 }
 
@@ -4343,7 +4568,7 @@ func TestAntonymHandlerHandleSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[{"word":"sad","score":100},{"word":"unhappy","score":95}]`))
+		w.Write([]byte(`[{"word":"sad","score":100,"tags":["adj"]},{"word":"unhappy","score":95,"tags":["adj"]}]`))
 	}))
 	defer srv.Close()
 
@@ -5874,5 +6099,161 @@ func TestUnitSystemHelpers(t *testing.T) {
 	pair := categorySystems["length"]
 	if categorySystemsUnit(pair, "imperial") != "feet" || categorySystemsUnit(pair, "metric") != "meters" {
 		t.Error("categorySystemsUnit should select the representative unit per system")
+	}
+}
+
+func TestHashHandlerAdditionalAlgorithms(t *testing.T) {
+	handler := NewHashHandler()
+	for _, test := range []struct {
+		query string
+		want  []string
+	}{
+		{query: "sha384: hello", want: []string{"SHA384:", "59e1748777448c69de6b800d7a33bbfb9ff1b463e44354c3553bcdb9c666fa90125a3c79f90397bdf5f6a13de828684f"}},
+		{query: "crc32: hello", want: []string{"CRC32:", "3610a686"}},
+		{query: "hash: hello", want: []string{"SHA384:", "CRC32:", "3610a686"}},
+	} {
+		answer, err := handler.HandleInstantQuery(context.Background(), test.query)
+		if err != nil {
+			t.Fatalf("HandleInstantQuery(%q): %v", test.query, err)
+		}
+		for _, want := range test.want {
+			if !strings.Contains(answer.Content, want) {
+				t.Errorf("HandleInstantQuery(%q) content missing %q: %s", test.query, want, answer.Content)
+			}
+		}
+	}
+}
+
+func TestLoremHandlerGeneratesBoundedText(t *testing.T) {
+	handler := NewLoremHandler()
+	for _, test := range []struct {
+		query string
+		count int
+		mode  string
+	}{
+		{query: "lorem ipsum", count: 1, mode: "paragraphs"},
+		{query: "lorem ipsum 3 paragraphs", count: 3, mode: "paragraphs"},
+		{query: "placeholder text 5 sentences", count: 5, mode: "sentences"},
+		{query: "dummy text 12 words", count: 12, mode: "words"},
+	} {
+		answer, err := handler.HandleInstantQuery(context.Background(), test.query)
+		if err != nil {
+			t.Fatalf("HandleInstantQuery(%q): %v", test.query, err)
+		}
+		if answer == nil || answer.Type != AnswerTypeLorem {
+			t.Fatalf("HandleInstantQuery(%q) = %#v, want Lorem answer", test.query, answer)
+		}
+		if answer.Data["count"] != test.count || answer.Data["mode"] != test.mode {
+			t.Errorf("answer data = %#v, want count %d and mode %q", answer.Data, test.count, test.mode)
+		}
+	}
+	if _, err := handler.HandleInstantQuery(context.Background(), "lorem ipsum 11 paragraphs"); err == nil {
+		t.Fatal("paragraph count over the limit was accepted")
+	}
+	if answer, err := handler.HandleInstantQuery(context.Background(), "loremish ipsum"); err != nil || answer != nil {
+		t.Fatalf("unrelated query = (%#v, %v), want (nil, nil)", answer, err)
+	}
+}
+
+func TestWordFirstDefinitionSynonymAndAntonymTriggers(t *testing.T) {
+	if !NewDefinitionHandler().CanHandle("serendipity definition") {
+		t.Error("word-first definition query was not recognized")
+	}
+	for _, query := range []string{"synonyms for happy", "beautiful synonyms"} {
+		if !NewSynonymHandler().CanHandle(query) {
+			t.Errorf("synonym query %q was not recognized", query)
+		}
+	}
+	for _, query := range []string{"antonyms of good", "good antonyms"} {
+		if !NewAntonymHandler().CanHandle(query) {
+			t.Errorf("antonym query %q was not recognized", query)
+		}
+	}
+}
+
+type instantJSONRoundTripper struct {
+	body      string
+	onRequest func(*http.Request)
+}
+
+func (transport instantJSONRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if transport.onRequest != nil {
+		transport.onRequest(request)
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(transport.body)),
+		Request:    request,
+	}, nil
+}
+
+func TestSynonymAndAntonymEscapeProviderWords(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		handler Handler
+		query   string
+		param   string
+		value   string
+		body    string
+	}{
+		{name: "synonym", handler: NewSynonymHandler(), query: "synonyms for happy", param: "rel_syn", value: "happy", body: "[{\"word\":\"<script>alert(1)</script>\",\"score\":100}]"},
+		{name: "antonym", handler: NewAntonymHandler(), query: "antonyms of good", param: "rel_ant", value: "good", body: "[{\"word\":\"<script>alert(1)</script>\",\"score\":100}]"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler := test.handler
+			requestSeen := false
+			client := &http.Client{Transport: instantJSONRoundTripper{body: test.body, onRequest: func(request *http.Request) {
+				requestSeen = true
+				if got := request.URL.Query().Get(test.param); got != test.value {
+					t.Errorf("request %s = %q, want %q", test.param, got, test.value)
+				}
+			}}}
+			switch typed := handler.(type) {
+			case *SynonymHandler:
+				typed.client = client
+			case *AntonymHandler:
+				typed.client = client
+			}
+			answer, err := handler.HandleInstantQuery(context.Background(), test.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !requestSeen || strings.Contains(answer.Content, "<script>") || !strings.Contains(answer.Content, "&lt;script&gt;") {
+				t.Fatalf("provider result was not safely rendered: %#v", answer)
+			}
+		})
+	}
+}
+
+func TestColorHandlerHSLAndNamedColors(t *testing.T) {
+	handler := NewColorHandler()
+	for _, test := range []struct {
+		query string
+		hex   string
+	}{
+		{query: "hsl(11,100%,60%)", hex: "FF5833"},
+		{query: "red", hex: "FF0000"},
+		{query: "dark blue", hex: "00008B"},
+		{query: "coral", hex: "FF7F50"},
+		{query: "aliceblue", hex: "F0F8FF"},
+		{query: "rebeccapurple", hex: "663399"},
+	} {
+		answer, err := handler.HandleInstantQuery(context.Background(), test.query)
+		if err != nil {
+			t.Fatalf("HandleInstantQuery(%q): %v", test.query, err)
+		}
+		if answer == nil || answer.Data["hex"] != test.hex {
+			t.Errorf("HandleInstantQuery(%q) hex = %#v, want %q", test.query, answer, test.hex)
+			continue
+		}
+		for _, fragment := range []string{"CMYK:", "Complementary:", "type=\"color\"", "class=\"copy-btn\""} {
+			if !strings.Contains(answer.Content, fragment) {
+				t.Errorf("HandleInstantQuery(%q) content missing %q", test.query, fragment)
+			}
+		}
+	}
+	if handler.CanHandle("rgb(300,0,0)") {
+		t.Error("out-of-range RGB channel was accepted")
 	}
 }

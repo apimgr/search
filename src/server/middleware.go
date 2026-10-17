@@ -14,15 +14,21 @@ import (
 	"net/http"
 	"path"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/logging"
+	"github.com/apimgr/search/src/notify"
+	"github.com/apimgr/search/src/security"
 	"github.com/google/uuid"
 	"github.com/rs/cors"
 	"golang.org/x/time/rate"
@@ -44,13 +50,23 @@ func isAllowlisted(ctx context.Context) bool {
 
 // Middleware wraps an http.Handler to add common functionality
 type Middleware struct {
-	config     *config.Config
-	logManager *logging.Manager
+	config           *config.Config
+	logManager       *logging.Manager
+	blocklistManager *security.BlocklistManager
+	notifyManager    *notify.Manager
 }
 
 // NewMiddleware creates a new middleware instance
 func NewMiddleware(cfg *config.Config, logMgr *logging.Manager) *Middleware {
 	return &Middleware{config: cfg, logManager: logMgr}
+}
+
+func (m *Middleware) SetBlocklistManager(manager *security.BlocklistManager) {
+	m.blocklistManager = manager
+}
+
+func (m *Middleware) SetNotificationManager(manager *notify.Manager) {
+	m.notifyManager = manager
 }
 
 // Chain chains multiple middleware handlers together
@@ -115,6 +131,12 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 				cspHeader = "Content-Security-Policy-Report-Only"
 			}
 			csp := headers.ContentSecurityPolicy
+			if r.URL.Path == "/server/contact" && !isOnion {
+				mode, siteKey, secretKey := contactCaptchaConfig(m.config)
+				if siteKey != "" && secretKey != "" {
+					csp = contactCaptchaCSP(csp, mode)
+				}
+			}
 			if isOnion {
 				// Tor hidden service has no HTTPS listener — upgrading requests
 				// would break every form submission and link on the .onion site.
@@ -408,6 +430,15 @@ func (erl *EndpointRateLimiter) RemainingTime(ip string) time.Duration {
 // and GeoIP checks downstream — but NOT auth.
 func (m *Middleware) Allowlist(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Per AI.md PART 12 line 16098: never apply clearnet IP allow/deny
+		// lists to Tor requests — the TCP peer is the local Tor daemon, so a
+		// match would be against loopback, not the client. A Tor request also
+		// cannot be allowlisted by IP; downstream Tor-specific handling keys
+		// on the circuit token instead.
+		if m.isTorRelay(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
 		parsedIP := net.ParseIP(ip)
 		for _, entry := range m.config.Server.Security.Allowlist {
@@ -432,27 +463,78 @@ func (m *Middleware) Allowlist(next http.Handler) http.Handler {
 }
 
 // Blocklist is middleware step 6 per AI.md PART 5.
-// Blocks requests from IPs listed in server.security.blocked_ips.
-// Allowlisted IPs (flag set by Allowlist middleware) skip this check.
+// Blocks configured IPs and downloaded IP/domain blocklist matches.
+// Allowlisted clients and Tor relay requests skip this check.
 func (m *Middleware) Blocklist(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAllowlisted(r.Context()) {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Per AI.md PART 12 line 16098: clearnet blocklists never apply to Tor
+		// requests — the peer is loopback and the client is unknowable by
+		// design. Abuse control over Tor is handled by circuit-keyed rate
+		// limiting, not IP rules.
+		if m.isTorRelay(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
 		for _, blocked := range m.config.Server.Security.BlockedIPs {
-			if ip == blocked || strings.HasPrefix(ip, blocked) {
+			if matchBlockedIP(ip, blocked) {
 				// Per AI.md PART 11: no IP logging — privacy is the product.
 				if m.logManager != nil {
 					m.logManager.Security().LogBlocked("-", r.URL.Path, "blocked")
 				}
+				// Per AI.md PART 17 "Operator Notifications": IP block is a
+				// security_alert email event.
+				email.NotifySecurityAlert("ip_blocked", "-", "request from blocked IP")
+				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
+				return
+			}
+		}
+		if m.blocklistManager != nil {
+			blockedIP := m.blocklistManager.IsBlocked(ip)
+			blockedDomain := m.blocklistManager.IsBlockedDomain(r.Host)
+			if blockedIP || blockedDomain {
+				if m.logManager != nil {
+					m.logManager.Security().LogBlocked("-", r.URL.Path, "blocked")
+				}
+				event := "domain_blocked"
+				details := "request host matched a downloaded domain blocklist"
+				if blockedIP {
+					event = "ip_blocked"
+					details = "request matched a downloaded IP blocklist"
+				}
+				email.NotifySecurityAlert(event, "-", details)
 				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// matchBlockedIP reports whether the client IP matches one blocked_ips entry.
+// Entries may be a plain IP (exact match) or a CIDR range. String-prefix
+// matching is never used: HasPrefix("1.2.3.4") would also block 1.2.3.40 and
+// every other address sharing the prefix.
+func matchBlockedIP(ip, blocked string) bool {
+	if ip == blocked {
+		return true
+	}
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	if entryIP := net.ParseIP(blocked); entryIP != nil {
+		return entryIP.Equal(parsedIP)
+	}
+	// Not a plain IP — treat as CIDR (plain-IP entries were handled above).
+	if _, ipNet, err := net.ParseCIDR(blocked); err == nil {
+		return ipNet.Contains(parsedIP)
+	}
+	return false
 }
 
 // RateLimit is middleware step 7 per AI.md PART 5.
@@ -464,12 +546,17 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 				next.ServeHTTP(w, r)
 				return
 			}
-			ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
+			ip := m.clientIdentity(r)
 			if !limiter.Allow(ip) {
 				// Per AI.md PART 11: no IP logging — privacy is the product.
 				if m.logManager != nil {
 					m.logManager.Security().LogRateLimited("-", r.URL.Path)
 				}
+				// Per AI.md PART 17 Operator Notifications matrix: "Rate limit
+				// exceeded" is a WARN log event with Email ✗ — a per-request 429
+				// never emails. (The emailed "Request Flood" path in PART 11's
+				// Abuse Detection table only applies when auto-blocking fires,
+				// which has no handler today.)
 				w.Header().Set("Retry-After", "60")
 				localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limit")
 				return
@@ -477,6 +564,71 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// isTorRelay reports whether the request was relayed from the Tor hidden
+// service: its local address is the dedicated PROXY-protocol backend listener
+// (AI.md PART 12 lines 16097-16098, PART 31 backend-listener rules). The port
+// pointer is installed by NewServer after Tor starts; nil before that.
+var middlewareTorBackendPort atomic.Pointer[atomic.Int64]
+
+// setMiddlewareTorBackendPort shares the server's live backend-port state with
+// the middleware without coupling Middleware to TorService.
+func setMiddlewareTorBackendPort(port *atomic.Int64) {
+	middlewareTorBackendPort.Store(port)
+}
+
+func (m *Middleware) isTorRelay(r *http.Request) bool {
+	portPtr := middlewareTorBackendPort.Load()
+	if portPtr == nil {
+		return false
+	}
+	port := portPtr.Load()
+	if port == 0 {
+		return false
+	}
+	local, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if !ok {
+		return false
+	}
+	_, p, err := net.SplitHostPort(local.String())
+	return err == nil && p == strconv.FormatInt(port, 10)
+}
+
+// clientIdentity is the Tor-aware replacement for getClientIP wherever the
+// value is used as a bucket key (rate limiting) or a recorded identifier. Per
+// AI.md PART 12 line 16098/16109 a hidden-service request keys on its
+// "tor:{circuit_id}" token — never the loopback address.
+func (m *Middleware) clientIdentity(r *http.Request) string {
+	if m.isTorRelay(r) {
+		return m.circuitIdentity(r)
+	}
+	return getClientIP(r, m.config.Server.TrustedProxies.Additional)
+}
+
+// circuitIdentity resolves the tor:{circuit_id} token for a relayed request.
+// The resolver is installed by NewServer (see tor_identity.go) — the
+// middleware holds no TorService reference.
+var middlewareCircuitResolver atomic.Pointer[func(*http.Request) string]
+
+// setMiddlewareCircuitResolver installs the TorService-backed circuit resolver.
+func setMiddlewareCircuitResolver(resolve func(*http.Request) string) {
+	if resolve == nil {
+		middlewareCircuitResolver.Store(nil)
+		return
+	}
+	middlewareCircuitResolver.Store(&resolve)
+}
+
+func (m *Middleware) circuitIdentity(r *http.Request) string {
+	if resolve := middlewareCircuitResolver.Load(); resolve != nil {
+		if token := (*resolve)(r); token != "" {
+			return token
+		}
+	}
+	// Circuit-ID export unavailable — per AI.md PART 12 line 16109 use the
+	// literal sentinel "tor" instead of an IP.
+	return "tor"
 }
 
 // getClientIP extracts the real client IP from request.
@@ -625,14 +777,18 @@ func (c *CSRFMiddleware) IssueToken(w http.ResponseWriter, r *http.Request) stri
 	}
 
 	token := c.GenerateToken()
-	http.SetCookie(w, &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: false,
 		Secure:   c.cookieSecure(r),
 		SameSite: http.SameSiteStrictMode,
-	})
+	}
+	http.SetCookie(w, cookie)
+	// Keep later IssueToken calls in the same handler response on this token.
+	// Some page renderers prepare a feature form before building shared page data.
+	r.AddCookie(cookie)
 	return token
 }
 
@@ -721,6 +877,11 @@ func (c *CSRFMiddleware) ValidateToken(r *http.Request) bool {
 
 	token := r.Header.Get(headerName)
 	if token == "" {
+		if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
+			if err := r.ParseMultipartForm(2 << 20); err != nil {
+				return false
+			}
+		}
 		token = r.FormValue(fieldName)
 	}
 	if token == "" {
@@ -831,7 +992,19 @@ func (m *Middleware) SecFetch(next http.Handler) http.Handler {
 	})
 }
 
-// Logger middleware logs all requests
+// isHealthPath reports whether the request path is a health-check endpoint.
+// Covers the canonical routes and their aliases per AI.md PART 13.
+func isHealthPath(path string) bool {
+	return path == "/server/healthz" || path == api.APIPrefix+"/server/healthz" ||
+		path == "/healthz" ||
+		path == "/api/healthz"
+}
+
+// Logger middleware logs all requests, except successful health checks.
+// Per AI.md PART 13: a 10-second Docker healthcheck would write ~8,640
+// identical access.log lines per day, so 2xx health responses are suppressed
+// unless server.logs.access.log_health_checks is true or debug is enabled.
+// Non-2xx health responses always log.
 func (m *Middleware) Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -843,8 +1016,16 @@ func (m *Middleware) Logger(next http.Handler) http.Handler {
 
 		duration := time.Since(start)
 
+		// Health-check log suppression per AI.md PART 13: skip successful
+		// 2xx health requests unless logging is explicitly enabled or debug
+		// is on; failures always log
+		suppressHealth := isHealthPath(r.URL.Path) &&
+			wrapped.statusCode >= 200 && wrapped.statusCode < 300 &&
+			!m.config.Server.Logs.Access.LogHealthChecks &&
+			!m.config.IsDebug()
+
 		// Log to access log (Apache/Nginx combined format)
-		if m.logManager != nil {
+		if m.logManager != nil && !suppressHealth {
 			m.logManager.Access().LogRequest(r, wrapped.statusCode, int64(wrapped.bytesWritten), duration)
 		}
 
@@ -886,6 +1067,9 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
+				if m.notifyManager != nil && m.notifyManager.HasWebhook("admin") {
+					_ = m.notifyManager.Dispatch(context.Background(), notify.Event{Role: "admin", Name: "server.panic", Subject: "Server recovered from a panic", Body: "A request handler panic was recovered. Review server logs for diagnostic details.", Severity: "critical"})
+				}
 				// Safely convert panic value to string (handles all types)
 				var errMsg string
 				switch v := err.(type) {
@@ -1009,7 +1193,7 @@ func (m *Middleware) Compress(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		defer gz.Close()
+		defer closeutil.Close(gz)
 
 		// Wrap response writer
 		gzw := &gzipResponseWriter{Writer: gz, ResponseWriter: w}
@@ -1032,6 +1216,14 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 			}
 			// Allowlisted IPs bypass GeoIP per AI.md PART 5
 			if isAllowlisted(r.Context()) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Per AI.md PART 12 line 16097: skip GeoIP entirely for Tor
+			// requests — onion routing hides the client, so the real IP and
+			// its country are unknowable by design; a loopback lookup would
+			// only resolve the local Tor daemon.
+			if m.isTorRelay(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -1094,7 +1286,7 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 
 			// Always allow health checks - canonical: /server/healthz per AI.md PART 13
 			if path == "/server/healthz" || path == api.APIPrefix+"/server/healthz" ||
-				path == "/healthz" || path == api.APIPrefix+"/healthz" {
+				path == "/healthz" || path == "/api/healthz" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -1168,7 +1360,9 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
     </div>
 </body>
 </html>`, lang, dir, html.EscapeString(message))
-			w.Write([]byte(maintenanceHTML))
+			if _, err := w.Write([]byte(maintenanceHTML)); err != nil {
+				slog.Debug("failed to write maintenance response", "error", err)
+			}
 		})
 	}
 }
@@ -1289,8 +1483,8 @@ func GetRequestContext(r *http.Request) *RequestContext {
 	return &RequestContext{Type: TargetUnknown}
 }
 
-// PathSecurityMiddleware normalizes paths and blocks traversal and uppercase attempts.
-// Per AI.md PART 5: blocks .., %2e%2e, and uppercase letters in path segments.
+// PathSecurityMiddleware normalizes paths and blocks traversal attempts.
+// Per AI.md PART 5: blocks .., %2e%2e, and encoded traversal variants.
 // MUST be middleware step 3 — after URLNormalize and RequestID, before all others.
 func PathSecurityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1309,21 +1503,6 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 			strings.Contains(strings.ToLower(rawPath), "%2e") {
 			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 			return
-		}
-
-		// Block uppercase letters in path segments per AI.md PART 5.
-		// All valid path segments are lowercase; uppercase indicates either a typo
-		// or an attempt to bypass case-sensitive route matching.
-		for _, seg := range strings.Split(strings.Trim(original, "/"), "/") {
-			if seg == "" {
-				continue
-			}
-			for _, ch := range seg {
-				if ch >= 'A' && ch <= 'Z' {
-					localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
-					return
-				}
-			}
 		}
 
 		// Normalize the path

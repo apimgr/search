@@ -100,7 +100,9 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 		// Force kill if still running (after timeout)
 		if err := process.Signal(syscall.Signal(0)); err == nil {
 			slog.Warn("Process still running after timeout, sending SIGKILL", "pid", pid)
-			process.Signal(syscall.SIGKILL)
+			if killErr := process.Signal(syscall.SIGKILL); killErr != nil {
+				slog.Error("Failed to send SIGKILL", "pid", pid, "err", killErr)
+			}
 		}
 	}
 }

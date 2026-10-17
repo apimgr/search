@@ -256,7 +256,7 @@ func TestHandleWidgetDataFetcherError(t *testing.T) {
 func TestServeSwaggerUITLSScheme(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger", nil)
 	req.TLS = &cryptotls.ConnectionState{}
 	req.Host = "secure.example.com"
 	w := httptest.NewRecorder()

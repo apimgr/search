@@ -3,17 +3,89 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/backup"
+	"github.com/apimgr/search/src/notify"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/update"
 )
+
+// updateNotifyTracker remembers the release the update_check task last
+// surfaced to the operator
+type updateNotifyTracker struct {
+	mu   sync.Mutex
+	seen string
+}
+
+// markSeen records version as surfaced and reports whether this is the first
+// time it has been seen. Per AI.md PART 22 the WARN log line and the
+// update_available email fire once per version, when a new eligible version is
+// first seen, and are not re-sent on every task run.
+func (t *updateNotifyTracker) markSeen(version string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.seen == version {
+		return false
+	}
+	t.seen = version
+	return true
+}
+
+// updateNotifyState is the process-wide fire-once guard for update
+// notifications
+var updateNotifyState updateNotifyTracker
+
+// installScheduledUpdate runs the full `--update yes` flow for a release the
+// update_check task found eligible, as AI.md PART 22 requires when
+// server.update.auto_install is true
+func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.UpdateInfo) error {
+	if info.DownloadURL == "" {
+		err := fmt.Errorf("release %s has no binary for this platform", info.LatestVersion)
+		slog.Error("auto-install skipped", "latest_version", info.LatestVersion, "err", err)
+		return err
+	}
+
+	slog.Info("auto-installing update", "latest_version", info.LatestVersion)
+
+	downloadPath, err := mgr.DownloadUpdate(info.DownloadURL, nil)
+	if err != nil {
+		slog.Error("auto-install download failed", "latest_version", info.LatestVersion, "err", err)
+		return err
+	}
+
+	if err := mgr.InstallUpdate(downloadPath, info.AssetName, info.ChecksumURL); err != nil {
+		slog.Error("auto-install failed", "latest_version", info.LatestVersion, "err", err)
+		return err
+	}
+
+	slog.Info("update installed", "previous_version", info.CurrentVersion, "new_version", info.LatestVersion)
+
+	// Per AI.md PART 17 Operator Notifications: record the change by email
+	if s.mailer != nil && s.mailer.IsEnabled() {
+		if err := s.mailer.SendUpdateInstalled(info.CurrentVersion, info.LatestVersion); err != nil {
+			slog.Error("failed to send update-installed notification", "err", err)
+		}
+	}
+
+	// Per AI.md PART 22 "Service-Aware Update": the replaced binary only takes
+	// effect once this process restarts - through the service manager when one
+	// supervises it, otherwise by re-executing in place
+	slog.Info("restarting to run the new version", "service_managed", update.ServiceManaged())
+	if err := update.Restart(); err != nil {
+		slog.Error("restart after update failed", "err", err)
+		return err
+	}
+	return nil
+}
 
 // initScheduler initializes and starts the scheduler per AI.md PART 19
 // The scheduler is ALWAYS RUNNING - there is no enable/disable option
@@ -113,6 +185,13 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				// GeoIP is disabled; skip update
 				return nil
 			}
+			if s.geoipLookup == nil {
+				return nil
+			}
+			if err := s.geoipLookup.UpdateDatabases(); err != nil {
+				slog.Error("GeoIP database update failed", "err", err)
+				return err
+			}
 			slog.Info("GeoIP database update complete")
 			return nil
 		},
@@ -128,7 +207,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				return err
 			}
 			ips, nets := s.blocklistManager.Count()
-			slog.Info("blocklist update complete", "blocked_ips", ips, "blocked_nets", nets)
+			slog.Info("blocklist update complete", "blocked_ips", ips, "blocked_nets", nets, "blocked_domains", s.blocklistManager.DomainCount())
 			return nil
 		},
 
@@ -137,81 +216,104 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			if s.cveManager == nil {
 				return nil
 			}
+			var updateErrors []error
 			if err := s.cveManager.Update(ctx); err != nil {
 				slog.Error("CVE update failed", "err", err)
-				return err
+				updateErrors = append(updateErrors, err)
+			} else {
+				slog.Info("CVE update complete", "entries", s.cveManager.Count())
 			}
-			slog.Info("CVE update complete", "entries", s.cveManager.Count())
-			return nil
+			trivy := s.config.Data.Trivy
+			if trivy.Enabled {
+				source := strings.TrimSpace(trivy.Source)
+				if source == "" {
+					source = "ghcr.io/aquasecurity/trivy-db:2"
+				}
+				if err := s.cveManager.UpdateTrivyDB(ctx, source); err != nil {
+					slog.Error("Trivy database update failed", "err", err)
+					updateErrors = append(updateErrors, err)
+				}
+			}
+			return errors.Join(updateErrors...)
 		},
 
-		// Update Check - notify-only check for a newer release
-		// Per AI.md PART 18/22: check the release channel for a newer version
-		// and notify admins. This task NEVER installs, even when auto_install
-		// is set - actual updates always require explicit operator confirmation
-		// via --maintenance update (auto-update without confirmation is forbidden).
+		// Update Check - check the configured release channel for a newer version
+		// Per AI.md PART 18/22: runs the equivalent of `--update check` against
+		// the configured channel, filtered by defer_days. With auto_install
+		// false (the default) it only notifies; with auto_install true it runs
+		// the full `--update yes` flow for eligible releases.
 		UpdateCheck: func(ctx context.Context) error {
 			updateCfg := s.config.Server.Update
-			// beta and daily channels both include pre-releases; stable does not
-			includePrerelease := updateCfg.Branch == "beta" || updateCfg.Branch == "daily"
+			branch := update.NormalizeBranch(updateCfg.Branch)
 
 			mgr := update.NewManager()
-			info, err := mgr.CheckForUpdates(includePrerelease)
+
+			// Per AI.md PART 22: defer_days gates the scheduled task only - the
+			// newest ELIGIBLE release wins, so a brand-new release never resets
+			// the clock for an older release that has already aged past the
+			// window. Manual `--update check`/`yes` bypass this entirely.
+			info, err := mgr.CheckForUpdatesDeferred(branch, updateCfg.DeferDays)
 			if err != nil {
 				slog.Error("update check failed", "err", err)
 				return err
 			}
 			if info == nil || !info.Available {
-				slog.Info("update check complete", "current_version", info.CurrentVersion, "update_available", false)
+				slog.Info("update check complete", "channel", branch,
+					"current_version", mgr.GetCurrentVersion(), "update_available", false)
 				return nil
 			}
 
-			// Per AI.md PART 22: defer_days gates the scheduled task only - a
-			// release is eligible once it has been public for defer_days days.
-			// Manual `--update check`/`yes` bypass this window entirely.
-			if updateCfg.DeferDays > 0 {
-				eligibleAt := info.PublishedAt.Add(time.Duration(updateCfg.DeferDays) * 24 * time.Hour)
-				if time.Now().UTC().Before(eligibleAt) {
-					slog.Info("update check complete", "current_version", info.CurrentVersion,
-						"update_available", false, "reason", "deferred", "latest_version", info.LatestVersion,
-						"eligible_at", eligibleAt.Format("2006-01-02"))
-					return nil
+			// Per AI.md PART 22 surfacing rules: the WARN log and the
+			// update_available email fire once per version, not on every run
+			if updateNotifyState.markSeen(info.LatestVersion) {
+				slog.Warn("update available",
+					"channel", branch,
+					"current_version", info.CurrentVersion,
+					"latest_version", info.LatestVersion)
+
+				if s.mailer != nil && s.mailer.IsEnabled() {
+					updateURL := s.config.Server.BaseURL + "/update"
+					if err := s.mailer.SendUpdateAvailable(
+						info.CurrentVersion,
+						info.LatestVersion,
+						info.PublishedAt.Format("2006-01-02"),
+						info.ReleaseNotes,
+						updateURL,
+					); err != nil {
+						slog.Error("failed to send update-available notification", "err", err)
+					} else {
+						slog.Info("update-available notification email sent", "latest_version", info.LatestVersion)
+					}
 				}
 			}
 
-			slog.Warn("update available",
-				"current_version", info.CurrentVersion,
-				"latest_version", info.LatestVersion)
-			// Per AI.md PART 22/features-rules.md: auto_install is read for
-			// operator visibility only - the scheduled task never installs.
-			if updateCfg.AutoInstall {
-				slog.Debug("auto_install is set but update_check remains notify-only; run --maintenance update to install")
+			if !updateCfg.AutoInstall {
+				return nil
 			}
-			if s.mailer != nil && s.mailer.IsEnabled() {
-				updateURL := s.config.Server.BaseURL + "/update"
-				if err := s.mailer.SendUpdateAvailable(
-					info.CurrentVersion,
-					info.LatestVersion,
-					info.PublishedAt.Format("2006-01-02"),
-					info.ReleaseNotes,
-					updateURL,
-				); err != nil {
-					slog.Error("failed to send update-available notification", "err", err)
-				} else {
-					slog.Info("update-available notification email sent", "latest_version", info.LatestVersion)
-				}
-			}
-			return nil
+			return s.installScheduledUpdate(mgr, info)
 		},
 
 		// Token Cleanup - remove expired tokens
 		TokenCleanup: func(ctx context.Context) error {
-			slog.Info("token cleanup complete")
+			if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+				return errors.New("server database is unavailable for token cleanup")
+			}
+			removed, err := s.dbManager.ServerDB().CleanupExpiredAPITokens(ctx)
+			if err != nil {
+				return err
+			}
+			slog.Info("expired API token cleanup complete", "removed", removed)
 			return nil
 		},
 
-		// Log Rotation - rotate and compress old logs
+		// Log Rotation - rotate all active log files using the built-in logger.
 		LogRotation: func(ctx context.Context) error {
+			if s.logManager == nil {
+				return errors.New("log manager is unavailable for log rotation")
+			}
+			if err := s.logManager.RotateAll(); err != nil {
+				return err
+			}
 			slog.Info("log rotation complete")
 			return nil
 		},
@@ -287,22 +389,34 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 
 	// Apply config for skippable tasks only
 	if !tasks.BackupDaily.Enabled {
-		sched.Disable(scheduler.TaskBackupDaily)
+		if err := sched.Disable(scheduler.TaskBackupDaily); err != nil {
+			slog.Warn("failed to disable daily backup task", "error", err)
+		}
 	}
 	if tasks.BackupHourly.Enabled {
-		sched.Enable(scheduler.TaskBackupHourly)
+		if err := sched.Enable(scheduler.TaskBackupHourly); err != nil {
+			slog.Warn("failed to enable hourly backup task", "error", err)
+		}
 	}
 	if !tasks.GeoIPUpdate.Enabled {
-		sched.Disable(scheduler.TaskGeoIPUpdate)
+		if err := sched.Disable(scheduler.TaskGeoIPUpdate); err != nil {
+			slog.Warn("failed to disable GeoIP update task", "error", err)
+		}
 	}
 	if !tasks.BlocklistUpdate.Enabled {
-		sched.Disable(scheduler.TaskBlocklistUpdate)
+		if err := sched.Disable(scheduler.TaskBlocklistUpdate); err != nil {
+			slog.Warn("failed to disable blocklist update task", "error", err)
+		}
 	}
 	if !tasks.CVEUpdate.Enabled {
-		sched.Disable(scheduler.TaskCVEUpdate)
+		if err := sched.Disable(scheduler.TaskCVEUpdate); err != nil {
+			slog.Warn("failed to disable CVE update task", "error", err)
+		}
 	}
 	if !tasks.UpdateCheck.Enabled {
-		sched.Disable(scheduler.TaskUpdateCheck)
+		if err := sched.Disable(scheduler.TaskUpdateCheck); err != nil {
+			slog.Warn("failed to disable update check task", "error", err)
+		}
 	}
 }
 
@@ -320,6 +434,32 @@ func (s *Server) RunSchedulerTask(taskID string) error {
 		return &TaskNotFoundError{Name: taskID}
 	}
 	return s.scheduler.RunNow(scheduler.TaskID(taskID))
+}
+
+// StartBlocklistUpdateIfMissing queues the first external-data refresh after
+// the listener starts, without delaying server startup when feeds are down.
+func (s *Server) StartBlocklistUpdateIfMissing() {
+	if s.blocklistManager == nil || !s.blocklistManager.NeedsInitialUpdate() {
+		return
+	}
+	if err := s.RunSchedulerTask(string(scheduler.TaskBlocklistUpdate)); err != nil {
+		slog.Warn("initial blocklist update could not be scheduled", "error", err)
+	}
+}
+
+// StartCVEUpdateIfMissing queues the first CVE data refresh without delaying
+// server startup when a configured source is unavailable.
+func (s *Server) StartCVEUpdateIfMissing() {
+	if s.cveManager == nil {
+		return
+	}
+	trivyMissing := s.config.Data.Trivy.Enabled && !s.cveManager.HasTrivyDB()
+	if !s.cveManager.NeedsInitialUpdate() && !trivyMissing {
+		return
+	}
+	if err := s.RunSchedulerTask(string(scheduler.TaskCVEUpdate)); err != nil {
+		slog.Warn("initial CVE update could not be scheduled", "error", err)
+	}
 }
 
 // TaskNotFoundError is returned when a task is not found
@@ -351,6 +491,7 @@ func (s *Server) handleTaskFailureNotification(notification *scheduler.TaskFailu
 	case scheduler.TaskBackupDaily, scheduler.TaskBackupHourly, scheduler.TaskSSLRenewal:
 		return
 	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "scheduler.task_failed", Subject: "Scheduled task failed", Body: "Task " + notification.TaskName + " failed after " + fmt.Sprint(notification.Attempts) + " attempt(s).", Severity: "error"})
 
 	// Send email notification if mailer is configured
 	// Per AI.md PART 17 "Default Templates" -> scheduler_error.
@@ -545,16 +686,16 @@ func (s *Server) logAuditEvent(event, details string) {
 // filename/size/verification status) and PART 17 "Default Templates" →
 // backup_complete.
 func (s *Server) sendBackupCompletedNotification(backupPath string) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
-		return
-	}
 	size := "unknown"
 	if stat, err := os.Stat(backupPath); err == nil {
 		size = backup.BackupInfo{Size: stat.Size()}.FormatSize()
 	}
-	if err := s.mailer.SendBackupCompleted(filepath.Base(backupPath), size); err != nil {
-		slog.Error("failed to send backup completed notification email", "err", err)
+	if s.mailer != nil && s.mailer.IsEnabled() {
+		if err := s.mailer.SendBackupCompleted(filepath.Base(backupPath), size); err != nil {
+			slog.Error("failed to send backup completed notification email", "err", err)
+		}
 	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "backup.completed", Subject: "Backup completed", Body: fmt.Sprintf("Backup %s completed and verified (%s).", filepath.Base(backupPath), size), Severity: "info"})
 }
 
 // sendBackupFailedNotification alerts admins that a backup failed. Per AI.md
@@ -564,40 +705,40 @@ func (s *Server) sendBackupCompletedNotification(backupPath string) {
 // generic scheduler_error email for the same backup task execution (handled
 // in handleTaskFailureNotification).
 func (s *Server) sendBackupFailedNotification(filename string, backupErr error) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
-		return
+	if s.mailer != nil && s.mailer.IsEnabled() {
+		if err := s.mailer.SendBackupFailed(filename, backupErr.Error()); err != nil {
+			slog.Error("failed to send backup failed notification email", "err", err)
+		}
 	}
-	if err := s.mailer.SendBackupFailed(filename, backupErr.Error()); err != nil {
-		slog.Error("failed to send backup failed notification email", "err", err)
-	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "backup.failed", Subject: "Backup failed", Body: "Backup " + filepath.Base(filename) + " failed.", Severity: "error"})
 }
 
 // sendSSLRenewedNotification notifies admins that a managed SSL certificate
 // was successfully renewed. Per AI.md PART 17 "Default Templates" →
 // ssl_renewed and PART 15 (SSL/TLS & Let's Encrypt).
 func (s *Server) sendSSLRenewedNotification(domain string, validUntil time.Time) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
-		return
+	if s.mailer != nil && s.mailer.IsEnabled() {
+		if err := s.mailer.SendSSLRenewed(domain, validUntil.Format("2006-01-02")); err != nil {
+			slog.Error("failed to send SSL renewed notification email", "err", err)
+		}
 	}
-	if err := s.mailer.SendSSLRenewed(domain, validUntil.Format("2006-01-02")); err != nil {
-		slog.Error("failed to send SSL renewed notification email", "err", err)
-	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "ssl.renewed", Subject: "TLS certificate renewed", Body: fmt.Sprintf("The TLS certificate for %s was renewed and is valid until %s.", domain, validUntil.Format("2006-01-02")), Severity: "info"})
 }
 
 // sendSSLExpiringNotification warns admins that a managed SSL certificate is
 // approaching expiry. Per AI.md PART 17 "Default Templates" → ssl_expiring:
 // sent at 7, 3, and 1 days before expiry (PART 15, renewalThreshold).
 func (s *Server) sendSSLExpiringNotification(domain string, daysLeft int, expiryDate time.Time) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
-		return
-	}
 	expiresIn := fmt.Sprintf("%d day", daysLeft)
 	if daysLeft != 1 {
 		expiresIn += "s"
 	}
-	if err := s.mailer.SendSSLExpiring(domain, expiresIn, expiryDate.Format("2006-01-02")); err != nil {
-		slog.Error("failed to send SSL expiring notification email", "err", err)
+	if s.mailer != nil && s.mailer.IsEnabled() {
+		if err := s.mailer.SendSSLExpiring(domain, expiresIn, expiryDate.Format("2006-01-02")); err != nil {
+			slog.Error("failed to send SSL expiring notification email", "err", err)
+		}
 	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "ssl.expiring", Subject: "TLS certificate expiring", Body: fmt.Sprintf("The TLS certificate for %s expires in %s (%s).", domain, expiresIn, expiryDate.Format("2006-01-02")), Severity: "warning"})
 }
 
 // sendSSLRenewalFailedNotification alerts admins that an SSL certificate
@@ -607,10 +748,10 @@ func (s *Server) sendSSLExpiringNotification(domain string, daysLeft int, expiry
 // handleTaskFailureNotification). nextRetry is the next scheduled run of the
 // SSLRenewal task (daily 03:00 per PART 18 Built-in Tasks).
 func (s *Server) sendSSLRenewalFailedNotification(domain, errMsg string, daysLeft int, nextRetry time.Time) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
-		return
+	if s.mailer != nil && s.mailer.IsEnabled() {
+		if err := s.mailer.SendSSLRenewalFailed(domain, errMsg, daysLeft, nextRetry.Format(time.RFC3339)); err != nil {
+			slog.Error("failed to send SSL renewal failed notification email", "err", err)
+		}
 	}
-	if err := s.mailer.SendSSLRenewalFailed(domain, errMsg, daysLeft, nextRetry.Format(time.RFC3339)); err != nil {
-		slog.Error("failed to send SSL renewal failed notification email", "err", err)
-	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "ssl.renewal_failed", Subject: "TLS certificate renewal failed", Body: fmt.Sprintf("The TLS certificate for %s could not be renewed. %d day(s) remain; retry scheduled for %s.", domain, daysLeft, nextRetry.Format(time.RFC3339)), Severity: "error"})
 }

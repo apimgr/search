@@ -33,9 +33,9 @@ func NewMathHandler() *MathHandler {
 			regexp.MustCompile(`(?i)^eval(?:uate)?[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^compute[:\s]+(.+)$`),
 		},
-		// numericExpr matches pure digit arithmetic: digits, spaces, and + - * / ( ) .
+		// numericExpr matches numeric arithmetic: digits, spaces, and basic operators.
 		// No letters — so hyphenated words and named functions never match here.
-		numericExpr: regexp.MustCompile(`^[\d\s\+\-\*\/\(\)\.]+$`),
+		numericExpr: regexp.MustCompile(`^[\d\s\+\-\*\/\^\(\)\.]+$`),
 		percentOf:   regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*%\s*of\s*(\d+(?:\.\d+)?)`),
 		funcPattern: regexp.MustCompile(`(?i)^(sqrt|abs|ceil|floor|round|sin|cos|tan|asin|acos|atan|log|log2|ln|exp|cbrt)\s*\((.+)\)\s*$`),
 		funcNames: map[string]func(float64) float64{
@@ -82,6 +82,10 @@ func (h *MathHandler) CanHandle(query string) bool {
 		}
 	}
 
+	if h.funcPattern.MatchString(strings.TrimSpace(query)) {
+		return true
+	}
+
 	// "15% of 200" style — unambiguous even without a prefix.
 	if h.percentOf.MatchString(query) {
 		return true
@@ -92,7 +96,7 @@ func (h *MathHandler) CanHandle(query string) bool {
 	// word containing a hyphen are never misidentified as subtraction.
 	cleaned := strings.TrimSpace(query)
 	if h.numericExpr.MatchString(cleaned) && len(cleaned) > 2 {
-		for _, op := range []string{"+", "-", "*", "/"} {
+		for _, op := range []string{"+", "-", "*", "/", "^"} {
 			if strings.Contains(cleaned, op) {
 				return true
 			}
@@ -132,7 +136,7 @@ func (h *MathHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		Type:    AnswerTypeMath,
 		Query:   query,
 		Title:   i18n.T(lang, "instant.calculator_title"),
-		Content: fmt.Sprintf("<div class=\"math-result\"><span class=\"expression\">%s</span> = <span class=\"result\">%s</span></div>", escapeHTML(expr), resultStr),
+		Content: fmt.Sprintf("<div class=\"math-result\"><span class=\"expression\">%s</span> = <span class=\"result\">%s</span></div><button class=\"copy-btn\" data-copy=\"%s\">Copy</button>", escapeHTML(expr), resultStr, escapeHTML(resultStr)),
 		Data: map[string]interface{}{
 			"expression": expr,
 			"result":     result,

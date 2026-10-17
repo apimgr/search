@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,24 @@ import (
 	"strings"
 	"testing"
 )
+
+func newBlocklistTempDir(t *testing.T) string {
+	t.Helper()
+	root := filepath.Join(os.TempDir(), "apimgr")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(root, "search-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("remove test data directory: %v", err)
+		}
+	})
+	return dir
+}
 
 // newTestBlocklistManager creates a BlocklistManager pointing at a mock HTTP server.
 // The sources slice uses the server URL so no real network access is needed.
@@ -90,6 +109,34 @@ func TestBlocklistManager_Update_CIDR(t *testing.T) {
 	}
 }
 
+func TestBlocklistManager_UpdateAndReload_DomainEntries(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("# domain feed\nphish.example\n0.0.0.0 malware.example\n"))
+	}))
+	defer server.Close()
+
+	dataDir := newBlocklistTempDir(t)
+	sources := []BlocklistSource{{Name: "domains", URL: server.URL, Type: "domain", Enabled: true}}
+	manager := newTestBlocklistManager(t, dataDir, sources)
+	if err := manager.Update(context.Background()); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !manager.IsBlockedDomain("login.phish.example") || !manager.IsBlockedDomain("malware.example") {
+		t.Fatal("domain feed entries were not active after update")
+	}
+	if got := manager.DomainCount(); got != 2 {
+		t.Fatalf("DomainCount() = %d, want 2", got)
+	}
+
+	reloaded := NewBlocklistManager(dataDir, sources)
+	if err := reloaded.LoadFromDisk(); err != nil {
+		t.Fatalf("LoadFromDisk() error = %v", err)
+	}
+	if !reloaded.IsBlockedDomain("sub.phish.example") || !reloaded.IsBlockedDomain("malware.example") {
+		t.Fatal("domain feed entries were not restored from disk")
+	}
+}
+
 // TestBlocklistManager_Update_SkipsDisabledSources ensures that sources with
 // Enabled=false are never contacted, even if the context is live.
 func TestBlocklistManager_Update_SkipsDisabledSources(t *testing.T) {
@@ -120,9 +167,8 @@ func TestBlocklistManager_Update_SkipsDisabledSources(t *testing.T) {
 	}
 }
 
-// TestBlocklistManager_Update_PartialFailure verifies that when one source fails
-// (HTTP 500) but another succeeds, the update still succeeds and loads data
-// from the working source.
+// TestBlocklistManager_Update_PartialFailure verifies that a failed source
+// retains its last known rules while successful sources can add new rules.
 func TestBlocklistManager_Update_PartialFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "bad") {
@@ -139,14 +185,87 @@ func TestBlocklistManager_Update_PartialFailure(t *testing.T) {
 		{Name: "good_source", URL: srv.URL + "/good", Type: "ip", Enabled: true},
 	}
 	m := newTestBlocklistManager(t, t.TempDir(), sources)
+	m.blockedIPs["1.1.1.1"] = true
 
-	if err := m.Update(context.Background()); err != nil {
-		t.Fatalf("Update() error = %v, want nil (partial failure should not error)", err)
+	if err := m.Update(context.Background()); err == nil {
+		t.Fatal("Update() error = nil, want an error for a partial update")
 	}
 
-	ips, _ := m.Count()
-	if ips != 1 {
-		t.Errorf("Count() ips = %d, want 1", ips)
+	for _, ip := range []string{"1.1.1.1", "3.3.3.3"} {
+		if !m.IsBlocked(ip) {
+			t.Errorf("partial update lost expected blocked IP %s", ip)
+		}
+	}
+}
+
+func TestBlocklistManager_Update_RejectsOversizedFeedWithoutReplacingDiskData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(blocklistMaxDownloadBytes+1))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	dataDir := newBlocklistTempDir(t)
+	blocklistDir := filepath.Join(dataDir, "security", "blocklists")
+	if err := os.MkdirAll(blocklistDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(blocklistDir, "oversized.txt")
+	if err := os.WriteFile(filePath, []byte("1.2.3.4\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager := newTestBlocklistManager(t, dataDir, []BlocklistSource{{Name: "oversized", URL: server.URL, Type: "ip", Enabled: true}})
+	manager.blockedIPs["1.2.3.4"] = true
+
+	if err := manager.Update(context.Background()); err == nil {
+		t.Fatal("Update() error = nil, want oversized-feed error")
+	}
+	if !manager.IsBlocked("1.2.3.4") {
+		t.Fatal("oversized feed replaced the last known blocked IP")
+	}
+	body, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "1.2.3.4\n" {
+		t.Fatalf("persisted feed = %q, want previous contents", body)
+	}
+}
+
+func TestBlocklistManager_Update_RejectsUnsafeSourceName(t *testing.T) {
+	contacted := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		contacted = true
+		_, _ = w.Write([]byte("1.2.3.4\n"))
+	}))
+	defer server.Close()
+
+	dataDir := newBlocklistTempDir(t)
+	manager := newTestBlocklistManager(t, dataDir, []BlocklistSource{{Name: "../outside", URL: server.URL, Type: "ip", Enabled: true}})
+	if err := manager.Update(context.Background()); err == nil {
+		t.Fatal("Update() error = nil, want unsafe source-name error")
+	}
+	if contacted {
+		t.Fatal("unsafe source name was downloaded")
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "security", "outside.txt")); !os.IsNotExist(err) {
+		t.Fatalf("unsafe source wrote outside the blocklist directory: %v", err)
+	}
+}
+
+func TestBlocklistManager_Update_RejectsFeedWithoutRules(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("upstream temporarily returned an empty list\n"))
+	}))
+	defer server.Close()
+
+	manager := newTestBlocklistManager(t, newBlocklistTempDir(t), []BlocklistSource{{Name: "empty", URL: server.URL, Type: "ip", Enabled: true}})
+	manager.blockedIPs["1.2.3.4"] = true
+	if err := manager.Update(context.Background()); err == nil {
+		t.Fatal("Update() error = nil, want an unusable-feed error")
+	}
+	if !manager.IsBlocked("1.2.3.4") {
+		t.Fatal("unusable feed removed the last known blocked IP")
 	}
 }
 
@@ -183,12 +302,12 @@ func TestBlocklistManager_Update_NotFound(t *testing.T) {
 	}
 	m := newTestBlocklistManager(t, t.TempDir(), sources)
 
-	// One source, one failure — Update returns error because all failed + nothing loaded.
+	// One source, one failure — Update returns an incomplete-update error when a feed fails.
 	err := m.Update(context.Background())
 	if err == nil {
 		t.Error("Update() should return error when all sources fail")
 	}
-	if !strings.Contains(err.Error(), "all blocklist sources failed") {
+	if !strings.Contains(err.Error(), "blocklist update incomplete") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
@@ -346,8 +465,8 @@ func TestBlocklistManager_LoadFromDisk_SkipsNonTxtFiles(t *testing.T) {
 	}
 }
 
-// TestBlocklistManager_LoadFromDisk_UnknownSource verifies that a .txt file whose
-// name does not match any configured source is loaded using the default "ip" type.
+// TestBlocklistManager_LoadFromDisk_UnknownSource verifies that files from removed
+// or unconfigured feeds are not activated as IP blocklists.
 func TestBlocklistManager_LoadFromDisk_UnknownSource(t *testing.T) {
 	tmpDir := t.TempDir()
 	blocklistDir := filepath.Join(tmpDir, "security", "blocklists")
@@ -368,8 +487,31 @@ func TestBlocklistManager_LoadFromDisk_UnknownSource(t *testing.T) {
 	}
 
 	ips, _ := m.Count()
-	if ips != 1 {
-		t.Errorf("Count() ips = %d, want 1 (unknown source defaults to ip type)", ips)
+	if ips != 0 {
+		t.Errorf("Count() ips = %d, want 0 (unknown sources must not be loaded)", ips)
+	}
+}
+
+func TestBlocklistManager_SetSourcesReloadsActiveFeeds(t *testing.T) {
+	dataDir := newBlocklistTempDir(t)
+	blocklistDir := filepath.Join(dataDir, "security", "blocklists")
+	if err := os.MkdirAll(blocklistDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(blocklistDir, "feed.txt"), []byte("1.2.3.4\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewBlocklistManager(dataDir, []BlocklistSource{{Name: "feed", Type: "ip", Enabled: true}})
+	if err := manager.LoadFromDisk(); err != nil {
+		t.Fatal(err)
+	}
+	if !manager.IsBlocked("1.2.3.4") {
+		t.Fatal("enabled feed was not loaded")
+	}
+
+	manager.SetSources([]BlocklistSource{{Name: "feed", Type: "ip", Enabled: false}})
+	if manager.IsBlocked("1.2.3.4") {
+		t.Fatal("disabled feed remained active after configuration reload")
 	}
 }
 

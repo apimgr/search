@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -11,10 +14,44 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/version"
 	"github.com/go-chi/chi/v5"
 )
+
+type queryCaptureEngine struct {
+	*search.BaseEngine
+	queries chan model.Query
+}
+
+func (e *queryCaptureEngine) Search(_ context.Context, query *model.Query) ([]model.Result, error) {
+	e.queries <- *query
+	return []model.Result{{Title: "Fixture", URL: "https://example.test/", Engine: e.Name(), Category: query.Category}}, nil
+}
+
+func TestHandleSearchForwardsAdvancedFilters(t *testing.T) {
+	s := newTestServer(t)
+	previous := s.aggregator
+	queries := make(chan model.Query, 1)
+	engineConfig := model.NewEngineConfig("filter-fixture")
+	engineConfig.Categories = []string{"general"}
+	capture := &queryCaptureEngine{BaseEngine: search.NewBaseEngine(engineConfig), queries: queries}
+	s.aggregator = search.NewAggregator([]search.Engine{capture}, search.AggregatorConfig{})
+	t.Cleanup(func() { s.aggregator = previous })
+
+	request := httptest.NewRequest(http.MethodGet, "/search?q=privacy&lang=de&region=fr&time_range=custom&time_from=2025-01-01&time_to=2025-01-31", nil)
+	recorder := httptest.NewRecorder()
+	s.handleSearch(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("handleSearch status = %d, want %d; body: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	query := <-queries
+	if query.Language != "de" || query.Region != "fr" || query.TimeRange != "custom" || query.DateAfter != "2025-01-01" || query.DateBefore != "2025-01-31" {
+		t.Fatalf("search filters = language %q, region %q, range %q, from %q, to %q", query.Language, query.Region, query.TimeRange, query.DateAfter, query.DateBefore)
+	}
+}
 
 // Tests for Middleware
 
@@ -447,6 +484,23 @@ func TestCSRFGenerateToken(t *testing.T) {
 	}
 }
 
+func TestCSRFIssueTokenReusesTokenWithinResponse(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Security.CSRF.Enabled = true
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	csrf := NewCSRFMiddleware(cfg)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	response := httptest.NewRecorder()
+	first := csrf.IssueToken(response, req)
+	second := csrf.IssueToken(response, req)
+	if first == "" || first != second {
+		t.Fatalf("IssueToken values differ within one response: first present=%t, equal=%t", first != "", first == second)
+	}
+	if len(response.Result().Cookies()) != 1 {
+		t.Fatalf("Set-Cookie count = %d, want 1", len(response.Result().Cookies()))
+	}
+}
+
 func TestCSRFValidateToken(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Server.Security.CSRF.Enabled = true
@@ -690,6 +744,11 @@ func TestPathSecurityMiddleware(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "mixed-case route data is preserved",
+			path:       "/direct/jwt/eyJhbGciOiJub25lIn0",
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:       "path traversal blocked",
 			path:       "/../etc/passwd",
 			wantStatus: http.StatusBadRequest,
@@ -710,6 +769,9 @@ func TestPathSecurityMiddleware(t *testing.T) {
 
 			if rec.Code != tt.wantStatus {
 				t.Errorf("Status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			if tt.name == "mixed-case route data is preserved" && rec.Body.String() != tt.path {
+				t.Errorf("mixed-case route data = %q, want %q", rec.Body.String(), tt.path)
 			}
 		})
 	}
@@ -811,9 +873,14 @@ func TestMetrics(t *testing.T) {
 	cfg := m.config
 	cfg.Server.Metrics.Enabled = true
 	cfg.Server.Metrics.IncludeSystem = false
-	origToken := cfg.Server.Metrics.Token
-	cfg.Server.Metrics.Token = "secret-token"
-	t.Cleanup(func() { cfg.Server.Metrics.Token = origToken })
+	origToken := cfg.Server.Metrics.Auth.Tokens.Prometheus
+	origUnauth := cfg.Server.Metrics.Auth.AllowUnauthenticated
+	cfg.Server.Metrics.Auth.Tokens.Prometheus = "secret-token"
+	cfg.Server.Metrics.Auth.AllowUnauthenticated = false
+	t.Cleanup(func() {
+		cfg.Server.Metrics.Auth.Tokens.Prometheus = origToken
+		cfg.Server.Metrics.Auth.AllowUnauthenticated = origUnauth
+	})
 
 	// Test NewMetrics
 	t.Run("NewMetrics", func(t *testing.T) {
@@ -882,14 +949,14 @@ func TestMetrics(t *testing.T) {
 		}
 	})
 
-	// Test AuthenticatedHandler
-	t.Run("AuthenticatedHandler", func(t *testing.T) {
-		handler := m.AuthenticatedHandler()
+	// Test metricsAuth (per-service bearer auth, AI.md PART 20)
+	t.Run("metricsAuth", func(t *testing.T) {
+		handler := s.metricsAuth(metricsServicePrometheus, m.Handler())
 
 		// Test without token
 		req := httptest.NewRequest(http.MethodGet, "/metrics?lang=de", nil)
 		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
+		handler(rec, req)
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("Status without token = %d, want %d", rec.Code, http.StatusUnauthorized)
 		}
@@ -901,7 +968,7 @@ func TestMetrics(t *testing.T) {
 		reqInvalid := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 		reqInvalid.Header.Set("Authorization", "Bearer wrong-token")
 		recInvalid := httptest.NewRecorder()
-		handler.ServeHTTP(recInvalid, reqInvalid)
+		handler(recInvalid, reqInvalid)
 		if recInvalid.Code != http.StatusUnauthorized {
 			t.Errorf("Status with invalid token = %d, want %d", recInvalid.Code, http.StatusUnauthorized)
 		}
@@ -910,7 +977,7 @@ func TestMetrics(t *testing.T) {
 		reqValid := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 		reqValid.Header.Set("Authorization", "Bearer secret-token")
 		recValid := httptest.NewRecorder()
-		handler.ServeHTTP(recValid, reqValid)
+		handler(recValid, reqValid)
 		if recValid.Code != http.StatusOK {
 			t.Errorf("Status with valid token = %d, want %d", recValid.Code, http.StatusOK)
 		}
@@ -2202,6 +2269,53 @@ func TestSignCaptcha(t *testing.T) {
 	}
 }
 
+func TestContactHoneypotSilentlyAcceptsWithoutDelivery(t *testing.T) {
+	s := newTestServer(t)
+	form := url.Values{"website": {"https://spam.example"}}
+	req := httptest.NewRequest(http.MethodPost, "/server/contact", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	s.handleContactSubmit(recorder, req)
+	if recorder.Code != http.StatusSeeOther || recorder.Header().Get("Location") != "/server/contact?success=1" {
+		t.Fatalf("honeypot response = %d %q, want successful redirect", recorder.Code, recorder.Header().Get("Location"))
+	}
+}
+
+func TestContactCaptchaOnlyAppearsAfterSignedFailureMarker(t *testing.T) {
+	s := &Server{startTime: time.Now()}
+	req := httptest.NewRequest(http.MethodGet, "/server/contact", nil)
+	if s.contactCaptchaRequired(req) {
+		t.Fatal("captcha required before any failed attempt")
+	}
+	recorder := httptest.NewRecorder()
+	s.markContactCaptchaRequired(recorder, req)
+	if !s.contactCaptchaRequired(req) {
+		t.Fatal("signed failure marker did not enable captcha")
+	}
+	forged := httptest.NewRequest(http.MethodGet, "/server/contact", nil)
+	forged.AddCookie(&http.Cookie{Name: "contact_captcha_required", Value: "1.forged"})
+	if s.contactCaptchaRequired(forged) {
+		t.Fatal("forged failure marker enabled captcha")
+	}
+}
+
+func TestValidCaptchaChecksSignatureAndAnswer(t *testing.T) {
+	s := &Server{config: &config.Config{}, startTime: time.Now()}
+	id := s.signCaptcha(7)
+	if !s.validCaptcha(id, "7") {
+		t.Fatal("valid captcha was rejected")
+	}
+	if s.validCaptcha(id, "8") {
+		t.Error("captcha accepted a different answer")
+	}
+	if s.validCaptcha("7.invalid", "7") {
+		t.Error("captcha accepted an invalid signature")
+	}
+	if s.validCaptcha(id, "") {
+		t.Error("captcha accepted an empty answer")
+	}
+}
+
 func TestGetCSRFToken(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Server.Security.CSRF.Enabled = true
@@ -3025,4 +3139,26 @@ func TestApplyEngineCredentialsEmptyFieldsLeftUntouched(t *testing.T) {
 	if got := gh.GetConfig().GetSetting("api_key"); got != "" {
 		t.Errorf("github api_key = %q, want empty", got)
 	}
+}
+
+func TestServerListenConsumesPreboundListener(t *testing.T) {
+	prebound, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	defer prebound.Close()
+	port := prebound.Addr().(*net.TCPAddr).Port
+	srv := &Server{preboundListeners: map[int]net.Listener{port: prebound}}
+
+	got, err := srv.listen(port, "not-a-valid-address")
+	if err != nil {
+		t.Fatalf("listen() error = %v", err)
+	}
+	if got != prebound {
+		t.Fatal("listen() did not return the prebound listener")
+	}
+	if _, ok := srv.preboundListeners[port]; ok {
+		t.Fatal("listen() did not consume the prebound listener")
+	}
+	got.Close()
 }

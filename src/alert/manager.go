@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/model"
@@ -54,6 +55,7 @@ type Manager struct {
 
 type Alert struct {
 	ID             string
+	OwnerID        string `json:"-"`
 	Email          string
 	Query          string
 	Category       string
@@ -66,7 +68,6 @@ type Alert struct {
 	DeliverRSS     bool
 	DeliverWebhook bool
 	WebhookURL     string
-	EmailVerified  bool
 	Status         string
 	BaseURL        string
 	LastCheckedAt  *time.Time
@@ -74,7 +75,6 @@ type Alert struct {
 	LastError      string
 	CreatedFromIP  string
 	CreatedAt      time.Time
-	VerifiedAt     *time.Time
 	PausedAt       *time.Time
 }
 
@@ -91,6 +91,7 @@ type AlertResult struct {
 }
 
 type CreateRequest struct {
+	OwnerID        string
 	Query          string
 	Category       string
 	Language       string
@@ -155,55 +156,11 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	if m.db == nil {
 		return nil, fmt.Errorf("alert storage unavailable")
 	}
-
-	req.Query = strings.TrimSpace(req.Query)
-	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
-	req.WebhookURL = strings.TrimSpace(req.WebhookURL)
-	req.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
-	if req.BaseURL == "" {
-		req.BaseURL = strings.TrimRight(strings.TrimSpace(m.serverConfig.Server.BaseURL), "/")
-	}
-	// Per AI.md PART 11: privacy — raw IPs must never be persisted.
-	// Hash the IP so rate-limit buckets remain functional without storing the address.
-	if req.CreatedFromIP != "" {
-		h := sha256.Sum256([]byte(req.CreatedFromIP))
-		req.CreatedFromIP = fmt.Sprintf("%x", h)
-	}
-
-	if req.Query == "" {
-		return nil, fmt.Errorf("%w: query is required", ErrInvalidInput)
-	}
-	category := model.ParseCategory(req.Category)
-	if !category.IsValid() {
-		return nil, fmt.Errorf("%w: category is invalid", ErrInvalidInput)
-	}
-	if !isValidFrequency(req.Frequency) {
-		req.Frequency = FrequencyDaily
-	}
-	req.Language = normalizeAlertLanguage(req.Language)
-	req.Region = normalizeAlertRegion(req.Region)
+	var category model.Category
 	var err error
-	req.Engines, err = m.normalizeAlertEngines(req.Engines)
+	req, category, err = m.prepareCreate(req)
 	if err != nil {
 		return nil, err
-	}
-	req.SafeSearch = normalizeSafeSearch(req.SafeSearch)
-	if !req.DeliverEmail && !req.DeliverRSS && !req.DeliverWebhook {
-		return nil, fmt.Errorf("%w: choose at least one delivery channel", ErrInvalidInput)
-	}
-	if req.DeliverEmail && (m.mailer == nil || !m.mailer.IsEnabled()) {
-		return nil, ErrEmailRequired
-	}
-	if req.Email == "" {
-		return nil, fmt.Errorf("%w: email is required", ErrInvalidInput)
-	}
-	if req.DeliverWebhook {
-		if req.WebhookURL == "" {
-			return nil, fmt.Errorf("%w: webhook URL is required", ErrInvalidInput)
-		}
-		if err := validateWebhookURL(req.WebhookURL); err != nil {
-			return nil, err
-		}
 	}
 	if err := m.enforceCreateRateLimit(ctx, req.CreatedFromIP); err != nil {
 		return nil, err
@@ -247,20 +204,20 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 
 	_, err = m.db.ExecContext(ctx, `
 		INSERT INTO search_alerts (
-			id, email, query, category, language, region, engines_json, safe_search, frequency,
+			id, owner_id, email, query, category, language, region, engines_json, safe_search, frequency,
 			deliver_email, deliver_rss, deliver_webhook,
 			webhook_url, webhook_secret_encrypted,
-			email_verified, status, verify_token_hash, verify_token_expires,
+			status,
 			manage_token_hash, rss_token_hash, manage_token_encrypted, rss_token_encrypted, base_url, created_from_ip,
-			created_at, verified_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		alertID, req.Email, req.Query, category.String(), req.Language, req.Region, marshalAlertEngines(req.Engines), req.SafeSearch, string(req.Frequency),
+		alertID, req.OwnerID, req.Email, req.Query, category.String(), req.Language, req.Region, marshalAlertEngines(req.Engines), req.SafeSearch, string(req.Frequency),
 		boolToInt(req.DeliverEmail), boolToInt(req.DeliverRSS), boolToInt(req.DeliverWebhook),
 		req.WebhookURL, webhookSecretEncrypted,
-		1, StatusActive, nil, nil,
+		StatusActive,
 		hashTokenHex(manageToken), hashTokenHex(rssToken), manageTokenEncrypted, rssTokenEncrypted, req.BaseURL, req.CreatedFromIP,
-		now, now,
+		now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create alert: %w", err)
@@ -268,6 +225,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 
 	alert := &Alert{
 		ID:             alertID,
+		OwnerID:        req.OwnerID,
 		Email:          req.Email,
 		Query:          req.Query,
 		Category:       category.String(),
@@ -280,12 +238,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		DeliverRSS:     req.DeliverRSS,
 		DeliverWebhook: req.DeliverWebhook,
 		WebhookURL:     req.WebhookURL,
-		EmailVerified:  true,
 		Status:         StatusActive,
 		BaseURL:        req.BaseURL,
 		CreatedFromIP:  req.CreatedFromIP,
 		CreatedAt:      now,
-		VerifiedAt:     ptrTime(now),
 	}
 
 	return &CreateResponse{
@@ -293,6 +249,65 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		ManageToken: manageToken,
 		RSSToken:    rssToken,
 	}, nil
+}
+
+// ValidateCreate checks an alert request before allocating an anonymous owner.
+func (m *Manager) ValidateCreate(req CreateRequest) error {
+	_, _, err := m.prepareCreate(req)
+	return err
+}
+
+func (m *Manager) prepareCreate(req CreateRequest) (CreateRequest, model.Category, error) {
+	var err error
+	req.Query = strings.TrimSpace(req.Query)
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.WebhookURL = strings.TrimSpace(req.WebhookURL)
+	req.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
+	if req.BaseURL == "" {
+		req.BaseURL = strings.TrimRight(strings.TrimSpace(m.serverConfig.Server.BaseURL), "/")
+	}
+	// Per AI.md PART 11: privacy — raw IPs must never be persisted.
+	// Hash the IP so rate-limit buckets remain functional without storing the address.
+	if req.CreatedFromIP != "" {
+		h := sha256.Sum256([]byte(req.CreatedFromIP))
+		req.CreatedFromIP = fmt.Sprintf("%x", h)
+	}
+
+	if req.Query == "" {
+		return req, "", fmt.Errorf("%w: query is required", ErrInvalidInput)
+	}
+	category := model.ParseCategory(req.Category)
+	if !category.IsValid() {
+		return req, "", fmt.Errorf("%w: category is invalid", ErrInvalidInput)
+	}
+	if !isValidFrequency(req.Frequency) {
+		req.Frequency = FrequencyDaily
+	}
+	req.Language = normalizeAlertLanguage(req.Language)
+	req.Region = normalizeAlertRegion(req.Region)
+	req.Engines, err = m.normalizeAlertEngines(req.Engines)
+	if err != nil {
+		return req, "", err
+	}
+	req.SafeSearch = normalizeSafeSearch(req.SafeSearch)
+	if !req.DeliverEmail && !req.DeliverRSS && !req.DeliverWebhook {
+		return req, "", fmt.Errorf("%w: choose at least one delivery channel", ErrInvalidInput)
+	}
+	if req.DeliverEmail && (m.mailer == nil || !m.mailer.IsEnabled()) {
+		return req, "", ErrEmailRequired
+	}
+	if req.Email == "" {
+		return req, "", fmt.Errorf("%w: email is required", ErrInvalidInput)
+	}
+	if req.DeliverWebhook {
+		if req.WebhookURL == "" {
+			return req, "", fmt.Errorf("%w: webhook URL is required", ErrInvalidInput)
+		}
+		if err := validateWebhookURL(req.WebhookURL); err != nil {
+			return req, "", err
+		}
+	}
+	return req, category, nil
 }
 
 func (m *Manager) GetByManageToken(ctx context.Context, token string) (*Alert, error) {
@@ -420,7 +435,7 @@ func (m *Manager) Feed(ctx context.Context, rssToken string, limit int) (*Feed, 
 	if err != nil {
 		return nil, fmt.Errorf("load alert feed: %w", err)
 	}
-	defer rows.Close()
+	defer closeutil.Close(rows)
 
 	items := make([]AlertResult, 0, limit)
 	for rows.Next() {
@@ -598,14 +613,14 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 func (m *Manager) sendDigestEmail(ctx context.Context, alert *Alert, results []AlertResult) error {
 	var body strings.Builder
 	body.WriteString("<!DOCTYPE html><html><body style=\"font-family: sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;\">")
-	body.WriteString(fmt.Sprintf("<h1>New results for %q</h1>", alert.Query))
+	fmt.Fprintf(&body, "<h1>New results for %q</h1>", alert.Query)
 	body.WriteString("<ul>")
 	for _, result := range results {
-		body.WriteString(fmt.Sprintf("<li><a href=\"%s\">%s</a><br><small>%s</small></li>", result.URL, result.Title, result.Engine))
+		fmt.Fprintf(&body, "<li><a href=\"%s\">%s</a><br><small>%s</small></li>", result.URL, result.Title, result.Engine)
 	}
 	body.WriteString("</ul>")
 	if manageURL, err := m.manageURL(ctx, alert); err == nil && manageURL != "" {
-		body.WriteString(fmt.Sprintf("<p>Manage this alert: <a href=\"%s\">%s</a></p>", manageURL, manageURL))
+		fmt.Fprintf(&body, "<p>Manage this alert: <a href=\"%s\">%s</a></p>", manageURL, manageURL)
 	} else {
 		body.WriteString("<p>Manage this alert from the link you saved when it was created.</p>")
 	}
@@ -670,7 +685,7 @@ func (m *Manager) sendWebhook(ctx context.Context, alert *Alert, results []Alert
 		req.Header.Set("User-Agent", "search-alerts/1.0")
 		resp, err := m.client.Do(req)
 		if err == nil && resp != nil && resp.Body != nil {
-			resp.Body.Close()
+			closeutil.Close(resp.Body)
 		}
 		if err == nil && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return nil
@@ -702,15 +717,15 @@ func (m *Manager) loadAlertsByFrequency(ctx context.Context, frequency Frequency
 	rows, err := m.db.QueryContext(ctx, `
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
 		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
-		       email_verified, status, base_url, last_checked_at, last_sent_at,
-		       last_error, created_from_ip, created_at, verified_at, paused_at
+		       status, base_url, last_checked_at, last_sent_at,
+		       last_error, created_from_ip, created_at, paused_at
 		FROM search_alerts
-		WHERE status = ? AND email_verified = 1 AND frequency = ?
+		WHERE status = ? AND frequency = ?
 	`, StatusActive, string(frequency))
 	if err != nil {
 		return nil, fmt.Errorf("load alerts: %w", err)
 	}
-	defer rows.Close()
+	defer closeutil.Close(rows)
 
 	var alerts []*Alert
 	for rows.Next() {
@@ -729,15 +744,15 @@ func (m *Manager) ListAll(ctx context.Context) ([]*Alert, error) {
 	rows, err := m.db.QueryContext(ctx, `
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
 		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
-		       email_verified, status, base_url, last_checked_at, last_sent_at,
-		       last_error, created_from_ip, created_at, verified_at, paused_at
+		       status, base_url, last_checked_at, last_sent_at,
+		       last_error, created_from_ip, created_at, paused_at
 		FROM search_alerts
 		ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list all alerts: %w", err)
 	}
-	defer rows.Close()
+	defer closeutil.Close(rows)
 
 	var alerts []*Alert
 	for rows.Next() {
@@ -754,8 +769,8 @@ func (m *Manager) getAlertByTokenHash(ctx context.Context, column, tokenHash str
 	query := fmt.Sprintf(`
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
 		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
-		       email_verified, status, base_url, last_checked_at, last_sent_at,
-		       last_error, created_from_ip, created_at, verified_at, paused_at
+		       status, base_url, last_checked_at, last_sent_at,
+		       last_error, created_from_ip, created_at, paused_at
 		FROM search_alerts WHERE %s = ?
 	`, column)
 	row := m.db.QueryRowContext(ctx, query, tokenHash)
@@ -794,7 +809,7 @@ func (m *Manager) pendingResults(ctx context.Context, alertID, column string) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer closeutil.Close(rows)
 	var results []AlertResult
 	for rows.Next() {
 		result, err := scanAlertResult(rows)
@@ -872,17 +887,17 @@ func scanAlert(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*Alert, error) {
 	var (
-		alert                                              Alert
-		frequency, enginesJSON                             string
-		deliverEmail, deliverRSS, deliverWebhook, verified int
-		lastError                                          sql.NullString
-		lastChecked, lastSent, verifiedAt, pausedAt        sql.NullTime
+		alert                                    Alert
+		frequency, enginesJSON                   string
+		deliverEmail, deliverRSS, deliverWebhook int
+		lastError                                sql.NullString
+		lastChecked, lastSent, pausedAt          sql.NullTime
 	)
 	if err := scanner.Scan(
 		&alert.ID, &alert.Email, &alert.Query, &alert.Category, &alert.Language, &alert.Region, &enginesJSON, &alert.SafeSearch, &frequency,
 		&deliverEmail, &deliverRSS, &deliverWebhook, &alert.WebhookURL,
-		&verified, &alert.Status, &alert.BaseURL, &lastChecked, &lastSent,
-		&lastError, &alert.CreatedFromIP, &alert.CreatedAt, &verifiedAt, &pausedAt,
+		&alert.Status, &alert.BaseURL, &lastChecked, &lastSent,
+		&lastError, &alert.CreatedFromIP, &alert.CreatedAt, &pausedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -893,7 +908,6 @@ func scanAlert(scanner interface {
 	alert.DeliverEmail = deliverEmail == 1
 	alert.DeliverRSS = deliverRSS == 1
 	alert.DeliverWebhook = deliverWebhook == 1
-	alert.EmailVerified = verified == 1
 	if lastError.Valid {
 		alert.LastError = lastError.String
 	}
@@ -902,9 +916,6 @@ func scanAlert(scanner interface {
 	}
 	if lastSent.Valid {
 		alert.LastSentAt = &lastSent.Time
-	}
-	if verifiedAt.Valid {
-		alert.VerifiedAt = &verifiedAt.Time
 	}
 	if pausedAt.Valid {
 		alert.PausedAt = &pausedAt.Time

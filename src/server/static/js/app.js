@@ -8,7 +8,8 @@
     // ========================================================================
     // THEME MANAGEMENT
     // ========================================================================
-    const SEARCH_PREFERENCES_KEY = 'search_preferences';
+    const SEARCH_HISTORY_KEY = 'search_history';
+    const SEARCH_HISTORY_LIMIT = 20;
     const THEMES = ['dark', 'light', 'auto'];
     let clientTranslations = null;
 
@@ -25,8 +26,7 @@
     }
 
     function normalizeThemePreference(theme) {
-        if (theme === 'system') return 'auto';
-        return THEMES.includes(theme) ? theme : 'auto';
+        return THEMES.includes(theme) ? theme : 'dark';
     }
 
     function getClientLanguage() {
@@ -82,7 +82,7 @@
     }
 
     function setCookie(name, value, maxAgeSeconds) {
-        document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + maxAgeSeconds + '; SameSite=Lax';
+        document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + maxAgeSeconds + '; SameSite=Lax' + (window.location.protocol === 'https:' ? '; Secure' : '');
     }
 
     // Ensure the theme cookie is set. Theme is a strictly necessary cookie
@@ -105,23 +105,45 @@
     function normalizeSearchPreferences(prefs) {
         prefs = prefs || {};
         return {
-            theme: normalizeThemePreference(prefs.theme || 'auto'),
+            theme: normalizeThemePreference(prefs.theme || 'dark'),
+            lang: prefs.lang || document.documentElement.lang || 'en',
             default_category: prefs.default_category || 'general',
             safe_search: prefs.safe_search !== undefined ? String(prefs.safe_search) : '1',
             results_per_page: prefs.results_per_page ? String(prefs.results_per_page) : '100',
             new_tab: prefs.new_tab !== false,
             infinite_scroll: prefs.infinite_scroll !== false,
             keyboard_shortcuts: prefs.keyboard_shortcuts !== false,
+            save_history: prefs.save_history !== false,
             units: prefs.units === 'metric' ? 'metric' : 'imperial'
         };
     }
 
     function getStoredSearchPreferences() {
-        try {
-            return normalizeSearchPreferences(JSON.parse(localStorage.getItem(SEARCH_PREFERENCES_KEY) || '{}'));
-        } catch (e) {
-            return normalizeSearchPreferences({});
+        function read(key) {
+            var match = document.cookie.match(new RegExp('(?:^|;\\s*)search_pref_' + key + '=([^;]*)'));
+            return match ? decodeURIComponent(match[1]) : undefined;
         }
+        return normalizeSearchPreferences({
+            theme: getPreferredTheme(), lang: (function() { var match = document.cookie.match(/(?:^|;\\s*)lang=([^;]*)/); return match ? decodeURIComponent(match[1]) : document.documentElement.lang || 'en'; })(), default_category: read('category'), safe_search: read('safe_search'),
+            results_per_page: read('results_per_page'), new_tab: read('new_tab') !== '0',
+            infinite_scroll: read('infinite_scroll') !== '0', keyboard_shortcuts: read('keyboard_shortcuts') !== '0', save_history: read('save_history') !== '0',
+            units: read('units')
+        });
+    }
+
+    function writeSearchPreferences(value) {
+        var prefs = normalizeSearchPreferences(value);
+        setCookie('theme', prefs.theme, 31536000);
+        setCookie('lang', prefs.lang, 31536000);
+        setCookie('search_pref_category', prefs.default_category, 31536000);
+        setCookie('search_pref_safe_search', prefs.safe_search, 31536000);
+        setCookie('search_pref_results_per_page', prefs.results_per_page, 31536000);
+        setCookie('search_pref_units', prefs.units, 31536000);
+        setCookie('search_pref_new_tab', prefs.new_tab ? '1' : '0', 31536000);
+        setCookie('search_pref_infinite_scroll', prefs.infinite_scroll ? '1' : '0', 31536000);
+        setCookie('search_pref_keyboard_shortcuts', prefs.keyboard_shortcuts ? '1' : '0', 31536000);
+        setCookie('search_pref_save_history', prefs.save_history ? '1' : '0', 31536000);
+        return prefs;
     }
 
     function decodePreferencePayload(raw) {
@@ -205,9 +227,9 @@
             results_per_page: urlPrefs.results_per_page || stored.results_per_page,
             new_tab: urlPrefs.new_tab,
             infinite_scroll: urlPrefs.infinite_scroll,
-            keyboard_shortcuts: urlPrefs.keyboard_shortcuts
+            keyboard_shortcuts: urlPrefs.keyboard_shortcuts,
+            save_history: stored.save_history
         });
-        localStorage.setItem(SEARCH_PREFERENCES_KEY, JSON.stringify(merged));
         return merged;
     }
 
@@ -244,11 +266,11 @@
                 return saved;
             }
         }
-        return 'auto';
+        return 'dark';
     }
 
     function getPreferredUnits() {
-        var match = document.cookie.match(/(?:^|;\s*)units=([^;]*)/);
+        var match = document.cookie.match(/(?:^|;\s*)search_pref_units=([^;]*)/);
         if (match) {
             var saved = decodeURIComponent(match[1]);
             if (saved === 'metric' || saved === 'imperial') {
@@ -259,7 +281,7 @@
     }
 
     function setUnitsCookie(units) {
-        setCookie('units', units === 'metric' ? 'metric' : 'imperial', 31536000);
+        setCookie('search_pref_units', units === 'metric' ? 'metric' : 'imperial', 31536000);
     }
 
     // Resolve "auto" to actual dark/light based on system preference
@@ -630,41 +652,524 @@
     // ========================================================================
 
     // Built-in bangs list (subset for quick suggestions)
+    // Built-in bangs list (generated from src/search/bang/defaults.go)
     var BUILTIN_BANGS = [
         { shortcut: 'g', name: 'Google', category: 'general' },
         { shortcut: 'ddg', name: 'DuckDuckGo', category: 'general' },
         { shortcut: 'b', name: 'Bing', category: 'general' },
         { shortcut: 'sp', name: 'Startpage', category: 'general' },
+        { shortcut: 'q', name: 'Qwant', category: 'general' },
+        { shortcut: 'ec', name: 'Ecosia', category: 'general' },
         { shortcut: 'br', name: 'Brave Search', category: 'general' },
+        { shortcut: 'ya', name: 'Yandex', category: 'general' },
+        { shortcut: 'bd', name: 'Baidu', category: 'general' },
+        { shortcut: 'swisscows', name: 'Swisscows', category: 'general' },
+        { shortcut: 'mojeek', name: 'Mojeek', category: 'general' },
+        { shortcut: 'metager', name: 'MetaGer', category: 'general' },
+        { shortcut: 'gibiru', name: 'Gibiru', category: 'general' },
+        { shortcut: 'yep', name: 'Yep', category: 'general' },
+        { shortcut: 'kagi', name: 'Kagi', category: 'general' },
+        { shortcut: 'you', name: 'You.com', category: 'general' },
+        { shortcut: 'perplexity', name: 'Perplexity', category: 'general' },
+        { shortcut: 'presearch', name: 'Presearch', category: 'general' },
+        { shortcut: 'naver', name: 'Naver', category: 'general' },
+        { shortcut: 'sogou', name: 'Sogou', category: 'general' },
+        { shortcut: 'ask', name: 'Ask.com', category: 'general' },
+        { shortcut: 'aol', name: 'AOL Search', category: 'general' },
+        { shortcut: 'yahoo', name: 'Yahoo', category: 'general' },
+        { shortcut: 'lycos', name: 'Lycos', category: 'general' },
         { shortcut: 'gi', name: 'Google Images', category: 'images' },
         { shortcut: 'bi', name: 'Bing Images', category: 'images' },
+        { shortcut: 'yi', name: 'Yandex Images', category: 'images' },
+        { shortcut: 'fl', name: 'Flickr', category: 'images' },
+        { shortcut: 'us', name: 'Unsplash', category: 'images' },
+        { shortcut: 'pexels', name: 'Pexels', category: 'images' },
+        { shortcut: 'pixabay', name: 'Pixabay', category: 'images' },
+        { shortcut: '500px', name: '500px', category: 'images' },
+        { shortcut: 'pinterest', name: 'Pinterest', category: 'images' },
+        { shortcut: 'imgur', name: 'Imgur', category: 'images' },
+        { shortcut: 'deviantart', name: 'DeviantArt', category: 'images' },
+        { shortcut: 'artstation', name: 'ArtStation', category: 'images' },
+        { shortcut: 'behance', name: 'Behance', category: 'images' },
+        { shortcut: 'dribbble', name: 'Dribbble', category: 'images' },
+        { shortcut: 'giphy', name: 'Giphy', category: 'images' },
+        { shortcut: 'tenor', name: 'Tenor GIFs', category: 'images' },
+        { shortcut: 'tineye', name: 'TinEye', category: 'images' },
+        { shortcut: 'icons8', name: 'Icons8', category: 'images' },
+        { shortcut: 'flaticon', name: 'Flaticon', category: 'images' },
+        { shortcut: 'iconfinder', name: 'Iconfinder', category: 'images' },
+        { shortcut: 'freepik', name: 'Freepik', category: 'images' },
+        { shortcut: 'stocksnap', name: 'StockSnap', category: 'images' },
+        { shortcut: 'openclipart', name: 'OpenClipart', category: 'images' },
+        { shortcut: 'wikimediacommons', name: 'Wikimedia Commons', category: 'images' },
         { shortcut: 'yt', name: 'YouTube', category: 'video' },
+        { shortcut: 'v', name: 'Vimeo', category: 'video' },
+        { shortcut: 'dtube', name: 'Dailymotion', category: 'video' },
+        { shortcut: 'pt', name: 'PeerTube', category: 'video' },
+        { shortcut: 'od', name: 'Odysee', category: 'video' },
+        { shortcut: 'rumble', name: 'Rumble', category: 'video' },
+        { shortcut: 'bitchute', name: 'BitChute', category: 'video' },
+        { shortcut: 'twitch', name: 'Twitch', category: 'video' },
+        { shortcut: 'tiktok', name: 'TikTok', category: 'video' },
+        { shortcut: 'gv', name: 'Google Video', category: 'video' },
+        { shortcut: 'bv', name: 'Bing Video', category: 'video' },
+        { shortcut: 'veoh', name: 'Veoh', category: 'video' },
+        { shortcut: 'metacafe', name: 'Metacafe', category: 'video' },
+        { shortcut: 'nebula', name: 'Nebula', category: 'video' },
+        { shortcut: 'floatplane', name: 'Floatplane', category: 'video' },
         { shortcut: 'gm', name: 'Google Maps', category: 'maps' },
         { shortcut: 'osm', name: 'OpenStreetMap', category: 'maps' },
+        { shortcut: 'bm', name: 'Bing Maps', category: 'maps' },
+        { shortcut: 'applemaps', name: 'Apple Maps', category: 'maps' },
+        { shortcut: 'here', name: 'HERE WeGo', category: 'maps' },
+        { shortcut: 'waze', name: 'Waze', category: 'maps' },
+        { shortcut: 'mapquest', name: 'MapQuest', category: 'maps' },
+        { shortcut: 'yelp', name: 'Yelp', category: 'maps' },
+        { shortcut: 'tripadvisor', name: 'TripAdvisor', category: 'maps' },
+        { shortcut: 'foursquare', name: 'Foursquare', category: 'maps' },
+        { shortcut: 'gmapsat', name: 'Google Maps Satellite', category: 'maps' },
+        { shortcut: 'gearth', name: 'Google Earth', category: 'maps' },
         { shortcut: 'gn', name: 'Google News', category: 'news' },
+        { shortcut: 'bn', name: 'Bing News', category: 'news' },
+        { shortcut: 'yn', name: 'Yahoo News', category: 'news' },
+        { shortcut: 'reuters', name: 'Reuters', category: 'news' },
+        { shortcut: 'ap', name: 'AP News', category: 'news' },
+        { shortcut: 'bbc', name: 'BBC', category: 'news' },
+        { shortcut: 'cnn', name: 'CNN', category: 'news' },
+        { shortcut: 'nyt', name: 'New York Times', category: 'news' },
+        { shortcut: 'wapo', name: 'Washington Post', category: 'news' },
+        { shortcut: 'guardian', name: 'The Guardian', category: 'news' },
+        { shortcut: 'aljazeera', name: 'Al Jazeera', category: 'news' },
+        { shortcut: 'npr', name: 'NPR', category: 'news' },
+        { shortcut: 'techcrunch', name: 'TechCrunch', category: 'news' },
+        { shortcut: 'verge', name: 'The Verge', category: 'news' },
+        { shortcut: 'wired', name: 'Wired', category: 'news' },
+        { shortcut: 'arstechnica', name: 'Ars Technica', category: 'news' },
+        { shortcut: 'engadget', name: 'Engadget', category: 'news' },
+        { shortcut: 'cnet', name: 'CNET', category: 'news' },
+        { shortcut: 'zdnet', name: 'ZDNet', category: 'news' },
+        { shortcut: 'venturebeat', name: 'VentureBeat', category: 'news' },
+        { shortcut: 'hackernoon', name: 'HackerNoon', category: 'news' },
+        { shortcut: 'bloomberg', name: 'Bloomberg', category: 'news' },
+        { shortcut: 'ft', name: 'Financial Times', category: 'news' },
+        { shortcut: 'wsj', name: 'Wall Street Journal', category: 'news' },
+        { shortcut: 'economist', name: 'The Economist', category: 'news' },
+        { shortcut: 'forbes', name: 'Forbes', category: 'news' },
+        { shortcut: 'businessinsider', name: 'Business Insider', category: 'news' },
         { shortcut: 'w', name: 'Wikipedia', category: 'knowledge' },
+        { shortcut: 'wd', name: 'Wikidata', category: 'knowledge' },
+        { shortcut: 'wt', name: 'Wiktionary', category: 'knowledge' },
+        { shortcut: 'wb', name: 'Wikibooks', category: 'knowledge' },
+        { shortcut: 'wq', name: 'Wikiquote', category: 'knowledge' },
+        { shortcut: 'ws', name: 'Wikisource', category: 'knowledge' },
+        { shortcut: 'wn', name: 'Wikinews', category: 'knowledge' },
+        { shortcut: 'wv', name: 'Wikivoyage', category: 'knowledge' },
         { shortcut: 'wa', name: 'Wolfram Alpha', category: 'knowledge' },
+        { shortcut: 'britannica', name: 'Britannica', category: 'knowledge' },
+        { shortcut: 'quora', name: 'Quora', category: 'knowledge' },
+        { shortcut: 'answers', name: 'Answers.com', category: 'knowledge' },
+        { shortcut: 'howstuffworks', name: 'HowStuffWorks', category: 'knowledge' },
+        { shortcut: 'scholarpedia', name: 'Scholarpedia', category: 'knowledge' },
+        { shortcut: 'citizendium', name: 'Citizendium', category: 'knowledge' },
+        { shortcut: 'infoplease', name: 'Infoplease', category: 'knowledge' },
+        { shortcut: 'fandom', name: 'Fandom', category: 'knowledge' },
+        { shortcut: 'tvtropes', name: 'TV Tropes', category: 'knowledge' },
         { shortcut: 'tw', name: 'Twitter/X', category: 'social' },
-        { shortcut: 'rd', name: 'Reddit', category: 'social' },
+        { shortcut: 'mast', name: 'Mastodon', category: 'social' },
+        { shortcut: 'r', name: 'Reddit', category: 'social' },
         { shortcut: 'hn', name: 'Hacker News', category: 'social' },
+        { shortcut: 'lb', name: 'Lobsters', category: 'social' },
+        { shortcut: 'fb', name: 'Facebook', category: 'social' },
+        { shortcut: 'ig', name: 'Instagram', category: 'social' },
+        { shortcut: 'linkedin', name: 'LinkedIn', category: 'social' },
+        { shortcut: 'tumblr', name: 'Tumblr', category: 'social' },
+        { shortcut: 'discord', name: 'Discord', category: 'social' },
+        { shortcut: 'slack', name: 'Slack', category: 'social' },
+        { shortcut: 'telegram', name: 'Telegram', category: 'social' },
+        { shortcut: 'medium', name: 'Medium', category: 'social' },
+        { shortcut: 'substack', name: 'Substack', category: 'social' },
+        { shortcut: 'lemmy', name: 'Lemmy', category: 'social' },
+        { shortcut: 'minds', name: 'Minds', category: 'social' },
+        { shortcut: 'gab', name: 'Gab', category: 'social' },
+        { shortcut: 'parler', name: 'Parler', category: 'social' },
+        { shortcut: 'truthsocial', name: 'Truth Social', category: 'social' },
+        { shortcut: 'bluesky', name: 'Bluesky', category: 'social' },
+        { shortcut: 'threads', name: 'Threads', category: 'social' },
+        { shortcut: 'snapchat', name: 'Snapchat', category: 'social' },
+        { shortcut: 'whatsapp', name: 'WhatsApp', category: 'social' },
+        { shortcut: 'signal', name: 'Signal', category: 'social' },
+        { shortcut: 'matrix', name: 'Matrix', category: 'social' },
         { shortcut: 'gh', name: 'GitHub', category: 'code' },
+        { shortcut: 'ghc', name: 'GitHub Code', category: 'code' },
+        { shortcut: 'ghr', name: 'GitHub Repos', category: 'code' },
+        { shortcut: 'ghu', name: 'GitHub Users', category: 'code' },
+        { shortcut: 'ghi', name: 'GitHub Issues', category: 'code' },
+        { shortcut: 'ghd', name: 'GitHub Discussions', category: 'code' },
+        { shortcut: 'gist', name: 'GitHub Gist', category: 'code' },
         { shortcut: 'gl', name: 'GitLab', category: 'code' },
+        { shortcut: 'bb', name: 'Bitbucket', category: 'code' },
+        { shortcut: 'sr', name: 'Sourcegraph', category: 'code' },
         { shortcut: 'so', name: 'Stack Overflow', category: 'code' },
+        { shortcut: 'se', name: 'Stack Exchange', category: 'code' },
+        { shortcut: 'su', name: 'Super User', category: 'code' },
+        { shortcut: 'sf', name: 'Server Fault', category: 'code' },
+        { shortcut: 'au', name: 'Ask Ubuntu', category: 'code' },
+        { shortcut: 'unix', name: 'Unix & Linux', category: 'code' },
         { shortcut: 'npm', name: 'npm', category: 'code' },
+        { shortcut: 'yarn', name: 'Yarn', category: 'code' },
         { shortcut: 'pypi', name: 'PyPI', category: 'code' },
+        { shortcut: 'crates', name: 'Crates.io', category: 'code' },
         { shortcut: 'gopkg', name: 'Go Packages', category: 'code' },
-        { shortcut: 'mdn', name: 'MDN Web Docs', category: 'code' },
+        { shortcut: 'hex', name: 'Hex.pm', category: 'code' },
+        { shortcut: 'rubygems', name: 'RubyGems', category: 'code' },
+        { shortcut: 'nuget', name: 'NuGet', category: 'code' },
+        { shortcut: 'maven', name: 'Maven Central', category: 'code' },
+        { shortcut: 'packagist', name: 'Packagist', category: 'code' },
+        { shortcut: 'cpan', name: 'CPAN', category: 'code' },
+        { shortcut: 'cran', name: 'CRAN', category: 'code' },
+        { shortcut: 'cocoapods', name: 'CocoaPods', category: 'code' },
+        { shortcut: 'pub', name: 'pub.dev', category: 'code' },
+        { shortcut: 'haskell', name: 'Hackage', category: 'code' },
         { shortcut: 'docker', name: 'Docker Hub', category: 'code' },
-        { shortcut: 'az', name: 'Amazon', category: 'shopping' },
+        { shortcut: 'quay', name: 'Quay.io', category: 'code' },
+        { shortcut: 'ghcr', name: 'GitHub Container Registry', category: 'code' },
+        { shortcut: 'helm', name: 'Helm Hub', category: 'code' },
+        { shortcut: 'terraform', name: 'Terraform Registry', category: 'code' },
+        { shortcut: 'ansible', name: 'Ansible Galaxy', category: 'code' },
+        { shortcut: 'mdn', name: 'MDN Web Docs', category: 'code' },
+        { shortcut: 'can', name: 'Can I Use', category: 'code' },
+        { shortcut: 'w3schools', name: 'W3Schools', category: 'code' },
+        { shortcut: 'devdocs', name: 'DevDocs', category: 'code' },
+        { shortcut: 'codepen', name: 'CodePen', category: 'code' },
+        { shortcut: 'jsfiddle', name: 'JSFiddle', category: 'code' },
+        { shortcut: 'codesandbox', name: 'CodeSandbox', category: 'code' },
+        { shortcut: 'replit', name: 'Replit', category: 'code' },
+        { shortcut: 'glitch', name: 'Glitch', category: 'code' },
+        { shortcut: 'leetcode', name: 'LeetCode', category: 'code' },
+        { shortcut: 'hackerrank', name: 'HackerRank', category: 'code' },
+        { shortcut: 'codewars', name: 'Codewars', category: 'code' },
+        { shortcut: 'exercism', name: 'Exercism', category: 'code' },
+        { shortcut: 'rosetta', name: 'Rosetta Code', category: 'code' },
+        { shortcut: 'regex101', name: 'Regex101', category: 'code' },
+        { shortcut: 'explainshell', name: 'ExplainShell', category: 'code' },
+        { shortcut: 'tldr', name: 'TLDR Pages', category: 'code' },
+        { shortcut: 'devhints', name: 'Devhints', category: 'code' },
+        { shortcut: 'cheatography', name: 'Cheatography', category: 'code' },
+        { shortcut: 'amz', name: 'Amazon', category: 'shopping' },
+        { shortcut: 'azuk', name: 'Amazon UK', category: 'shopping' },
+        { shortcut: 'azde', name: 'Amazon Germany', category: 'shopping' },
+        { shortcut: 'azjp', name: 'Amazon Japan', category: 'shopping' },
         { shortcut: 'eb', name: 'eBay', category: 'shopping' },
+        { shortcut: 'aliexpress', name: 'AliExpress', category: 'shopping' },
+        { shortcut: 'alibaba', name: 'Alibaba', category: 'shopping' },
+        { shortcut: 'walmart', name: 'Walmart', category: 'shopping' },
+        { shortcut: 'target', name: 'Target', category: 'shopping' },
+        { shortcut: 'bestbuy', name: 'Best Buy', category: 'shopping' },
+        { shortcut: 'newegg', name: 'Newegg', category: 'shopping' },
+        { shortcut: 'etsy', name: 'Etsy', category: 'shopping' },
+        { shortcut: 'wish', name: 'Wish', category: 'shopping' },
+        { shortcut: 'shopify', name: 'Shopify', category: 'shopping' },
+        { shortcut: 'camelcamelcamel', name: 'CamelCamelCamel', category: 'shopping' },
+        { shortcut: 'keepa', name: 'Keepa', category: 'shopping' },
+        { shortcut: 'pricespy', name: 'PriceSpy', category: 'shopping' },
+        { shortcut: 'slickdeals', name: 'Slickdeals', category: 'shopping' },
+        { shortcut: 'rakuten', name: 'Rakuten', category: 'shopping' },
+        { shortcut: 'mercari', name: 'Mercari', category: 'shopping' },
+        { shortcut: 'poshmark', name: 'Poshmark', category: 'shopping' },
+        { shortcut: 'thriftbooks', name: 'ThriftBooks', category: 'shopping' },
+        { shortcut: 'bookfinder', name: 'BookFinder', category: 'shopping' },
+        { shortcut: 'archive', name: 'Internet Archive', category: 'files' },
+        { shortcut: '1337x', name: '1337x', category: 'files' },
+        { shortcut: 'rarbg', name: 'RARBG', category: 'files' },
+        { shortcut: 'nyaa', name: 'Nyaa', category: 'files' },
+        { shortcut: 'libgen', name: 'Library Genesis', category: 'files' },
+        { shortcut: 'zlibrary', name: 'Z-Library', category: 'files' },
+        { shortcut: 'annas', name: 'Anna\'s Archive', category: 'files' },
+        { shortcut: 'sci-hub', name: 'Sci-Hub', category: 'files' },
+        { shortcut: 'pdfdrive', name: 'PDF Drive', category: 'files' },
+        { shortcut: 'openlib', name: 'Open Library', category: 'files' },
+        { shortcut: 'gutenberg', name: 'Project Gutenberg', category: 'files' },
+        { shortcut: 'standardebooks', name: 'Standard Ebooks', category: 'files' },
+        { shortcut: 'audiobookbay', name: 'AudioBook Bay', category: 'files' },
         { shortcut: 'spot', name: 'Spotify', category: 'music' },
+        { shortcut: 'applemusic', name: 'Apple Music', category: 'music' },
+        { shortcut: 'ytm', name: 'YouTube Music', category: 'music' },
         { shortcut: 'sc', name: 'SoundCloud', category: 'music' },
+        { shortcut: 'bc', name: 'Bandcamp', category: 'music' },
+        { shortcut: 'lastfm', name: 'Last.fm', category: 'music' },
+        { shortcut: 'discogs', name: 'Discogs', category: 'music' },
+        { shortcut: 'allmusic', name: 'AllMusic', category: 'music' },
+        { shortcut: 'lyrics', name: 'Genius Lyrics', category: 'music' },
+        { shortcut: 'azlyrics', name: 'AZLyrics', category: 'music' },
+        { shortcut: 'musixmatch', name: 'Musixmatch', category: 'music' },
+        { shortcut: 'songmeanings', name: 'SongMeanings', category: 'music' },
+        { shortcut: 'setlistfm', name: 'Setlist.fm', category: 'music' },
+        { shortcut: 'songkick', name: 'Songkick', category: 'music' },
+        { shortcut: 'rateyourmusic', name: 'Rate Your Music', category: 'music' },
+        { shortcut: 'musicbrainz', name: 'MusicBrainz', category: 'music' },
+        { shortcut: 'deezer', name: 'Deezer', category: 'music' },
+        { shortcut: 'tidal', name: 'Tidal', category: 'music' },
+        { shortcut: 'audiomack', name: 'Audiomack', category: 'music' },
+        { shortcut: 'mixcloud', name: 'Mixcloud', category: 'music' },
+        { shortcut: 'hearthis', name: 'hearthis.at', category: 'music' },
         { shortcut: 'scholar', name: 'Google Scholar', category: 'science' },
         { shortcut: 'arxiv', name: 'arXiv', category: 'science' },
+        { shortcut: 'pubmed', name: 'PubMed', category: 'science' },
+        { shortcut: 'semanticscholar', name: 'Semantic Scholar', category: 'science' },
+        { shortcut: 'researchgate', name: 'ResearchGate', category: 'science' },
+        { shortcut: 'academia', name: 'Academia.edu', category: 'science' },
+        { shortcut: 'jstor', name: 'JSTOR', category: 'science' },
+        { shortcut: 'ieee', name: 'IEEE Xplore', category: 'science' },
+        { shortcut: 'acm', name: 'ACM Digital Library', category: 'science' },
+        { shortcut: 'springerlink', name: 'SpringerLink', category: 'science' },
+        { shortcut: 'nature', name: 'Nature', category: 'science' },
+        { shortcut: 'science', name: 'Science', category: 'science' },
+        { shortcut: 'plos', name: 'PLOS ONE', category: 'science' },
+        { shortcut: 'biorxiv', name: 'bioRxiv', category: 'science' },
+        { shortcut: 'medrxiv', name: 'medRxiv', category: 'science' },
+        { shortcut: 'chemrxiv', name: 'ChemRxiv', category: 'science' },
+        { shortcut: 'ssrn', name: 'SSRN', category: 'science' },
+        { shortcut: 'philpapers', name: 'PhilPapers', category: 'science' },
+        { shortcut: 'doaj', name: 'DOAJ', category: 'science' },
+        { shortcut: 'core', name: 'CORE', category: 'science' },
+        { shortcut: 'base', name: 'BASE', category: 'science' },
+        { shortcut: 'dimensions', name: 'Dimensions', category: 'science' },
+        { shortcut: 'lens', name: 'The Lens', category: 'science' },
+        { shortcut: 'orcid', name: 'ORCID', category: 'science' },
+        { shortcut: 'crossref', name: 'Crossref', category: 'science' },
+        { shortcut: 'doi', name: 'DOI Resolver', category: 'science' },
+        { shortcut: 'nasa', name: 'NASA', category: 'science' },
+        { shortcut: 'esa', name: 'ESA', category: 'science' },
+        { shortcut: 'ncbi', name: 'NCBI', category: 'science' },
         { shortcut: 'gt', name: 'Google Translate', category: 'translate' },
         { shortcut: 'deepl', name: 'DeepL', category: 'translate' },
-        { shortcut: 'imdb', name: 'IMDb', category: 'misc' },
-        { shortcut: 'archive', name: 'Internet Archive', category: 'files' }
+        { shortcut: 'btrans', name: 'Bing Translator', category: 'translate' },
+        { shortcut: 'reverso', name: 'Reverso', category: 'translate' },
+        { shortcut: 'linguee', name: 'Linguee', category: 'translate' },
+        { shortcut: 'dict', name: 'Dictionary.com', category: 'translate' },
+        { shortcut: 'thesaurus', name: 'Thesaurus.com', category: 'translate' },
+        { shortcut: 'mw', name: 'Merriam-Webster', category: 'translate' },
+        { shortcut: 'oxford', name: 'Oxford Dictionary', category: 'translate' },
+        { shortcut: 'cambridge', name: 'Cambridge Dictionary', category: 'translate' },
+        { shortcut: 'collins', name: 'Collins Dictionary', category: 'translate' },
+        { shortcut: 'longman', name: 'Longman Dictionary', category: 'translate' },
+        { shortcut: 'macmillan', name: 'Macmillan Dictionary', category: 'translate' },
+        { shortcut: 'ud', name: 'Urban Dictionary', category: 'translate' },
+        { shortcut: 'etymonline', name: 'Etymonline', category: 'translate' },
+        { shortcut: 'wordnik', name: 'Wordnik', category: 'translate' },
+        { shortcut: 'forvo', name: 'Forvo', category: 'translate' },
+        { shortcut: 'wordreference', name: 'WordReference', category: 'translate' },
+        { shortcut: 'leo', name: 'LEO Dictionary', category: 'translate' },
+        { shortcut: 'pons', name: 'PONS', category: 'translate' },
+        { shortcut: 'jisho', name: 'Jisho', category: 'translate' },
+        { shortcut: 'tangorin', name: 'Tangorin', category: 'translate' },
+        { shortcut: 'navdict', name: 'Naver Dictionary', category: 'translate' },
+        { shortcut: 'pleco', name: 'Pleco', category: 'translate' },
+        { shortcut: 'mdbg', name: 'MDBG Chinese', category: 'translate' },
+        { shortcut: 'wbm', name: 'Wayback Machine', category: 'privacy' },
+        { shortcut: 'haveibeenpwned', name: 'Have I Been Pwned', category: 'privacy' },
+        { shortcut: 'dehashed', name: 'DeHashed', category: 'privacy' },
+        { shortcut: 'virustotal', name: 'VirusTotal', category: 'privacy' },
+        { shortcut: 'shodan', name: 'Shodan', category: 'privacy' },
+        { shortcut: 'censys', name: 'Censys', category: 'privacy' },
+        { shortcut: 'crt', name: 'crt.sh', category: 'privacy' },
+        { shortcut: 'dnsdumpster', name: 'DNSDumpster', category: 'privacy' },
+        { shortcut: 'securitytrails', name: 'SecurityTrails', category: 'privacy' },
+        { shortcut: 'whois', name: 'WHOIS', category: 'privacy' },
+        { shortcut: 'ipinfo', name: 'IPinfo', category: 'privacy' },
+        { shortcut: 'abuseipdb', name: 'AbuseIPDB', category: 'privacy' },
+        { shortcut: 'urlscan', name: 'urlscan.io', category: 'privacy' },
+        { shortcut: 'httpstatus', name: 'HTTP Status', category: 'privacy' },
+        { shortcut: 'ssltest', name: 'SSL Labs', category: 'privacy' },
+        { shortcut: 'securityheaders', name: 'Security Headers', category: 'privacy' },
+        { shortcut: 'builtwith', name: 'BuiltWith', category: 'privacy' },
+        { shortcut: 'wappalyzer', name: 'Wappalyzer', category: 'privacy' },
+        { shortcut: 'downforeveryoneorjustme', name: 'Down For Everyone', category: 'privacy' },
+        { shortcut: 'imdb', name: 'IMDb', category: 'movies' },
+        { shortcut: 'rt', name: 'Rotten Tomatoes', category: 'movies' },
+        { shortcut: 'metacritic', name: 'Metacritic', category: 'movies' },
+        { shortcut: 'letterboxd', name: 'Letterboxd', category: 'movies' },
+        { shortcut: 'tmdb', name: 'The Movie Database', category: 'movies' },
+        { shortcut: 'trakt', name: 'Trakt', category: 'movies' },
+        { shortcut: 'justwatch', name: 'JustWatch', category: 'movies' },
+        { shortcut: 'reelgood', name: 'Reelgood', category: 'movies' },
+        { shortcut: 'tvdb', name: 'TheTVDB', category: 'movies' },
+        { shortcut: 'tvmaze', name: 'TVmaze', category: 'movies' },
+        { shortcut: 'episodecalendar', name: 'Episode Calendar', category: 'movies' },
+        { shortcut: 'netflix', name: 'Netflix', category: 'movies' },
+        { shortcut: 'primevideo', name: 'Prime Video', category: 'movies' },
+        { shortcut: 'hulu', name: 'Hulu', category: 'movies' },
+        { shortcut: 'disneyplus', name: 'Disney+', category: 'movies' },
+        { shortcut: 'hbomax', name: 'Max', category: 'movies' },
+        { shortcut: 'peacock', name: 'Peacock', category: 'movies' },
+        { shortcut: 'paramount', name: 'Paramount+', category: 'movies' },
+        { shortcut: 'steam', name: 'Steam', category: 'games' },
+        { shortcut: 'gog', name: 'GOG', category: 'games' },
+        { shortcut: 'epicgames', name: 'Epic Games', category: 'games' },
+        { shortcut: 'itch', name: 'itch.io', category: 'games' },
+        { shortcut: 'humble', name: 'Humble Bundle', category: 'games' },
+        { shortcut: 'isthereanydeal', name: 'IsThereAnyDeal', category: 'games' },
+        { shortcut: 'gg', name: 'GG.deals', category: 'games' },
+        { shortcut: 'pcgamingwiki', name: 'PCGamingWiki', category: 'games' },
+        { shortcut: 'howlongtobeat', name: 'HowLongToBeat', category: 'games' },
+        { shortcut: 'igdb', name: 'IGDB', category: 'games' },
+        { shortcut: 'rawg', name: 'RAWG', category: 'games' },
+        { shortcut: 'mobygames', name: 'MobyGames', category: 'games' },
+        { shortcut: 'giantbomb', name: 'Giant Bomb', category: 'games' },
+        { shortcut: 'gamefaqs', name: 'GameFAQs', category: 'games' },
+        { shortcut: 'speedrun', name: 'Speedrun.com', category: 'games' },
+        { shortcut: 'strategywiki', name: 'StrategyWiki', category: 'games' },
+        { shortcut: 'steamdb', name: 'SteamDB', category: 'games' },
+        { shortcut: 'protondb', name: 'ProtonDB', category: 'games' },
+        { shortcut: 'nintendolife', name: 'Nintendo Life', category: 'games' },
+        { shortcut: 'playstation', name: 'PlayStation Store', category: 'games' },
+        { shortcut: 'xbox', name: 'Xbox Store', category: 'games' },
+        { shortcut: 'goodreads', name: 'Goodreads', category: 'books' },
+        { shortcut: 'storygraph', name: 'StoryGraph', category: 'books' },
+        { shortcut: 'bookdepository', name: 'Book Depository', category: 'books' },
+        { shortcut: 'worldcat', name: 'WorldCat', category: 'books' },
+        { shortcut: 'googlebooks', name: 'Google Books', category: 'books' },
+        { shortcut: 'overdrive', name: 'OverDrive', category: 'books' },
+        { shortcut: 'libby', name: 'Libby', category: 'books' },
+        { shortcut: 'audible', name: 'Audible', category: 'books' },
+        { shortcut: 'kindle', name: 'Kindle Store', category: 'books' },
+        { shortcut: 'kobo', name: 'Kobo', category: 'books' },
+        { shortcut: 'barnesandnoble', name: 'Barnes & Noble', category: 'books' },
+        { shortcut: 'bookshop', name: 'Bookshop.org', category: 'books' },
+        { shortcut: 'isfdb', name: 'ISFDB', category: 'books' },
+        { shortcut: 'fantasticfiction', name: 'Fantastic Fiction', category: 'books' },
+        { shortcut: 'indeed', name: 'Indeed', category: 'jobs' },
+        { shortcut: 'glassdoor', name: 'Glassdoor', category: 'jobs' },
+        { shortcut: 'monster', name: 'Monster', category: 'jobs' },
+        { shortcut: 'ziprecruiter', name: 'ZipRecruiter', category: 'jobs' },
+        { shortcut: 'careerbuilder', name: 'CareerBuilder', category: 'jobs' },
+        { shortcut: 'simplyhired', name: 'SimplyHired', category: 'jobs' },
+        { shortcut: 'dice', name: 'Dice', category: 'jobs' },
+        { shortcut: 'wellfound', name: 'Wellfound', category: 'jobs' },
+        { shortcut: 'wwr', name: 'We Work Remotely', category: 'jobs' },
+        { shortcut: 'remoteok', name: 'Remote OK', category: 'jobs' },
+        { shortcut: 'flexjobs', name: 'FlexJobs', category: 'jobs' },
+        { shortcut: 'ycombinator', name: 'Y Combinator Jobs', category: 'jobs' },
+        { shortcut: 'levels', name: 'Levels.fyi', category: 'jobs' },
+        { shortcut: 'crunchbase', name: 'Crunchbase', category: 'jobs' },
+        { shortcut: 'allrecipes', name: 'Allrecipes', category: 'food' },
+        { shortcut: 'foodnetwork', name: 'Food Network', category: 'food' },
+        { shortcut: 'epicurious', name: 'Epicurious', category: 'food' },
+        { shortcut: 'seriouseats', name: 'Serious Eats', category: 'food' },
+        { shortcut: 'bonappetit', name: 'Bon Appetit', category: 'food' },
+        { shortcut: 'tasty', name: 'Tasty', category: 'food' },
+        { shortcut: 'yummly', name: 'Yummly', category: 'food' },
+        { shortcut: 'cookpad', name: 'Cookpad', category: 'food' },
+        { shortcut: 'foodcom', name: 'Food.com', category: 'food' },
+        { shortcut: 'delish', name: 'Delish', category: 'food' },
+        { shortcut: 'simplyrecipes', name: 'Simply Recipes', category: 'food' },
+        { shortcut: 'budgetbytes', name: 'Budget Bytes', category: 'food' },
+        { shortcut: 'doordash', name: 'DoorDash', category: 'food' },
+        { shortcut: 'ubereats', name: 'Uber Eats', category: 'food' },
+        { shortcut: 'grubhub', name: 'Grubhub', category: 'food' },
+        { shortcut: 'espn', name: 'ESPN', category: 'sports' },
+        { shortcut: 'cbssports', name: 'CBS Sports', category: 'sports' },
+        { shortcut: 'foxsports', name: 'Fox Sports', category: 'sports' },
+        { shortcut: 'bleacherreport', name: 'Bleacher Report', category: 'sports' },
+        { shortcut: 'theathletic', name: 'The Athletic', category: 'sports' },
+        { shortcut: 'nba', name: 'NBA', category: 'sports' },
+        { shortcut: 'nfl', name: 'NFL', category: 'sports' },
+        { shortcut: 'mlb', name: 'MLB', category: 'sports' },
+        { shortcut: 'nhl', name: 'NHL', category: 'sports' },
+        { shortcut: 'mls', name: 'MLS', category: 'sports' },
+        { shortcut: 'transfermarkt', name: 'Transfermarkt', category: 'sports' },
+        { shortcut: 'flashscore', name: 'Flashscore', category: 'sports' },
+        { shortcut: 'sofascore', name: 'SofaScore', category: 'sports' },
+        { shortcut: 'booking', name: 'Booking.com', category: 'travel' },
+        { shortcut: 'airbnb', name: 'Airbnb', category: 'travel' },
+        { shortcut: 'expedia', name: 'Expedia', category: 'travel' },
+        { shortcut: 'kayak', name: 'Kayak', category: 'travel' },
+        { shortcut: 'skyscanner', name: 'Skyscanner', category: 'travel' },
+        { shortcut: 'googleflights', name: 'Google Flights', category: 'travel' },
+        { shortcut: 'flightaware', name: 'FlightAware', category: 'travel' },
+        { shortcut: 'rome2rio', name: 'Rome2rio', category: 'travel' },
+        { shortcut: 'seat61', name: 'Seat61', category: 'travel' },
+        { shortcut: 'hostelworld', name: 'Hostelworld', category: 'travel' },
+        { shortcut: 'vrbo', name: 'VRBO', category: 'travel' },
+        { shortcut: 'hotels', name: 'Hotels.com', category: 'travel' },
+        { shortcut: 'agoda', name: 'Agoda', category: 'travel' },
+        { shortcut: 'lonelyplanet', name: 'Lonely Planet', category: 'travel' },
+        { shortcut: 'yfin', name: 'Yahoo Finance', category: 'finance' },
+        { shortcut: 'gfinance', name: 'Google Finance', category: 'finance' },
+        { shortcut: 'tradingview', name: 'TradingView', category: 'finance' },
+        { shortcut: 'marketwatch', name: 'MarketWatch', category: 'finance' },
+        { shortcut: 'seekingalpha', name: 'Seeking Alpha', category: 'finance' },
+        { shortcut: 'investopedia', name: 'Investopedia', category: 'finance' },
+        { shortcut: 'coinmarketcap', name: 'CoinMarketCap', category: 'finance' },
+        { shortcut: 'coingecko', name: 'CoinGecko', category: 'finance' },
+        { shortcut: 'etherscan', name: 'Etherscan', category: 'finance' },
+        { shortcut: 'bscscan', name: 'BscScan', category: 'finance' },
+        { shortcut: 'blockchain', name: 'Blockchain.com', category: 'finance' },
+        { shortcut: 'defi', name: 'DeFi Llama', category: 'finance' },
+        { shortcut: 'finviz', name: 'Finviz', category: 'finance' },
+        { shortcut: 'stocktwits', name: 'Stocktwits', category: 'finance' },
+        { shortcut: 'webmd', name: 'WebMD', category: 'health' },
+        { shortcut: 'mayoclinic', name: 'Mayo Clinic', category: 'health' },
+        { shortcut: 'healthline', name: 'Healthline', category: 'health' },
+        { shortcut: 'medlineplus', name: 'MedlinePlus', category: 'health' },
+        { shortcut: 'drugs', name: 'Drugs.com', category: 'health' },
+        { shortcut: 'rxlist', name: 'RxList', category: 'health' },
+        { shortcut: 'nih', name: 'NIH', category: 'health' },
+        { shortcut: 'cdc', name: 'CDC', category: 'health' },
+        { shortcut: 'who', name: 'WHO', category: 'health' },
+        { shortcut: 'findlaw', name: 'FindLaw', category: 'legal' },
+        { shortcut: 'justia', name: 'Justia', category: 'legal' },
+        { shortcut: 'law', name: 'Law.com', category: 'legal' },
+        { shortcut: 'courtlistener', name: 'CourtListener', category: 'legal' },
+        { shortcut: 'caselaw', name: 'Caselaw Access', category: 'legal' },
+        { shortcut: 'oyez', name: 'Oyez', category: 'legal' },
+        { shortcut: 'cornell', name: 'Cornell Law', category: 'legal' },
+        { shortcut: 'patents', name: 'Google Patents', category: 'legal' },
+        { shortcut: 'uspto', name: 'USPTO', category: 'legal' },
+        { shortcut: 'trademark', name: 'USPTO Trademark', category: 'legal' },
+        { shortcut: 'coursera', name: 'Coursera', category: 'education' },
+        { shortcut: 'udemy', name: 'Udemy', category: 'education' },
+        { shortcut: 'edx', name: 'edX', category: 'education' },
+        { shortcut: 'khanacademy', name: 'Khan Academy', category: 'education' },
+        { shortcut: 'udacity', name: 'Udacity', category: 'education' },
+        { shortcut: 'skillshare', name: 'Skillshare', category: 'education' },
+        { shortcut: 'lilearn', name: 'LinkedIn Learning', category: 'education' },
+        { shortcut: 'pluralsight', name: 'Pluralsight', category: 'education' },
+        { shortcut: 'freecodecamp', name: 'freeCodeCamp', category: 'education' },
+        { shortcut: 'codecademy', name: 'Codecademy', category: 'education' },
+        { shortcut: 'brilliant', name: 'Brilliant', category: 'education' },
+        { shortcut: 'mit', name: 'MIT OpenCourseWare', category: 'education' },
+        { shortcut: 'ted', name: 'TED', category: 'education' },
+        { shortcut: 'masterclass', name: 'MasterClass', category: 'education' },
+        { shortcut: 'usagov', name: 'USA.gov', category: 'government' },
+        { shortcut: 'govuk', name: 'GOV.UK', category: 'government' },
+        { shortcut: 'data', name: 'Data.gov', category: 'government' },
+        { shortcut: 'europeana', name: 'Europeana', category: 'government' },
+        { shortcut: 'dpla', name: 'Digital Public Library', category: 'government' },
+        { shortcut: 'loc', name: 'Library of Congress', category: 'government' },
+        { shortcut: 'smithsonian', name: 'Smithsonian', category: 'government' },
+        { shortcut: 'worldbank', name: 'World Bank', category: 'government' },
+        { shortcut: 'un', name: 'United Nations', category: 'government' },
+        { shortcut: 'census', name: 'US Census', category: 'government' },
+        { shortcut: 'mal', name: 'MyAnimeList', category: 'anime' },
+        { shortcut: 'anilist', name: 'AniList', category: 'anime' },
+        { shortcut: 'anidb', name: 'AniDB', category: 'anime' },
+        { shortcut: 'kitsu', name: 'Kitsu', category: 'anime' },
+        { shortcut: 'crunchyroll', name: 'Crunchyroll', category: 'anime' },
+        { shortcut: 'funimation', name: 'Funimation', category: 'anime' },
+        { shortcut: 'mangadex', name: 'MangaDex', category: 'anime' },
+        { shortcut: 'mangaupdates', name: 'Manga Updates', category: 'anime' },
+        { shortcut: 'producthunt', name: 'Product Hunt', category: 'misc' },
+        { shortcut: 'alternativeto', name: 'AlternativeTo', category: 'misc' },
+        { shortcut: 'similarweb', name: 'SimilarWeb', category: 'misc' },
+        { shortcut: 'pastebin', name: 'Pastebin', category: 'misc' },
+        { shortcut: 'wolframcom', name: 'Wolfram', category: 'misc' },
+        { shortcut: 'symbolab', name: 'Symbolab', category: 'misc' },
+        { shortcut: 'desmos', name: 'Desmos', category: 'misc' },
+        { shortcut: 'geogebra', name: 'GeoGebra', category: 'misc' },
+        { shortcut: 'timeanddate', name: 'Time and Date', category: 'misc' },
+        { shortcut: 'xe', name: 'XE Currency', category: 'misc' },
+        { shortcut: 'oeis', name: 'OEIS', category: 'misc' },
     ];
 
     function initSearchAutocomplete() {
@@ -1250,13 +1755,45 @@
     // ========================================================================
     function initImageViewer() {
         document.addEventListener('click', function(e) {
-            const imageResult = closestFrom(e.target, '.image-result');
-            if (imageResult && !closestFrom(e.target, 'a')) {
-                const fullUrl = imageResult.dataset.fullUrl;
-                if (fullUrl) {
-                    window.open(fullUrl, '_blank', 'noopener,noreferrer');
-                }
+            const previewLink = closestFrom(e.target, '[data-image-preview]');
+            if (!previewLink) return;
+            const imageResult = closestFrom(previewLink, '.image-result');
+            const dialog = document.getElementById('image-preview-dialog');
+            if (!imageResult || !dialog || typeof dialog.showModal !== 'function') return;
+
+            const previewURL = imageResult.dataset.previewUrl || '';
+            if (!previewURL) return;
+            e.preventDefault();
+
+            const title = imageResult.dataset.imageTitle || t('search.image_preview', 'Preview image');
+            const image = dialog.querySelector('[data-image-preview-image]');
+            const titleElement = dialog.querySelector('[data-image-preview-title]');
+            const dimensions = dialog.querySelector('[data-image-preview-dimensions]');
+            const source = dialog.querySelector('[data-image-preview-source]');
+            const download = dialog.querySelector('[data-image-preview-download]');
+            titleElement.textContent = title;
+            image.alt = title;
+            dimensions.textContent = '';
+
+            const width = Number(imageResult.dataset.imageWidth);
+            const height = Number(imageResult.dataset.imageHeight);
+            const hasDimensions = width > 0 && height > 0;
+            if (hasDimensions) {
+                dimensions.textContent = t('search.image_dimensions', 'Image dimensions') + ': ' + width + ' × ' + height + ' px';
             }
+            image.onload = function() {
+                if (!hasDimensions && image.naturalWidth > 0 && image.naturalHeight > 0) {
+                    dimensions.textContent = t('search.image_dimensions', 'Image dimensions') + ': ' + image.naturalWidth + ' × ' + image.naturalHeight + ' px';
+                }
+            };
+            image.src = previewURL;
+
+            source.href = imageResult.dataset.fullUrl || previewLink.href;
+            download.href = previewURL;
+            const filename = title.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'image';
+            const format = (imageResult.dataset.imageFormat || '').replace(/[^a-z0-9]/gi, '');
+            download.download = format ? filename + '.' + format : filename;
+            dialog.showModal();
         });
     }
 
@@ -1284,6 +1821,11 @@
         var currentPage = parseInt(container.dataset.page) || 1;
         var perPage = parseInt(container.dataset.perPage) || 20;
         var safeSearch = container.dataset.safeSearch || '1';
+        var language = container.dataset.lang || '';
+        var region = container.dataset.region || '';
+        var timeRange = container.dataset.timeRange || '';
+        var timeFrom = container.dataset.timeFrom || '';
+        var timeTo = container.dataset.timeTo || '';
         var prefsParam = container.dataset.prefs || '';
         var isLoading = false;
         var hasMore = true;
@@ -1387,6 +1929,11 @@
                 '&page=' + nextPage +
                 '&limit=' + perPage +
                 '&safe_search=' + encodeURIComponent(safeSearch);
+            if (language) apiURL += '&lang=' + encodeURIComponent(language);
+            if (region) apiURL += '&region=' + encodeURIComponent(region);
+            if (timeRange) apiURL += '&time_range=' + encodeURIComponent(timeRange);
+            if (timeFrom) apiURL += '&time_from=' + encodeURIComponent(timeFrom);
+            if (timeTo) apiURL += '&time_to=' + encodeURIComponent(timeTo);
             if (prefsParam) {
                 apiURL += '&prefs=' + encodeURIComponent(prefsParam);
             }
@@ -2009,6 +2556,32 @@
     function initEventDelegation() {
         document.addEventListener('click', function(e) {
             const target = e.target;
+            const stopwatchButton = target.closest('.stopwatch-start, .stopwatch-stop, .stopwatch-reset, .stopwatch-lap');
+            if (stopwatchButton) {
+                handleStopwatchAction(stopwatchButton);
+                return;
+            }
+
+            const timerButton = target.closest('.timer-start, .timer-pause, .timer-reset');
+            if (timerButton) {
+                handleTimerAction(timerButton);
+                return;
+            }
+
+            if (target.matches('[data-action="regenerate-password"]')) {
+                regeneratePassword(target.closest('[data-password-widget]'));
+                return;
+            }
+
+            if (target.matches('[data-action="uuid-regenerate"]')) {
+                regenerateUUID(target.closest('.uuid-result'));
+                return;
+            }
+
+            if (target.matches('[data-action="roll-again"]')) {
+                rollAgain(target.closest('.random-result'));
+                return;
+            }
 
             // Flash close button
             if (target.matches('.flash-close') || target.closest('.flash-close')) {
@@ -2134,9 +2707,42 @@
         document.addEventListener('submit', function(e) {
             const form = e.target;
 
+            if (form.matches('.directory-scan-form')) {
+                e.preventDefault();
+                const query = (form.dataset.query || '').trim();
+                window.location.assign(form.action + '?q=' + encodeURIComponent(query));
+                return;
+            }
+
+            if (form.matches('.directory-filter-form')) {
+                e.preventDefault();
+                const query = ['directory:' + (form.dataset.query || '').trim()];
+                const values = [
+                    ['type', form.elements.directory_type.value],
+                    ['min-size', form.elements.directory_min_size.value],
+                    ['after', form.elements.directory_after.value],
+                    ['before', form.elements.directory_before.value],
+                    ['site', form.elements.directory_site.value]
+                ];
+                values.forEach(function(entry) {
+                    const value = entry[1].trim();
+                    if (value) query.push(entry[0] + ':' + value);
+                });
+                const scanIndex = form.elements.directory_scan.value.trim();
+                if (scanIndex) query.push('scan:' + scanIndex);
+                window.location.assign(form.action + '?q=' + encodeURIComponent(query.join(' ')));
+                return;
+            }
+
             if (form.matches('[data-confirm-revoke]')) {
                 e.preventDefault();
                 handleRevokeToken(form);
+            }
+        });
+
+        document.addEventListener('input', function(e) {
+            if (e.target.matches('.color-preview')) {
+                updateColorResult(e.target);
             }
         });
 
@@ -2303,6 +2909,24 @@
 
             if (query && searchQuery && searchForm && advancedModal) {
                 searchQuery.value = query;
+                var timeRange = document.getElementById('as-time');
+                var language = document.getElementById('as-lang');
+                var region = document.getElementById('as-region');
+                [
+                    ['time_range', timeRange && timeRange.value],
+                    ['lang', language && language.value],
+                    ['region', region && region.value]
+                ].forEach(function(filter) {
+                    var existing = searchForm.querySelector('input[name="' + filter[0] + '"]');
+                    if (existing) existing.remove();
+                    if (filter[1]) {
+                        var input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = filter[0];
+                        input.value = filter[1];
+                        searchForm.appendChild(input);
+                    }
+                });
                 advancedModal.close();
                 searchForm.submit();
             }
@@ -2329,6 +2953,78 @@
         return div.innerHTML;
     }
 
+    // Search history is browser-local state only; queries are never sent to a
+    // history endpoint or included in preference sync URLs.
+    function readSearchHistory() {
+        try {
+            var entries = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+            if (!Array.isArray(entries)) return [];
+            return entries.filter(function(entry) {
+                return entry && typeof entry.query === 'string' && entry.query.trim() &&
+                    typeof entry.category === 'string';
+            }).slice(0, SEARCH_HISTORY_LIMIT);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function renderSearchHistory() {
+        var section = document.getElementById('search-history');
+        var list = document.getElementById('search-history-list');
+        if (!section || !list) return;
+
+        var enabled = getStoredSearchPreferences().save_history;
+        var entries = enabled ? readSearchHistory() : [];
+        list.replaceChildren();
+        section.hidden = entries.length === 0;
+        entries.forEach(function(entry) {
+            var item = document.createElement('li');
+            var link = document.createElement('a');
+            var target = new URL('/search', window.location.origin);
+            target.searchParams.set('q', entry.query);
+            target.searchParams.set('category', entry.category);
+            link.href = target.pathname + target.search;
+            link.textContent = entry.query;
+            item.appendChild(link);
+            list.appendChild(item);
+        });
+    }
+
+    function recordSearchHistory() {
+        var page = document.querySelector('.search-results-page');
+        if (!page || !getStoredSearchPreferences().save_history) return;
+        var query = (page.dataset.query || '').trim();
+        if (!query) return;
+
+        var category = page.dataset.category || 'general';
+        var entries = readSearchHistory().filter(function(entry) {
+            return entry.query !== query || entry.category !== category;
+        });
+        entries.unshift({ query: query, category: category });
+        try {
+            localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(entries.slice(0, SEARCH_HISTORY_LIMIT)));
+        } catch (error) {
+            return;
+        }
+    }
+
+    function initSearchHistory() {
+        document.querySelectorAll('#clear-search-history').forEach(function(button) {
+            button.addEventListener('click', function() {
+                try {
+                    localStorage.removeItem(SEARCH_HISTORY_KEY);
+                } catch (error) {
+                    // Storage can be unavailable in private browsing modes.
+                }
+                renderSearchHistory();
+                var status = document.getElementById('save-status');
+                if (status) status.textContent = t('preferences.clear_history', 'Clear history');
+            });
+        });
+        recordSearchHistory();
+        renderSearchHistory();
+    }
+
     // ========================================================================
     // PREFERENCES PAGE - Per AI.md PART 16: NO inline JS
     // ========================================================================
@@ -2337,14 +3033,14 @@
         if (!prefsPage) return;
 
         // Storage keys (widgets are server-side cookie — no WIDGETS_KEY here)
-        var PREFS_KEY = SEARCH_PREFERENCES_KEY;
         var BANGS_KEY = 'search_custom_bangs';
 
-        // Load preferences from localStorage
+        // Load preferences from cookies; only the search-history records stay in localStorage.
         function loadPreferences() {
             try {
-                var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+                var prefs = getStoredSearchPreferences();
                 var themeSelect = document.getElementById('theme');
+                var langSelect = document.getElementById('lang');
                 var unitsSelect = document.getElementById('units');
                 var defaultCategorySelect = document.getElementById('default-category');
                 var safeSearchSelect = document.getElementById('safe-search');
@@ -2352,9 +3048,11 @@
                 var newTabCheckbox = document.getElementById('new-tab');
                 var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
                 var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
+                var saveHistoryCheckbox = document.getElementById('save-history');
+                var videoPreviewsCheckbox = document.getElementById('video-previews');
 
-                // Theme and units are stored in cookies (not localStorage)
                 if (themeSelect) themeSelect.value = getPreferredTheme();
+                if (langSelect) langSelect.value = prefs.lang;
                 if (unitsSelect) unitsSelect.value = getPreferredUnits();
                 if (prefs.default_category && defaultCategorySelect) defaultCategorySelect.value = prefs.default_category;
                 if (prefs.safe_search !== undefined && safeSearchSelect) safeSearchSelect.value = prefs.safe_search;
@@ -2362,44 +3060,64 @@
                 if (newTabCheckbox) newTabCheckbox.checked = prefs.new_tab !== false;
                 if (infiniteScrollCheckbox) infiniteScrollCheckbox.checked = prefs.infinite_scroll !== false;
                 if (keyboardShortcutsCheckbox) keyboardShortcutsCheckbox.checked = prefs.keyboard_shortcuts !== false;
+                if (saveHistoryCheckbox) saveHistoryCheckbox.checked = prefs.save_history !== false;
+                if (videoPreviewsCheckbox) {
+                    var videoPreviewCookie = document.cookie.split('; ').find(function(item) { return item.indexOf('search_pref_video_previews=') === 0; });
+                    videoPreviewsCheckbox.checked = !videoPreviewCookie || decodeURIComponent(videoPreviewCookie.split('=').slice(1).join('=')) !== '0';
+                }
             } catch (e) {
                 console.error('Failed to load preferences:', e);
             }
         }
 
-        // Save preferences to localStorage
+        // Save preferences to cookies and keep history records client-side.
         function savePreferences() {
             var themeSelect = document.getElementById('theme');
+            var langSelect = document.getElementById('lang');
             var unitsSelect = document.getElementById('units');
+            var weatherUnitsSelect = document.getElementById('weather-units');
             var defaultCategorySelect = document.getElementById('default-category');
             var safeSearchSelect = document.getElementById('safe-search');
             var resultsPerPageSelect = document.getElementById('results-per-page');
             var newTabCheckbox = document.getElementById('new-tab');
             var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
             var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
+            var saveHistoryCheckbox = document.getElementById('save-history');
+            var videoPreviewsCheckbox = document.getElementById('video-previews');
 
             var prefs = {
-                theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'auto',
+                theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'dark',
+                lang: langSelect ? langSelect.value : getClientLanguage(),
                 units: unitsSelect && unitsSelect.value === 'metric' ? 'metric' : 'imperial',
+                weather_units: weatherUnitsSelect && ['auto', 'metric', 'imperial'].indexOf(weatherUnitsSelect.value) !== -1 ? weatherUnitsSelect.value : 'auto',
                 default_category: defaultCategorySelect ? defaultCategorySelect.value : 'general',
                 safe_search: safeSearchSelect ? safeSearchSelect.value : '1',
                 results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '100',
                 new_tab: newTabCheckbox ? newTabCheckbox.checked : true,
                 infinite_scroll: infiniteScrollCheckbox ? infiniteScrollCheckbox.checked : true,
-                keyboard_shortcuts: keyboardShortcutsCheckbox ? keyboardShortcutsCheckbox.checked : true
+                keyboard_shortcuts: keyboardShortcutsCheckbox ? keyboardShortcutsCheckbox.checked : true,
+                save_history: saveHistoryCheckbox ? saveHistoryCheckbox.checked : true,
+                video_previews: videoPreviewsCheckbox ? videoPreviewsCheckbox.checked : true
             };
 
-            localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+            if (!prefs.save_history) localStorage.removeItem(SEARCH_HISTORY_KEY);
             document.cookie = 'theme=' + encodeURIComponent(prefs.theme) + '; path=/; max-age=31536000; SameSite=Lax';
+            setCookie('lang', prefs.lang, 31536000);
             setUnitsCookie(prefs.units);
+            setCookie('search_widget_weather_units', prefs.weather_units, 31536000);
+            setCookie('search_pref_category', prefs.default_category, 31536000);
+            setCookie('search_pref_safe_search', prefs.safe_search, 31536000);
+            setCookie('search_pref_results_per_page', prefs.results_per_page, 31536000);
+            setCookie('search_pref_new_tab', prefs.new_tab ? '1' : '0', 31536000);
+            setCookie('search_pref_infinite_scroll', prefs.infinite_scroll ? '1' : '0', 31536000);
+            setCookie('search_pref_keyboard_shortcuts', prefs.keyboard_shortcuts ? '1' : '0', 31536000);
+            setCookie('search_pref_save_history', prefs.save_history ? '1' : '0', 31536000);
+            setCookie('search_pref_video_previews', prefs.video_previews ? '1' : '0', 31536000);
 
             applyTheme(prefs.theme);
 
-            // preventDefault() on the submit button means the real POST to
-            // /server/preferences/general never fires for JS-enabled clients, so
-            // sync the same fields there via fetch to keep the server-side
-            // cookies (and thus .Prefs on next page render) consistent with
-            // what no-JS clients would have submitted. Widget toggles are
+            // Save through the canonical preferences endpoint so cookies and
+            // the no-JavaScript form path share server-side validation. Widget toggles are
             // form="general-settings" checkboxes rendered elsewhere on the
             // page, so they are collected and sent in the same request -
             // there is a single Save action, not a separate one per section.
@@ -2431,13 +3149,17 @@
                 params.append('csrf_token', csrfInput.value);
             }
             params.append('theme', prefs.theme);
-            params.append('units', prefs.units);
-            params.append('default_category', prefs.default_category);
-            params.append('safe_search', prefs.safe_search);
-            params.append('results_per_page', prefs.results_per_page);
-            if (prefs.new_tab) params.append('new_tab', 'on');
-            if (prefs.infinite_scroll) params.append('infinite_scroll', 'on');
-            if (prefs.keyboard_shortcuts) params.append('keyboard_shortcuts', 'on');
+            params.append('lang', prefs.lang);
+            params.append('search_pref_units', prefs.units);
+            params.append('search_widget_weather_units', prefs.weather_units);
+            params.append('search_pref_category', prefs.default_category);
+            params.append('search_pref_safe_search', prefs.safe_search);
+            params.append('search_pref_results_per_page', prefs.results_per_page);
+            params.append('search_pref_new_tab', prefs.new_tab ? '1' : '0');
+            params.append('search_pref_infinite_scroll', prefs.infinite_scroll ? '1' : '0');
+            params.append('search_pref_keyboard_shortcuts', prefs.keyboard_shortcuts ? '1' : '0');
+            params.append('search_pref_save_history', prefs.save_history ? '1' : '0');
+            params.append('search_pref_video_previews', prefs.video_previews ? '1' : '0');
 
             var toggles = document.getElementById('widget-toggles');
             if (toggles) {
@@ -2446,7 +3168,7 @@
                 });
             }
 
-            fetch('/server/preferences/general', {
+            fetch('/server/preferences', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: params.toString(),
@@ -2573,8 +3295,9 @@
             // Export preferences (widgets are server-side cookie — not included in export)
             if (e.target.id === 'export-prefs') {
                 var data = {
-                    preferences: JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'),
+                    preferences: getStoredSearchPreferences(),
                     custom_bangs: JSON.parse(localStorage.getItem(BANGS_KEY) || '[]'),
+                    search_history: readSearchHistory(),
                     exported_at: new Date().toISOString()
                 };
                 var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2604,23 +3327,23 @@
                     .then(function(res) { return res.json(); })
                     .then(function(json) {
                         var data = json && json.data ? json.data : {};
-                        if (!data.full_url) {
+                        if (!data.url) {
                             showPrefStatus(t('preferences.sync_export_failed', 'Could not copy preferences'), true);
                             return;
                         }
                         var urlField = document.getElementById('sync-url');
                         var codeField = document.getElementById('sync-code');
                         var qrLink = document.getElementById('qr-sync-prefs');
-                        if (urlField) urlField.value = data.full_url;
-                        if (codeField) codeField.value = data.short_code || '';
-                        if (qrLink) qrLink.href = '/direct/qr/' + encodeURIComponent(data.full_url);
+                        if (urlField) urlField.value = data.url;
+                        if (codeField) codeField.value = data.code || '';
+                        if (qrLink) qrLink.href = '/direct/qr/' + encodeURIComponent(data.url);
                         // Populating the fields above is the source of truth for success.
                         // Some browsers (notably Safari) drop the user-activation state
                         // the async Clipboard API needs by the time this fetch resolves,
                         // so a clipboard failure must never be reported as the whole
                         // action failing when the fields were already filled in.
                         if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(data.full_url).then(function() {
+                            navigator.clipboard.writeText(data.url).then(function() {
                                 showPrefStatus(t('preferences.sync_copied', 'Preferences copied!'));
                             }).catch(function() {
                                 if (urlField) urlField.select();
@@ -2659,8 +3382,9 @@
                     danger: true
                 }).then(function(confirmed) {
                     if (!confirmed) return;
-                    localStorage.removeItem(PREFS_KEY);
+                    ['theme', 'lang', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_widget_weather_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews'].forEach(function(name) { clearCookie(name); });
                     localStorage.removeItem(BANGS_KEY);
+                    localStorage.removeItem(SEARCH_HISTORY_KEY);
                     // Clear per-widget settings
                     for (var i = localStorage.length - 1; i >= 0; i--) {
                         var key = localStorage.key(i);
@@ -2725,8 +3449,20 @@
                 reader.onload = function(ev) {
                     try {
                         var data = JSON.parse(ev.target.result);
-                        if (data.preferences) localStorage.setItem(PREFS_KEY, JSON.stringify(data.preferences));
-                        if (data.custom_bangs) localStorage.setItem(BANGS_KEY, JSON.stringify(data.custom_bangs));
+                        if (data.preferences && typeof data.preferences === 'object' && !Array.isArray(data.preferences)) writeSearchPreferences(data.preferences);
+                        if (Array.isArray(data.custom_bangs)) {
+                            localStorage.setItem(BANGS_KEY, JSON.stringify(data.custom_bangs));
+                        }
+                        var importedPreferences = data.preferences || getStoredSearchPreferences();
+                        if (importedPreferences.save_history === false) {
+                            localStorage.removeItem(SEARCH_HISTORY_KEY);
+                        } else if (Array.isArray(data.search_history)) {
+                            var importedHistory = data.search_history.filter(function(entry) {
+                                return entry && typeof entry.query === 'string' && entry.query.trim() &&
+                                    typeof entry.category === 'string';
+                            }).slice(0, SEARCH_HISTORY_LIMIT);
+                            localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(importedHistory));
+                        }
                         // widgets are server-side (enabled_widgets cookie) — not imported from file
                         loadPreferences();
                         loadCustomBangs();
@@ -3009,6 +3745,364 @@
         });
     }
 
+    function regenerateUUID(widget) {
+        if (!widget || !window.crypto || !window.crypto.getRandomValues) return;
+        var bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        var hex = Array.from(bytes, function(value) { return value.toString(16).padStart(2, '0'); }).join('');
+        var uuid = hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+        var values = { standard: uuid, uppercase: uuid.toUpperCase(), compact: hex };
+        widget.querySelectorAll('[data-uuid-format]').forEach(function(code) {
+            var value = values[code.dataset.uuidFormat];
+            code.textContent = value;
+            var copy = code.nextElementSibling;
+            if (copy && copy.matches('.copy-btn')) copy.dataset.copy = value;
+        });
+    }
+
+    function secureRandomIndex(max) {
+        if (!window.crypto || !window.crypto.getRandomValues || max < 1 || max > 4294967296) {
+            throw new Error('Secure random number generation is unavailable.');
+        }
+        var limit = Math.floor(4294967296 / max) * max;
+        var value = new Uint32Array(1);
+        do {
+            window.crypto.getRandomValues(value);
+        } while (value[0] >= limit);
+        return value[0] % max;
+    }
+
+    function regeneratePassword(widget) {
+        if (!widget) return;
+        var lengthInput = widget.querySelector('.password-length');
+        var length = Math.max(8, Math.min(64, parseInt(lengthInput.value, 10) || 16));
+        lengthInput.value = String(length);
+        var sets = {
+            lowercase: 'abcdefghijklmnopqrstuvwxyz',
+            uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+            numbers: '0123456789',
+            symbols: '!@#$%^&*()-_=+[]{}|;:,.<>?'
+        };
+        var chosen = Array.from(widget.querySelectorAll('[data-password-set]:checked'))
+            .map(function(input) { return sets[input.dataset.passwordSet]; })
+            .filter(Boolean);
+        if (!chosen.length) {
+            widget.querySelector('[data-password-set="lowercase"]').checked = true;
+            chosen = [sets.lowercase];
+        }
+        var alphabet = chosen.join('');
+        var chars = chosen.map(function(set) { return set[secureRandomIndex(set.length)]; });
+        while (chars.length < length) chars.push(alphabet[secureRandomIndex(alphabet.length)]);
+        for (var i = chars.length - 1; i > 0; i--) {
+            var j = secureRandomIndex(i + 1);
+            var temp = chars[i];
+            chars[i] = chars[j];
+            chars[j] = temp;
+        }
+        var password = chars.join('');
+        var entropy = Math.floor(length * Math.log2(alphabet.length));
+        var strength = entropy < 40 ? 'Weak' : entropy < 70 ? 'Fair' : entropy < 100 ? 'Strong' : 'Very strong';
+        widget.querySelector('.password-value').textContent = password;
+        var copy = widget.querySelector('.copy-btn');
+        copy.dataset.copy = password;
+        widget.querySelector('.password-strength-meter').value = Math.min(entropy, 100);
+        widget.querySelector('.password-strength-label').textContent = strength;
+    }
+
+    function rollAgain(widget) {
+        if (!widget) return;
+        var value = widget.querySelector('.random-value');
+        var result;
+        if (widget.dataset.randomKind === 'coin') {
+            result = secureRandomIndex(2) === 0 ? 'Heads' : 'Tails';
+        } else {
+            var min = parseInt(widget.dataset.min, 10);
+            var max = parseInt(widget.dataset.max, 10);
+            if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) || max < min || max - min >= 4294967296) return;
+            var count = Math.max(1, Math.min(100, parseInt(widget.dataset.count || '1', 10)));
+            var rolls = [];
+            for (var i = 0; i < count; i++) rolls.push(min + secureRandomIndex(max - min + 1));
+            result = count > 1 ? rolls.join(', ') + ' (total ' + rolls.reduce(function(sum, roll) { return sum + roll; }, 0) + ')' : String(rolls[0]);
+        }
+        value.textContent = result;
+        widget.classList.remove('is-rolling');
+        void widget.offsetWidth;
+        widget.classList.add('is-rolling');
+        window.setTimeout(function() { widget.classList.remove('is-rolling'); }, 350);
+    }
+
+    function updateColorResult(input) {
+        var widget = input.closest('.color-result');
+        if (!widget || !/^#[0-9a-f]{6}$/i.test(input.value)) return;
+        var hex = input.value.toUpperCase();
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        var rn = r / 255, gn = g / 255, bn = b / 255;
+        var max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn), delta = max - min;
+        var light = (max + min) / 2, hue = 0, saturation = 0;
+        if (delta) {
+            saturation = light > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+            if (max === rn) hue = (gn - bn) / delta + (gn < bn ? 6 : 0);
+            else if (max === gn) hue = (bn - rn) / delta + 2;
+            else hue = (rn - gn) / delta + 4;
+            hue *= 60;
+        }
+        var k = 1 - max;
+        var cmyk = k === 1 ? [0, 0, 0, 100] : [(1 - rn - k) / (1 - k) * 100, (1 - gn - k) / (1 - k) * 100, (1 - bn - k) / (1 - k) * 100, k * 100].map(Math.round);
+        var complementary = colorFromHSL((hue + 180) % 360, saturation, light);
+        var names = {};
+        try { names = JSON.parse(widget.dataset.colorNames || '{}'); } catch (error) { names = {}; }
+        var values = {
+            hex: hex.slice(1),
+            rgb: 'rgb(' + r + ', ' + g + ', ' + b + ')',
+            hsl: 'hsl(' + Math.round(hue) + ', ' + Math.round(saturation * 100) + '%, ' + Math.round(light * 100) + '%)',
+            cmyk: 'cmyk(' + cmyk.join('%, ') + '%)',
+            name: names[hex.slice(1).toLowerCase()] || '',
+            complementary: complementary
+        };
+        Object.keys(values).forEach(function(key) {
+            var value = key === 'complementary' ? '#' + values[key] : key === 'hex' ? '#' + values[key] : values[key];
+            var display = widget.querySelector('[data-color-value="' + key + '"]');
+            if (display) display.textContent = value;
+            var copy = widget.querySelector('[data-color-copy="' + key + '"]');
+            if (copy) copy.dataset.copy = value;
+        });
+    }
+
+    function colorFromHSL(hue, saturation, lightness) {
+        var c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+        var x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        var m = lightness - c / 2;
+        var rgb = hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
+        return rgb.map(function(value) { return Math.round((value + m) * 255).toString(16).padStart(2, '0'); }).join('').toUpperCase();
+    }
+
+    function formatWidgetTime(totalSeconds, includeHours) {
+        var seconds = Math.max(0, Math.floor(totalSeconds));
+        var hours = Math.floor(seconds / 3600);
+        var minutes = Math.floor((seconds % 3600) / 60);
+        var remaining = seconds % 60;
+        var pad = function(value) { return String(value).padStart(2, '0'); };
+        return (includeHours || hours > 0 ? pad(hours) + ':' : '') + pad(minutes) + ':' + pad(remaining);
+    }
+
+    function handleStopwatchAction(button) {
+        var widget = button.closest('.stopwatch-widget');
+        if (!widget) return;
+        var state = widget._stopwatchState || (widget._stopwatchState = { elapsed: 0, startedAt: 0, interval: 0, laps: [], storageKey: stopwatchStorageKey(widget) });
+        var display = widget.querySelector('.stopwatch-display');
+        var render = function() {
+            var elapsed = state.elapsed + (state.startedAt ? Date.now() - state.startedAt : 0);
+            display.textContent = formatWidgetTime(elapsed / 1000, true);
+        };
+        if (button.matches('.stopwatch-start') && !state.startedAt) {
+            state.startedAt = Date.now();
+            state.interval = window.setInterval(render, 100);
+            saveStopwatchState(state);
+            widget.querySelector('.stopwatch-start').disabled = true;
+            widget.querySelector('.stopwatch-stop').disabled = false;
+            widget.querySelector('.stopwatch-reset').disabled = false;
+        } else if (button.matches('.stopwatch-stop') && state.startedAt) {
+            state.elapsed += Date.now() - state.startedAt;
+            state.startedAt = 0;
+            window.clearInterval(state.interval);
+            render();
+            saveStopwatchState(state);
+            widget.querySelector('.stopwatch-start').disabled = false;
+            widget.querySelector('.stopwatch-stop').disabled = true;
+        } else if (button.matches('.stopwatch-reset')) {
+            window.clearInterval(state.interval);
+            state.elapsed = 0;
+            state.startedAt = 0;
+            render();
+            widget.querySelector('.stopwatch-start').disabled = false;
+            widget.querySelector('.stopwatch-stop').disabled = true;
+            widget.querySelector('.stopwatch-reset').disabled = true;
+            widget.querySelector('.stopwatch-laps').replaceChildren();
+            state.laps = [];
+            try { sessionStorage.removeItem(state.storageKey); } catch (error) { /* Storage is optional. */ }
+        } else if (button.matches('.stopwatch-lap')) {
+            var lapText = display.textContent;
+            state.laps.push(lapText);
+            var lap = document.createElement('div');
+            lap.textContent = 'Lap ' + state.laps.length + ': ' + lapText;
+            widget.querySelector('.stopwatch-laps').appendChild(lap);
+            saveStopwatchState(state);
+        }
+    }
+
+    function stopwatchStorageKey(widget) {
+        var stopwatches = Array.from(document.querySelectorAll('.instant-answer-content .stopwatch-widget'));
+        return 'search.instant-stopwatch:' + location.pathname + location.search + ':' + stopwatches.indexOf(widget);
+    }
+
+    function saveStopwatchState(state) {
+        try {
+            sessionStorage.setItem(state.storageKey, JSON.stringify({ elapsed: state.elapsed, startedAt: state.startedAt, laps: state.laps }));
+        } catch (error) {
+            // The stopwatch remains usable when browser storage is unavailable.
+        }
+    }
+
+    function timerStorageKey(widget) {
+        var timers = Array.from(document.querySelectorAll('.instant-answer-content .timer-widget'));
+        return 'search.instant-timer:' + location.pathname + location.search + ':' + timers.indexOf(widget);
+    }
+
+    function initInstantWidgetPersistence() {
+        document.querySelectorAll('.instant-answer-content .stopwatch-widget').forEach(function(widget) {
+            var state = { elapsed: 0, startedAt: 0, interval: 0, laps: [], storageKey: stopwatchStorageKey(widget) };
+            try {
+                var saved = JSON.parse(sessionStorage.getItem(state.storageKey) || 'null');
+                if (saved && Number.isFinite(saved.elapsed) && saved.elapsed >= 0) {
+                    state.elapsed = saved.elapsed;
+                    state.startedAt = Number.isFinite(saved.startedAt) ? saved.startedAt : 0;
+                    state.laps = Array.isArray(saved.laps) ? saved.laps.filter(function(lap) { return typeof lap === 'string'; }).slice(0, 1000) : [];
+                }
+            } catch (error) {
+                try { sessionStorage.removeItem(state.storageKey); } catch (storageError) { /* Storage is optional. */ }
+            }
+            widget._stopwatchState = state;
+            var display = widget.querySelector('.stopwatch-display');
+            state.laps.forEach(function(text, index) {
+                var lap = document.createElement('div');
+                lap.textContent = 'Lap ' + (index + 1) + ': ' + text;
+                widget.querySelector('.stopwatch-laps').appendChild(lap);
+            });
+            var render = function() {
+                var elapsed = state.elapsed + (state.startedAt ? Date.now() - state.startedAt : 0);
+                display.textContent = formatWidgetTime(elapsed / 1000, true);
+            };
+            render();
+            if (state.startedAt) {
+                state.interval = window.setInterval(render, 100);
+                widget.querySelector('.stopwatch-start').disabled = true;
+                widget.querySelector('.stopwatch-stop').disabled = false;
+                widget.querySelector('.stopwatch-reset').disabled = false;
+            }
+        });
+        document.querySelectorAll('.instant-answer-content .timer-widget').forEach(function(widget) {
+            var key = timerStorageKey(widget);
+            var total = Math.max(0, parseInt(widget.dataset.duration || '0', 10));
+            var state = { total: total, remaining: total, interval: 0, deadline: 0, storageKey: key };
+            try {
+                var saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+                if (saved && Number.isFinite(saved.total) && saved.total >= 0) {
+                    state.total = saved.total;
+                    state.remaining = Math.max(0, Number(saved.remaining) || 0);
+                    if (Number.isFinite(saved.deadline) && saved.deadline > Date.now()) {
+                        state.deadline = saved.deadline;
+                        state.interval = window.setInterval(function() { renderTimer(widget, state); }, 200);
+                        var start = widget.querySelector('.timer-start');
+                        var pause = widget.querySelector('.timer-pause');
+                        if (start) start.disabled = true;
+                        if (pause) pause.disabled = false;
+                    } else if (Number.isFinite(saved.deadline) && saved.deadline > 0) {
+                        state.remaining = 0;
+                        sessionStorage.removeItem(key);
+                    }
+                }
+            } catch (error) {
+                try { sessionStorage.removeItem(key); } catch (storageError) { /* Storage is optional. */ }
+            }
+            widget._timerState = state;
+            if (!state.interval) {
+                var display = widget.querySelector('.timer-display');
+                if (display) display.textContent = formatWidgetTime(state.remaining, state.remaining >= 3600);
+            }
+        });
+    }
+
+    function saveTimerState(widget, state, running) {
+        try {
+            sessionStorage.setItem(state.storageKey || timerStorageKey(widget), JSON.stringify({
+                total: state.total,
+                remaining: state.remaining,
+                deadline: running ? state.deadline : 0
+            }));
+        } catch (error) {
+            // Timers continue to run if browser storage is unavailable.
+        }
+    }
+
+    function renderTimer(widget, state) {
+        var display = widget.querySelector('.timer-display');
+        state.remaining = Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000));
+        display.textContent = formatWidgetTime(state.remaining, state.remaining >= 3600);
+        if (state.remaining === 0) {
+            window.clearInterval(state.interval);
+            state.interval = 0;
+            try { sessionStorage.removeItem(state.storageKey); } catch (error) { /* Storage is optional. */ }
+            widget.dispatchEvent(new CustomEvent('timercomplete', { bubbles: true }));
+            playTimerNotification();
+            var start = widget.querySelector('.timer-start');
+            var pause = widget.querySelector('.timer-pause');
+            if (start) start.disabled = false;
+            if (pause) pause.disabled = true;
+        }
+    }
+
+    function playTimerNotification() {
+        try {
+            var AudioContextType = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextType) return;
+            var audio = new AudioContextType();
+            var oscillator = audio.createOscillator();
+            var gain = audio.createGain();
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(0.12, audio.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.8);
+            oscillator.connect(gain);
+            gain.connect(audio.destination);
+            oscillator.start();
+            oscillator.stop(audio.currentTime + 0.8);
+            oscillator.onended = function() { audio.close(); };
+        } catch (error) {
+            // Completion remains visible when audio is unavailable or blocked.
+        }
+    }
+
+    function handleTimerAction(button) {
+        var widget = button.closest('.timer-widget');
+        if (!widget) return;
+        var display = widget.querySelector('.timer-display');
+        var state = widget._timerState || (widget._timerState = {
+            total: Math.max(0, parseInt(widget.dataset.duration || '0', 10)),
+            remaining: Math.max(0, parseInt(widget.dataset.duration || '0', 10)),
+            interval: 0,
+            deadline: 0,
+            storageKey: timerStorageKey(widget)
+        });
+        var start = widget.querySelector('.timer-start');
+        var pause = widget.querySelector('.timer-pause');
+        if (button.matches('.timer-start') && !state.interval && state.remaining > 0) {
+            state.deadline = Date.now() + state.remaining * 1000;
+            state.interval = window.setInterval(function() { renderTimer(widget, state); }, 200);
+            saveTimerState(widget, state, true);
+            if (start) start.disabled = true;
+            if (pause) pause.disabled = false;
+        } else if (button.matches('.timer-pause') && state.interval) {
+            renderTimer(widget, state);
+            if (state.remaining === 0) return;
+            window.clearInterval(state.interval);
+            state.interval = 0;
+            saveTimerState(widget, state, false);
+            if (start) start.disabled = false;
+            if (pause) pause.disabled = true;
+        } else if (button.matches('.timer-reset')) {
+            window.clearInterval(state.interval);
+            state.interval = 0;
+            state.remaining = state.total;
+            display.textContent = formatWidgetTime(state.remaining, state.remaining >= 3600);
+            try { sessionStorage.removeItem(state.storageKey); } catch (error) { /* Storage is optional. */ }
+            if (start) start.disabled = false;
+            if (pause) pause.disabled = true;
+        }
+    }
+
     // ========================================================================
     // INITIALIZATION
     // ========================================================================
@@ -3029,8 +4123,10 @@
         initInstallPrompt();
         initOfflineIndicator();
         initEventDelegation();
+        initInstantWidgetPersistence();
         initTabKeyboardNav();
         initAuthForms();
+        initSearchHistory();
         initHomepage();
         initHealthzCountdown();
         initPreferencesPage();
@@ -3333,13 +4429,17 @@
         widgets.forEach(function(wt) {
             params.append('widget', wt);
         });
-        fetch('/server/preferences/widgets', {
+        return fetch('/server/preferences/widgets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: params.toString(),
             redirect: 'follow'
+        }).then(function(response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return true;
         }).catch(function(e) {
             console.error('Widget preference save failed:', e);
+            return false;
         });
     }
 
@@ -4127,7 +5227,8 @@
                 if (target.matches('.widget-collapse')) {
                     var widgetEl = target.closest('.widget');
                     if (widgetEl) {
-                        widgetEl.classList.toggle('widget-collapsed');
+                        var expanded = widgetEl.classList.toggle('widget-collapsed') === false;
+                        target.setAttribute('aria-expanded', String(expanded));
                     }
                     return;
                 }
@@ -4391,11 +5492,23 @@
         removeWidget: function(widgetType) {
             var enabled = getEnabledWidgets();
             var idx = enabled.indexOf(widgetType);
-            if (idx >= 0) {
-                enabled.splice(idx, 1);
-                // POST updated list to server; page reloads with new cookie-driven state.
-                saveEnabledWidgets(enabled);
-            }
+            if (idx < 0) return;
+
+            enabled.splice(idx, 1);
+            var widget = document.querySelector('[data-widget="' + widgetType + '"]');
+            var parent = widget && widget.parentNode;
+            var next = widget && widget.nextSibling;
+            if (widget) widget.remove();
+            saveEnabledWidgets(enabled).then(function(saved) {
+                if (!saved) {
+                    if (widget && parent) parent.insertBefore(widget, next && next.parentNode === parent ? next : null);
+                    return;
+                }
+                clearInterval(this.intervals[widgetType]);
+                clearInterval(this.intervals[widgetType + '_refresh']);
+                delete this.intervals[widgetType];
+                delete this.intervals[widgetType + '_refresh'];
+            }.bind(this));
         },
 
         getWidgetDisplayName: function(widgetType) {
@@ -4872,181 +5985,36 @@
 
 
 // ============================================================================
-// BANG AUTOCOMPLETE
+// ARCHIVE TIMELINE (progressive enhancement for the native snapshot form)
 // ============================================================================
 (function() {
     'use strict';
 
-    var BANGS_KEY = 'search_custom_bangs';
-    var PREFS_KEY = 'search_preferences';
-
-    function getCustomBangs() {
-        try {
-            return JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
-        } catch (e) {
-            return [];
-        }
+    function updateTimeline(form, index) {
+        var select = form.querySelector('select[name="snapshot_id"]');
+        var range = form.querySelector('input[type="range"]');
+        var output = form.querySelector('output[for="archive-snapshot-range"]');
+        if (!select || !range || !output || !select.options[index]) return;
+        select.selectedIndex = index;
+        var label = select.options[index].textContent;
+        output.textContent = label;
+        range.setAttribute('aria-valuetext', label);
     }
 
-    function getPreferences() {
-        try {
-            return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-        } catch (e) {
-            return {};
-        }
-    }
+    document.addEventListener('input', function(event) {
+        if (!event.target) return;
+        var target = event.target.nodeType === 1 ? event.target : event.target.parentElement;
+        var range = target && target.closest('.archive-timeline input[type="range"]');
+        if (range) updateTimeline(range.form, Number(range.value));
+    });
 
-    function applyPreferences() {
-        var prefs = window.getActiveSearchPreferences();
-
-        // Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark
-        window.applyTheme(prefs.theme);
-
-        if (prefs.new_tab) {
-            document.querySelectorAll('.result a, .result-item a, .video-result a, .image-result a').forEach(function(link) {
-                link.setAttribute('target', '_blank');
-                link.setAttribute('rel', 'noopener noreferrer');
-            });
-        }
-    }
-
-    function initBangSuggestions() {
-        var searchInput = document.querySelector('input[name="q"]');
-        if (!searchInput) return;
-
-        var suggestionBox = null;
-
-        function createSuggestionBox() {
-            if (suggestionBox) return suggestionBox;
-
-            suggestionBox = document.createElement('div');
-            suggestionBox.className = 'bang-suggestions';
-            suggestionBox.style.cssText = 'position:absolute;background:var(--color-bg-active,#44475a);border:1px solid var(--color-border,#44475a);border-radius:4px;max-height:300px;overflow-y:auto;z-index:1000;display:none;width:100%;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
-
-            var parent = searchInput.parentElement;
-            parent.style.position = 'relative';
-            parent.appendChild(suggestionBox);
-
-            return suggestionBox;
-        }
-
-        function escapeHtml(text) {
-            var div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function showSuggestions(bangs) {
-            var box = createSuggestionBox();
-            box.innerHTML = '';
-
-            if (bangs.length === 0) {
-                box.style.display = 'none';
-                return;
-            }
-
-            bangs.slice(0, 10).forEach(function(bang) {
-                var item = document.createElement('div');
-                item.className = 'bang-suggestion-item';
-                item.innerHTML = '<span class="bang-shortcut">!' + escapeHtml(bang.shortcut) + '</span><span>' + escapeHtml(bang.name) + '</span>';
-
-                item.addEventListener('click', function() {
-                    var currentValue = searchInput.value;
-                    var bangMatch = currentValue.match(/!(\w*)$/);
-                    if (bangMatch) {
-                        searchInput.value = currentValue.slice(0, -bangMatch[0].length) + '!' + bang.shortcut + ' ';
-                    }
-                    searchInput.focus();
-                    hideSuggestions();
-                });
-
-                box.appendChild(item);
-            });
-
-            box.style.display = 'block';
-        }
-
-        function hideSuggestions() {
-            if (suggestionBox) {
-                suggestionBox.style.display = 'none';
-            }
-        }
-
-        function filterBangs(partial) {
-            var builtinBangs = window.__BUILTIN_BANGS || [];
-            var customBangs = getCustomBangs();
-            var allBangs = customBangs.concat(builtinBangs);
-
-            partial = partial.toLowerCase();
-            return allBangs.filter(function(bang) {
-                return bang.shortcut.toLowerCase().startsWith(partial) ||
-                    bang.name.toLowerCase().includes(partial) ||
-                    (bang.aliases && bang.aliases.some(function(a) { return a.toLowerCase().startsWith(partial); }));
-            });
-        }
-
-        searchInput.addEventListener('input', function() {
-            var value = this.value;
-            var bangMatch = value.match(/!(\w*)$/);
-
-            if (bangMatch && bangMatch[1].length > 0) {
-                var matches = filterBangs(bangMatch[1]);
-                showSuggestions(matches);
-            } else {
-                hideSuggestions();
-            }
-        });
-
-        searchInput.addEventListener('keydown', function(e) {
-            if (!suggestionBox || suggestionBox.style.display === 'none') return;
-
-            var items = suggestionBox.querySelectorAll('.bang-suggestion-item');
-            var selected = suggestionBox.querySelector('.bang-suggestion-item.selected');
-            var index = Array.from(items).indexOf(selected);
-
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (selected) selected.classList.remove('selected');
-                index = (index + 1) % items.length;
-                items[index].classList.add('selected');
-                items[index].style.background = 'var(--color-bg-secondary,#21222c)';
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (selected) selected.classList.remove('selected');
-                index = index <= 0 ? items.length - 1 : index - 1;
-                items[index].classList.add('selected');
-                items[index].style.background = 'var(--color-bg-secondary,#21222c)';
-            } else if (e.key === 'Enter' && selected) {
-                e.preventDefault();
-                selected.click();
-            } else if (e.key === 'Escape') {
-                hideSuggestions();
-            }
-        });
-
-        document.addEventListener('click', function(e) {
-            if (!searchInput.contains(e.target) && (!suggestionBox || !suggestionBox.contains(e.target))) {
-                hideSuggestions();
-            }
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-            applyPreferences();
-            initBangSuggestions();
-        });
-    } else {
-        applyPreferences();
-        initBangSuggestions();
-    }
-
-    window.SearchBangs = {
-        getCustomBangs: getCustomBangs,
-        getPreferences: getPreferences
-    };
+    document.addEventListener('change', function(event) {
+        if (!event.target) return;
+        var target = event.target.nodeType === 1 ? event.target : event.target.parentElement;
+        var select = target && target.closest('.archive-timeline select[name="snapshot_id"]');
+        if (select) updateTimeline(select.form, select.selectedIndex);
+    });
 })();
-
 
 // ============================================================================
 // VIDEO PREVIEWS (per IDEA.md - hover-to-play video thumbnails)
@@ -5061,6 +6029,9 @@
 
     // Initialize video preview functionality
     function initVideoPreview() {
+        var previewPreference = document.cookie.split('; ').find(function(item) { return item.indexOf('search_pref_video_previews=') === 0; });
+        if (previewPreference && decodeURIComponent(previewPreference.split('=').slice(1).join('=')) === '0') return;
+
         // Create preview container
         if (!previewContainer) {
             previewContainer = document.createElement('div');
@@ -5110,23 +6081,15 @@
     }
 
     function showVideoPreview(videoResult) {
-        var videoId = videoResult.dataset.videoId;
         var previewUrl = videoResult.dataset.previewUrl;
-        var videoSource = videoResult.dataset.videoSource || 'youtube';
-
-        if (!videoId && !previewUrl) {
-            // Try to extract from YouTube thumbnail
-            var thumbnail = videoResult.querySelector('img[src*="ytimg"], img[src*="youtube"]');
-            if (thumbnail) {
-                var match = thumbnail.src.match(/vi\/([^\/]+)/);
-                if (match) {
-                    videoId = match[1];
-                    videoSource = 'youtube';
-                }
-            }
+        if (!previewUrl) return;
+        var parsedPreview;
+        try {
+            parsedPreview = new URL(previewUrl, window.location.href);
+        } catch (e) {
+            return;
         }
-
-        if (!videoId && !previewUrl) return;
+        if (parsedPreview.origin !== window.location.origin || !/\.((webm)|(mp4))$/i.test(parsedPreview.pathname)) return;
 
         activePreview = videoResult;
 
@@ -5145,38 +6108,16 @@
             previewContainer.style.top = (window.innerHeight - 190) + 'px';
         }
 
-        // Show preview content
-        if (previewUrl) {
-            // Direct preview URL (animated GIF or video)
-            if (previewUrl.endsWith('.gif') || previewUrl.includes('giphy')) {
-                previewContainer.innerHTML = '<img src="' + previewUrl + '" alt="Video preview" class="video-preview-gif">';
-            } else {
-                previewContainer.innerHTML = '<video src="' + previewUrl + '" autoplay muted loop class="video-preview-video"></video>';
-            }
-        } else if (videoSource === 'youtube' && videoId) {
-            // Use YouTube animated thumbnail
-            // YouTube provides animated thumbnails at specific URLs
-            var animatedThumb = 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg';
-
-            // Create preview with storyboard simulation
-            previewContainer.innerHTML =
-                '<div class="video-preview-youtube">' +
-                    '<img src="' + animatedThumb + '" alt="Video preview" class="video-preview-thumb">' +
-                    '<div class="video-preview-progress"></div>' +
-                    '<div class="video-preview-play">&#9658;</div>' +
-                '</div>';
-
-            // Simulate video scrubbing with different thumbnail timestamps
-            simulateVideoScrub(videoId);
-        } else {
-            // Generic preview
-            var thumbUrl = videoResult.querySelector('img')?.src || '';
-            previewContainer.innerHTML =
-                '<div class="video-preview-generic">' +
-                    '<img src="' + thumbUrl + '" alt="Video preview">' +
-                    '<div class="video-preview-play">&#9658;</div>' +
-                '</div>';
-        }
+        var video = document.createElement('video');
+        video.src = parsedPreview.href;
+        video.autoplay = true;
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.preload = 'none';
+        video.className = 'video-preview-video';
+        video.addEventListener('error', hideVideoPreview, { once: true });
+        previewContainer.replaceChildren(video);
 
         previewContainer.classList.add('visible');
         previewContainer.setAttribute('aria-hidden', 'false');
@@ -5189,34 +6130,6 @@
             previewContainer.innerHTML = '';
         }
         activePreview = null;
-    }
-
-    // Simulate video scrubbing using YouTube thumbnail storyboards
-    function simulateVideoScrub(videoId) {
-        var storyboardIndex = 0;
-        var maxIndex = 3;
-        var thumb = previewContainer.querySelector('.video-preview-thumb');
-        var progress = previewContainer.querySelector('.video-preview-progress');
-
-        if (!thumb) return;
-
-        // YouTube storyboard thumbnails (different quality levels)
-        var qualities = ['mqdefault', 'hqdefault', 'sddefault', 'maxresdefault'];
-
-        var scrubInterval = setInterval(function() {
-            if (!previewContainer.classList.contains('visible')) {
-                clearInterval(scrubInterval);
-                return;
-            }
-
-            storyboardIndex = (storyboardIndex + 1) % qualities.length;
-            thumb.src = 'https://i.ytimg.com/vi/' + videoId + '/' + qualities[storyboardIndex] + '.jpg';
-
-            // Update progress bar
-            if (progress) {
-                progress.style.width = ((storyboardIndex + 1) / qualities.length * 100) + '%';
-            }
-        }, 800);
     }
 
     // Touch handling for mobile swipe scrubbing

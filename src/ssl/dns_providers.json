@@ -1,0 +1,2843 @@
+[
+  {
+    "id": "acme-dns",
+    "name": "Joohoi's ACME-DNS",
+    "credentials": [
+      {
+        "name": "ACME_DNS_API_BASE",
+        "description": "The ACME-DNS API address"
+      },
+      {
+        "name": "ACME_DNS_STORAGE_PATH",
+        "description": "The ACME-DNS JSON account data file. A per-domain account will be registered/persisted to this file and used for TXT updates."
+      },
+      {
+        "name": "ACME_DNS_STORAGE_BASE_URL",
+        "description": "The ACME-DNS JSON account data server."
+      }
+    ]
+  },
+  {
+    "id": "acmedns",
+    "name": "Joohoi's ACME-DNS",
+    "credentials": [
+      {
+        "name": "ACME_DNS_API_BASE",
+        "description": "The ACME-DNS API address"
+      },
+      {
+        "name": "ACME_DNS_STORAGE_PATH",
+        "description": "The ACME-DNS JSON account data file. A per-domain account will be registered/persisted to this file and used for TXT updates."
+      },
+      {
+        "name": "ACME_DNS_STORAGE_BASE_URL",
+        "description": "The ACME-DNS JSON account data server."
+      }
+    ]
+  },
+  {
+    "id": "active24",
+    "name": "Active24",
+    "credentials": [
+      {
+        "name": "ACTIVE24_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "ACTIVE24_SECRET",
+        "description": "Secret"
+      }
+    ]
+  },
+  {
+    "id": "alidns",
+    "name": "Alibaba Cloud DNS",
+    "credentials": [
+      {
+        "name": "ALICLOUD_RAM_ROLE",
+        "description": "Your instance RAM role (https://www.alibabacloud.com/help/en/ecs/user-guide/attach-an-instance-ram-role-to-an-ecs-instance)"
+      },
+      {
+        "name": "ALICLOUD_ACCESS_KEY",
+        "description": "Access key ID"
+      },
+      {
+        "name": "ALICLOUD_SECRET_KEY",
+        "description": "Access Key secret"
+      },
+      {
+        "name": "ALICLOUD_SECURITY_TOKEN",
+        "description": "STS Security Token (optional)"
+      }
+    ]
+  },
+  {
+    "id": "aliesa",
+    "name": "AlibabaCloud ESA",
+    "credentials": [
+      {
+        "name": "ALIESA_RAM_ROLE",
+        "description": "Your instance RAM role (https://www.alibabacloud.com/help/en/ecs/user-guide/attach-an-instance-ram-role-to-an-ecs-instance)"
+      },
+      {
+        "name": "ALIESA_ACCESS_KEY",
+        "description": "Access key ID"
+      },
+      {
+        "name": "ALIESA_SECRET_KEY",
+        "description": "Access Key secret"
+      },
+      {
+        "name": "ALIESA_SECURITY_TOKEN",
+        "description": "STS Security Token (optional)"
+      }
+    ]
+  },
+  {
+    "id": "allinkl",
+    "name": "all-inkl",
+    "credentials": [
+      {
+        "name": "ALL_INKL_LOGIN",
+        "description": "KAS login"
+      },
+      {
+        "name": "ALL_INKL_PASSWORD",
+        "description": "KAS password"
+      }
+    ]
+  },
+  {
+    "id": "alwaysdata",
+    "name": "Alwaysdata",
+    "credentials": [
+      {
+        "name": "ALWAYSDATA_API_KEY",
+        "description": "API Key"
+      }
+    ]
+  },
+  {
+    "id": "anexia",
+    "name": "Anexia CloudDNS",
+    "credentials": [
+      {
+        "name": "ANEXIA_TOKEN",
+        "description": "API token for Anexia Engine"
+      }
+    ]
+  },
+  {
+    "id": "artfiles",
+    "name": "ArtFiles",
+    "credentials": [
+      {
+        "name": "ARTFILES_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "ARTFILES_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "arvancloud",
+    "name": "ArvanCloud",
+    "credentials": [
+      {
+        "name": "ARVANCLOUD_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "auroradns",
+    "name": "Aurora DNS",
+    "credentials": [
+      {
+        "name": "AURORA_API_KEY",
+        "description": "API key or username to used"
+      },
+      {
+        "name": "AURORA_SECRET",
+        "description": "Secret password to be used"
+      }
+    ]
+  },
+  {
+    "id": "autodns",
+    "name": "Autodns",
+    "credentials": [
+      {
+        "name": "AUTODNS_API_USER",
+        "description": "Username"
+      },
+      {
+        "name": "AUTODNS_API_PASSWORD",
+        "description": "User Password"
+      }
+    ]
+  },
+  {
+    "id": "axelname",
+    "name": "Axelname",
+    "credentials": [
+      {
+        "name": "AXELNAME_NICKNAME",
+        "description": "Account nickname"
+      },
+      {
+        "name": "AXELNAME_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "azion",
+    "name": "Azion",
+    "credentials": [
+      {
+        "name": "AZION_PERSONAL_TOKEN",
+        "description": "Your Azion personal token."
+      }
+    ]
+  },
+  {
+    "id": "azure",
+    "name": "Azure (deprecated)",
+    "credentials": [
+      {
+        "name": "AZURE_ENVIRONMENT",
+        "description": "Azure environment, one of: public, usgovernment, german, and china"
+      },
+      {
+        "name": "AZURE_CLIENT_ID",
+        "description": "Client ID"
+      },
+      {
+        "name": "AZURE_CLIENT_SECRET",
+        "description": "Client secret"
+      },
+      {
+        "name": "AZURE_SUBSCRIPTION_ID",
+        "description": "Subscription ID"
+      },
+      {
+        "name": "AZURE_TENANT_ID",
+        "description": "Tenant ID"
+      },
+      {
+        "name": "AZURE_RESOURCE_GROUP",
+        "description": "Resource group"
+      }
+    ]
+  },
+  {
+    "id": "azuredns",
+    "name": "Azure DNS",
+    "credentials": [
+      {
+        "name": "AZURE_CLIENT_ID",
+        "description": "Client ID"
+      },
+      {
+        "name": "AZURE_CLIENT_SECRET",
+        "description": "Client secret"
+      },
+      {
+        "name": "AZURE_TENANT_ID",
+        "description": "Tenant ID"
+      },
+      {
+        "name": "AZURE_CLIENT_CERTIFICATE_PATH",
+        "description": "Client certificate path"
+      }
+    ]
+  },
+  {
+    "id": "baiducloud",
+    "name": "Baidu Cloud",
+    "credentials": [
+      {
+        "name": "BAIDUCLOUD_ACCESS_KEY_ID",
+        "description": "Access key"
+      },
+      {
+        "name": "BAIDUCLOUD_SECRET_ACCESS_KEY",
+        "description": "Secret access key"
+      }
+    ]
+  },
+  {
+    "id": "beget",
+    "name": "Beget.com",
+    "credentials": [
+      {
+        "name": "BEGET_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "BEGET_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "binarylane",
+    "name": "Binary Lane",
+    "credentials": [
+      {
+        "name": "BINARYLANE_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "bindman",
+    "name": "Bindman",
+    "credentials": [
+      {
+        "name": "BINDMAN_MANAGER_ADDRESS",
+        "description": "The server URL, should have scheme, hostname, and port (if required) of the Bindman-DNS Manager server"
+      }
+    ]
+  },
+  {
+    "id": "bluecat",
+    "name": "Bluecat",
+    "credentials": [
+      {
+        "name": "BLUECAT_SERVER_URL",
+        "description": "The server URL, should have scheme, hostname, and port (if required) of the authoritative Bluecat BAM serve"
+      },
+      {
+        "name": "BLUECAT_USER_NAME",
+        "description": "API username"
+      },
+      {
+        "name": "BLUECAT_PASSWORD",
+        "description": "API password"
+      },
+      {
+        "name": "BLUECAT_CONFIG_NAME",
+        "description": "Configuration name"
+      },
+      {
+        "name": "BLUECAT_DNS_VIEW",
+        "description": "External DNS View Name"
+      }
+    ]
+  },
+  {
+    "id": "bluecatv2",
+    "name": "Bluecat v2",
+    "credentials": [
+      {
+        "name": "BLUECATV2_SERVER_URL",
+        "description": "The server URL: it should have a scheme, hostname, and port (if required) of the authoritative Bluecat BAM serve"
+      },
+      {
+        "name": "BLUECATV2_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "BLUECATV2_PASSWORD",
+        "description": "API password"
+      },
+      {
+        "name": "BLUECATV2_CONFIG_NAME",
+        "description": "Configuration name"
+      },
+      {
+        "name": "BLUECATV2_VIEW_NAME",
+        "description": "DNS View Name"
+      }
+    ]
+  },
+  {
+    "id": "bookmyname",
+    "name": "BookMyName",
+    "credentials": [
+      {
+        "name": "BOOKMYNAME_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "BOOKMYNAME_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "brandit",
+    "name": "Brandit (deprecated)",
+    "credentials": [
+      {
+        "name": "BRANDIT_API_KEY",
+        "description": "The API key"
+      },
+      {
+        "name": "BRANDIT_API_USERNAME",
+        "description": "The API username"
+      }
+    ]
+  },
+  {
+    "id": "bunny",
+    "name": "Bunny",
+    "credentials": [
+      {
+        "name": "BUNNY_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "checkdomain",
+    "name": "Checkdomain",
+    "credentials": [
+      {
+        "name": "CHECKDOMAIN_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "civo",
+    "name": "Civo",
+    "credentials": [
+      {
+        "name": "CIVO_TOKEN",
+        "description": "Authentication token"
+      }
+    ]
+  },
+  {
+    "id": "clouddns",
+    "name": "CloudDNS",
+    "credentials": [
+      {
+        "name": "CLOUDDNS_CLIENT_ID",
+        "description": "Client ID"
+      },
+      {
+        "name": "CLOUDDNS_EMAIL",
+        "description": "Account email"
+      },
+      {
+        "name": "CLOUDDNS_PASSWORD",
+        "description": "Account password"
+      }
+    ]
+  },
+  {
+    "id": "cloudflare",
+    "name": "Cloudflare",
+    "credentials": [
+      {
+        "name": "CF_API_EMAIL",
+        "description": "Account email"
+      },
+      {
+        "name": "CF_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "CF_DNS_API_TOKEN",
+        "description": "API token with DNS:Edit permission (since v3.1.0)"
+      },
+      {
+        "name": "CF_ZONE_API_TOKEN",
+        "description": "API token with Zone:Read permission (since v3.1.0)"
+      },
+      {
+        "name": "CLOUDFLARE_EMAIL",
+        "description": "Alias to CF_API_EMAIL"
+      },
+      {
+        "name": "CLOUDFLARE_API_KEY",
+        "description": "Alias to CF_API_KEY"
+      },
+      {
+        "name": "CLOUDFLARE_DNS_API_TOKEN",
+        "description": "Alias to CF_DNS_API_TOKEN"
+      },
+      {
+        "name": "CLOUDFLARE_ZONE_API_TOKEN",
+        "description": "Alias to CF_ZONE_API_TOKEN"
+      }
+    ]
+  },
+  {
+    "id": "cloudns",
+    "name": "ClouDNS",
+    "credentials": [
+      {
+        "name": "CLOUDNS_AUTH_ID",
+        "description": "The API user ID"
+      },
+      {
+        "name": "CLOUDNS_AUTH_PASSWORD",
+        "description": "The password for API user ID"
+      }
+    ]
+  },
+  {
+    "id": "cloudru",
+    "name": "Cloud.ru",
+    "credentials": [
+      {
+        "name": "CLOUDRU_SERVICE_INSTANCE_ID",
+        "description": "Service Instance ID (parentId)"
+      },
+      {
+        "name": "CLOUDRU_KEY_ID",
+        "description": "Key ID (login)"
+      },
+      {
+        "name": "CLOUDRU_SECRET",
+        "description": "Key Secret"
+      }
+    ]
+  },
+  {
+    "id": "cloudxns",
+    "name": "CloudXNS (Deprecated)",
+    "credentials": [
+      {
+        "name": "CLOUDXNS_API_KEY",
+        "description": "The API key"
+      },
+      {
+        "name": "CLOUDXNS_SECRET_KEY",
+        "description": "The API secret key"
+      }
+    ]
+  },
+  {
+    "id": "com35",
+    "name": "35.com/三五互联",
+    "credentials": [
+      {
+        "name": "COM35_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "COM35_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "conoha",
+    "name": "ConoHa v2",
+    "credentials": [
+      {
+        "name": "CONOHA_TENANT_ID",
+        "description": "Tenant ID"
+      },
+      {
+        "name": "CONOHA_API_USERNAME",
+        "description": "The API username"
+      },
+      {
+        "name": "CONOHA_API_PASSWORD",
+        "description": "The API password"
+      }
+    ]
+  },
+  {
+    "id": "conohav3",
+    "name": "ConoHa v3",
+    "credentials": [
+      {
+        "name": "CONOHAV3_TENANT_ID",
+        "description": "Tenant ID"
+      },
+      {
+        "name": "CONOHAV3_API_USER_ID",
+        "description": "The API user ID"
+      },
+      {
+        "name": "CONOHAV3_API_PASSWORD",
+        "description": "The API password"
+      }
+    ]
+  },
+  {
+    "id": "constellix",
+    "name": "Constellix",
+    "credentials": [
+      {
+        "name": "CONSTELLIX_API_KEY",
+        "description": "User API key"
+      },
+      {
+        "name": "CONSTELLIX_SECRET_KEY",
+        "description": "User secret key"
+      }
+    ]
+  },
+  {
+    "id": "corenetworks",
+    "name": "Core-Networks",
+    "credentials": [
+      {
+        "name": "CORENETWORKS_LOGIN",
+        "description": "The username of the API account"
+      },
+      {
+        "name": "CORENETWORKS_PASSWORD",
+        "description": "The password"
+      }
+    ]
+  },
+  {
+    "id": "cpanel",
+    "name": "CPanel/WHM",
+    "credentials": [
+      {
+        "name": "CPANEL_USERNAME",
+        "description": "username"
+      },
+      {
+        "name": "CPANEL_TOKEN",
+        "description": "API token"
+      },
+      {
+        "name": "CPANEL_BASE_URL",
+        "description": "API server URL"
+      }
+    ]
+  },
+  {
+    "id": "czechia",
+    "name": "Czechia",
+    "credentials": [
+      {
+        "name": "CZECHIA_TOKEN",
+        "description": "Authorization token"
+      }
+    ]
+  },
+  {
+    "id": "ddnss",
+    "name": "DDnss (DynDNS Service)",
+    "credentials": [
+      {
+        "name": "DDNSS_KEY",
+        "description": "Update key"
+      }
+    ]
+  },
+  {
+    "id": "derak",
+    "name": "Derak Cloud",
+    "credentials": [
+      {
+        "name": "DERAK_API_KEY",
+        "description": "The API key"
+      }
+    ]
+  },
+  {
+    "id": "desec",
+    "name": "deSEC.io",
+    "credentials": [
+      {
+        "name": "DESEC_TOKEN",
+        "description": "Domain token"
+      }
+    ]
+  },
+  {
+    "id": "designate",
+    "name": "Designate DNSaaS for Openstack",
+    "credentials": [
+      {
+        "name": "OS_AUTH_URL",
+        "description": "Identity endpoint URL"
+      },
+      {
+        "name": "OS_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "OS_PASSWORD",
+        "description": "Password"
+      },
+      {
+        "name": "OS_USER_ID",
+        "description": "User ID"
+      },
+      {
+        "name": "OS_APPLICATION_CREDENTIAL_ID",
+        "description": "Application credential ID"
+      },
+      {
+        "name": "OS_APPLICATION_CREDENTIAL_NAME",
+        "description": "Application credential name"
+      },
+      {
+        "name": "OS_APPLICATION_CREDENTIAL_SECRET",
+        "description": "Application credential secret"
+      },
+      {
+        "name": "OS_PROJECT_NAME",
+        "description": "Project name"
+      },
+      {
+        "name": "OS_REGION_NAME",
+        "description": "Region name"
+      }
+    ]
+  },
+  {
+    "id": "digitalocean",
+    "name": "Digital Ocean",
+    "credentials": [
+      {
+        "name": "DO_AUTH_TOKEN",
+        "description": "Authentication token"
+      }
+    ]
+  },
+  {
+    "id": "directadmin",
+    "name": "DirectAdmin",
+    "credentials": [
+      {
+        "name": "DIRECTADMIN_API_URL",
+        "description": "URL of the API"
+      },
+      {
+        "name": "DIRECTADMIN_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "DIRECTADMIN_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "dnsexit",
+    "name": "DNSExit",
+    "credentials": [
+      {
+        "name": "DNSEXIT_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "dnshomede",
+    "name": "dnsHome.de",
+    "credentials": [
+      {
+        "name": "DNSHOMEDE_CREDENTIALS",
+        "description": "Comma-separated list of domain:password credential pairs"
+      }
+    ]
+  },
+  {
+    "id": "dnsimple",
+    "name": "DNSimple",
+    "credentials": [
+      {
+        "name": "DNSIMPLE_OAUTH_TOKEN",
+        "description": "OAuth token"
+      }
+    ]
+  },
+  {
+    "id": "dnsmadeeasy",
+    "name": "DNS Made Easy",
+    "credentials": [
+      {
+        "name": "DNSMADEEASY_API_KEY",
+        "description": "The API key"
+      },
+      {
+        "name": "DNSMADEEASY_API_SECRET",
+        "description": "The API Secret key"
+      }
+    ]
+  },
+  {
+    "id": "dnspod",
+    "name": "DNSPod (deprecated)",
+    "credentials": [
+      {
+        "name": "DNSPOD_API_KEY",
+        "description": "The user token"
+      }
+    ]
+  },
+  {
+    "id": "dode",
+    "name": "Domain Offensive (do.de)",
+    "credentials": [
+      {
+        "name": "DODE_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "domeneshop",
+    "name": "Domeneshop",
+    "credentials": [
+      {
+        "name": "DOMENESHOP_API_TOKEN",
+        "description": "API token"
+      },
+      {
+        "name": "DOMENESHOP_API_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "domainnameshop",
+    "name": "Domeneshop",
+    "credentials": [
+      {
+        "name": "DOMENESHOP_API_TOKEN",
+        "description": "API token"
+      },
+      {
+        "name": "DOMENESHOP_API_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "dreamhost",
+    "name": "DreamHost",
+    "credentials": [
+      {
+        "name": "DREAMHOST_API_KEY",
+        "description": "The API key"
+      }
+    ]
+  },
+  {
+    "id": "duckdns",
+    "name": "Duck DNS",
+    "credentials": [
+      {
+        "name": "DUCKDNS_TOKEN",
+        "description": "Account token"
+      }
+    ]
+  },
+  {
+    "id": "dyn",
+    "name": "Dyn",
+    "credentials": [
+      {
+        "name": "DYN_CUSTOMER_NAME",
+        "description": "Customer name"
+      },
+      {
+        "name": "DYN_USER_NAME",
+        "description": "User name"
+      },
+      {
+        "name": "DYN_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "dyndnsfree",
+    "name": "DynDnsFree.de",
+    "credentials": [
+      {
+        "name": "DYNDNSFREE_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "DYNDNSFREE_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "dynu",
+    "name": "Dynu",
+    "credentials": [
+      {
+        "name": "DYNU_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "easydns",
+    "name": "EasyDNS",
+    "credentials": [
+      {
+        "name": "EASYDNS_TOKEN",
+        "description": "API Token"
+      },
+      {
+        "name": "EASYDNS_KEY",
+        "description": "API Key"
+      }
+    ]
+  },
+  {
+    "id": "edgecenter",
+    "name": "EdgeCenter",
+    "credentials": [
+      {
+        "name": "EDGECENTER_PERMANENT_API_TOKEN",
+        "description": "Permanent API token (https://edgecenter.ru/blog/permanent-api-token-explained/)"
+      }
+    ]
+  },
+  {
+    "id": "edgedns",
+    "name": "Akamai EdgeDNS",
+    "credentials": [
+      {
+        "name": "AKAMAI_HOST",
+        "description": "API host, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_CLIENT_TOKEN",
+        "description": "Client token, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_CLIENT_SECRET",
+        "description": "Client secret, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_ACCESS_TOKEN",
+        "description": "Access token, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_EDGERC",
+        "description": "Path to the .edgerc file, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_EDGERC_SECTION",
+        "description": "Configuration section, managed by the Akamai EdgeGrid client"
+      }
+    ]
+  },
+  {
+    "id": "fastdns",
+    "name": "Akamai EdgeDNS",
+    "credentials": [
+      {
+        "name": "AKAMAI_HOST",
+        "description": "API host, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_CLIENT_TOKEN",
+        "description": "Client token, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_CLIENT_SECRET",
+        "description": "Client secret, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_ACCESS_TOKEN",
+        "description": "Access token, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_EDGERC",
+        "description": "Path to the .edgerc file, managed by the Akamai EdgeGrid client"
+      },
+      {
+        "name": "AKAMAI_EDGERC_SECTION",
+        "description": "Configuration section, managed by the Akamai EdgeGrid client"
+      }
+    ]
+  },
+  {
+    "id": "edgeone",
+    "name": "Tencent EdgeOne",
+    "credentials": [
+      {
+        "name": "EDGEONE_SECRET_ID",
+        "description": "Access key ID"
+      },
+      {
+        "name": "EDGEONE_SECRET_KEY",
+        "description": "Access Key secret"
+      }
+    ]
+  },
+  {
+    "id": "efficientip",
+    "name": "Efficient IP",
+    "credentials": [
+      {
+        "name": "EFFICIENTIP_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "EFFICIENTIP_PASSWORD",
+        "description": "Password"
+      },
+      {
+        "name": "EFFICIENTIP_HOSTNAME",
+        "description": "Hostname (ex: foo.example.com)"
+      },
+      {
+        "name": "EFFICIENTIP_DNS_NAME",
+        "description": "DNS name (ex: dns.smart)"
+      }
+    ]
+  },
+  {
+    "id": "epik",
+    "name": "Epik",
+    "credentials": [
+      {
+        "name": "EPIK_SIGNATURE",
+        "description": "Epik API signature (https://registrar.epik.com/account/api-settings/)"
+      }
+    ]
+  },
+  {
+    "id": "eurodns",
+    "name": "EuroDNS",
+    "credentials": [
+      {
+        "name": "EURODNS_APP_ID",
+        "description": "Application ID"
+      },
+      {
+        "name": "EURODNS_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "excedo",
+    "name": "Excedo",
+    "credentials": [
+      {
+        "name": "EXCEDO_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "EXCEDO_API_URL",
+        "description": "API base URL"
+      }
+    ]
+  },
+  {
+    "id": "exec",
+    "name": "External program",
+    "credentials": []
+  },
+  {
+    "id": "exoscale",
+    "name": "Exoscale",
+    "credentials": [
+      {
+        "name": "EXOSCALE_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "EXOSCALE_API_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "f5xc",
+    "name": "F5 XC",
+    "credentials": [
+      {
+        "name": "F5XC_API_TOKEN",
+        "description": "API token"
+      },
+      {
+        "name": "F5XC_TENANT_NAME",
+        "description": "XC Tenant shortname"
+      },
+      {
+        "name": "F5XC_GROUP_NAME",
+        "description": "Group name"
+      }
+    ]
+  },
+  {
+    "id": "freemyip",
+    "name": "freemyip.com",
+    "credentials": [
+      {
+        "name": "FREEMYIP_TOKEN",
+        "description": "Account token"
+      }
+    ]
+  },
+  {
+    "id": "gandi",
+    "name": "Gandi",
+    "credentials": [
+      {
+        "name": "GANDI_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "gandiv5",
+    "name": "Gandi Live DNS (v5)",
+    "credentials": [
+      {
+        "name": "GANDIV5_PERSONAL_ACCESS_TOKEN",
+        "description": "Personal Access Token"
+      },
+      {
+        "name": "GANDIV5_API_KEY",
+        "description": "API key (Deprecated)"
+      }
+    ]
+  },
+  {
+    "id": "gcloud",
+    "name": "Google Cloud",
+    "credentials": [
+      {
+        "name": "GCE_PROJECT",
+        "description": "Project name (by default, the project name is auto-detected by using the metadata service)"
+      },
+      {
+        "name": "GCE_SERVICE_ACCOUNT_FILE",
+        "description": "Account file path"
+      },
+      {
+        "name": "GCE_SERVICE_ACCOUNT",
+        "description": "Account"
+      }
+    ]
+  },
+  {
+    "id": "gcore",
+    "name": "G-Core",
+    "credentials": [
+      {
+        "name": "GCORE_PERMANENT_API_TOKEN",
+        "description": "Permanent API token (https://gcore.com/blog/permanent-api-token-explained/)"
+      }
+    ]
+  },
+  {
+    "id": "gigahostno",
+    "name": "Gigahost.no",
+    "credentials": [
+      {
+        "name": "GIGAHOSTNO_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "GIGAHOSTNO_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "glesys",
+    "name": "Glesys",
+    "credentials": [
+      {
+        "name": "GLESYS_API_USER",
+        "description": "API user"
+      },
+      {
+        "name": "GLESYS_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "godaddy",
+    "name": "Go Daddy",
+    "credentials": [
+      {
+        "name": "GODADDY_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "GODADDY_API_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "googledomains",
+    "name": "Google Domains",
+    "credentials": [
+      {
+        "name": "GOOGLE_DOMAINS_ACCESS_TOKEN",
+        "description": "Access token"
+      }
+    ]
+  },
+  {
+    "id": "gravity",
+    "name": "Gravity",
+    "credentials": [
+      {
+        "name": "GRAVITY_SERVER_URL",
+        "description": "URL of the server"
+      },
+      {
+        "name": "GRAVITY_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "GRAVITY_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "hetzner",
+    "name": "Hetzner",
+    "credentials": [
+      {
+        "name": "HETZNER_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "hostingde",
+    "name": "Hosting.de",
+    "credentials": [
+      {
+        "name": "HOSTINGDE_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "hostinger",
+    "name": "Hostinger",
+    "credentials": [
+      {
+        "name": "HOSTINGER_API_TOKEN",
+        "description": "API Token"
+      }
+    ]
+  },
+  {
+    "id": "hostingnl",
+    "name": "Hosting.nl",
+    "credentials": [
+      {
+        "name": "HOSTINGNL_API_KEY",
+        "description": "The API key"
+      }
+    ]
+  },
+  {
+    "id": "hosttech",
+    "name": "Hosttech",
+    "credentials": [
+      {
+        "name": "HOSTTECH_API_KEY",
+        "description": "API login"
+      },
+      {
+        "name": "HOSTTECH_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "httpnet",
+    "name": "http.net",
+    "credentials": [
+      {
+        "name": "HTTPNET_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "httpreq",
+    "name": "HTTP request",
+    "credentials": [
+      {
+        "name": "HTTPREQ_MODE",
+        "description": "`RAW`, none"
+      },
+      {
+        "name": "HTTPREQ_ENDPOINT",
+        "description": "The URL of the server"
+      }
+    ]
+  },
+  {
+    "id": "huaweicloud",
+    "name": "Huawei Cloud",
+    "credentials": [
+      {
+        "name": "HUAWEICLOUD_ACCESS_KEY_ID",
+        "description": "Access key ID"
+      },
+      {
+        "name": "HUAWEICLOUD_SECRET_ACCESS_KEY",
+        "description": "Access Key secret"
+      },
+      {
+        "name": "HUAWEICLOUD_REGION",
+        "description": "Region"
+      }
+    ]
+  },
+  {
+    "id": "hurricane",
+    "name": "Hurricane Electric DNS",
+    "credentials": [
+      {
+        "name": "HURRICANE_TOKENS",
+        "description": "TXT record names and tokens"
+      }
+    ]
+  },
+  {
+    "id": "hyperone",
+    "name": "HyperOne",
+    "credentials": []
+  },
+  {
+    "id": "ibmcloud",
+    "name": "IBM Cloud (SoftLayer)",
+    "credentials": [
+      {
+        "name": "SOFTLAYER_USERNAME",
+        "description": "Username (IBM Cloud is {accountID}_{emailAddress})"
+      },
+      {
+        "name": "SOFTLAYER_API_KEY",
+        "description": "Classic Infrastructure API key"
+      }
+    ]
+  },
+  {
+    "id": "iij",
+    "name": "Internet Initiative Japan",
+    "credentials": [
+      {
+        "name": "IIJ_API_ACCESS_KEY",
+        "description": "API access key"
+      },
+      {
+        "name": "IIJ_API_SECRET_KEY",
+        "description": "API secret key"
+      },
+      {
+        "name": "IIJ_DO_SERVICE_CODE",
+        "description": "DO service code"
+      }
+    ]
+  },
+  {
+    "id": "iijdpf",
+    "name": "IIJ DNS Platform Service",
+    "credentials": [
+      {
+        "name": "IIJ_DPF_API_TOKEN",
+        "description": "API token"
+      },
+      {
+        "name": "IIJ_DPF_DPM_SERVICE_CODE",
+        "description": "IIJ Managed DNS Service's service code"
+      }
+    ]
+  },
+  {
+    "id": "infoblox",
+    "name": "Infoblox",
+    "credentials": [
+      {
+        "name": "INFOBLOX_USERNAME",
+        "description": "Account Username"
+      },
+      {
+        "name": "INFOBLOX_PASSWORD",
+        "description": "Account Password"
+      },
+      {
+        "name": "INFOBLOX_HOST",
+        "description": "Host URI"
+      }
+    ]
+  },
+  {
+    "id": "infomaniak",
+    "name": "Infomaniak",
+    "credentials": [
+      {
+        "name": "INFOMANIAK_ACCESS_TOKEN",
+        "description": "Access token"
+      }
+    ]
+  },
+  {
+    "id": "internetbs",
+    "name": "Internet.bs",
+    "credentials": [
+      {
+        "name": "INTERNET_BS_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "INTERNET_BS_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "inwx",
+    "name": "INWX",
+    "credentials": [
+      {
+        "name": "INWX_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "INWX_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "ionos",
+    "name": "Ionos",
+    "credentials": [
+      {
+        "name": "IONOS_API_KEY",
+        "description": "API key `<prefix>.<secret>` https://developer.hosting.ionos.com/docs/getstarted"
+      }
+    ]
+  },
+  {
+    "id": "ionoscloud",
+    "name": "Ionos Cloud",
+    "credentials": [
+      {
+        "name": "IONOSCLOUD_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "ipv64",
+    "name": "IPv64",
+    "credentials": [
+      {
+        "name": "IPV64_API_KEY",
+        "description": "Account API Key"
+      }
+    ]
+  },
+  {
+    "id": "ispconfig",
+    "name": "ISPConfig 3",
+    "credentials": [
+      {
+        "name": "ISPCONFIG_SERVER_URL",
+        "description": "Server URL"
+      },
+      {
+        "name": "ISPCONFIG_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "ISPCONFIG_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "ispconfigddns",
+    "name": "ISPConfig 3 - Dynamic DNS (DDNS) Module",
+    "credentials": [
+      {
+        "name": "ISPCONFIG_DDNS_SERVER_URL",
+        "description": "API server URL (ex: https://panel.example.com:8080)"
+      },
+      {
+        "name": "ISPCONFIG_DDNS_TOKEN",
+        "description": "DDNS API token"
+      }
+    ]
+  },
+  {
+    "id": "iwantmyname",
+    "name": "iwantmyname (Deprecated)",
+    "credentials": [
+      {
+        "name": "IWANTMYNAME_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "IWANTMYNAME_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "jdcloud",
+    "name": "JD Cloud",
+    "credentials": [
+      {
+        "name": "JDCLOUD_ACCESS_KEY_ID",
+        "description": "Access key ID"
+      },
+      {
+        "name": "JDCLOUD_ACCESS_KEY_SECRET",
+        "description": "Access key secret"
+      }
+    ]
+  },
+  {
+    "id": "joker",
+    "name": "Joker",
+    "credentials": [
+      {
+        "name": "JOKER_API_MODE",
+        "description": "'DMAPI' or 'SVC'. DMAPI is for resellers accounts. (Default: DMAPI)"
+      },
+      {
+        "name": "JOKER_USERNAME",
+        "description": "Joker.com username"
+      },
+      {
+        "name": "JOKER_PASSWORD",
+        "description": "Joker.com password"
+      },
+      {
+        "name": "JOKER_API_KEY",
+        "description": "API key (only with DMAPI mode)"
+      }
+    ]
+  },
+  {
+    "id": "keyhelp",
+    "name": "KeyHelp",
+    "credentials": [
+      {
+        "name": "KEYHELP_BASE_URL",
+        "description": "Server URL"
+      },
+      {
+        "name": "KEYHELP_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "leaseweb",
+    "name": "Leaseweb",
+    "credentials": [
+      {
+        "name": "LEASEWEB_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "liara",
+    "name": "Liara",
+    "credentials": [
+      {
+        "name": "LIARA_API_KEY",
+        "description": "The API key"
+      }
+    ]
+  },
+  {
+    "id": "lightsail",
+    "name": "Amazon Lightsail",
+    "credentials": [
+      {
+        "name": "AWS_ACCESS_KEY_ID",
+        "description": "Managed by the AWS client. Access key ID (`AWS_ACCESS_KEY_ID_FILE` is not supported, use `AWS_SHARED_CREDENTIALS_FILE` instead)"
+      },
+      {
+        "name": "AWS_SECRET_ACCESS_KEY",
+        "description": "Managed by the AWS client. Secret access key (`AWS_SECRET_ACCESS_KEY_FILE` is not supported, use `AWS_SHARED_CREDENTIALS_FILE` instead)"
+      },
+      {
+        "name": "DNS_ZONE",
+        "description": "Domain name of the DNS zone"
+      }
+    ]
+  },
+  {
+    "id": "limacity",
+    "name": "Lima-City",
+    "credentials": [
+      {
+        "name": "LIMACITY_API_KEY",
+        "description": "The API key"
+      }
+    ]
+  },
+  {
+    "id": "linode",
+    "name": "Linode (v4)",
+    "credentials": [
+      {
+        "name": "LINODE_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "linodev4",
+    "name": "Linode (v4)",
+    "credentials": [
+      {
+        "name": "LINODE_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "liquidweb",
+    "name": "Liquid Web",
+    "credentials": [
+      {
+        "name": "LWAPI_USERNAME",
+        "description": "Liquid Web API Username"
+      },
+      {
+        "name": "LWAPI_PASSWORD",
+        "description": "Liquid Web API Password"
+      }
+    ]
+  },
+  {
+    "id": "loopia",
+    "name": "Loopia",
+    "credentials": [
+      {
+        "name": "LOOPIA_API_USER",
+        "description": "API username"
+      },
+      {
+        "name": "LOOPIA_API_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "luadns",
+    "name": "LuaDNS",
+    "credentials": [
+      {
+        "name": "LUADNS_API_USERNAME",
+        "description": "Username (your email)"
+      },
+      {
+        "name": "LUADNS_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "mailinabox",
+    "name": "Mail-in-a-Box",
+    "credentials": [
+      {
+        "name": "MAILINABOX_EMAIL",
+        "description": "User email"
+      },
+      {
+        "name": "MAILINABOX_PASSWORD",
+        "description": "User password"
+      },
+      {
+        "name": "MAILINABOX_BASE_URL",
+        "description": "Base API URL (ex: https://box.example.com)"
+      }
+    ]
+  },
+  {
+    "id": "manageengine",
+    "name": "ManageEngine CloudDNS",
+    "credentials": [
+      {
+        "name": "MANAGEENGINE_CLIENT_ID",
+        "description": "Client ID"
+      },
+      {
+        "name": "MANAGEENGINE_CLIENT_SECRET",
+        "description": "Client Secret"
+      }
+    ]
+  },
+  {
+    "id": "manual",
+    "name": "Manual",
+    "credentials": []
+  },
+  {
+    "id": "metaname",
+    "name": "Metaname",
+    "credentials": [
+      {
+        "name": "METANAME_ACCOUNT_REFERENCE",
+        "description": "The four-digit reference of a Metaname account"
+      },
+      {
+        "name": "METANAME_API_KEY",
+        "description": "API Key"
+      }
+    ]
+  },
+  {
+    "id": "metaregistrar",
+    "name": "Metaregistrar",
+    "credentials": [
+      {
+        "name": "METAREGISTRAR_API_TOKEN",
+        "description": "The API token"
+      }
+    ]
+  },
+  {
+    "id": "mijnhost",
+    "name": "mijn.host",
+    "credentials": [
+      {
+        "name": "MIJNHOST_API_KEY",
+        "description": "The API key"
+      }
+    ]
+  },
+  {
+    "id": "mittwald",
+    "name": "Mittwald",
+    "credentials": [
+      {
+        "name": "MITTWALD_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "myaddr",
+    "name": "myaddr.{tools,dev,io}",
+    "credentials": [
+      {
+        "name": "MYADDR_PRIVATE_KEYS_MAPPING",
+        "description": "Mapping between subdomains and private keys. The format is: `<subdomain1>:<private_key1>,<subdomain2>:<private_key2>,<subdomain3>:<private_key3>`"
+      }
+    ]
+  },
+  {
+    "id": "mydnsjp",
+    "name": "MyDNS.jp",
+    "credentials": [
+      {
+        "name": "MYDNSJP_MASTER_ID",
+        "description": "Master ID"
+      },
+      {
+        "name": "MYDNSJP_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "mythicbeasts",
+    "name": "MythicBeasts",
+    "credentials": [
+      {
+        "name": "MYTHICBEASTS_USERNAME",
+        "description": "User name"
+      },
+      {
+        "name": "MYTHICBEASTS_PASSWORD",
+        "description": "Password"
+      }
+    ]
+  },
+  {
+    "id": "namecheap",
+    "name": "Namecheap",
+    "credentials": [
+      {
+        "name": "NAMECHEAP_API_USER",
+        "description": "API user"
+      },
+      {
+        "name": "NAMECHEAP_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "namedotcom",
+    "name": "Name.com",
+    "credentials": [
+      {
+        "name": "NAMECOM_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "NAMECOM_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "namesilo",
+    "name": "Namesilo",
+    "credentials": [
+      {
+        "name": "NAMESILO_API_KEY",
+        "description": "Client ID"
+      }
+    ]
+  },
+  {
+    "id": "namesurfer",
+    "name": "FusionLayer NameSurfer",
+    "credentials": [
+      {
+        "name": "NAMESURFER_BASE_URL",
+        "description": "The base URL of NameSurfer API (jsonrpc10) endpoint URL (e.g., https://foo.example.com:8443/API/NSService_10)"
+      },
+      {
+        "name": "NAMESURFER_API_KEY",
+        "description": "API key name"
+      },
+      {
+        "name": "NAMESURFER_API_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "nearlyfreespeech",
+    "name": "NearlyFreeSpeech.NET",
+    "credentials": [
+      {
+        "name": "NEARLYFREESPEECH_API_KEY",
+        "description": "API Key for API requests"
+      },
+      {
+        "name": "NEARLYFREESPEECH_LOGIN",
+        "description": "Username for API requests"
+      }
+    ]
+  },
+  {
+    "id": "neodigit",
+    "name": "Neodigit",
+    "credentials": [
+      {
+        "name": "NEODIGIT_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "netcup",
+    "name": "Netcup",
+    "credentials": [
+      {
+        "name": "NETCUP_CUSTOMER_NUMBER",
+        "description": "Customer number"
+      },
+      {
+        "name": "NETCUP_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "NETCUP_API_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "netlify",
+    "name": "Netlify",
+    "credentials": [
+      {
+        "name": "NETLIFY_TOKEN",
+        "description": "Token"
+      }
+    ]
+  },
+  {
+    "id": "netnod",
+    "name": "Netnod",
+    "credentials": [
+      {
+        "name": "NETNOD_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "nicmanager",
+    "name": "Nicmanager",
+    "credentials": [
+      {
+        "name": "NICMANAGER_API_LOGIN",
+        "description": "Login, used for Username-based login"
+      },
+      {
+        "name": "NICMANAGER_API_USERNAME",
+        "description": "Username, used for Username-based login"
+      },
+      {
+        "name": "NICMANAGER_API_EMAIL",
+        "description": "Email-based login"
+      },
+      {
+        "name": "NICMANAGER_API_PASSWORD",
+        "description": "Password, always required"
+      }
+    ]
+  },
+  {
+    "id": "nicru",
+    "name": "RU CENTER",
+    "credentials": [
+      {
+        "name": "NICRU_USER",
+        "description": "Agreement for an account in RU CENTER"
+      },
+      {
+        "name": "NICRU_PASSWORD",
+        "description": "Password for an account in RU CENTER"
+      },
+      {
+        "name": "NICRU_SERVICE_ID",
+        "description": "Service ID for application in DNS-hosting RU CENTER"
+      },
+      {
+        "name": "NICRU_SECRET",
+        "description": "Secret for application in DNS-hosting RU CENTER"
+      },
+      {
+        "name": "NICRU_SERVICE_NAME",
+        "description": "Service Name for DNS-hosting RU CENTER"
+      }
+    ]
+  },
+  {
+    "id": "nifcloud",
+    "name": "NIFCloud",
+    "credentials": [
+      {
+        "name": "NIFCLOUD_ACCESS_KEY_ID",
+        "description": "Access key"
+      },
+      {
+        "name": "NIFCLOUD_SECRET_ACCESS_KEY",
+        "description": "Secret access key"
+      }
+    ]
+  },
+  {
+    "id": "njalla",
+    "name": "Njalla",
+    "credentials": [
+      {
+        "name": "NJALLA_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "nodion",
+    "name": "Nodion",
+    "credentials": [
+      {
+        "name": "NODION_API_TOKEN",
+        "description": "The API token"
+      }
+    ]
+  },
+  {
+    "id": "ns1",
+    "name": "NS1",
+    "credentials": [
+      {
+        "name": "NS1_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "octenium",
+    "name": "Octenium",
+    "credentials": [
+      {
+        "name": "OCTENIUM_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "onecloudru",
+    "name": "1cloud.ru",
+    "credentials": [
+      {
+        "name": "ONECLOUDRU_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "onlinenet",
+    "name": "Online.net",
+    "credentials": [
+      {
+        "name": "ONLINENET_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "oraclecloud",
+    "name": "Oracle Cloud",
+    "credentials": [
+      {
+        "name": "OCI_COMPARTMENT_OCID",
+        "description": "Compartment OCID"
+      },
+      {
+        "name": "OCI_REGION",
+        "description": "Region (it can be empty if `OCI_AUTH_TYPE` is not empty)."
+      },
+      {
+        "name": "OCI_PRIVATE_KEY_PATH",
+        "description": "Private key file (ignored if `OCI_AUTH_TYPE` is not empty)"
+      },
+      {
+        "name": "OCI_PRIVATE_KEY_PASSWORD",
+        "description": "Private key password (ignored if `OCI_AUTH_TYPE` is not empty)"
+      },
+      {
+        "name": "OCI_TENANCY_OCID",
+        "description": "Tenancy OCID (ignored if `OCI_AUTH_TYPE` is not empty)"
+      },
+      {
+        "name": "OCI_USER_OCID",
+        "description": "User OCID (ignored if `OCI_AUTH_TYPE` is not empty)"
+      },
+      {
+        "name": "OCI_FINGERPRINT",
+        "description": "Public key fingerprint (ignored if `OCI_AUTH_TYPE` is not empty)"
+      }
+    ]
+  },
+  {
+    "id": "otc",
+    "name": "Open Telekom Cloud",
+    "credentials": [
+      {
+        "name": "OTC_USER_NAME",
+        "description": "User name"
+      },
+      {
+        "name": "OTC_PASSWORD",
+        "description": "Password"
+      },
+      {
+        "name": "OTC_PROJECT_NAME",
+        "description": "Project name"
+      },
+      {
+        "name": "OTC_DOMAIN_NAME",
+        "description": "Domain name"
+      }
+    ]
+  },
+  {
+    "id": "ovh",
+    "name": "OVH",
+    "credentials": [
+      {
+        "name": "OVH_ENDPOINT",
+        "description": "Endpoint URL (ovh-eu or ovh-ca)"
+      },
+      {
+        "name": "OVH_APPLICATION_KEY",
+        "description": "Application key (Application Key authentication)"
+      },
+      {
+        "name": "OVH_APPLICATION_SECRET",
+        "description": "Application secret (Application Key authentication)"
+      },
+      {
+        "name": "OVH_CONSUMER_KEY",
+        "description": "Consumer key (Application Key authentication)"
+      },
+      {
+        "name": "OVH_CLIENT_ID",
+        "description": "Client ID (OAuth2)"
+      },
+      {
+        "name": "OVH_CLIENT_SECRET",
+        "description": "Client secret (OAuth2)"
+      },
+      {
+        "name": "OVH_ACCESS_TOKEN",
+        "description": "Access token"
+      }
+    ]
+  },
+  {
+    "id": "pdns",
+    "name": "PowerDNS",
+    "credentials": [
+      {
+        "name": "PDNS_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "PDNS_API_URL",
+        "description": "API URL"
+      }
+    ]
+  },
+  {
+    "id": "plesk",
+    "name": "plesk.com",
+    "credentials": [
+      {
+        "name": "PLESK_SERVER_BASE_URL",
+        "description": "Base URL of the server (ex: https://plesk.myserver.com:8443)"
+      },
+      {
+        "name": "PLESK_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "PLESK_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "porkbun",
+    "name": "Porkbun",
+    "credentials": [
+      {
+        "name": "PORKBUN_SECRET_API_KEY",
+        "description": "secret API key"
+      },
+      {
+        "name": "PORKBUN_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "rackspace",
+    "name": "Rackspace",
+    "credentials": [
+      {
+        "name": "RACKSPACE_USER",
+        "description": "API user"
+      },
+      {
+        "name": "RACKSPACE_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "rainyun",
+    "name": "Rain Yun/雨云",
+    "credentials": [
+      {
+        "name": "RAINYUN_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "rcodezero",
+    "name": "RcodeZero",
+    "credentials": [
+      {
+        "name": "RCODEZERO_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "regfish",
+    "name": "Regfish",
+    "credentials": [
+      {
+        "name": "REGFISH_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "regru",
+    "name": "reg.ru",
+    "credentials": [
+      {
+        "name": "REGRU_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "REGRU_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "rfc2136",
+    "name": "DNS Update (RFC2136)",
+    "credentials": []
+  },
+  {
+    "id": "dnsupdate",
+    "name": "DNS Update (RFC2136)",
+    "credentials": []
+  },
+  {
+    "id": "rimuhosting",
+    "name": "RimuHosting",
+    "credentials": [
+      {
+        "name": "RIMUHOSTING_API_KEY",
+        "description": "User API key"
+      }
+    ]
+  },
+  {
+    "id": "route53",
+    "name": "Amazon Route 53",
+    "credentials": [
+      {
+        "name": "AWS_ACCESS_KEY_ID",
+        "description": "Managed by the AWS client. Access key ID (`AWS_ACCESS_KEY_ID_FILE` is not supported, use `AWS_SHARED_CREDENTIALS_FILE` instead)"
+      },
+      {
+        "name": "AWS_SECRET_ACCESS_KEY",
+        "description": "Managed by the AWS client. Secret access key (`AWS_SECRET_ACCESS_KEY_FILE` is not supported, use `AWS_SHARED_CREDENTIALS_FILE` instead)"
+      },
+      {
+        "name": "AWS_REGION",
+        "description": "Managed by the AWS client (`AWS_REGION_FILE` is not supported)"
+      },
+      {
+        "name": "AWS_HOSTED_ZONE_ID",
+        "description": "Override the hosted zone ID."
+      },
+      {
+        "name": "AWS_PROFILE",
+        "description": "Managed by the AWS client (`AWS_PROFILE_FILE` is not supported)"
+      },
+      {
+        "name": "AWS_SDK_LOAD_CONFIG",
+        "description": "Managed by the AWS client. Retrieve the region from the CLI config file (`AWS_SDK_LOAD_CONFIG_FILE` is not supported)"
+      },
+      {
+        "name": "AWS_ASSUME_ROLE_ARN",
+        "description": "Managed by the AWS Role ARN (`AWS_ASSUME_ROLE_ARN_FILE` is not supported)"
+      },
+      {
+        "name": "AWS_EXTERNAL_ID",
+        "description": "Managed by STS AssumeRole API operation (`AWS_EXTERNAL_ID_FILE` is not supported)"
+      },
+      {
+        "name": "AWS_WAIT_FOR_RECORD_SETS_CHANGED",
+        "description": "Wait for changes to be INSYNC (it can be unstable)"
+      }
+    ]
+  },
+  {
+    "id": "safedns",
+    "name": "ANS SafeDNS",
+    "credentials": [
+      {
+        "name": "SAFEDNS_AUTH_TOKEN",
+        "description": "Authentication token"
+      }
+    ]
+  },
+  {
+    "id": "sakuracloud",
+    "name": "Sakura Cloud",
+    "credentials": [
+      {
+        "name": "SAKURACLOUD_ACCESS_TOKEN",
+        "description": "Access token"
+      },
+      {
+        "name": "SAKURACLOUD_ACCESS_TOKEN_SECRET",
+        "description": "Access token secret"
+      }
+    ]
+  },
+  {
+    "id": "scaleway",
+    "name": "Scaleway",
+    "credentials": [
+      {
+        "name": "SCW_SECRET_KEY",
+        "description": "Secret key"
+      },
+      {
+        "name": "SCW_PROJECT_ID",
+        "description": "Project to use (optional)"
+      }
+    ]
+  },
+  {
+    "id": "selectel",
+    "name": "Selectel",
+    "credentials": [
+      {
+        "name": "SELECTEL_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "selectelv2",
+    "name": "Selectel v2",
+    "credentials": [
+      {
+        "name": "SELECTELV2_USERNAME",
+        "description": "Openstack username"
+      },
+      {
+        "name": "SELECTELV2_PASSWORD",
+        "description": "Openstack username's password"
+      },
+      {
+        "name": "SELECTELV2_ACCOUNT_ID",
+        "description": "Selectel account ID (INT)"
+      },
+      {
+        "name": "SELECTELV2_PROJECT_ID",
+        "description": "Cloud project ID (UUID)"
+      }
+    ]
+  },
+  {
+    "id": "selfhostde",
+    "name": "SelfHost.(de|eu)",
+    "credentials": [
+      {
+        "name": "SELFHOSTDE_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "SELFHOSTDE_PASSWORD",
+        "description": "Password"
+      },
+      {
+        "name": "SELFHOSTDE_RECORDS_MAPPING",
+        "description": "Record IDs mapping with domains (ex: example.com:123:456,example.org:789,foo.example.com:147)"
+      }
+    ]
+  },
+  {
+    "id": "servercow",
+    "name": "Servercow",
+    "credentials": [
+      {
+        "name": "SERVERCOW_USERNAME",
+        "description": "API username"
+      },
+      {
+        "name": "SERVERCOW_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "shellrent",
+    "name": "Shellrent",
+    "credentials": [
+      {
+        "name": "SHELLRENT_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "SHELLRENT_TOKEN",
+        "description": "Token"
+      }
+    ]
+  },
+  {
+    "id": "simply",
+    "name": "Simply.com",
+    "credentials": [
+      {
+        "name": "SIMPLY_ACCOUNT_NAME",
+        "description": "Account name"
+      },
+      {
+        "name": "SIMPLY_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "sonic",
+    "name": "Sonic",
+    "credentials": [
+      {
+        "name": "SONIC_USER_ID",
+        "description": "User ID"
+      },
+      {
+        "name": "SONIC_API_KEY",
+        "description": "API Key"
+      }
+    ]
+  },
+  {
+    "id": "spaceship",
+    "name": "Spaceship",
+    "credentials": [
+      {
+        "name": "SPACESHIP_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "SPACESHIP_API_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "stackpath",
+    "name": "Stackpath",
+    "credentials": [
+      {
+        "name": "STACKPATH_CLIENT_ID",
+        "description": "Client ID"
+      },
+      {
+        "name": "STACKPATH_CLIENT_SECRET",
+        "description": "Client secret"
+      },
+      {
+        "name": "STACKPATH_STACK_ID",
+        "description": "Stack ID"
+      }
+    ]
+  },
+  {
+    "id": "syse",
+    "name": "Syse",
+    "credentials": [
+      {
+        "name": "SYSE_CREDENTIALS",
+        "description": "Comma-separated list of `zone:password` credential pairs"
+      }
+    ]
+  },
+  {
+    "id": "technitium",
+    "name": "Technitium",
+    "credentials": [
+      {
+        "name": "TECHNITIUM_SERVER_BASE_URL",
+        "description": "Server base URL"
+      },
+      {
+        "name": "TECHNITIUM_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "tencentcloud",
+    "name": "Tencent Cloud DNS",
+    "credentials": [
+      {
+        "name": "TENCENTCLOUD_SECRET_ID",
+        "description": "Access key ID"
+      },
+      {
+        "name": "TENCENTCLOUD_SECRET_KEY",
+        "description": "Access Key secret"
+      }
+    ]
+  },
+  {
+    "id": "timewebcloud",
+    "name": "Timeweb Cloud",
+    "credentials": [
+      {
+        "name": "TIMEWEBCLOUD_AUTH_TOKEN",
+        "description": "Authentication token"
+      }
+    ]
+  },
+  {
+    "id": "todaynic",
+    "name": "TodayNIC/时代互联",
+    "credentials": [
+      {
+        "name": "TODAYNIC_AUTH_USER_ID",
+        "description": "account ID"
+      },
+      {
+        "name": "TODAYNIC_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "transip",
+    "name": "TransIP",
+    "credentials": [
+      {
+        "name": "TRANSIP_ACCOUNT_NAME",
+        "description": "Account name"
+      },
+      {
+        "name": "TRANSIP_PRIVATE_KEY_PATH",
+        "description": "Private key path"
+      }
+    ]
+  },
+  {
+    "id": "ucloud",
+    "name": "UCloud",
+    "credentials": [
+      {
+        "name": "UCLOUD_PUBLIC_KEY",
+        "description": "Public key"
+      },
+      {
+        "name": "UCLOUD_PRIVATE_KEY",
+        "description": "Private key"
+      }
+    ]
+  },
+  {
+    "id": "ultradns",
+    "name": "Ultradns",
+    "credentials": [
+      {
+        "name": "ULTRADNS_USERNAME",
+        "description": "API Username"
+      },
+      {
+        "name": "ULTRADNS_PASSWORD",
+        "description": "API Password"
+      }
+    ]
+  },
+  {
+    "id": "uniteddomains",
+    "name": "United-Domains",
+    "credentials": [
+      {
+        "name": "UNITEDDOMAINS_API_KEY",
+        "description": "API key `<prefix>.<secret>` https://www.united-domains.de/help/faq-article/getting-started-with-the-united-domains-dns-api/"
+      }
+    ]
+  },
+  {
+    "id": "variomedia",
+    "name": "Variomedia",
+    "credentials": [
+      {
+        "name": "VARIOMEDIA_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "vegadns",
+    "name": "VegaDNS",
+    "credentials": [
+      {
+        "name": "SECRET_VEGADNS_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "SECRET_VEGADNS_SECRET",
+        "description": "API secret"
+      },
+      {
+        "name": "VEGADNS_URL",
+        "description": "API endpoint URL"
+      }
+    ]
+  },
+  {
+    "id": "vercel",
+    "name": "Vercel",
+    "credentials": [
+      {
+        "name": "VERCEL_API_TOKEN",
+        "description": "Authentication token"
+      }
+    ]
+  },
+  {
+    "id": "versio",
+    "name": "Versio.[nl|eu|uk]",
+    "credentials": [
+      {
+        "name": "VERSIO_USERNAME",
+        "description": "Basic authentication username"
+      },
+      {
+        "name": "VERSIO_PASSWORD",
+        "description": "Basic authentication password"
+      }
+    ]
+  },
+  {
+    "id": "vinyldns",
+    "name": "VinylDNS",
+    "credentials": [
+      {
+        "name": "VINYLDNS_ACCESS_KEY",
+        "description": "The VinylDNS API key"
+      },
+      {
+        "name": "VINYLDNS_SECRET_KEY",
+        "description": "The VinylDNS API Secret key"
+      },
+      {
+        "name": "VINYLDNS_HOST",
+        "description": "The VinylDNS API URL"
+      }
+    ]
+  },
+  {
+    "id": "virtualname",
+    "name": "Virtualname",
+    "credentials": [
+      {
+        "name": "VIRTUALNAME_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "vkcloud",
+    "name": "VK Cloud",
+    "credentials": [
+      {
+        "name": "VK_CLOUD_PROJECT_ID",
+        "description": "String ID of project in VK Cloud"
+      },
+      {
+        "name": "VK_CLOUD_USERNAME",
+        "description": "Email of VK Cloud account"
+      },
+      {
+        "name": "VK_CLOUD_PASSWORD",
+        "description": "Password for VK Cloud account"
+      }
+    ]
+  },
+  {
+    "id": "volcengine",
+    "name": "Volcano Engine/火山引擎",
+    "credentials": [
+      {
+        "name": "VOLC_ACCESSKEY",
+        "description": "Access Key ID (AK)"
+      },
+      {
+        "name": "VOLC_SECRETKEY",
+        "description": "Secret Access Key (SK)"
+      }
+    ]
+  },
+  {
+    "id": "vscale",
+    "name": "Vscale",
+    "credentials": [
+      {
+        "name": "VSCALE_API_TOKEN",
+        "description": "API token"
+      }
+    ]
+  },
+  {
+    "id": "vultr",
+    "name": "Vultr",
+    "credentials": [
+      {
+        "name": "VULTR_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "webnames",
+    "name": "webnames.ru",
+    "credentials": [
+      {
+        "name": "WEBNAMESRU_API_KEY",
+        "description": "Domain API key"
+      }
+    ]
+  },
+  {
+    "id": "webnamesru",
+    "name": "webnames.ru",
+    "credentials": [
+      {
+        "name": "WEBNAMESRU_API_KEY",
+        "description": "Domain API key"
+      }
+    ]
+  },
+  {
+    "id": "webnamesca",
+    "name": "webnames.ca",
+    "credentials": [
+      {
+        "name": "WEBNAMESCA_API_USER",
+        "description": "API username"
+      },
+      {
+        "name": "WEBNAMESCA_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "websupport",
+    "name": "Websupport",
+    "credentials": [
+      {
+        "name": "WEBSUPPORT_API_KEY",
+        "description": "API key"
+      },
+      {
+        "name": "WEBSUPPORT_SECRET",
+        "description": "API secret"
+      }
+    ]
+  },
+  {
+    "id": "wedos",
+    "name": "WEDOS",
+    "credentials": [
+      {
+        "name": "WEDOS_USERNAME",
+        "description": "Username is the same as for the admin account"
+      },
+      {
+        "name": "WEDOS_WAPI_PASSWORD",
+        "description": "Password needs to be generated and IP allowed in the admin interface"
+      }
+    ]
+  },
+  {
+    "id": "westcn",
+    "name": "West.cn/西部数码",
+    "credentials": [
+      {
+        "name": "WESTCN_USERNAME",
+        "description": "Username"
+      },
+      {
+        "name": "WESTCN_PASSWORD",
+        "description": "API password"
+      }
+    ]
+  },
+  {
+    "id": "yandex",
+    "name": "Yandex PDD",
+    "credentials": [
+      {
+        "name": "YANDEX_PDD_TOKEN",
+        "description": "Basic authentication username"
+      }
+    ]
+  },
+  {
+    "id": "yandex360",
+    "name": "Yandex 360",
+    "credentials": [
+      {
+        "name": "YANDEX360_OAUTH_TOKEN",
+        "description": "The OAuth Token"
+      },
+      {
+        "name": "YANDEX360_ORG_ID",
+        "description": "The organization ID"
+      }
+    ]
+  },
+  {
+    "id": "yandexcloud",
+    "name": "Yandex Cloud",
+    "credentials": [
+      {
+        "name": "YANDEX_CLOUD_IAM_TOKEN",
+        "description": "The base64 encoded json which contains information about iam token of service account with `dns.admin` permissions"
+      },
+      {
+        "name": "YANDEX_CLOUD_FOLDER_ID",
+        "description": "The string id of folder (aka project) in Yandex Cloud"
+      }
+    ]
+  },
+  {
+    "id": "zoneedit",
+    "name": "ZoneEdit",
+    "credentials": [
+      {
+        "name": "ZONEEDIT_USER",
+        "description": "User ID"
+      },
+      {
+        "name": "ZONEEDIT_AUTH_TOKEN",
+        "description": "Authentication token"
+      }
+    ]
+  },
+  {
+    "id": "zoneee",
+    "name": "Zone.ee",
+    "credentials": [
+      {
+        "name": "ZONEEE_API_USER",
+        "description": "API user"
+      },
+      {
+        "name": "ZONEEE_API_KEY",
+        "description": "API key"
+      }
+    ]
+  },
+  {
+    "id": "zonomi",
+    "name": "Zonomi",
+    "credentials": [
+      {
+        "name": "ZONOMI_API_KEY",
+        "description": "User API key"
+      }
+    ]
+  }
+]

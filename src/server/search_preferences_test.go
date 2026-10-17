@@ -2,6 +2,8 @@ package server
 
 import (
 	"encoding/base64"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/search/src/model"
@@ -30,6 +32,51 @@ func TestParseSearchPreferencesCompactString(t *testing.T) {
 	}
 	if prefs.KeyboardShortcuts {
 		t.Fatal("KeyboardShortcuts = true, want false")
+	}
+}
+
+func TestAppendDirectoryFilterParamsSupportsNativeForms(t *testing.T) {
+	parameters := url.Values{
+		"directory_type":     {"documents"},
+		"directory_min_size": {"10485760"},
+		"directory_after":    {"2024-01-01"},
+		"directory_before":   {"2024-12-31"},
+		"directory_site":     {"example.edu"},
+		"directory_scan":     {"2"},
+	}
+	got := appendDirectoryFilterParams("directory:linux books", parameters)
+	want := "directory:linux books type:documents min-size:10485760 after:2024-01-01 before:2024-12-31 site:example.edu scan:2"
+	if got != want {
+		t.Fatalf("appendDirectoryFilterParams() = %q, want %q", got, want)
+	}
+	if got := appendDirectoryFilterParams("golang", parameters); got != "golang" {
+		t.Errorf("non-directory query was modified: %q", got)
+	}
+	parameters.Set("directory_site", "example.edu site:internal")
+	if got := appendDirectoryFilterParams("directory:linux", parameters); got == "directory:linux" || got[len("directory:linux"):] != " type:documents min-size:10485760 after:2024-01-01 before:2024-12-31 scan:2" {
+		t.Errorf("invalid whitespace filter was not safely omitted: %q", got)
+	}
+}
+
+func TestBuildAdvancedSearchQueryFromNativeForm(t *testing.T) {
+	parameters := url.Values{
+		"as_allwords":    {"golang testing"},
+		"as_exactphrase": {"unit tests"},
+		"as_anywords":    {"fast secure"},
+		"as_nonewords":   {"java -ruby"},
+		"as_site":        {"example.com"},
+		"as_filetype":    {"PDF"},
+	}
+	got := buildAdvancedSearchQuery(parameters)
+	want := `golang testing "unit tests" (fast OR secure) -java -ruby site:example.com filetype:pdf`
+	if got != want {
+		t.Fatalf("buildAdvancedSearchQuery() = %q, want %q", got, want)
+	}
+	parameters.Set("as_site", "example.com another.example")
+	parameters.Set("as_filetype", "pdf;drop")
+	got = buildAdvancedSearchQuery(parameters)
+	if strings.Contains(got, "site:") || strings.Contains(got, "filetype:") {
+		t.Fatalf("invalid site/filetype values were accepted: %q", got)
 	}
 }
 

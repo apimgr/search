@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -286,19 +287,31 @@ func TestMaintenanceServiceRegisterCallback(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ms := NewMaintenanceService(cfg)
 
+	var mu sync.Mutex
 	var calledWith MaintenanceMode
 	var callCount int
 
+	done := make(chan struct{})
 	ms.RegisterCallback(func(mode MaintenanceMode) {
+		mu.Lock()
 		calledWith = mode
 		callCount++
+		mu.Unlock()
+		close(done)
 	})
 
 	ms.SetMode(ModeMaintenance, "test")
 
-	// Wait for callback
-	time.Sleep(50 * time.Millisecond)
+	// Wait for callback — the channel closes from inside the callback, which
+	// establishes happens-before for every write the callback made.
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Callback was not called within timeout")
+	}
 
+	mu.Lock()
+	defer mu.Unlock()
 	if callCount == 0 {
 		t.Error("Callback should have been called")
 	}
@@ -683,19 +696,38 @@ func TestMaintenanceServiceMultipleCallbacks(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ms := NewMaintenanceService(cfg)
 
+	var mu sync.Mutex
 	var callCounts [3]int
+
+	// Each callback signals on its own channel so the test can wait for all
+	// three instead of racing them against a fixed sleep.
+	done := make(chan int, 3)
 
 	for i := 0; i < 3; i++ {
 		idx := i
 		ms.RegisterCallback(func(mode MaintenanceMode) {
+			mu.Lock()
 			callCounts[idx]++
+			mu.Unlock()
+			done <- idx
 		})
 	}
 
 	ms.SetMode(ModeMaintenance, "test")
-	time.Sleep(50 * time.Millisecond)
+
+	seen := make([]bool, 3)
+	for i := 0; i < 3; i++ {
+		select {
+		case idx := <-done:
+			seen[idx] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("Only %d of 3 callbacks ran within timeout", i)
+		}
+	}
 
 	// All callbacks should have been called
+	mu.Lock()
+	defer mu.Unlock()
 	for i, count := range callCounts {
 		if count == 0 {
 			t.Errorf("Callback %d was not called", i)
@@ -1154,14 +1186,27 @@ func TestMaintenanceServiceModeAfterCallback(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ms := NewMaintenanceService(cfg)
 
+	var mu sync.Mutex
 	var capturedMode MaintenanceMode
+
+	done := make(chan struct{})
 	ms.RegisterCallback(func(mode MaintenanceMode) {
+		mu.Lock()
 		capturedMode = mode
+		mu.Unlock()
+		close(done)
 	})
 
 	ms.SetMode(ModeDegraded, "testing")
-	time.Sleep(50 * time.Millisecond)
 
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Callback was not called within timeout")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
 	if capturedMode != ModeDegraded {
 		t.Errorf("Callback received mode %v, want %v", capturedMode, ModeDegraded)
 	}

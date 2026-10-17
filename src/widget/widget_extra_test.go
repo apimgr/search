@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1148,6 +1149,32 @@ func TestWikipediaFetchArticleSummaryDisambiguation(t *testing.T) {
 	}
 }
 
+func TestWikipediaFetchArticleDetailsExtractsSafeText(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"parse": map[string]interface{}{
+				"sections": []interface{}{map[string]interface{}{"line": "History", "anchor": "History", "level": "2"}},
+				"text":     `<div class="mw-parser-output"><table class="infobox"><tbody><tr><th>Founded</th><td>1901</td></tr></tbody></table><h2 id="History">History</h2><p>Known <em>facts</em>.</p><script>alert(1)</script></div>`,
+			},
+		})
+	}))
+	defer srv.Close()
+	f := NewWikipediaFetcher()
+	f.httpClient = &http.Client{Transport: &redirectTransport{base: srv.URL}}
+
+	sections, fields, err := f.fetchArticleDetails(context.Background(), "Test Article", "en")
+	if err != nil {
+		t.Fatalf("fetchArticleDetails() error = %v", err)
+	}
+	if len(sections) != 1 || sections[0].Title != "History" || sections[0].Text != "Known facts." {
+		t.Fatalf("sections = %#v", sections)
+	}
+	if len(fields) != 1 || fields[0] != (WikipediaField{Label: "Founded", Value: "1901"}) {
+		t.Fatalf("infobox = %#v", fields)
+	}
+}
+
 // ---- Crypto additional paths ----
 
 func TestCryptoFetcherWithMockedHTTP(t *testing.T) {
@@ -1159,7 +1186,7 @@ func TestCryptoFetcherWithMockedHTTP(t *testing.T) {
 	}{
 		{
 			name:   "successful EUR currency response",
-			params: map[string]string{"coins": "bitcoin", "currency": "eur"},
+			params: map[string]string{"coins": "bitcoin", "currency": "eur", "amount": "0.5"},
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1218,6 +1245,11 @@ func TestCryptoFetcherWithMockedHTTP(t *testing.T) {
 			} else {
 				if data.Error != "" {
 					t.Errorf("unexpected error: %s", data.Error)
+				} else if tt.params["amount"] != "" {
+					coin := data.Data.(*CryptoData).Coins[0]
+					if coin.Amount != 0.5 || coin.Price != 45000 || coin.Currency != "EUR" {
+						t.Errorf("crypto amount/currency/price = %+v", coin)
+					}
 				}
 			}
 		})
@@ -1227,71 +1259,84 @@ func TestCryptoFetcherWithMockedHTTP(t *testing.T) {
 // ---- Currency fetcher mocked paths ----
 
 func TestCurrencyFetcherWithMockedHTTP(t *testing.T) {
-	tests := []struct {
-		name    string
-		params  map[string]string
-		handler func(w http.ResponseWriter, r *http.Request)
-		wantErr bool
-	}{
-		{
-			name:   "default USD to EUR",
-			params: map[string]string{},
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"success": true,
-					"query": map[string]interface{}{
-						"from": "USD", "to": "EUR", "amount": 1.0,
-					},
-					"info":   map[string]interface{}{"rate": 0.92},
-					"result": 0.92,
-					"date":   "2024-01-01",
-				})
-			},
-		},
-		{
-			name:   "explicit amount param",
-			params: map[string]string{"from": "GBP", "to": "JPY", "amount": "100"},
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"success": true,
-					"query": map[string]interface{}{
-						"from": "GBP", "to": "JPY", "amount": 100.0,
-					},
-					"info":   map[string]interface{}{"rate": 185.0},
-					"result": 18500.0,
-					"date":   "2024-01-01",
-				})
-			},
-		},
+	today := time.Now().UTC().Format("2006-01-02")
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v2/rate/GBP/JPY":
+			if r.URL.Query().Has("amount") {
+				t.Error("currency amount was sent to the provider")
+			}
+			_, _ = fmt.Fprintf(w, `{"date":%q,"base":"GBP","quote":"JPY","rate":185}`, today)
+		case "/v2/rates":
+			if r.URL.Query().Get("base") != "GBP" || r.URL.Query().Get("quotes") != "JPY" || r.URL.Query().Has("amount") {
+				t.Errorf("unexpected historical-rate query: %s", r.URL.RawQuery)
+			}
+			_, _ = fmt.Fprintf(w, `[{"date":"%s","base":"GBP","quote":"JPY","rate":180},{"date":%q,"base":"GBP","quote":"JPY","rate":185}]`, time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02"), today)
+		default:
+			t.Errorf("unexpected currency endpoint %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	fetcher := NewCurrencyFetcher()
+	fetcher.httpClient.Transport = &redirectTransport{base: server.URL}
+	result, err := fetcher.Fetch(context.Background(), map[string]string{"from": "gbp", "to": "jpy", "amount": "100"})
+	if err != nil {
+		t.Fatal(err)
 	}
+	data, ok := result.Data.(*CurrencyData)
+	if !ok {
+		t.Fatalf("data type = %T, want *CurrencyData", result.Data)
+	}
+	if data.Result != 18500 || data.Rate != 185 || data.From != "GBP" || data.To != "JPY" {
+		t.Errorf("conversion = %#v", data)
+	}
+	if len(data.History) != 2 || data.History[0].Rate != 180 {
+		t.Errorf("history = %#v", data.History)
+	}
+	if len(paths) != 2 {
+		t.Errorf("provider paths = %#v, want current and history requests", paths)
+	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(tt.handler))
-			defer srv.Close()
+func TestCurrencyFetcherRejectsInvalidInputsBeforeNetwork(t *testing.T) {
+	fetcher := NewCurrencyFetcher()
+	for _, params := range []map[string]string{
+		{"from": "U$D", "to": "EUR"},
+		{"from": "USD", "to": "EURO"},
+		{"from": "USD", "to": "EUR", "amount": "NaN"},
+		{"from": "USD", "to": "EUR", "amount": "-1"},
+		{"from": "USD", "to": "EUR", "amount": "1000000000001"},
+	} {
+		if _, err := fetcher.Fetch(context.Background(), params); err == nil {
+			t.Errorf("Fetch(%v) unexpectedly accepted invalid input", params)
+		}
+	}
+}
 
-			f := NewCurrencyFetcher("")
-			f.httpClient = &http.Client{
-				Transport: &redirectTransport{base: srv.URL},
-			}
-
-			data, err := f.Fetch(context.Background(), tt.params)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Fetch() unexpected error: %v", err)
-			}
-			if data.Error != "" {
-				t.Errorf("unexpected WidgetData.Error: %s", data.Error)
-			}
-			if data.Type != WidgetCurrency {
-				t.Errorf("Type = %q, want %q", data.Type, WidgetCurrency)
+func TestCurrencyFetcherRejectsMalformedAndOversizedProviderData(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{name: "wrong currency pair", body: `{"date":"2026-10-10","base":"EUR","quote":"USD","rate":1}`},
+		{name: "invalid rate", body: `{"date":"2026-10-10","base":"USD","quote":"EUR","rate":0}`},
+		{name: "malformed JSON", body: `{`},
+		{name: "oversized response", body: strings.Repeat("x", maxCurrencyResponseBytes+1)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer server.Close()
+			fetcher := NewCurrencyFetcher()
+			fetcher.httpClient.Transport = &redirectTransport{base: server.URL}
+			if _, err := fetcher.Fetch(context.Background(), map[string]string{"from": "USD", "to": "EUR"}); err == nil {
+				t.Fatal("Fetch unexpectedly accepted malformed provider data")
 			}
 		})
 	}
@@ -1309,34 +1354,7 @@ func TestStocksFetcherFetchQuotes(t *testing.T) {
 			name: "successful quote response",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(YahooFinanceResponse{
-					QuoteResponse: struct {
-						Result []struct {
-							Symbol                     string  `json:"symbol"`
-							ShortName                  string  `json:"shortName"`
-							LongName                   string  `json:"longName"`
-							RegularMarketPrice         float64 `json:"regularMarketPrice"`
-							RegularMarketChange        float64 `json:"regularMarketChange"`
-							RegularMarketChangePercent float64 `json:"regularMarketChangePercent"`
-							RegularMarketVolume        int64   `json:"regularMarketVolume"`
-							MarketCap                  float64 `json:"marketCap"`
-						} `json:"result"`
-						Error interface{} `json:"error"`
-					}{
-						Result: []struct {
-							Symbol                     string  `json:"symbol"`
-							ShortName                  string  `json:"shortName"`
-							LongName                   string  `json:"longName"`
-							RegularMarketPrice         float64 `json:"regularMarketPrice"`
-							RegularMarketChange        float64 `json:"regularMarketChange"`
-							RegularMarketChangePercent float64 `json:"regularMarketChangePercent"`
-							RegularMarketVolume        int64   `json:"regularMarketVolume"`
-							MarketCap                  float64 `json:"marketCap"`
-						}{
-							{Symbol: "AAPL", ShortName: "Apple Inc.", RegularMarketPrice: 175.5},
-						},
-					},
-				})
+				_, _ = io.WriteString(w, `{"chart":{"result":[{"meta":{"symbol":"AAPL","shortName":"Apple Inc.","regularMarketPrice":175.5,"chartPreviousClose":170},"indicators":{"quote":[{"open":[174,175],"high":[175,176],"low":[173.5,174.5],"close":[175,175.5],"volume":[100,200]}]}}],"error":null}}`)
 			},
 		},
 		{
@@ -1372,6 +1390,10 @@ func TestStocksFetcherFetchQuotes(t *testing.T) {
 				if data.Error != "" {
 					t.Errorf("unexpected error: %s", data.Error)
 				}
+				quotes := data.Data.(*StocksData).Symbols
+				if len(quotes) != 1 || quotes[0].Price != 175.5 || quotes[0].Change != 5.5 || quotes[0].Open != 174 || quotes[0].High != 176 || quotes[0].Low != 173.5 || quotes[0].Volume != 300 || len(quotes[0].Chart) != 2 || quotes[0].Chart[1] != 175.5 {
+					t.Errorf("quote data = %+v, want price, change, OHLCV, and chart from Yahoo chart response", quotes)
+				}
 			}
 		})
 	}
@@ -1380,12 +1402,7 @@ func TestStocksFetcherFetchQuotes(t *testing.T) {
 func TestStocksFetcherFetchWithSymbolsParam(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"quoteResponse": map[string]interface{}{
-				"result": []interface{}{},
-				"error":  nil,
-			},
-		})
+		_, _ = io.WriteString(w, `{"chart":{"result":[{"meta":{"symbol":"TSLA","regularMarketPrice":100,"chartPreviousClose":99},"indicators":{"quote":[{"close":[100]}]}}],"error":null}}`)
 	}))
 	defer srv.Close()
 
@@ -1472,4 +1489,62 @@ func (t *dualRedirectTransport) RoundTrip(req *http.Request) (*http.Response, er
 	}
 
 	return http.DefaultTransport.RoundTrip(newReq)
+}
+
+func TestCryptoFetcherIncludesBounded24HourChartAndSelectedCurrencyMetrics(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/simple/price"):
+			if r.URL.Query().Get("vs_currencies") != "eur" {
+				t.Errorf("price request currency = %q, want eur", r.URL.Query().Get("vs_currencies"))
+			}
+			_, _ = io.WriteString(w, `{"bitcoin":{"eur":200,"eur_24h_change":2,"eur_market_cap":2000,"eur_24h_vol":300}}`)
+		case strings.HasSuffix(r.URL.Path, "/market_chart"):
+			if r.URL.Query().Get("vs_currency") != "eur" || r.URL.Query().Get("days") != "1" {
+				t.Errorf("chart query = %v, want EUR and one day", r.URL.Query())
+			}
+			_, _ = io.WriteString(w, `{"prices":[[1,100],[2,0],[3,-2],[4,102]]}`)
+		default:
+			t.Errorf("unexpected CoinGecko path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	fetcher := NewCryptoFetcher(&config.CryptoWidgetConfig{})
+	fetcher.client.Transport = &redirectTransport{base: server.URL}
+	data, err := fetcher.Fetch(context.Background(), map[string]string{
+		"coins": "bitcoin", "currency": "eur", "amount": "0.5", "include_chart": "true",
+	})
+	if err != nil {
+		t.Fatalf("Fetch() returned error: %v", err)
+	}
+	if data.Error != "" {
+		t.Fatalf("Fetch() returned widget error: %s", data.Error)
+	}
+	coin := data.Data.(*CryptoData).Coins[0]
+	if coin.Currency != "EUR" || coin.Amount != 0.5 || coin.Price != 200 || coin.Change24h != 2 || coin.MarketCap != 2000 || coin.Volume24h != 300 {
+		t.Errorf("coin data = %+v, want selected currency metrics and amount", coin)
+	}
+	if len(coin.Chart) != 2 || coin.Chart[0] != 100 || coin.Chart[1] != 102 {
+		t.Errorf("chart = %v, want valid positive points [100 102]", coin.Chart)
+	}
+}
+
+func TestCryptoFetcherRejectsOversizedPriceResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, strings.Repeat("x", maximumCoinGeckoResponseBytes+1))
+	}))
+	defer server.Close()
+
+	fetcher := NewCryptoFetcher(&config.CryptoWidgetConfig{})
+	fetcher.client.Transport = &redirectTransport{base: server.URL}
+	data, err := fetcher.Fetch(context.Background(), map[string]string{"coins": "bitcoin"})
+	if err != nil {
+		t.Fatalf("Fetch() returned error: %v", err)
+	}
+	if data.Error != "cryptocurrency response exceeds the size limit" {
+		t.Errorf("Fetch() error = %q, want bounded-response error", data.Error)
+	}
 }

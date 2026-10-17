@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,10 +14,41 @@ import (
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
+	"github.com/apimgr/search/src/swagger"
 	"github.com/go-chi/chi/v5"
+	_ "modernc.org/sqlite"
 )
+
+type testContactSubmitter struct {
+	calls int
+	last  ContactMessage
+	err   error
+}
+
+type captureAPISearchEngine struct {
+	query *model.Query
+}
+
+func (e *captureAPISearchEngine) Name() string                         { return "capture" }
+func (e *captureAPISearchEngine) DisplayName() string                  { return "Capture" }
+func (e *captureAPISearchEngine) IsEnabled() bool                      { return true }
+func (e *captureAPISearchEngine) GetPriority() int                     { return 1 }
+func (e *captureAPISearchEngine) SupportsCategory(model.Category) bool { return true }
+func (e *captureAPISearchEngine) GetConfig() *model.EngineConfig       { return nil }
+func (e *captureAPISearchEngine) Search(_ context.Context, query *model.Query) ([]model.Result, error) {
+	copy := *query
+	e.query = &copy
+	return []model.Result{{Title: "Captured", URL: "https://example.test/result", Engine: "capture", Category: query.Category}}, nil
+}
+
+func (s *testContactSubmitter) SubmitContact(_ context.Context, message ContactMessage) error {
+	s.calls++
+	s.last = message
+	return s.err
+}
 
 func newTestHandler() *Handler {
 	cfg := &config.Config{
@@ -33,7 +66,7 @@ func newTestHandler() *Handler {
 func TestHealthzEndpoint(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, APIPrefix+"/server/healthz", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
@@ -42,22 +75,13 @@ func TestHealthzEndpoint(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	var response APIResponse
+	var response HealthResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.OK {
-		t.Error("Expected success to be true")
-	}
-
-	data, ok := response.Data.(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected data to be a map")
-	}
-
-	if data["status"] != "healthy" {
-		t.Errorf("Expected status 'healthy', got %v", data["status"])
+	if response.Status != "healthy" {
+		t.Errorf("Expected status 'healthy', got %v", response.Status)
 	}
 }
 
@@ -80,6 +104,148 @@ func TestInfoEndpoint(t *testing.T) {
 
 	if !response.OK {
 		t.Error("Expected success to be true")
+	}
+}
+
+func TestAPIRequestForGraphQLUsesRegisteredRESTRoutes(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	handler.RegisterRoutes(router)
+	request := httptest.NewRequest(http.MethodPost, APIPrefix+"/server/graphql", nil)
+	result, err := handler.APIRequestForGraphQL(request.Context(), request, http.MethodGet, "/api/v1/info", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["status"] != http.StatusOK {
+		t.Fatalf("REST bridge status = %v, want 200", result["status"])
+	}
+	body, ok := result["body"].(map[string]interface{})
+	if !ok || body["ok"] != true {
+		t.Fatalf("REST bridge returned unexpected payload: %#v", result["body"])
+	}
+	for _, test := range []struct{ method, path string }{
+		{http.MethodGet, "https://example.com/api/v1/info"},
+		{http.MethodPost, "/api/v1/server/graphql"},
+		{http.MethodPost, "/api/v1/server/mcp"},
+		{http.MethodOptions, "/api/v1/info"},
+	} {
+		if _, err := handler.APIRequestForGraphQL(request.Context(), request, test.method, test.path, nil); err == nil {
+			t.Errorf("expected REST bridge to reject %s %s", test.method, test.path)
+		}
+	}
+}
+
+func TestOpenAPIDocumentsRegisteredAPIPaths(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	handler.RegisterRoutes(router)
+	spec := swagger.GenerateSpec(handler.config, "https://search.example.test")
+	for _, route := range router.Routes() {
+		path := openAPITestPath(route.Pattern)
+		if !strings.HasPrefix(path, "/api/") {
+			continue
+		}
+		item, exists := spec.Paths[path]
+		if !exists {
+			t.Errorf("registered REST path %q is missing from OpenAPI", path)
+			continue
+		}
+		for method := range route.Handlers {
+			if !openAPIMethod(item, method) {
+				t.Errorf("OpenAPI omits registered %s %s", method, path)
+			}
+		}
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+			if openAPIMethod(item, method) {
+				if _, registered := route.Handlers[method]; !registered {
+					t.Errorf("OpenAPI documents unregistered %s %s", method, path)
+				}
+			}
+		}
+	}
+	request := httptest.NewRequest(http.MethodPost, APIPrefix+"/server/graphql", nil)
+	pathParameters := strings.NewReplacer(
+		"{id}", "test", "{token}", "test", "{engine_id}", "test", "{widget_id}", "test",
+		"{type}", "unknown", "{term}", "example.test", "{ip}", "203.0.113.1", "{name}", "test", "{task}", "test",
+	)
+	for path, item := range spec.Paths {
+		if !strings.HasPrefix(path, "/api/") || strings.HasSuffix(path, "/graphql") || strings.HasSuffix(path, "/mcp") {
+			continue
+		}
+		path = pathParameters.Replace(path)
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+			if !openAPIMethod(item, method) {
+				continue
+			}
+			bridge, err := handler.APIRequestForGraphQL(request.Context(), request, method, path, nil)
+			if err != nil {
+				t.Errorf("GraphQL apiRequest cannot dispatch documented REST operation %s %s: %v", method, path, err)
+				continue
+			}
+			directRequest := httptest.NewRequest(method, path, nil)
+			directRequest.RemoteAddr = request.RemoteAddr
+			directRecorder := httptest.NewRecorder()
+			router.ServeHTTP(directRecorder, directRequest)
+			if bridge["status"] != directRecorder.Code {
+				t.Errorf("GraphQL apiRequest %s %s status = %v, direct REST status = %d", method, path, bridge["status"], directRecorder.Code)
+				continue
+			}
+			var directBody interface{}
+			if json.Unmarshal(directRecorder.Body.Bytes(), &directBody) != nil {
+				directBody = directRecorder.Body.String()
+			}
+			normalizeAPITimingMetadata(bridge["body"])
+			normalizeAPITimingMetadata(directBody)
+			if !reflect.DeepEqual(bridge["body"], directBody) {
+				t.Errorf("GraphQL apiRequest %s %s body differs from direct REST response: bridge=%#v direct=%#v", method, path, bridge["body"], directBody)
+			}
+		}
+	}
+}
+
+func normalizeAPITimingMetadata(value interface{}) {
+	switch value := value.(type) {
+	case map[string]interface{}:
+		delete(value, "process_time_ms")
+		for _, child := range value {
+			normalizeAPITimingMetadata(child)
+		}
+	case []interface{}:
+		for _, child := range value {
+			normalizeAPITimingMetadata(child)
+		}
+	}
+}
+
+func openAPITestPath(pattern string) string {
+	switch pattern {
+	case APIPrefix + "/alerts/*":
+		return APIPrefix + "/alerts/{token}"
+	case APIPrefix + "/direct/*":
+		return APIPrefix + "/direct/{type}/{term}"
+	case APIPrefix + "/engines/*":
+		return APIPrefix + "/engines/{engine_id}"
+	case APIPrefix + "/widgets/*":
+		return APIPrefix + "/widgets/{widget_id}"
+	default:
+		return pattern
+	}
+}
+
+func openAPIMethod(item swagger.PathItem, method string) bool {
+	switch method {
+	case http.MethodGet:
+		return item.Get != nil
+	case http.MethodPost:
+		return item.Post != nil
+	case http.MethodPut:
+		return item.Put != nil
+	case http.MethodPatch:
+		return item.Patch != nil
+	case http.MethodDelete:
+		return item.Delete != nil
+	default:
+		return false
 	}
 }
 
@@ -480,6 +646,53 @@ func TestSearchEndpointWithCategory(t *testing.T) {
 	}
 }
 
+func TestSearchEndpointPassesFiltersToEngine(t *testing.T) {
+	engine := &captureAPISearchEngine{}
+	handler := newTestHandler()
+	handler.aggregator = search.NewAggregatorSimple([]search.Engine{engine}, time.Second)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=privacy&category=news&page=2&limit=30&lang=fr&region=ca&safe_search=2&time_range=custom&time_from=2025-01-01&time_to=2025-01-31&engines=capture", nil)
+	w := httptest.NewRecorder()
+	handler.handleSearch(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("search status = %d, body %s", w.Code, w.Body.String())
+	}
+	if engine.query == nil {
+		t.Fatal("search engine did not receive a query")
+	}
+	query := engine.query
+	if query.Text != "privacy" || query.Category != model.CategoryNews || query.Page != 2 || query.PerPage != 30 {
+		t.Errorf("query core fields = %#v", query)
+	}
+	if query.Language != "fr" || query.Region != "ca" || query.SafeSearch != 2 || query.TimeRange != "custom" || query.DateAfter != "2025-01-01" || query.DateBefore != "2025-01-31" {
+		t.Errorf("query filters = %#v", query)
+	}
+	if len(query.Engines) != 1 || query.Engines[0] != "capture" {
+		t.Errorf("query engines = %#v", query.Engines)
+	}
+}
+
+func TestValidateSearchDateRange(t *testing.T) {
+	tests := []struct {
+		name string
+		req  SearchRequest
+		want bool
+	}{
+		{name: "complete custom range", req: SearchRequest{TimeRange: "custom", TimeFrom: "2025-01-01", TimeTo: "2025-01-31"}},
+		{name: "custom range requires both dates", req: SearchRequest{TimeRange: "custom", TimeFrom: "2025-01-01"}, want: true},
+		{name: "invalid date", req: SearchRequest{TimeFrom: "2025-02-30"}, want: true},
+		{name: "reversed range", req: SearchRequest{TimeFrom: "2025-02-01", TimeTo: "2025-01-01"}, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateSearchDateRange(test.req)
+			if (err != nil) != test.want {
+				t.Fatalf("validateSearchDateRange() error = %v, want error %v", err, test.want)
+			}
+		})
+	}
+}
+
 // Tests for Autocomplete with query
 
 func TestAutocompleteWithQuery(t *testing.T) {
@@ -733,7 +946,7 @@ func TestRespondWithFormatText(t *testing.T) {
 	handler := newTestHandler()
 
 	// Test .txt extension
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz.txt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz.txt", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
@@ -744,15 +957,15 @@ func TestRespondWithFormatText(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if body != "OK\n" && !strings.HasPrefix(body, "ERROR:") {
-		t.Errorf("Expected 'OK\\n' or 'ERROR:', got %q", body)
+	if !strings.Contains(body, "status: healthy\n") {
+		t.Errorf("Expected complete health text, got %q", body)
 	}
 }
 
 func TestRespondWithFormatAcceptHeader(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, APIPrefix+"/server/healthz", nil)
 	req.Header.Set("Accept", "text/plain")
 	w := httptest.NewRecorder()
 
@@ -767,7 +980,7 @@ func TestRespondWithFormatAcceptHeader(t *testing.T) {
 func TestRespondWithFormatQueryParam(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz?format=text", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz?format=text", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
@@ -785,9 +998,9 @@ func TestStripTxtExtension(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"/api/v1/healthz.txt", "/api/v1/healthz"},
+		{"/api/v1/server/healthz.txt", "/api/v1/server/healthz"},
 		{"/api/v1/info.txt", "/api/v1/info"},
-		{"/api/v1/healthz", "/api/v1/healthz"},
+		{"/api/v1/server/healthz", "/api/v1/server/healthz"},
 		{"/path/to/file", "/path/to/file"},
 		{"file.txt", "file"},
 		{"", ""},
@@ -804,6 +1017,13 @@ func TestStripTxtExtension(t *testing.T) {
 func TestCheckDiskHealth(t *testing.T) {
 	handler := newTestHandler()
 
+	// checkDiskHealth stats config.GetDataDir(), which resolves from CLI
+	// overrides/env — not from the handler's config. Point it at a temp dir
+	// so the test passes regardless of the host environment.
+	tmpDir := t.TempDir()
+	config.SetDataDirOverride(tmpDir)
+	defer config.SetDataDirOverride("")
+
 	result := handler.checkDiskHealth()
 	if result != "ok" {
 		t.Errorf("checkDiskHealth() = %q, want 'ok'", result)
@@ -817,6 +1037,59 @@ func TestGetRequestsTotal(t *testing.T) {
 	result := handler.getRequestsTotal()
 	if result != 0 {
 		t.Errorf("getRequestsTotal() = %d, want 0", result)
+	}
+}
+
+type fakeHealthMetrics struct {
+	total   int64
+	last24h int64
+	active  int64
+}
+
+func (m fakeHealthMetrics) GetTotalRequests() int64       { return m.total }
+func (m fakeHealthMetrics) GetRequestsLast24Hours() int64 { return m.last24h }
+func (m fakeHealthMetrics) GetActiveConnections() int64   { return m.active }
+
+type fakeHealthProvider struct {
+	snapshot HealthSnapshot
+}
+
+func (p fakeHealthProvider) HealthSnapshot() HealthSnapshot { return p.snapshot }
+
+func TestHealthProviderOverridesChecksAndStatus(t *testing.T) {
+	handler := newTestHandler()
+	handler.SetHealthProvider(fakeHealthProvider{snapshot: HealthSnapshot{
+		Status: "unhealthy",
+		Checks: ChecksInfo{Database: "error", Cache: "ok", Disk: "ok", Scheduler: "ok"},
+	}})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
+	request.Header.Set("Accept", "application/json")
+	response := httptest.NewRecorder()
+	handler.handleHealthz(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("health response status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	var body HealthResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if body.Status != "unhealthy" || body.Checks.Database != "error" {
+		t.Fatalf("health response did not use provider snapshot: %+v", body)
+	}
+}
+
+func TestHealthMetricsIntegration(t *testing.T) {
+	handler := newTestHandler()
+	handler.SetHealthMetrics(fakeHealthMetrics{total: 12, last24h: 7, active: 3})
+
+	if got := handler.getRequestsTotal(); got != 12 {
+		t.Errorf("getRequestsTotal() = %d, want 12", got)
+	}
+	if got := handler.getRequests24h(); got != 7 {
+		t.Errorf("getRequests24h() = %d, want 7", got)
+	}
+	if got := handler.getActiveConnections(); got != 3 {
+		t.Errorf("getActiveConnections() = %d, want 3", got)
 	}
 }
 
@@ -979,15 +1252,9 @@ func TestHealthResponseSerialization(t *testing.T) {
 
 func TestSearchResponseSerialization(t *testing.T) {
 	resp := SearchResponse{
-		Query:    "test",
-		Category: "general",
-		Results:  []SearchResult{{Title: "Test", URL: "https://example.com"}},
-		Pagination: Pagination{
-			Page:  1,
-			Limit: 20,
-			Total: 1,
-			Pages: 1,
-		},
+		Query:      "test",
+		Category:   "general",
+		Results:    []SearchResult{{Title: "Test", URL: "https://example.com"}},
 		SearchTime: 100.5,
 		Engines:    []string{"google"},
 	}
@@ -1202,6 +1469,10 @@ func TestSearchResultSerialization(t *testing.T) {
 		Score:       0.95,
 		Category:    "general",
 		Thumbnail:   "https://example.com/thumb.png",
+		Duration:    634,
+		ViewCount:   1000,
+		Author:      "Fixture Channel",
+		EmbedURL:    "https://www.youtube-nocookie.com/embed/abc123",
 		Date:        "2024-01-01",
 		Domain:      "example.com",
 	}
@@ -1227,6 +1498,9 @@ func TestSearchResultSerialization(t *testing.T) {
 	}
 	if unmarshaled.Domain != result.Domain {
 		t.Errorf("Domain mismatch: got %q, want %q", unmarshaled.Domain, result.Domain)
+	}
+	if unmarshaled.Duration != result.Duration || unmarshaled.ViewCount != result.ViewCount || unmarshaled.Author != result.Author || unmarshaled.EmbedURL != result.EmbedURL {
+		t.Errorf("video metadata mismatch: got duration=%d views=%d author=%q embed=%q", unmarshaled.Duration, unmarshaled.ViewCount, unmarshaled.Author, unmarshaled.EmbedURL)
 	}
 }
 
@@ -1323,15 +1597,17 @@ func TestSystemInfoSerialization(t *testing.T) {
 // Tests for SearchRequest serialization
 
 func TestSearchRequestSerialization(t *testing.T) {
+	safeSearch := 1
 	req := SearchRequest{
 		Query:      "golang testing",
 		Category:   "general",
 		Page:       1,
 		Limit:      20,
 		Engines:    []string{"google", "bing"},
-		SafeSearch: "moderate",
+		SafeSearch: &safeSearch,
 		TimeRange:  "week",
 		Language:   "en",
+		Region:     "us",
 	}
 
 	data, err := json.Marshal(req)
@@ -1358,6 +1634,25 @@ func TestSearchRequestSerialization(t *testing.T) {
 	}
 	if len(unmarshaled.Engines) != len(req.Engines) {
 		t.Errorf("Engines length mismatch: got %d, want %d", len(unmarshaled.Engines), len(req.Engines))
+	}
+	if unmarshaled.SafeSearch == nil || *unmarshaled.SafeSearch != *req.SafeSearch {
+		t.Errorf("SafeSearch mismatch: got %v, want %v", unmarshaled.SafeSearch, req.SafeSearch)
+	}
+	if unmarshaled.Region != req.Region {
+		t.Errorf("Region mismatch: got %q, want %q", unmarshaled.Region, req.Region)
+	}
+}
+
+func TestSplitSearchEngineFilters(t *testing.T) {
+	got := splitSearchEngineFilters([]string{"google,bing", " duckduckgo ", "", "brave,,"})
+	want := []string{"google", "bing", "duckduckgo", "brave"}
+	if len(got) != len(want) {
+		t.Fatalf("engine filters = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("engine filters[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 
@@ -1654,7 +1949,7 @@ func TestAutodiscoverResponseSerialization(t *testing.T) {
 func TestServeOpenAPISpec(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequest(http.MethodGet, APIPrefix+"/server/swagger", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeOpenAPISpec(w, req)
@@ -1684,7 +1979,7 @@ func TestServeOpenAPISpec(t *testing.T) {
 func TestServeSwaggerUI(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger", nil)
 	req.Host = "localhost:8080"
 	w := httptest.NewRecorder()
 
@@ -1705,12 +2000,13 @@ func TestServeSwaggerUI(t *testing.T) {
 	}
 }
 
-func TestServeSwaggerUIWithXForwardedProto(t *testing.T) {
+// TestServeSwaggerUISpecURL verifies the UI fetches the spec from the
+// canonical /api/swagger alias per AI.md PART 14 Root-Level Endpoints.
+func TestServeSwaggerUISpecURL(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger", nil)
 	req.Host = "api.example.com"
-	req.Header.Set("X-Forwarded-Proto", "https")
 	w := httptest.NewRecorder()
 
 	handler.ServeSwaggerUI(w, req)
@@ -1720,11 +2016,11 @@ func TestServeSwaggerUIWithXForwardedProto(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	// Check for the full spec URL with https scheme from X-Forwarded-Proto
-	// html/template escapes forward slashes in JavaScript contexts
-	expectedURL := `https:\/\/api.example.com\/openapi.json`
-	if !strings.Contains(body, expectedURL) {
-		t.Errorf("Expected spec URL %q in body, but it was not found", expectedURL)
+	if !strings.Contains(body, "//api.example.com/api/swagger") {
+		t.Error("Expected spec URL pointing at /api/swagger in body, but it was not found")
+	}
+	if strings.Contains(body, "/openapi.json") {
+		t.Error("Swagger UI must not reference the removed /openapi.json path")
 	}
 }
 
@@ -1739,8 +2035,11 @@ func TestRegisterOpenAPIRoutes(t *testing.T) {
 		path   string
 		status int
 	}{
-		{"/openapi.json", http.StatusOK},
-		{"/openapi", http.StatusOK},
+		{"/server/docs/swagger", http.StatusOK},
+		{APIPrefix + "/server/swagger", http.StatusOK},
+		{"/api/swagger", http.StatusOK},
+		{"/openapi", http.StatusNotFound},
+		{"/openapi.json", http.StatusNotFound},
 	}
 
 	for _, tt := range tests {
@@ -1915,7 +2214,7 @@ func TestHealthzMaintenanceMode(t *testing.T) {
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
@@ -1924,18 +2223,13 @@ func TestHealthzMaintenanceMode(t *testing.T) {
 		t.Errorf("Expected status %d for maintenance mode, got %d", http.StatusServiceUnavailable, w.Code)
 	}
 
-	var response APIResponse
+	var response HealthResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	data, ok := response.Data.(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected data to be a map")
-	}
-
-	if data["status"] != "maintenance" {
-		t.Errorf("Expected status 'maintenance', got %v", data["status"])
+	if response.Status != "maintenance" {
+		t.Errorf("Expected status 'maintenance', got %v", response.Status)
 	}
 }
 
@@ -1950,21 +2244,21 @@ func TestHealthzTextFormatError(t *testing.T) {
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz.txt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz.txt", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
 
 	body := w.Body.String()
-	if !strings.HasPrefix(body, "ERROR:") {
-		t.Errorf("Expected 'ERROR:' prefix in maintenance mode, got %q", body)
+	if !strings.Contains(body, "status: maintenance\n") {
+		t.Errorf("Expected full maintenance health text, got %q", body)
 	}
 }
 
 func TestRespondWithFormatTxtParam(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz?format=txt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz?format=txt", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
@@ -1978,7 +2272,7 @@ func TestRespondWithFormatTxtParam(t *testing.T) {
 func TestRespondWithFormatPlainParam(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz?format=plain", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz?format=plain", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleHealthz(w, req)
@@ -1993,7 +2287,7 @@ func TestRespondWithFormatJSONOverride(t *testing.T) {
 	handler := newTestHandler()
 
 	// Accept header with both text/plain and application/json should use JSON
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
 	req.Header.Set("Accept", "text/plain, application/json")
 	w := httptest.NewRecorder()
 
@@ -2101,8 +2395,8 @@ func TestRegisterRoutes(t *testing.T) {
 		method string
 	}{
 		{"/api/autodiscover", http.MethodGet},
-		{"/api/v1/healthz", http.MethodGet},
-		{"/api/v1/healthz.txt", http.MethodGet},
+		{"/api/v1/server/healthz", http.MethodGet},
+		{"/api/v1/server/healthz.txt", http.MethodGet},
 		{"/api/v1/info", http.MethodGet},
 		{"/api/v1/info.txt", http.MethodGet},
 		{"/api/v1/categories", http.MethodGet},
@@ -2259,30 +2553,6 @@ func TestRelatedSearchResponseSerialization(t *testing.T) {
 // ============================================================================
 
 // ============================================================================
-// Tests for SwaggerUIData
-// ============================================================================
-
-func TestSwaggerUIDataSerialization(t *testing.T) {
-	data := SwaggerUIData{
-		SpecURL: "https://api.example.com/openapi.json",
-	}
-
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		t.Fatalf("Failed to marshal SwaggerUIData: %v", err)
-	}
-
-	var unmarshaled SwaggerUIData
-	if err := json.Unmarshal(jsonData, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal SwaggerUIData: %v", err)
-	}
-
-	if unmarshaled.SpecURL != data.SpecURL {
-		t.Errorf("SpecURL mismatch: got %q, want %q", unmarshaled.SpecURL, data.SpecURL)
-	}
-}
-
-// ============================================================================
 // Tests for getHostname
 // ============================================================================
 
@@ -2300,6 +2570,47 @@ func TestGetHostname(t *testing.T) {
 // Used to drive aggregator into model.ErrNoResults in regression tests.
 type emptyResultEngine struct {
 	cfg *model.EngineConfig
+}
+
+type thumbnailResultEngine struct {
+	cfg *model.EngineConfig
+}
+
+func (e *thumbnailResultEngine) Name() string        { return e.cfg.Name }
+func (e *thumbnailResultEngine) DisplayName() string { return e.cfg.DisplayName }
+func (e *thumbnailResultEngine) Search(_ context.Context, _ *model.Query) ([]model.Result, error) {
+	return []model.Result{{Title: "Image", URL: "https://example.test/page", Engine: e.cfg.Name, Category: model.CategoryImages, Thumbnail: "https://images.example.test/thumb.jpg", ImageURL: "https://images.example.test/full.jpg", ImageWidth: 800, ImageHeight: 600, ImageFormat: "jpg", FileSize: 4096}}, nil
+}
+func (e *thumbnailResultEngine) IsEnabled() bool  { return e.cfg.Enabled }
+func (e *thumbnailResultEngine) GetPriority() int { return e.cfg.Priority }
+func (e *thumbnailResultEngine) SupportsCategory(c model.Category) bool {
+	return e.cfg.SupportsCategory(c)
+}
+func (e *thumbnailResultEngine) GetConfig() *model.EngineConfig { return e.cfg }
+
+func TestSearchEndpointRewritesThumbnailWhenConfigured(t *testing.T) {
+	cfg := &config.Config{Server: config.ServerConfig{Mode: "development"}}
+	resultEngine := &thumbnailResultEngine{cfg: model.NewEngineConfig("images")}
+	resultEngine.cfg.Enabled = true
+	resultEngine.cfg.Categories = []string{string(model.CategoryImages)}
+	handler := NewHandler(cfg, engine.NewRegistry(), search.NewAggregatorSimple([]search.Engine{resultEngine}, 5*time.Second))
+	handler.SetThumbnailRewriter(func(string) string { return "/image-proxy?url=signed" })
+
+	request := httptest.NewRequest(http.MethodGet, APIPrefix+"/search?q=example&category=images", nil)
+	response := httptest.NewRecorder()
+	handler.handleSearch(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("search status = %d, want 200: %s", response.Code, response.Body.String())
+	}
+	var envelope struct {
+		Data SearchResponse `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode search response: %v", err)
+	}
+	if len(envelope.Data.Results) != 1 || envelope.Data.Results[0].Thumbnail != "/image-proxy?url=signed" || envelope.Data.Results[0].ImageURL != "/image-proxy?url=signed" || envelope.Data.Results[0].ImageWidth != 800 || envelope.Data.Results[0].ImageHeight != 600 || envelope.Data.Results[0].ImageFormat != "jpg" || envelope.Data.Results[0].FileSize != 4096 {
+		t.Fatalf("API thumbnail = %#v, want rewritten same-origin URL", envelope.Data.Results)
+	}
 }
 
 func (e *emptyResultEngine) Name() string        { return e.cfg.Name }
@@ -2646,11 +2957,21 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 			Contact: config.ContactConfig{
 				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
+			Pages: config.PagesConfig{Contact: struct {
+				Enabled        bool   `yaml:"enabled"`
+				Email          string `yaml:"email"`
+				Captcha        string `yaml:"captcha"`
+				CaptchaSiteKey string `yaml:"captcha_site_key"`
+				CaptchaSecret  string `yaml:"captcha_secret_key"`
+				SuccessMessage string `yaml:"success_message"`
+			}{Enabled: true}},
 		},
 	}
 	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
+	submitter := &testContactSubmitter{}
+	handler.SetContactSubmitter(submitter)
 
 	body := `{"name":"Alice","email":"alice@example.com","subject":"Bug Report","message":"Found a bug"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(body))
@@ -2670,6 +2991,9 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 	if !resp.OK {
 		t.Errorf("OK = false, want true; message = %q", resp.Message)
 	}
+	if submitter.calls != 1 || submitter.last.Email != "alice@example.com" || submitter.last.Subject != "Bug Report" {
+		t.Errorf("contact submission = %#v, calls=%d", submitter.last, submitter.calls)
+	}
 }
 
 func TestHandleServerContactPOSTMissingFields(t *testing.T) {
@@ -2679,6 +3003,14 @@ func TestHandleServerContactPOSTMissingFields(t *testing.T) {
 			Contact: config.ContactConfig{
 				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
+			Pages: config.PagesConfig{Contact: struct {
+				Enabled        bool   `yaml:"enabled"`
+				Email          string `yaml:"email"`
+				Captcha        string `yaml:"captcha"`
+				CaptchaSiteKey string `yaml:"captcha_site_key"`
+				CaptchaSecret  string `yaml:"captcha_secret_key"`
+				SuccessMessage string `yaml:"success_message"`
+			}{Enabled: true}},
 		},
 	}
 	registry := engine.NewRegistry()
@@ -2718,6 +3050,14 @@ func TestHandleServerContactPOSTInvalidJSON(t *testing.T) {
 			Contact: config.ContactConfig{
 				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
+			Pages: config.PagesConfig{Contact: struct {
+				Enabled        bool   `yaml:"enabled"`
+				Email          string `yaml:"email"`
+				Captcha        string `yaml:"captcha"`
+				CaptchaSiteKey string `yaml:"captcha_site_key"`
+				CaptchaSecret  string `yaml:"captcha_secret_key"`
+				SuccessMessage string `yaml:"success_message"`
+			}{Enabled: true}},
 		},
 	}
 	registry := engine.NewRegistry()
@@ -2763,11 +3103,14 @@ func TestHandlePreferencesGET(t *testing.T) {
 	if !ok {
 		t.Fatal("data is not a map")
 	}
-	if data["storage"] != "client-side" {
-		t.Errorf("storage = %v, want 'client-side'", data["storage"])
+	if data["theme"] != "dark" {
+		t.Errorf("theme = %v, want dark", data["theme"])
 	}
-	if data["fields"] == nil {
-		t.Error("expected fields in response")
+	if data["lang"] != "en" {
+		t.Errorf("lang = %v, want en", data["lang"])
+	}
+	if prefs, ok := data["prefs"].(map[string]interface{}); !ok || prefs == nil {
+		t.Errorf("prefs = %T, want a preference map", data["prefs"])
 	}
 }
 
@@ -3303,6 +3646,26 @@ func TestHandleAlertsInvalidJSON(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleAlertsInvalidCreateDoesNotIssueOwner(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader(`{"category":"general","email":"user@example.com","deliver_rss":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.handleAlerts(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", w.Code, w.Body.String())
+	}
+	var owners int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM owners`).Scan(&owners); err != nil {
+		t.Fatal(err)
+	}
+	if owners != 0 {
+		t.Fatalf("owners = %d after invalid create, want 0", owners)
 	}
 }
 
@@ -3909,5 +4272,55 @@ func TestErrorResponseWith4xx(t *testing.T) {
 	}
 	if resp.OK {
 		t.Error("OK = true, want false")
+	}
+}
+
+func TestSchedulerOperatorEndpoints(t *testing.T) {
+	handler := newTestHandler()
+	handler.config.Server.Token = "scheduler-test-token"
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	sched := scheduler.NewScheduler(db, "test")
+	if err := sched.Register(&scheduler.Task{
+		ID: "test_task", Name: "Test task", Description: "test", Schedule: "@hourly",
+		Skippable: true, Run: func(context.Context) error { return nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler.SetScheduler(sched)
+	router := chi.NewRouter()
+	handler.RegisterRoutes(router)
+
+	request := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer scheduler-test-token")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, req)
+		return response
+	}
+
+	for _, endpoint := range []struct{ method, path string }{
+		{http.MethodGet, APIPrefix + "/server/scheduler/tasks"},
+		{http.MethodGet, APIPrefix + "/server/scheduler/tasks/test_task"},
+		{http.MethodGet, APIPrefix + "/server/scheduler/tasks/test_task/history"},
+	} {
+		response := request(endpoint.method, endpoint.path)
+		if response.Code != http.StatusOK {
+			t.Errorf("%s %s status = %d, body = %s", endpoint.method, endpoint.path, response.Code, response.Body.String())
+		}
+	}
+
+	for _, action := range []string{"disable", "enable", "run"} {
+		response := request(http.MethodPost, APIPrefix+"/server/scheduler/tasks/test_task/"+action)
+		if response.Code != http.StatusOK {
+			t.Errorf("scheduler %s status = %d, body = %s", action, response.Code, response.Body.String())
+		}
+	}
+	if got := request(http.MethodPost, APIPrefix+"/server/scheduler/tasks/test_task/disable").Code; got != http.StatusOK {
+		t.Errorf("repeat disable status = %d", got)
 	}
 }

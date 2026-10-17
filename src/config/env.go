@@ -45,7 +45,9 @@ func LoadFromEnv() *EnvConfig {
 	// Runtime Variables (Always Checked) - per AI.md PART 5
 	// NO_COLOR and TERM checked directly via os.Getenv where needed
 	cfg.Domain = os.Getenv("DOMAIN")
-	cfg.Mode = getEnvWithDefault("MODE", "production")
+	// Left empty when MODE is unset so server.yml's own mode still applies;
+	// GetMode() falls back to production for an empty or unknown value
+	cfg.Mode = os.Getenv("MODE")
 	cfg.DatabaseDriver = os.Getenv("DATABASE_DRIVER")
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.SMTPHost = os.Getenv("SMTP_HOST")
@@ -70,22 +72,18 @@ func LoadFromEnv() *EnvConfig {
 	return cfg
 }
 
-// getEnvWithDefault returns the env var value or the default if empty
-func getEnvWithDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return defaultVal
-}
-
 // GetMode returns the normalized application mode
 // Per AI.md PART 6: --mode dev or --mode development → development
 // Per AI.md PART 6: --mode prod or --mode production → production
 func (e *EnvConfig) GetMode() string {
-	mode := strings.ToLower(e.Mode)
+	// Per AI.md PART 6 mode shortcuts: dev/devel/development, prod/production,
+	// and debug (explicit opt-in, never implied)
+	mode := strings.ToLower(strings.TrimSpace(e.Mode))
 	switch mode {
-	case "dev", "development":
+	case "dev", "devel", "development":
 		return "development"
+	case "debug":
+		return "debug"
 	case "prod", "production":
 		return "production"
 	default:

@@ -2,13 +2,14 @@ package direct
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
@@ -52,12 +53,10 @@ type urbanDictionaryEntry struct {
 func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
-	if term == "" {
-		return nil, fmt.Errorf("slang term required")
-	}
-
-	// Fetch from Urban Dictionary API
 	apiURL := fmt.Sprintf("https://api.urbandictionary.com/v0/define?term=%s", url.QueryEscape(term))
+	if term == "" {
+		apiURL = "https://api.urbandictionary.com/v0/random"
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
@@ -70,7 +69,7 @@ func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch slang definition: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return &Answer{
@@ -84,7 +83,7 @@ func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	}
 
 	var data urbanDictionaryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &data); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
@@ -152,7 +151,7 @@ func (h *SlangHandler) formatSlangHTML(term string, defs []urbanDictionaryEntry)
 
 	// Header with word
 	if len(defs) > 0 {
-		html.WriteString(fmt.Sprintf("<h1>%s</h1>", escapeHTML(defs[0].Word)))
+		fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(defs[0].Word))
 	}
 
 	// Definitions
@@ -161,27 +160,27 @@ func (h *SlangHandler) formatSlangHTML(term string, defs []urbanDictionaryEntry)
 
 		// Definition number and votes
 		html.WriteString("<div class=\"def-header\">")
-		html.WriteString(fmt.Sprintf("<span class=\"def-number\">#%d</span>", i+1))
-		html.WriteString(fmt.Sprintf("<span class=\"def-votes\">👍 %d | 👎 %d</span>", def.ThumbsUp, def.ThumbsDown))
+		fmt.Fprintf(&html, "<span class=\"def-number\">#%d</span>", i+1)
+		fmt.Fprintf(&html, "<span class=\"def-votes\">👍 %d | 👎 %d</span>", def.ThumbsUp, def.ThumbsDown)
 		html.WriteString("</div>")
 
 		// Definition text (Urban Dictionary uses [brackets] for links)
 		definition := formatUrbanDictionaryText(def.Definition)
-		html.WriteString(fmt.Sprintf("<p class=\"definition\">%s</p>", definition))
+		fmt.Fprintf(&html, "<p class=\"definition\">%s</p>", definition)
 
 		// Example if present
 		if def.Example != "" {
 			example := formatUrbanDictionaryText(def.Example)
-			html.WriteString(fmt.Sprintf("<blockquote class=\"example\">%s</blockquote>", example))
+			fmt.Fprintf(&html, "<blockquote class=\"example\">%s</blockquote>", example)
 		}
 
 		// Metadata
 		html.WriteString("<div class=\"def-meta\">")
-		html.WriteString(fmt.Sprintf("<span class=\"author\">by %s</span>", escapeHTML(def.Author)))
+		fmt.Fprintf(&html, "<span class=\"author\">by %s</span>", escapeHTML(def.Author))
 		if def.WrittenOn != "" {
 			// Parse and format date
 			if t, err := time.Parse("2006-01-02T15:04:05.000Z", def.WrittenOn); err == nil {
-				html.WriteString(fmt.Sprintf("<span class=\"date\">%s</span>", t.Format("Jan 2, 2006")))
+				fmt.Fprintf(&html, "<span class=\"date\">%s</span>", t.Format("Jan 2, 2006"))
 			}
 		}
 		html.WriteString("</div>")

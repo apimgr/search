@@ -1,23 +1,15 @@
 {{define "public/footer"}}
 <footer class="footer">
-    {{/* Tor hidden service - per AI.md PART 32 (always show if enabled) */}}
-    {{if .TorEnabled}}
-    <div class="tor-access">
-        <span class="tor-icon">🧅</span>
-        {{if .OnionAddress}}
-        <div class="code-block">
-            <code class="code-content onion-address">{{.OnionAddress}}</code>
-            <button type="button" class="copy-btn" data-copy="{{.OnionAddress}}" aria-label="{{t "accessibility.copy_to_clipboard"}}">
-                <span class="copy-icon">📋</span>
-            </button>
-        </div>
-        {{else}}
-        <span class="tor-status">{{t "footer.tor_status_prefix"}} {{.TorStatus}}</span>
-        {{end}}
-    </div>
+    {{/* Onion address row - per AI.md PART 16 "Default Application Footer": only rendered when Tor is enabled, running, and an address is published */}}
+    {{if and .TorEnabled .OnionAddress}}
+    <p class="footer-onion">
+        <a href="/server/help#tor-access" aria-label="{{t "about.tor_support_title"}}">🧅</a>
+        <code class="onion-address">{{.OnionAddress}}</code>
+        <button type="button" class="copy-btn" data-copy="{{.OnionAddress}}" data-copied-label="{{t "common.copied"}}" aria-live="polite" aria-label="{{t "accessibility.copy_to_clipboard"}}">📋</button>
+    </p>
     {{end}}
 
-    {{/* Standard page links (always first) - per AI.md PART 17 */}}
+    {{/* Standard page links - per AI.md PART 16 "Default Application Footer" */}}
     <p>
         <a href="/server/about">{{t "nav.about"}}</a>
         <span>•</span>
@@ -26,19 +18,20 @@
         <a href="/server/contact">{{t "nav.contact"}}</a>
         <span>•</span>
         <a href="/server/help">{{t "nav.help"}}</a>
+        <span>•</span>
+        <a href="/server/preferences">{{t "preferences.title"}}</a>
     </p>
 
-    <br />
-
-    {{/* Application branding - per AI.md PART 17 */}}
+    {{/* Application branding - per AI.md PART 16 "Default Application Footer" */}}
     <p>
         {{if .Config.Server.Branding.SourceCodeURL}}<a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">{{t "footer.made_with"}}</a>{{else}}{{t "footer.made_with"}}{{end}} ❤️
         <span>•</span>
         <span>{{version}}</span>
     </p>
 
-    <br />
-
-    <a href="/server/healthz">{{t "footer.last_update"}} {{.BuildDate}}</a>
+    {{/* Build stamp - per AI.md PART 16 "Default Application Footer" */}}
+    <p>
+        <a href="/server/healthz">{{t "footer.last_update"}} {{.BuildDate}}</a>
+    </p>
 </footer>
 {{end}}

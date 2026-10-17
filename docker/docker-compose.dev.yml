@@ -19,9 +19,11 @@ services:
     logging: *default-logging
     environment:
       PORT: 80
-      DEBUG: 1
-      MODE: dev
+      DEBUG: true
+      MODE: development
       TZ: ${TZ:-America/New_York}
+      GOOGLE_SAFE_BROWSING_API_KEY: ${GOOGLE_SAFE_BROWSING_API_KEY:-}
+      PHISHTANK_API_KEY: ${PHISHTANK_API_KEY:-}
     volumes:
       - ./volumes/config:/config:z
       - ./volumes/data:/data:z

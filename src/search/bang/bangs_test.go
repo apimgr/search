@@ -1196,6 +1196,33 @@ func TestManagerBuildURLSpecialChars(t *testing.T) {
 }
 
 // Test that all default bangs have required fields
+func TestDefaultBangShortcutKeysAreUnique(t *testing.T) {
+	seen := make(map[string]struct{}, len(defaultBangs))
+	for _, item := range defaultBangs {
+		if _, exists := seen[item.Shortcut]; exists {
+			t.Fatalf("duplicate built-in shortcut %q", item.Shortcut)
+		}
+		seen[item.Shortcut] = struct{}{}
+	}
+}
+
+func TestCanonicalShortcutsAndAliasesFromIDEA(t *testing.T) {
+	manager := NewManager()
+	for _, tc := range []struct {
+		query, shortcut, host string
+	}{
+		{"!amz camera", "amz", "www.amazon.com"},
+		{"!az camera", "amz", "www.amazon.com"},
+		{"!r go", "r", "www.reddit.com"},
+		{"!rd go", "r", "www.reddit.com"},
+	} {
+		result := manager.Parse(tc.query)
+		if result == nil || result.Bang.Shortcut != tc.shortcut || !strings.Contains(result.TargetURL, tc.host) {
+			t.Errorf("Parse(%q) = %#v, want canonical %q targeting %s", tc.query, result, tc.shortcut, tc.host)
+		}
+	}
+}
+
 func TestDefaultBangsHaveRequiredFields(t *testing.T) {
 	m := NewManager()
 	all := m.GetBuiltins()

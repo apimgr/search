@@ -147,11 +147,11 @@ func escapeJavaScript(s string) string {
 		default:
 			if r < 32 || r > 126 {
 				if r <= 0xFFFF {
-					result.WriteString(fmt.Sprintf("\\u%04X", r))
+					fmt.Fprintf(&result, "\\u%04X", r)
 				} else {
-					result.WriteString(fmt.Sprintf("\\u%04X\\u%04X",
+					fmt.Fprintf(&result, "\\u%04X\\u%04X",
 						0xD800+((r-0x10000)>>10),
-						0xDC00+((r-0x10000)&0x3FF)))
+						0xDC00+((r-0x10000)&0x3FF))
 				}
 			} else {
 				result.WriteRune(r)
@@ -236,7 +236,7 @@ func escapeUnicode(s string) string {
 	var result strings.Builder
 	for _, r := range s {
 		if r > 127 {
-			result.WriteString(fmt.Sprintf("\\u%04X", r))
+			fmt.Fprintf(&result, "\\u%04X", r)
 		} else {
 			result.WriteRune(r)
 		}

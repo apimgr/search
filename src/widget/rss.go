@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/version"
 )
@@ -155,7 +156,7 @@ func (f *RSSFetcher) fetchSingleFeed(ctx context.Context, feedURL string) ([]RSS
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("feed returned status %d", resp.StatusCode)
@@ -169,14 +170,14 @@ func (f *RSSFetcher) fetchSingleFeed(ctx context.Context, feedURL string) ([]RSS
 	}
 
 	// Retry and try Atom format
-	resp.Body.Close()
+	closeutil.Close(resp.Body)
 	req, _ = http.NewRequestWithContext(ctx, "GET", feedURL, nil)
 	req.Header.Set("User-Agent", version.BrowserUserAgent)
 	resp, err = f.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var atomFeed AtomFeed
 	decoder = xml.NewDecoder(resp.Body)

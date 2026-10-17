@@ -2,7 +2,7 @@ package direct
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,7 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/qr"
 	"github.com/apimgr/search/src/version"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -168,7 +171,7 @@ func formatUserAgentContent(ua string, parsed map[string]string) string {
 	html.WriteString("<h1>User Agent Parser</h1>")
 
 	html.WriteString("<h2>User Agent String</h2>")
-	html.WriteString(fmt.Sprintf("<pre class=\"ua-string\"><code>%s</code></pre>", escapeHTML(ua)))
+	fmt.Fprintf(&html, "<pre class=\"ua-string\"><code>%s</code></pre>", escapeHTML(ua))
 
 	html.WriteString("<h2>Parsed Information</h2>")
 	html.WriteString("<table class=\"ua-table\">")
@@ -178,21 +181,21 @@ func formatUserAgentContent(ua string, parsed map[string]string) string {
 	if parsed["browserVer"] != "" {
 		browserFull += " " + parsed["browserVer"]
 	}
-	html.WriteString(fmt.Sprintf("<tr><td>Browser</td><td>%s</td></tr>", escapeHTML(browserFull)))
-	html.WriteString(fmt.Sprintf("<tr><td>Rendering Engine</td><td>%s</td></tr>", escapeHTML(parsed["engine"])))
+	fmt.Fprintf(&html, "<tr><td>Browser</td><td>%s</td></tr>", escapeHTML(browserFull))
+	fmt.Fprintf(&html, "<tr><td>Rendering Engine</td><td>%s</td></tr>", escapeHTML(parsed["engine"]))
 
 	osFull := parsed["os"]
 	if parsed["osVer"] != "" {
 		osFull += " " + parsed["osVer"]
 	}
-	html.WriteString(fmt.Sprintf("<tr><td>Operating System</td><td>%s</td></tr>", escapeHTML(osFull)))
-	html.WriteString(fmt.Sprintf("<tr><td>Device Type</td><td>%s</td></tr>", escapeHTML(parsed["device"])))
+	fmt.Fprintf(&html, "<tr><td>Operating System</td><td>%s</td></tr>", escapeHTML(osFull))
+	fmt.Fprintf(&html, "<tr><td>Device Type</td><td>%s</td></tr>", escapeHTML(parsed["device"]))
 
 	if parsed["architecture"] != "" {
-		html.WriteString(fmt.Sprintf("<tr><td>Architecture</td><td>%s</td></tr>", escapeHTML(parsed["architecture"])))
+		fmt.Fprintf(&html, "<tr><td>Architecture</td><td>%s</td></tr>", escapeHTML(parsed["architecture"]))
 	}
 
-	html.WriteString(fmt.Sprintf("<tr><td>Is Bot</td><td>%s</td></tr>", escapeHTML(parsed["isBot"])))
+	fmt.Fprintf(&html, "<tr><td>Is Bot</td><td>%s</td></tr>", escapeHTML(parsed["isBot"]))
 
 	html.WriteString("</tbody></table>")
 	html.WriteString("</div>")
@@ -347,20 +350,20 @@ func (h *MIMEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 func formatMIMEContent(mimeType string, extensions []string, category, description string, binary bool) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"mime-content\">")
-	html.WriteString(fmt.Sprintf("<h1>%s</h1>", escapeHTML(mimeType)))
+	fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(mimeType))
 
 	html.WriteString("<table class=\"mime-table\">")
 	html.WriteString("<tbody>")
-	html.WriteString(fmt.Sprintf("<tr><td>MIME Type</td><td><code>%s</code></td></tr>", escapeHTML(mimeType)))
-	html.WriteString(fmt.Sprintf("<tr><td>Category</td><td>%s</td></tr>", escapeHTML(category)))
-	html.WriteString(fmt.Sprintf("<tr><td>Description</td><td>%s</td></tr>", escapeHTML(description)))
-	html.WriteString(fmt.Sprintf("<tr><td>Extensions</td><td><code>%s</code></td></tr>", escapeHTML(strings.Join(extensions, ", "))))
+	fmt.Fprintf(&html, "<tr><td>MIME Type</td><td><code>%s</code></td></tr>", escapeHTML(mimeType))
+	fmt.Fprintf(&html, "<tr><td>Category</td><td>%s</td></tr>", escapeHTML(category))
+	fmt.Fprintf(&html, "<tr><td>Description</td><td>%s</td></tr>", escapeHTML(description))
+	fmt.Fprintf(&html, "<tr><td>Extensions</td><td><code>%s</code></td></tr>", escapeHTML(strings.Join(extensions, ", ")))
 
 	binaryStr := "No"
 	if binary {
 		binaryStr = "Yes"
 	}
-	html.WriteString(fmt.Sprintf("<tr><td>Binary</td><td>%s</td></tr>", binaryStr))
+	fmt.Fprintf(&html, "<tr><td>Binary</td><td>%s</td></tr>", binaryStr)
 
 	html.WriteString("</tbody></table>")
 	html.WriteString("</div>")
@@ -504,7 +507,7 @@ func (h *LicenseHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Term:        term,
 		Title:       info.Name,
 		Description: fmt.Sprintf("SPDX: %s", info.SPDX),
-		Content:     formatLicenseContent(info),
+		Content:     formatLicenseContent(info, fullLicenseText(info.SPDX)),
 		Source:      "SPDX License List",
 		SourceURL:   fmt.Sprintf("https://spdx.org/licenses/%s.html", info.SPDX),
 		Data:        data,
@@ -519,11 +522,11 @@ func formatLicenseContent(info struct {
 	Limitations []string
 	OSI         bool
 	Copyleft    bool
-}) string {
+}, licenseText string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"license-content\">")
-	html.WriteString(fmt.Sprintf("<h1>%s</h1>", escapeHTML(info.Name)))
-	html.WriteString(fmt.Sprintf("<p><code>%s</code></p>", escapeHTML(info.SPDX)))
+	fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(info.Name))
+	fmt.Fprintf(&html, "<p><code>%s</code></p>", escapeHTML(info.SPDX))
 
 	// Badges
 	if info.OSI {
@@ -539,7 +542,7 @@ func formatLicenseContent(info struct {
 	if len(info.Permissions) > 0 {
 		html.WriteString("<h2>Permissions</h2><ul class=\"permissions\">")
 		for _, p := range info.Permissions {
-			html.WriteString(fmt.Sprintf("<li>✓ %s</li>", escapeHTML(p)))
+			fmt.Fprintf(&html, "<li>✓ %s</li>", escapeHTML(p))
 		}
 		html.WriteString("</ul>")
 	}
@@ -548,7 +551,7 @@ func formatLicenseContent(info struct {
 	if len(info.Conditions) > 0 {
 		html.WriteString("<h2>Conditions</h2><ul class=\"conditions\">")
 		for _, c := range info.Conditions {
-			html.WriteString(fmt.Sprintf("<li>• %s</li>", escapeHTML(c)))
+			fmt.Fprintf(&html, "<li>• %s</li>", escapeHTML(c))
 		}
 		html.WriteString("</ul>")
 	}
@@ -557,13 +560,16 @@ func formatLicenseContent(info struct {
 	if len(info.Limitations) > 0 {
 		html.WriteString("<h2>Limitations</h2><ul class=\"limitations\">")
 		for _, l := range info.Limitations {
-			html.WriteString(fmt.Sprintf("<li>✗ %s</li>", escapeHTML(l)))
+			fmt.Fprintf(&html, "<li>✗ %s</li>", escapeHTML(l))
 		}
 		html.WriteString("</ul>")
 	}
 
-	html.WriteString(fmt.Sprintf("<p><a href=\"https://choosealicense.com/licenses/%s/\" target=\"_blank\" rel=\"noopener\">View full license text</a></p>",
-		strings.ToLower(info.SPDX)))
+	if licenseText != "" {
+		html.WriteString("<h2>Full License Text</h2>")
+		fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(licenseText))
+		html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
+	}
 
 	html.WriteString("</div>")
 	return html.String()
@@ -611,7 +617,7 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return &Answer{
@@ -636,6 +642,17 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Region     string   `json:"region"`
 		Subregion  string   `json:"subregion"`
 		Area       float64  `json:"area"`
+		Population int      `json:"population"`
+		Timezones  []string `json:"timezones"`
+		Car        struct {
+			Side string `json:"side"`
+		} `json:"car"`
+		Flags struct {
+			SVG string `json:"svg"`
+		} `json:"flags"`
+		Maps struct {
+			OpenStreetMaps string `json:"openStreetMaps"`
+		} `json:"maps"`
 		Currencies map[string]struct {
 			Name   string `json:"name"`
 			Symbol string `json:"symbol"`
@@ -649,7 +666,7 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		} `json:"idd"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&countries); err != nil {
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &countries); err != nil {
 		return nil, err
 	}
 
@@ -672,6 +689,8 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		case len(term) == 2 && c.CCA2 == upperTerm:
 			matchIndex = i
 		case len(term) == 3 && c.CCA3 == upperTerm:
+			matchIndex = i
+		case len(term) == 3 && c.CCN3 == term:
 			matchIndex = i
 		case strings.ToLower(c.Name.Common) == lowerTerm:
 			matchIndex = i
@@ -726,7 +745,13 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		"official":    country.Name.Official,
 		"cca2":        country.CCA2,
 		"cca3":        country.CCA3,
+		"ccn3":        country.CCN3,
 		"capital":     country.Capital,
+		"population":  country.Population,
+		"timezones":   country.Timezones,
+		"drivingSide": country.Car.Side,
+		"flagSVG":     country.Flags.SVG,
+		"mapURL":      country.Maps.OpenStreetMaps,
 		"region":      country.Region,
 		"subregion":   country.Subregion,
 		"area":        country.Area,
@@ -742,7 +767,7 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Term:        term,
 		Title:       fmt.Sprintf("%s %s", country.Flag, country.Name.Common),
 		Description: country.Name.Official,
-		Content:     formatCountryContent(country.Flag, country.Flag, country.Name.Common, country.Name.Official, data, UnitsFromContext(ctx)),
+		Content:     formatCountryContent(country.Flag, country.Flags.SVG, country.Name.Common, country.Name.Official, data, UnitsFromContext(ctx)),
 		Source:      "mledoze/countries",
 		SourceURL:   "https://github.com/mledoze/countries",
 		Data:        data,
@@ -755,57 +780,66 @@ func formatCountryContent(flagEmoji, flagURL, name, official string, data map[st
 
 	// Flag and name
 	html.WriteString("<div class=\"country-header\">")
-	html.WriteString(fmt.Sprintf("<span class=\"flag-emoji\">%s</span>", flagEmoji))
-	html.WriteString(fmt.Sprintf("<h1>%s</h1>", escapeHTML(name)))
+	fmt.Fprintf(&html, "<span class=\"flag-emoji\">%s</span>", escapeHTML(flagEmoji))
+	if flagURL != "" {
+		fmt.Fprintf(&html, "<img class=\"country-flag\" src=\"%s\" alt=\"Flag of %s\" loading=\"lazy\">", escapeHTML(flagURL), escapeHTML(name))
+	}
+	fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(name))
 	html.WriteString("</div>")
-	html.WriteString(fmt.Sprintf("<p class=\"official\">%s</p>", escapeHTML(official)))
+	fmt.Fprintf(&html, "<p class=\"official\">%s</p>", escapeHTML(official))
 
 	html.WriteString("<table class=\"country-table\">")
 	html.WriteString("<tbody>")
 
 	if cca2, ok := data["cca2"].(string); ok {
-		html.WriteString(fmt.Sprintf("<tr><td>ISO Alpha-2</td><td><code>%s</code></td></tr>", escapeHTML(cca2)))
+		fmt.Fprintf(&html, "<tr><td>ISO Alpha-2</td><td><code>%s</code></td></tr>", escapeHTML(cca2))
 	}
 	if cca3, ok := data["cca3"].(string); ok {
-		html.WriteString(fmt.Sprintf("<tr><td>ISO Alpha-3</td><td><code>%s</code></td></tr>", escapeHTML(cca3)))
+		fmt.Fprintf(&html, "<tr><td>ISO Alpha-3</td><td><code>%s</code></td></tr>", escapeHTML(cca3))
+	}
+	if ccn3, ok := data["ccn3"].(string); ok {
+		fmt.Fprintf(&html, "<tr><td>ISO Numeric</td><td><code>%s</code></td></tr>", escapeHTML(ccn3))
 	}
 	if capital, ok := data["capital"].([]string); ok && len(capital) > 0 {
-		html.WriteString(fmt.Sprintf("<tr><td>Capital</td><td>%s</td></tr>", escapeHTML(strings.Join(capital, ", "))))
+		fmt.Fprintf(&html, "<tr><td>Capital</td><td>%s</td></tr>", escapeHTML(strings.Join(capital, ", ")))
 	}
 	if region, ok := data["region"].(string); ok {
-		html.WriteString(fmt.Sprintf("<tr><td>Region</td><td>%s</td></tr>", escapeHTML(region)))
+		fmt.Fprintf(&html, "<tr><td>Region</td><td>%s</td></tr>", escapeHTML(region))
 	}
 	if subregion, ok := data["subregion"].(string); ok && subregion != "" {
-		html.WriteString(fmt.Sprintf("<tr><td>Subregion</td><td>%s</td></tr>", escapeHTML(subregion)))
+		fmt.Fprintf(&html, "<tr><td>Subregion</td><td>%s</td></tr>", escapeHTML(subregion))
 	}
 	if population, ok := data["population"].(int); ok {
-		html.WriteString(fmt.Sprintf("<tr><td>Population</td><td>%s</td></tr>", formatNumber(population)))
+		fmt.Fprintf(&html, "<tr><td>Population</td><td>%s</td></tr>", formatNumber(population))
 	}
 	if area, ok := data["area"].(float64); ok {
 		if units == "imperial" {
 			areaSqMi := area * 0.386102
-			html.WriteString(fmt.Sprintf("<tr><td>Area</td><td>%s sq mi</td></tr>", formatNumber(int(areaSqMi))))
+			fmt.Fprintf(&html, "<tr><td>Area</td><td>%s sq mi</td></tr>", formatNumber(int(areaSqMi)))
 		} else {
-			html.WriteString(fmt.Sprintf("<tr><td>Area</td><td>%s km²</td></tr>", formatNumber(int(area))))
+			fmt.Fprintf(&html, "<tr><td>Area</td><td>%s km²</td></tr>", formatNumber(int(area)))
 		}
 	}
 	if currencies, ok := data["currencies"].([]string); ok && len(currencies) > 0 {
-		html.WriteString(fmt.Sprintf("<tr><td>Currency</td><td>%s</td></tr>", escapeHTML(strings.Join(currencies, ", "))))
+		fmt.Fprintf(&html, "<tr><td>Currency</td><td>%s</td></tr>", escapeHTML(strings.Join(currencies, ", ")))
 	}
 	if languages, ok := data["languages"].([]string); ok && len(languages) > 0 {
-		html.WriteString(fmt.Sprintf("<tr><td>Languages</td><td>%s</td></tr>", escapeHTML(strings.Join(languages, ", "))))
+		fmt.Fprintf(&html, "<tr><td>Languages</td><td>%s</td></tr>", escapeHTML(strings.Join(languages, ", ")))
 	}
 	if callingCode, ok := data["callingCode"].(string); ok && callingCode != "" {
-		html.WriteString(fmt.Sprintf("<tr><td>Calling Code</td><td>%s</td></tr>", escapeHTML(callingCode)))
+		fmt.Fprintf(&html, "<tr><td>Calling Code</td><td>%s</td></tr>", escapeHTML(callingCode))
 	}
 	if tld, ok := data["tld"].([]string); ok && len(tld) > 0 {
-		html.WriteString(fmt.Sprintf("<tr><td>TLD</td><td><code>%s</code></td></tr>", escapeHTML(strings.Join(tld, ", "))))
+		fmt.Fprintf(&html, "<tr><td>TLD</td><td><code>%s</code></td></tr>", escapeHTML(strings.Join(tld, ", ")))
 	}
 	if drivingSide, ok := data["drivingSide"].(string); ok && drivingSide != "" {
-		html.WriteString(fmt.Sprintf("<tr><td>Driving Side</td><td>%s</td></tr>", escapeHTML(cases.Title(language.Und, cases.NoLower).String(drivingSide))))
+		fmt.Fprintf(&html, "<tr><td>Driving Side</td><td>%s</td></tr>", escapeHTML(cases.Title(language.Und, cases.NoLower).String(drivingSide)))
 	}
 	if timezones, ok := data["timezones"].([]string); ok && len(timezones) > 0 {
-		html.WriteString(fmt.Sprintf("<tr><td>Timezones</td><td>%s</td></tr>", escapeHTML(strings.Join(timezones, ", "))))
+		fmt.Fprintf(&html, "<tr><td>Timezones</td><td>%s</td></tr>", escapeHTML(strings.Join(timezones, ", ")))
+	}
+	if mapURL, ok := data["mapURL"].(string); ok && mapURL != "" {
+		fmt.Fprintf(&html, "<tr><td>Map</td><td><a href=\"%s\" rel=\"noopener\">OpenStreetMap</a></td></tr>", escapeHTML(mapURL))
 	}
 
 	html.WriteString("</tbody></table>")
@@ -946,12 +980,12 @@ func formatASCIIContent(text, art string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"ascii-content\">")
 	html.WriteString("<h1>ASCII Art</h1>")
-	html.WriteString(fmt.Sprintf("<p>Text: <strong>%s</strong></p>", escapeHTML(text)))
+	fmt.Fprintf(&html, "<p>Text: <strong>%s</strong></p>", escapeHTML(text))
 
 	html.WriteString("<pre class=\"ascii-art\">")
 	html.WriteString(escapeHTML(art))
 	html.WriteString("</pre>")
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 
 	html.WriteString("</div>")
 	return html.String()
@@ -975,52 +1009,116 @@ func (h *QRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer
 	if term == "" {
 		return nil, fmt.Errorf("text or URL required")
 	}
-
-	// Generate QR code URL using the QR Server API. Google's Chart Image
-	// API (chart.googleapis.com) was shut down and now returns HTTP 404
-	// for every request, so it can no longer be used.
-	qrURL := fmt.Sprintf("https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=%s", url.QueryEscape(term))
-
-	data := map[string]interface{}{
-		"text":  term,
-		"qrURL": qrURL,
+	options := qrOptionsFromContext(ctx)
+	if options.Size != 128 && options.Size != 256 && options.Size != 512 && options.Size != 1024 {
+		options.Size = 256
 	}
-
+	if options.Level != "L" && options.Level != "M" && options.Level != "Q" && options.Level != "H" {
+		options.Level = "M"
+	}
+	if !qr.ValidColor(options.Foreground) {
+		options.Foreground = "#000000"
+	}
+	if !qr.ValidColor(options.Background) {
+		options.Background = "#FFFFFF"
+	}
+	if len(options.Logo) > 0 {
+		options.Level = "H"
+	}
+	imageSizes := []int{128, 256, 512, 1024}
+	pngImages := make(map[int]string, len(imageSizes))
+	for _, size := range imageSizes {
+		png, err := qr.PNGWithLogo(term, options.Level, size, options.Foreground, options.Background, options.Logo)
+		if err != nil {
+			return nil, fmt.Errorf("generate %d-pixel QR code: %w", size, err)
+		}
+		pngImages[size] = base64.StdEncoding.EncodeToString(png)
+	}
+	vector, err := qr.SVGWithLogo(term, options.Level, options.Foreground, options.Background, options.Logo)
+	if err != nil {
+		return nil, fmt.Errorf("generate SVG QR code: %w", err)
+	}
+	correctionOptions := make(map[string]string, 3)
+	correctionLevels := []string{"L", "Q", "H"}
+	if len(options.Logo) > 0 {
+		correctionLevels = []string{"H"}
+	}
+	for _, level := range correctionLevels {
+		image, err := qr.SVGWithLogo(term, level, options.Foreground, options.Background, options.Logo)
+		if err != nil {
+			return nil, fmt.Errorf("generate %s-recovery QR code: %w", level, err)
+		}
+		correctionOptions[level] = base64.StdEncoding.EncodeToString(image)
+	}
+	data := map[string]interface{}{
+		"text": term, "image_type": "png", "image_b64": pngImages[options.Size],
+		"png_sizes": pngImages, "svg_b64": base64.StdEncoding.EncodeToString(vector),
+		"error_correction_svg_b64": correctionOptions, "size": options.Size,
+		"level": options.Level, "foreground": options.Foreground, "background": options.Background,
+	}
 	return &Answer{
-		Type:        AnswerTypeQR,
-		Term:        truncateString(term, 50),
+		Type: AnswerTypeQR, Term: truncateString(term, 50),
 		Title:       i18n.T(lang, "direct.qr_code_generator_title"),
 		Description: i18n.T(lang, "direct.qr_code_description"),
-		Content:     formatQRContent(term, qrURL),
-		Source:      "QR Code Generator",
-		Data:        data,
+		Content:     formatQRContent(lang, term, pngImages, vector, correctionOptions, options),
+		Source:      "QR Code Generator", Data: data,
 	}, nil
 }
 
-func formatQRContent(text, qrURL string) string {
+func isShortenableQRURL(value string) bool {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(value))
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Hostname() != "" && parsed.User == nil
+}
+
+func formatQRContent(lang, text string, pngImages map[int]string, svg []byte, correctionOptions map[string]string, options QROptions) string {
 	var html strings.Builder
-	html.WriteString("<div class=\"qr-content\">")
-	html.WriteString("<h1>QR Code</h1>")
-
-	html.WriteString("<div class=\"qr-image\">")
-	html.WriteString(fmt.Sprintf("<img src=\"%s\" alt=\"QR Code\" class=\"qr-code\">", escapeHTML(qrURL)))
-	html.WriteString("</div>")
-
-	html.WriteString("<h2>Encoded Text</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(text)))
-
-	html.WriteString("<h2>Download</h2>")
-	html.WriteString("<p>Right-click the QR code and select \"Save image as...\" to download.</p>")
-
-	// Size options
-	html.WriteString("<h2>Other Sizes</h2>")
-	html.WriteString("<ul>")
-	for _, size := range []int{150, 200, 300, 400, 500} {
-		sizeURL := fmt.Sprintf("https://api.qrserver.com/v1/create-qr-code/?size=%dx%d&data=%s", size, size, url.QueryEscape(text))
-		html.WriteString(fmt.Sprintf("<li><a href=\"%s\" target=\"_blank\">%dx%d</a></li>", sizeURL, size, size))
+	html.WriteString(`<div class="qr-content"><h1>QR Code</h1>`)
+	action := options.FormAction
+	fmt.Fprintf(&html, `<form method="post" action="%s" enctype="multipart/form-data" class="qr-options" aria-label="%s"><input type="hidden" name="csrf_token" value="%s"><label>%s <select name="size">`, escapeHTML(action), escapeHTML(i18n.T(lang, "direct.qr_options")), escapeHTML(options.CSRFToken), escapeHTML(i18n.T(lang, "direct.qr_size")))
+	for _, option := range []struct {
+		label string
+		size  int
+	}{{"S", 128}, {"M", 256}, {"L", 512}, {"XL", 1024}} {
+		selected := ""
+		if options.Size == option.size {
+			selected = ` selected`
+		}
+		fmt.Fprintf(&html, `<option value="%s"%s>%s (%dpx)</option>`, option.label, selected, option.label, option.size)
 	}
-	html.WriteString("</ul>")
-
-	html.WriteString("</div>")
+	fmt.Fprintf(&html, `</select></label><label>%s <select name="level">`, escapeHTML(i18n.T(lang, "direct.qr_error_correction")))
+	for _, level := range []string{"L", "M", "Q", "H"} {
+		selected := ""
+		if options.Level == level {
+			selected = ` selected`
+		}
+		fmt.Fprintf(&html, `<option value="%s"%s>%s</option>`, level, selected, level)
+	}
+	fmt.Fprintf(&html, `</select></label><label>%s <input type="color" name="foreground" value="%s"></label><label>%s <input type="color" name="background" value="%s"></label><label>%s <input type="file" name="logo" accept="image/png,image/jpeg"></label>`, escapeHTML(i18n.T(lang, "direct.qr_foreground")), options.Foreground, escapeHTML(i18n.T(lang, "direct.qr_background")), options.Background, escapeHTML(i18n.T(lang, "direct.qr_logo")))
+	if isShortenableQRURL(text) {
+		fmt.Fprintf(&html, `<label><input id="shorten_url" type="checkbox" name="shorten_url" value="1"> %s</label>`, escapeHTML(i18n.T(lang, "direct.qr_shorten_url")))
+	}
+	fmt.Fprintf(&html, `<button type="submit">%s</button></form>`, escapeHTML(i18n.T(lang, "direct.qr_apply")))
+	if options.ShortURL != "" {
+		fmt.Fprintf(&html, `<p class="qr-short-url">%s <a href="%s" rel="nofollow">%s</a></p>`, escapeHTML(i18n.T(lang, "direct.qr_short_url_label")), escapeHTML(options.ShortURL), escapeHTML(options.ShortURL))
+	}
+	html.WriteString(`<div class="qr-image">`)
+	fmt.Fprintf(&html, `<img src="data:image/png;base64,%s" alt="QR Code" class="qr-code" width="%d" height="%d">`, pngImages[options.Size], options.Size, options.Size)
+	html.WriteString(`</div><h2>Encoded Text</h2><pre><code>`)
+	html.WriteString(escapeHTML(text))
+	fmt.Fprintf(&html, `</code></pre><h2>%s</h2><ul>`, escapeHTML(i18n.T(lang, "direct.qr_download_png")))
+	for _, size := range []int{128, 256, 512, 1024} {
+		fmt.Fprintf(&html, `<li><a href="data:image/png;base64,%s" download="qr-%d.png">%s</a></li>`, pngImages[size], size, escapeHTML(i18n.T(lang, "direct.qr_size_pixels", size)))
+	}
+	fmt.Fprintf(&html, `</ul><h2>%s</h2><ul>`, escapeHTML(i18n.T(lang, "direct.qr_download_svg")))
+	fmt.Fprintf(&html, `<li><a href="data:image/svg+xml;base64,%s" download="qr.svg">M</a></li>`, base64.StdEncoding.EncodeToString(svg))
+	for _, level := range []string{"L", "Q", "H"} {
+		image, ok := correctionOptions[level]
+		if !ok {
+			continue
+		}
+		label := i18n.T(lang, map[string]string{"L": "direct.qr_recovery_low", "Q": "direct.qr_recovery_quartile", "H": "direct.qr_recovery_high"}[level])
+		fmt.Fprintf(&html, `<li><a href="data:image/svg+xml;base64,%s" download="qr-recovery-%s.svg">%s</a></li>`, image, strings.ToLower(level), label)
+	}
+	html.WriteString(`</ul></div>`)
 	return html.String()
 }

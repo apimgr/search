@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -99,7 +102,14 @@ func (e *Google) googleDo(ctx context.Context, rawURL string) (*http.Response, e
 // googleParams builds the common query parameters for all Google searches.
 func googleParams(query *model.Query) url.Values {
 	params := url.Values{}
-	params.Set("q", query.Text)
+	searchText := query.Text
+	switch query.Category {
+	case model.CategoryFiles:
+		searchText += " (filetype:pdf OR filetype:doc OR filetype:docx OR filetype:xls OR filetype:xlsx OR filetype:ppt OR filetype:pptx OR filetype:txt OR filetype:rtf OR filetype:odt OR filetype:ods)"
+	case model.CategoryMusic:
+		searchText += " (filetype:mp3 OR filetype:m4a OR filetype:aac OR filetype:flac OR filetype:ogg OR filetype:wav OR filetype:wma)"
+	}
+	params.Set("q", searchText)
 	params.Set("num", "20")
 	params.Set("hl", "en")
 	if query.Page > 1 {
@@ -130,7 +140,7 @@ func (e *Google) searchGeneral(ctx context.Context, query *model.Query) ([]model
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("google returned status %d", resp.StatusCode)
 	}
@@ -186,7 +196,7 @@ func (e *Google) parseWebResults(html string, query *model.Query) []model.Result
 			URL:      realURL,
 			Content:  snippet,
 			Engine:   e.Name(),
-			Category: model.CategoryGeneral,
+			Category: query.Category,
 			Score:    calculateScore(e.GetPriority(), len(results), 1),
 			Position: len(results),
 		})
@@ -204,7 +214,7 @@ func (e *Google) searchImages(ctx context.Context, query *model.Query) ([]model.
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("google images returned status %d", resp.StatusCode)
 	}
@@ -234,15 +244,21 @@ func (e *Google) parseImageResults(html string, query *model.Query) []model.Resu
 		if strings.Contains(imgURL, "gstatic.com") || strings.Contains(imgURL, "google.com") {
 			continue
 		}
+		width, _ := strconv.Atoi(m[2])
+		height, _ := strconv.Atoi(m[3])
 		results = append(results, model.Result{
-			Title:     fmt.Sprintf("Image %d", len(results)+1),
-			URL:       imgURL,
-			Thumbnail: imgURL,
-			Content:   fmt.Sprintf("%s×%s", m[2], m[3]),
-			Engine:    e.Name(),
-			Category:  model.CategoryImages,
-			Score:     calculateScore(e.GetPriority(), len(results), 1),
-			Position:  len(results),
+			Title:       fmt.Sprintf("Image %d", len(results)+1),
+			URL:         imgURL,
+			Thumbnail:   imgURL,
+			ImageURL:    imgURL,
+			ImageFormat: imageFormatFromURL(imgURL),
+			Content:     fmt.Sprintf("%s×%s", m[2], m[3]),
+			Engine:      e.Name(),
+			Category:    model.CategoryImages,
+			ImageWidth:  width,
+			ImageHeight: height,
+			Score:       calculateScore(e.GetPriority(), len(results), 1),
+			Position:    len(results),
 		})
 	}
 	return results
@@ -258,7 +274,7 @@ func (e *Google) searchNews(ctx context.Context, query *model.Query) ([]model.Re
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("google news returned status %d", resp.StatusCode)
 	}
@@ -329,7 +345,7 @@ func (e *Google) searchVideos(ctx context.Context, query *model.Query) ([]model.
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("google videos returned status %d", resp.StatusCode)
 	}

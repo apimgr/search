@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/model"
 )
 
@@ -278,6 +279,26 @@ func TestRenderNoJSSearch_QueryTitleEscaped(t *testing.T) {
 	}
 	if !strings.Contains(body, "&lt;script&gt;") {
 		t.Error("expected query to be HTML-escaped in title/body")
+	}
+}
+
+func TestRenderNoJSSearchShowsInstantAnswerAndSameOriginThumbnail(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/search?q=wiki+test", nil)
+	rec := httptest.NewRecorder()
+	data := &SearchPageData{
+		PageData: PageData{Lang: "en"},
+		Query:    "wiki test",
+		Category: "general",
+		Results: []model.Result{{
+			Title: "Result", URL: "https://example.org", Thumbnail: "/image-proxy?url=https%3A%2F%2Fimages.example%2Fa.png",
+		}},
+		InstantAnswer: &instant.Answer{Type: instant.AnswerTypeWiki, Title: "Test article", Content: "Summary"},
+	}
+	s.renderNoJSSearch(rec, req, data)
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="instant-answer-content">Summary`) || !strings.Contains(body, `src="/image-proxy?url=`) {
+		t.Fatalf("no-JS page omitted the instant answer or proxied thumbnail: %s", body)
 	}
 }
 

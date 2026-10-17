@@ -93,9 +93,8 @@ func TestCVEManager_Update_GenericJSON(t *testing.T) {
 	}
 }
 
-// TestCVEManager_Update_SourceFails verifies that a failed source (HTTP 500) is
-// logged and skipped; Update still returns nil when at least the directory setup
-// succeeded (no entries needed to succeed when sources simply fail).
+// TestCVEManager_Update_SourceFails verifies that source failures are surfaced
+// so the scheduler records an unsuccessful refresh.
 func TestCVEManager_Update_SourceFails(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -108,9 +107,8 @@ func TestCVEManager_Update_SourceFails(t *testing.T) {
 	mgr := NewCVEManager(t.TempDir(), sources)
 	mgr.client = &http.Client{}
 
-	// Update does not return error on individual source failure; it only logs.
-	if err := mgr.Update(context.Background()); err != nil {
-		t.Errorf("Update() error = %v, want nil (source failure is non-fatal)", err)
+	if err := mgr.Update(context.Background()); err == nil {
+		t.Error("Update() error = nil, want source failure")
 	}
 
 	if mgr.Count() != 0 {
@@ -119,7 +117,7 @@ func TestCVEManager_Update_SourceFails(t *testing.T) {
 }
 
 // TestCVEManager_Update_HTTP404 verifies that a 404 response from a CVE source
-// is treated as a non-fatal error.
+// is reported to the scheduler.
 func TestCVEManager_Update_HTTP404(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -132,8 +130,8 @@ func TestCVEManager_Update_HTTP404(t *testing.T) {
 	mgr := NewCVEManager(t.TempDir(), sources)
 	mgr.client = &http.Client{}
 
-	if err := mgr.Update(context.Background()); err != nil {
-		t.Errorf("Update() error = %v, want nil", err)
+	if err := mgr.Update(context.Background()); err == nil {
+		t.Error("Update() error = nil, want HTTP failure")
 	}
 }
 
@@ -380,9 +378,9 @@ func TestCVEManager_Search_NoKeywordMatch(t *testing.T) {
 // multi-entry JSON responses (exercises the 100MiB read-limit code path).
 func TestCVEManager_Update_LargeResponse(t *testing.T) {
 	body := `[
-		{"id": "CVE-2024-A001", "description": "a"},
-		{"id": "CVE-2024-A002", "description": "b"},
-		{"id": "CVE-2024-A003", "description": "c"}
+		{"id": "CVE-2024-1001", "description": "a"},
+		{"id": "CVE-2024-1002", "description": "b"},
+		{"id": "CVE-2024-1003", "description": "c"}
 	]`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -402,5 +400,46 @@ func TestCVEManager_Update_LargeResponse(t *testing.T) {
 	}
 	if mgr.Count() != 3 {
 		t.Errorf("Count() = %d, want 3", mgr.Count())
+	}
+}
+
+func TestCVEManager_Update_InvalidFeedPreservesCachedFile(t *testing.T) {
+	dataDir := t.TempDir()
+	cveDir := filepath.Join(dataDir, "security", "cve")
+	if err := os.MkdirAll(cveDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	cached := filepath.Join(cveDir, "custom_source.json")
+	old := []byte(`[{"id":"CVE-2024-9001","description":"last known good"}]`)
+	if err := os.WriteFile(cached, old, 0600); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html>upstream error</html>`))
+	}))
+	defer srv.Close()
+	mgr := NewCVEManager(dataDir, []CVESource{{Name: "custom_source", URL: srv.URL}})
+	mgr.client = srv.Client()
+	if err := mgr.Update(context.Background()); err == nil {
+		t.Fatal("Update() error = nil, want invalid feed error")
+	}
+	got, err := os.ReadFile(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(old) {
+		t.Fatalf("cached data replaced: got %q, want %q", got, old)
+	}
+}
+
+func TestCVEManager_Update_RejectsUnsafeSourceName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("unsafe source should not make a request")
+	}))
+	defer srv.Close()
+	mgr := NewCVEManager(t.TempDir(), []CVESource{{Name: "../escape", URL: srv.URL}})
+	mgr.client = srv.Client()
+	if err := mgr.Update(context.Background()); err == nil {
+		t.Fatal("Update() error = nil, want invalid source error")
 	}
 }

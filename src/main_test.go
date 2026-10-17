@@ -8,6 +8,20 @@ import (
 	"time"
 )
 
+// TestRunServerStartsBodyOnRegularProcess ensures non-service invocations
+// enter the long-running server path instead of returning successfully.
+func TestRunServerStartsBodyOnRegularProcess(t *testing.T) {
+	original := startServerBody
+	called := false
+	startServerBody = func() { called = true }
+	t.Cleanup(func() { startServerBody = original })
+
+	runServer()
+	if !called {
+		t.Fatal("runServer() did not start the server body")
+	}
+}
+
 // ============================================================
 // formatUptime
 // ============================================================
@@ -139,63 +153,6 @@ func TestFilterDaemonFlag(t *testing.T) {
 // ============================================================
 // formatBytes
 // ============================================================
-
-func TestFormatBytes(t *testing.T) {
-	tests := []struct {
-		name  string
-		bytes int64
-		want  string
-	}{
-		{
-			name:  "zero bytes",
-			bytes: 0,
-			want:  "0 B",
-		},
-		{
-			name:  "one byte",
-			bytes: 1,
-			want:  "1 B",
-		},
-		{
-			name:  "1023 bytes stays in B",
-			bytes: 1023,
-			want:  "1023 B",
-		},
-		{
-			name:  "exactly 1 KB",
-			bytes: 1024,
-			want:  "1.0 KB",
-		},
-		{
-			name:  "1.5 KB",
-			bytes: 1536,
-			want:  "1.5 KB",
-		},
-		{
-			name:  "exactly 1 MB",
-			bytes: 1024 * 1024,
-			want:  "1.0 MB",
-		},
-		{
-			name:  "exactly 1 GB",
-			bytes: 1024 * 1024 * 1024,
-			want:  "1.0 GB",
-		},
-		{
-			name:  "2.5 MB",
-			bytes: int64(2.5 * 1024 * 1024),
-			want:  "2.5 MB",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := formatBytes(tt.bytes)
-			if got != tt.want {
-				t.Errorf("formatBytes(%d) = %q, want %q", tt.bytes, got, tt.want)
-			}
-		})
-	}
-}
 
 // ============================================================
 // detectShell

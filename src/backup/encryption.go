@@ -21,7 +21,7 @@ const (
 )
 
 // EncryptBackup encrypts backup data using AES-256-GCM with password-based key derivation
-// Per AI.md PART 24: Backup Encryption (NON-NEGOTIABLE)
+// Per AI.md PART 21: Backup Encryption (NON-NEGOTIABLE)
 // Algorithm: AES-256-GCM
 // Key Derivation: Argon2id (password → encryption key)
 // Password Storage: NEVER stored - admin must remember
@@ -141,8 +141,8 @@ func EncryptFile(inputPath, outputPath, password string) error {
 		return fmt.Errorf("encryption failed: %w", err)
 	}
 
-	// Write encrypted data
-	if err := os.WriteFile(outputPath, encrypted, 0600); err != nil {
+	// Write encrypted data crash-safely (temp file plus rename)
+	if err := writeFileAtomic(outputPath, encrypted, 0600); err != nil {
 		return fmt.Errorf("failed to write encrypted file: %w", err)
 	}
 
@@ -163,8 +163,8 @@ func DecryptFile(inputPath, outputPath, password string) error {
 		return fmt.Errorf("decryption failed: %w", err)
 	}
 
-	// Write decrypted data
-	if err := os.WriteFile(outputPath, decrypted, 0600); err != nil {
+	// Write decrypted data crash-safely (temp file plus rename)
+	if err := writeFileAtomic(outputPath, decrypted, 0600); err != nil {
 		return fmt.Errorf("failed to write decrypted file: %w", err)
 	}
 

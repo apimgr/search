@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,22 +13,21 @@ import (
 	"github.com/apimgr/search/src/config"
 )
 
+// pipeStdin replaces os.Stdin with a pipe that delivers input, then restores on cleanup.
+// Use for tests that call fmt.Scanln (restore, setup confirm prompts).
+
 // resetAllFlagVars resets every CLI flag variable to its zero value.
 // Required before calling main() in tests so that flags set by a prior
 // flag.Parse() do not bleed into the next test run.
 func resetAllFlagVars() {
 	flagVersion = false
 	flagHelp = false
-	flagInit = false
-	flagConfigInfo = false
 	flagStatus = false
 	flagDaemon = false
 	flagDebug = false
-	flagTest = ""
 	flagService = ""
 	flagMaintenance = ""
 	flagUpdate = ""
-	flagBuild = ""
 	flagShell = ""
 	flagMode = ""
 	flagData = ""
@@ -43,8 +43,6 @@ func resetAllFlagVars() {
 	flagLang = ""
 }
 
-// pipeStdin replaces os.Stdin with a pipe that delivers input, then restores on cleanup.
-// Use for tests that call fmt.Scanln (rotate-token, restore, setup confirm prompts).
 func pipeStdin(t *testing.T, input string) {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -80,58 +78,6 @@ func TestPrintCompletionsUnsupportedShellOutput(t *testing.T) {
 	if !strings.Contains(out, "tcsh") {
 		t.Errorf("expected shell name 'tcsh' in output, got: %q", out)
 	}
-}
-
-// ============================================================
-// showConfigInfo — env-var conditional branches
-// ============================================================
-
-// TestShowConfigInfoWithEnvVars exercises all 13 env-var branches in showConfigInfo
-// that are taken only when the variable is set or non-default.
-// Each branch body prints one line; together they raise showConfigInfo from 79% → ~100%.
-func TestShowConfigInfoWithEnvVars(t *testing.T) {
-	restore := saveEnvKeys(
-		"DOMAIN", "MODE", "NO_COLOR", "TERM",
-		"DATABASE_DRIVER", "DATABASE_URL",
-		"SMTP_HOST", "CONFIG_DIR", "DATA_DIR", "LOG_DIR",
-		"PORT", "LISTEN", "APPLICATION_NAME",
-	)
-	t.Cleanup(restore)
-
-	os.Setenv("DOMAIN", "example.com")
-	os.Setenv("MODE", "development")
-	os.Setenv("NO_COLOR", "1")
-	os.Setenv("TERM", "dumb")
-	os.Setenv("DATABASE_DRIVER", "sqlite")
-	os.Setenv("DATABASE_URL", "file:/tmp/test.db")
-	os.Setenv("SMTP_HOST", "mail.example.com")
-	os.Setenv("CONFIG_DIR", "/tmp")
-	os.Setenv("DATA_DIR", "/tmp")
-	os.Setenv("LOG_DIR", "/tmp")
-	os.Setenv("PORT", "9090")
-	os.Setenv("LISTEN", "0.0.0.0")
-	os.Setenv("APPLICATION_NAME", "TestSearch")
-
-	out := captureStdout(t, showConfigInfo)
-	for _, want := range []string{"DOMAIN", "MODE", "NO_COLOR", "TERM", "DATABASE_DRIVER",
-		"DATABASE_URL", "SMTP_HOST", "CONFIG_DIR", "DATA_DIR", "LOG_DIR",
-		"PORT", "LISTEN", "APPLICATION_NAME"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("showConfigInfo: expected %q in output", want)
-		}
-	}
-}
-
-// ============================================================
-// handleLegacyArgs — --init case
-// ============================================================
-
-// TestHandleLegacyArgsInit covers the `case "--init": runInit()` branch in
-// handleLegacyArgs, the one case not covered by existing tests.
-func TestHandleLegacyArgsInit(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--init"})
-	captureStdout(t, handleLegacyArgs)
 }
 
 // ============================================================
@@ -196,31 +142,6 @@ func TestMainHelpDispatch(t *testing.T) {
 	}
 }
 
-// TestMainInitDispatch covers the --init dispatch case in main().
-func TestMainInitDispatch(t *testing.T) {
-	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
-	t.Cleanup(restore)
-
-	resetAllFlagVars()
-	withArgs(t, []string{"search", "--init"})
-	captureStdout(t, main)
-}
-
-// TestMainConfigInfoDispatch covers the --config-info dispatch case in main().
-func TestMainConfigInfoDispatch(t *testing.T) {
-	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
-	t.Cleanup(restore)
-
-	resetAllFlagVars()
-	withArgs(t, []string{"search", "--config-info"})
-	out := captureStdout(t, main)
-	if out == "" {
-		t.Error("--config-info: expected non-empty output from main()")
-	}
-}
-
 // TestMainStatusDispatch covers the --status dispatch case in main().
 func TestMainStatusDispatch(t *testing.T) {
 	withExitFunc(t)
@@ -242,7 +163,7 @@ func TestMainServiceDispatch(t *testing.T) {
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
-	withArgs(t, []string{"search", "--service", "help"})
+	withArgs(t, []string{"search", "--service", "--help"})
 	out := captureStdout(t, main)
 	if !strings.Contains(out, "Service") {
 		t.Errorf("--service help: expected 'Service' in output, got: %q", out)
@@ -256,7 +177,7 @@ func TestMainMaintenanceDispatch(t *testing.T) {
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
-	withArgs(t, []string{"search", "--maintenance", "help"})
+	withArgs(t, []string{"search", "--maintenance", "--help"})
 	out := captureStdout(t, main)
 	if !strings.Contains(out, "Maintenance") {
 		t.Errorf("--maintenance help: expected 'Maintenance' in output, got: %q", out)
@@ -276,19 +197,6 @@ func TestMainUpdateDispatch(t *testing.T) {
 	if !strings.Contains(out, "Update") {
 		t.Errorf("--update help: expected 'Update' in output, got: %q", out)
 	}
-}
-
-// TestMainBuildDispatch covers the --build case in main(), including the
-// `platform := flagBuild` and `if platform == ""` check stmts.
-// Docker may not be available inside the test container; exitFunc no-op handles that.
-func TestMainBuildDispatch(t *testing.T) {
-	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
-	t.Cleanup(restore)
-
-	resetAllFlagVars()
-	withArgs(t, []string{"search", "--build", "host"})
-	captureStdout(t, main)
 }
 
 // TestMainShellDispatch covers the --shell case in main(), including
@@ -474,19 +382,6 @@ func TestRunMaintenanceRestoreFileYesError(t *testing.T) {
 // runMaintenance — rotate-token yes confirmation
 // ============================================================
 
-// TestRunMaintenanceRotateTokenConfirm covers the "yes" path for rotate-token:
-// generateSetupToken, if-err check, cfg.Server.Token assign, cfg.Save, and
-// the 5 success println statements.
-func TestRunMaintenanceRotateTokenConfirm(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--maintenance", "rotate-token"})
-	pipeStdin(t, "yes\n")
-	out := captureStdout(t, func() { runMaintenance("rotate-token") })
-	if !strings.Contains(out, "Bearer") {
-		t.Errorf("expected 'Bearer' token info in output, got: %q", out)
-	}
-}
-
 // ============================================================
 // runMaintenance — mode DISABLED path
 // ============================================================
@@ -595,30 +490,6 @@ func TestShowStatusRunningProcessNoConfig(t *testing.T) {
 // runMaintenance — list with an actual backup present
 // ============================================================
 
-// TestRunMaintenanceListWithBackup creates a backup then immediately lists
-// backups, covering the "Available backups:" println and the range-loop body
-// stmts (filename, size, created, and the Version != "" check).
-func TestRunMaintenanceListWithBackup(t *testing.T) {
-	withExitFunc(t)
-
-	tmpDir := t.TempDir()
-	config.SetBackupDirOverride(tmpDir)
-	t.Cleanup(func() { config.SetBackupDirOverride("") })
-
-	withArgs(t, []string{"search", "--maintenance", "backup"})
-	restore := saveEnvKeys("BACKUP_PASSWORD")
-	t.Cleanup(restore)
-	os.Unsetenv("BACKUP_PASSWORD")
-
-	// Suppress the backup output; errors are tolerated via withExitFunc
-	captureStdout(t, func() { runMaintenance("backup") })
-
-	// Now list — if at least one backup was created the loop body is covered
-	withArgs(t, []string{"search", "--maintenance", "list"})
-	out := captureStdout(t, func() { runMaintenance("list") })
-	_ = out
-}
-
 // ============================================================
 // flag.Usage callback body
 // ============================================================
@@ -638,17 +509,6 @@ func TestFlagUsageCallback(t *testing.T) {
 // ============================================================
 // runInit — Initialize() error path
 // ============================================================
-
-// TestRunInitInitError covers the 3 stmts in runInit where config.Initialize()
-// fails (slog.Error, exitFunc(1), return). Setting the config dir to
-// /dev/null/impossible forces EnsureDirectories() to fail even as root because
-// /dev/null is a character device, not a directory.
-func TestRunInitInitError(t *testing.T) {
-	withExitFunc(t)
-	config.SetConfigDirOverride("/dev/null/impossible")
-	t.Cleanup(func() { config.SetConfigDirOverride("") })
-	captureStdout(t, runInit)
-}
 
 // ============================================================
 // applyCliOverrides — EnsureDirectories error path
@@ -684,21 +544,6 @@ func TestMainUpdateEmptySubCmd(t *testing.T) {
 }
 
 // ============================================================
-// main() dispatch — empty build platform → "all"
-// ============================================================
-
-// TestMainBuildEmptyPlatform covers `platform = "all"` (line 159) when
-// flagBuild is "" but os.Args[1] is "--build".
-func TestMainBuildEmptyPlatform(t *testing.T) {
-	withExitFunc(t)
-	resetAllFlagVars()
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
-	t.Cleanup(restore)
-	withArgs(t, []string{"search", "--build", ""})
-	captureStdout(t, main)
-}
-
-// ============================================================
 // main() dispatch — empty shell subCmd paths
 // ============================================================
 
@@ -712,6 +557,42 @@ func TestMainShellEmptySubCmd(t *testing.T) {
 	withArgs(t, []string{"search", "--shell", ""})
 	out := captureStdout(t, main)
 	_ = out
+}
+
+// TestPrintFirstRunOperatorToken verifies service-first installs still show
+// the one-time token after configuration initialization consumes first-run state.
+func TestPrintFirstRunOperatorToken(t *testing.T) {
+	dir := t.TempDir()
+	config.SetConfigDirOverride(filepath.Join(dir, "config"))
+	config.SetDataDirOverride(filepath.Join(dir, "data"))
+	config.SetLogDirOverride(filepath.Join(dir, "log"))
+	config.SetCacheDirOverride(filepath.Join(dir, "cache"))
+	config.SetBackupDirOverride(filepath.Join(dir, "backup"))
+	config.SetPIDFileOverride(filepath.Join(dir, "run", "search.pid"))
+	t.Cleanup(func() {
+		config.SetConfigDirOverride("")
+		config.SetDataDirOverride("")
+		config.SetLogDirOverride("")
+		config.SetCacheDirOverride("")
+		config.SetBackupDirOverride("")
+		config.SetPIDFileOverride("")
+	})
+
+	cfg, err := config.Initialize()
+	if err != nil {
+		t.Fatalf("config.Initialize() error = %v", err)
+	}
+	if !cfg.IsFirstRun() || cfg.Server.Token == "" {
+		t.Fatal("expected first-run config with a generated operator token")
+	}
+
+	out := captureStdout(t, func() { printFirstRunOperatorToken(cfg) })
+	if !strings.Contains(out, cfg.Server.Token) {
+		t.Fatalf("first-run output does not contain the operator token: %q", out)
+	}
+	if strings.Contains(captureStdout(t, func() { printFirstRunOperatorToken(nil) }), cfg.Server.Token) {
+		t.Fatal("nil config unexpectedly printed an operator token")
+	}
 }
 
 // ============================================================
@@ -753,45 +634,9 @@ func TestRunMaintenanceBackupCreateError(t *testing.T) {
 // runMaintenance — list empty path
 // ============================================================
 
-// TestRunMaintenanceListEmpty covers the 2 stmts for empty backup list
-// (len check + "No backups found." println). A fresh temp dir has no backups.
-func TestRunMaintenanceListEmpty(t *testing.T) {
-	withExitFunc(t)
-	tmpDir := t.TempDir()
-	config.SetBackupDirOverride(tmpDir)
-	t.Cleanup(func() { config.SetBackupDirOverride("") })
-	withArgs(t, []string{"search", "--maintenance", "list"})
-	out := captureStdout(t, func() { runMaintenance("list") })
-	if !strings.Contains(out, "No backups found") {
-		t.Errorf("expected 'No backups found' in output, got: %q", out)
-	}
-}
-
 // ============================================================
 // runMaintenance — list error path (bm.List() returns error)
 // ============================================================
-
-// TestRunMaintenanceListError covers the 2 stmts for bm.List() error
-// (fmt.Printf + return). Pointing the backup dir at a FILE (not a dir)
-// makes os.ReadDir fail inside backup.List().
-func TestRunMaintenanceListError(t *testing.T) {
-	withExitFunc(t)
-	tmpFile, err := os.CreateTemp("", "search-test-backup-file-*")
-	if err != nil {
-		t.Fatalf("CreateTemp: %v", err)
-	}
-	tmpFile.Close()
-	t.Cleanup(func() {
-		config.SetBackupDirOverride("")
-		os.Remove(tmpFile.Name())
-	})
-	config.SetBackupDirOverride(tmpFile.Name())
-	withArgs(t, []string{"search", "--maintenance", "list"})
-	out := captureStdout(t, func() { runMaintenance("list") })
-	if !strings.Contains(out, "Failed") && !strings.Contains(out, "ERROR") {
-		t.Logf("list error output: %q", out)
-	}
-}
 
 // ============================================================
 // runMaintenance — mode Initialize() error
@@ -811,16 +656,6 @@ func TestRunMaintenanceModeInitError(t *testing.T) {
 // runMaintenance — rotate-token Initialize() error
 // ============================================================
 
-// TestRunMaintenanceRotateTokenInitError covers the 3 stmts in runMaintenance
-// "rotate-token" where config.Initialize() fails.
-func TestRunMaintenanceRotateTokenInitError(t *testing.T) {
-	withExitFunc(t)
-	config.SetConfigDirOverride("/dev/null/impossible")
-	t.Cleanup(func() { config.SetConfigDirOverride("") })
-	withArgs(t, []string{"search", "--maintenance", "rotate-token"})
-	captureStdout(t, func() { runMaintenance("rotate-token") })
-}
-
 // ============================================================
 // runMaintenance — setup Initialize() error
 // ============================================================
@@ -835,32 +670,21 @@ func TestRunMaintenanceSetupInitError(t *testing.T) {
 	captureStdout(t, func() { runMaintenance("setup") })
 }
 
-// ============================================================
-// findSourceDir — /app common path
-// ============================================================
-
-// TestFindSourceDirAppPath covers the `/app` branch in findSourceDir's
-// common-paths loop. Creating /app/go.mod causes that entry to match.
-func TestFindSourceDirAppPath(t *testing.T) {
-	if err := os.MkdirAll("/app", 0755); err != nil {
-		t.Skipf("cannot create /app directory: %v", err)
-	}
-	goModPath := "/app/go.mod"
-	existed := false
-	if _, err := os.Stat(goModPath); err == nil {
-		existed = true
-	}
-	if !existed {
-		if err := os.WriteFile(goModPath, []byte("module testmod\n"), 0644); err != nil {
-			t.Skipf("cannot write /app/go.mod: %v", err)
-		}
-		t.Cleanup(func() { os.Remove(goModPath) })
-	}
-	dir, err := findSourceDir()
+func TestBindPrivilegedListenersSkipsUnprivilegedPort(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Address = "127.0.0.1"
+	cfg.Server.Port = 8080
+	listeners, redirect, err := bindPrivilegedListeners(cfg)
 	if err != nil {
-		t.Errorf("findSourceDir() with /app/go.mod error = %v", err)
+		t.Fatalf("bindPrivilegedListeners() error = %v", err)
 	}
-	if dir == "" {
-		t.Error("findSourceDir() returned empty dir when /app/go.mod exists")
+	if len(listeners) != 0 || redirect != nil {
+		t.Fatalf("unexpected privileged listeners: ports=%v redirect=%v", listeners, redirect)
+	}
+}
+
+func TestBindPrivilegedListenersRequiresConfig(t *testing.T) {
+	if _, _, err := bindPrivilegedListeners(nil); err == nil {
+		t.Fatal("bindPrivilegedListeners(nil) succeeded")
 	}
 }

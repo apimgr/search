@@ -1,6 +1,10 @@
 package instant
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -2229,8 +2233,13 @@ func TestPkgHandlerParseQuery(t *testing.T) {
 		{"npm express", "npm", "express"},
 		{"pypi: requests", "pypi", "requests"},
 		{"pypi requests", "pypi", "requests"},
+		{"pip requests", "pypi", "requests"},
 		{"gopkg: github.com/gin-gonic/gin", "go", "github.com/gin-gonic/gin"},
 		{"pkg: npm: lodash", "npm", "lodash"},
+		{"pkg:crates/serde", "crates", "serde"},
+		{"pkg:pip/requests", "pypi", "requests"},
+		{"cargo: serde", "crates", "serde"},
+		{"pkg:rubygems/rails", "rubygems", "rails"},
 		{"pkg: express", "", "express"},
 		{"not a pkg query", "", ""},
 	}
@@ -2245,6 +2254,98 @@ func TestPkgHandlerParseQuery(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPkgHandlerCratesFixture(t *testing.T) {
+	today := time.Now().UTC().Format("2006-01-02")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/dependencies") {
+			_, _ = w.Write([]byte(`{"dependencies":[{},{}]}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/downloads") {
+			_, _ = fmt.Fprintf(w, `{"version_downloads":[{"date":%q,"downloads":7,"version":1}]}`, today)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/readme") {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte("<p>Crate README preview</p>"))
+			return
+		}
+		_, _ = w.Write([]byte(`{"crate":{"name":"serde","description":"Serialization","max_version":"1.0.0","license":"MIT","updated_at":"2026-01-01T00:00:00Z","repository":"https://github.com/serde-rs/serde","downloads":1000,"recent_downloads":100}}`))
+	}))
+	defer srv.Close()
+	h := NewPkgHandler()
+	h.client = redirectClient(srv)
+	answer, err := h.HandleInstantQuery(context.Background(), "pkg:crates/serde")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"cargo add serde", "MIT", "Dependencies:</strong> 2", "Weekly downloads:</strong> 7", "Crate README preview"} {
+		if !strings.Contains(answer.Content, text) {
+			t.Errorf("crate answer missing %q: %s", text, answer.Content)
+		}
+	}
+}
+
+func TestPkgHandlerRubyGemsFixture(t *testing.T) {
+	gemFile := rubyGemFixture(t, "# Rails README preview")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, ".gem") {
+			_, _ = w.Write(gemFile)
+			return
+		}
+		_, _ = w.Write([]byte(`{"name":"rails","info":"Web framework","version":"8.0.0","licenses":["MIT"],"project_uri":"https://rubyonrails.org","source_code_uri":"https://github.com/rails/rails","gem_uri":"https://rubygems.org/downloads/rails-8.0.0.gem","downloads":1000,"version_created_at":"2026-01-01T00:00:00Z","dependencies":{"runtime":[{},{}]}}`))
+	}))
+	defer srv.Close()
+	h := NewPkgHandler()
+	h.client = redirectClient(srv)
+	answer, err := h.HandleInstantQuery(context.Background(), "rubygems: rails")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"gem install rails", "MIT", "Dependencies:</strong> 2 runtime", "Weekly downloads:</strong> unavailable", "Rails README preview"} {
+		if !strings.Contains(answer.Content, text) {
+			t.Errorf("RubyGems answer missing %q: %s", text, answer.Content)
+		}
+	}
+}
+
+func rubyGemFixture(t *testing.T, readme string) []byte {
+	t.Helper()
+	var dataTar bytes.Buffer
+	dataWriter := tar.NewWriter(&dataTar)
+	if err := dataWriter.WriteHeader(&tar.Header{Name: "README.md", Mode: 0o644, Size: int64(len(readme)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dataWriter.Write([]byte(readme)); err != nil {
+		t.Fatal(err)
+	}
+	if err := dataWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var dataGzip bytes.Buffer
+	gzipWriter := gzip.NewWriter(&dataGzip)
+	if _, err := gzipWriter.Write(dataTar.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var gem bytes.Buffer
+	outer := tar.NewWriter(&gem)
+	if err := outer.WriteHeader(&tar.Header{Name: "data.tar.gz", Mode: 0o644, Size: int64(dataGzip.Len()), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := outer.Write(dataGzip.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := outer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return gem.Bytes()
 }
 
 func TestPkgHandlerDetectRegistry(t *testing.T) {
@@ -2355,6 +2456,132 @@ func TestPkgHandlerHTTPNPM(t *testing.T) {
 	}
 	if !strings.Contains(ans.Content, "express") {
 		t.Errorf("Content missing package name; got: %s", ans.Content)
+	}
+}
+
+func TestPkgHandlerNPMFullMetadataAndCachedWeeklyDownloads(t *testing.T) {
+	var statsRequests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/downloads/") {
+			statsRequests++
+			_, _ = w.Write([]byte(`{"downloads":321}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"name":"express","description":"Framework","license":"MIT","homepage":"https://example.test","readme":"Express README preview","dist-tags":{"latest":"5.0.0"},"time":{"modified":"2026-01-01T00:00:00Z"},"versions":{"5.0.0":{"dependencies":{"accepts":"*","body-parser":"*"},"repository":{"url":"https://github.com/expressjs/express"}}}}`))
+	}))
+	defer srv.Close()
+	h := NewPkgHandler()
+	h.client = redirectClient(srv)
+	for i := 0; i < 2; i++ {
+		answer, err := h.HandleInstantQuery(context.Background(), "npm: express")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, field := range []string{"Weekly downloads:</strong> 321", "Dependencies:</strong> 2", "Last updated:", "Express README preview"} {
+			if !strings.Contains(answer.Content, field) {
+				t.Errorf("NPM answer missing %q: %s", field, answer.Content)
+			}
+		}
+		if answer.Data["weekly_downloads"] != int64(321) {
+			t.Errorf("weekly_downloads = %#v", answer.Data["weekly_downloads"])
+		}
+	}
+	if statsRequests != 1 {
+		t.Fatalf("weekly stats requests = %d, want cached single request", statsRequests)
+	}
+}
+
+func TestPkgHandlerPyPIWeeklyDownloadsDependenciesAndReadme(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/recent") {
+			_, _ = w.Write([]byte(`{"data":{"last_week":456}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"info":{"name":"requests","version":"2.0.0","summary":"HTTP client","description":"Requests README preview","license":"Apache-2.0","requires_dist":["urllib3","certifi"]},"releases":{"2.0.0":[{"upload_time_iso_8601":"2026-01-01T00:00:00Z"}]}}`))
+	}))
+	defer srv.Close()
+	h := NewPkgHandler()
+	h.client = redirectClient(srv)
+	answer, err := h.HandleInstantQuery(context.Background(), "pip: requests")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"Weekly downloads:</strong> 456", "Dependencies:</strong> 2", "Last updated:", "Requests README preview"} {
+		if !strings.Contains(answer.Content, field) {
+			t.Errorf("PyPI answer missing %q: %s", field, answer.Content)
+		}
+	}
+}
+
+func TestPkgHandlerGoModuleMetadataFromProxy(t *testing.T) {
+	var archive bytes.Buffer
+	zipWriter := zip.NewWriter(&archive)
+	for filename, body := range map[string]string{
+		"github.com/!azure/thing@v1.2.3/README.md": "# Azure module README",
+		"github.com/!azure/thing@v1.2.3/LICENSE":   "MIT License",
+	} {
+		file, err := zipWriter.Create(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := file.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/github.com/!azure/thing/@latest":
+			_, _ = w.Write([]byte(`{"Version":"v1.2.3","Time":"2026-01-01T00:00:00Z"}`))
+		case "/github.com/!azure/thing/@v/v1.2.3.mod":
+			_, _ = w.Write([]byte("module github.com/Azure/thing\n\ngo 1.20\n\nrequire (\n github.com/example/direct v1.0.0\n github.com/example/transitive v1.0.0 // indirect\n)\n"))
+		case "/github.com/!azure/thing/@v/v1.2.3.zip":
+			_, _ = w.Write(archive.Bytes())
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	h := NewPkgHandler()
+	h.client = redirectClient(srv)
+	answer, err := h.HandleInstantQuery(context.Background(), "pkg:go/github.com/Azure/thing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"v1.2.3", "Dependencies:</strong> 1 direct", "MIT License", "Azure module README", "Weekly downloads:</strong> unavailable"} {
+		if !strings.Contains(answer.Content, expected) {
+			t.Errorf("Go module answer missing %q: %s", expected, answer.Content)
+		}
+	}
+	if answer.Data["dependencies"] != 1 {
+		t.Errorf("dependencies = %#v, want 1", answer.Data["dependencies"])
+	}
+}
+
+func TestPackageMetadataRejectsOversizedJSON(t *testing.T) {
+	data := bytes.Repeat([]byte(" "), maxPackageMetadataBytes+1)
+	var result map[string]interface{}
+	if err := decodePackageJSON(bytes.NewReader(data), &result); err == nil {
+		t.Fatal("expected oversized package metadata to be rejected")
+	}
+}
+
+func TestWritePackageLinkRejectsUnsafeAndEscapesSafeURLs(t *testing.T) {
+	var content strings.Builder
+	writePackageLink(&content, "Homepage", "javascript:alert(1)")
+	writePackageLink(&content, "Repository", "https://user:pass@example.test/repo?a=1&b=2\"<script>")
+	if content.Len() != 0 {
+		t.Fatalf("unsafe package URLs were rendered: %s", content.String())
+	}
+
+	writePackageLink(&content, "Homepage", "https://example.test/project?a=1&b=2")
+	got := content.String()
+	if strings.Contains(got, "&b=2\"") || !strings.Contains(got, "&amp;b=2") || !strings.Contains(got, `rel="noopener noreferrer"`) {
+		t.Fatalf("safe package URL was not safely rendered: %s", got)
 	}
 }
 

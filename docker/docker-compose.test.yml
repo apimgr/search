@@ -8,7 +8,7 @@ x-logging: &default-logging
 
 services:
   search:
-    image: ghcr.io/apimgr/search:latest
+    image: ghcr.io/apimgr/search:devel
     pull_policy: always
     container_name: search-test
     hostname: search
@@ -16,8 +16,8 @@ services:
     logging: *default-logging
     environment:
       PORT: 80
-      DEBUG: 1
-      MODE: dev
+      DEBUG: true
+      MODE: development
       TZ: ${TZ:-America/New_York}
       CACHE_URL: valkey://search-cache-test:6379
     volumes:

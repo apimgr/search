@@ -59,10 +59,35 @@ func (c *Cache) Get(key string) (*WidgetData, bool) {
 	return item.Data, true
 }
 
+// maxCacheItems bounds the widget cache. Keys embed user-controlled params
+// (query, text, word — see buildCacheKey), so an unbounded map lets any
+// client grow memory indefinitely with unique parameters. On overflow the
+// expired entries are dropped first, then arbitrary (map-order) extras.
+const maxCacheItems = 10000
+
 // Set stores an item in the cache with TTL
 func (c *Cache) Set(key string, data *WidgetData, ttl time.Duration) {
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Bound memory: drop expired entries, then evict to stay under the cap.
+	if len(c.items) >= maxCacheItems {
+		now := time.Now()
+		for k, item := range c.items {
+			if now.After(item.ExpiresAt) {
+				delete(c.items, k)
+			}
+		}
+		for k := range c.items {
+			if len(c.items) < maxCacheItems {
+				break
+			}
+			delete(c.items, k)
+		}
+	}
 
 	c.items[key] = &CacheItem{
 		Data:      data,

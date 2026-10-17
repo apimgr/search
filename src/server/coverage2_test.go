@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -455,7 +456,18 @@ func TestIsTrustedProxy(t *testing.T) {
 
 // TestValidateNotPrivateProxy_Extra adds the uppercase case and the DNS
 // lookup failure branch not covered by the existing TestValidateNotPrivateProxy.
+//
+// The resolver is stubbed so the lookup-failure path is exercised in every
+// environment; relying on a real .invalid lookup is unreliable because some
+// resolvers hijack NXDOMAIN with a wildcard A record.
 func TestValidateNotPrivateProxy_Extra(t *testing.T) {
+	origLookup := lookupProxyHostIP
+	t.Cleanup(func() { lookupProxyHostIP = origLookup })
+
+	lookupProxyHostIP = func(host string) ([]net.IP, error) {
+		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	}
+
 	tests := []struct {
 		name    string
 		host    string
@@ -492,14 +504,15 @@ func TestResolveUnitsCookieOverride(t *testing.T) {
 		cookie string
 		want   string
 	}{
-		{"metric cookie", "metric", "metric"},
-		{"imperial cookie", "imperial", "imperial"},
+		{"metric cookie", "search_pref_units=metric", "metric"},
+		{"imperial cookie", "search_pref_units=imperial", "imperial"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			req.AddCookie(&http.Cookie{Name: "units", Value: tt.cookie})
+			name, value, _ := strings.Cut(tt.cookie, "=")
+			req.AddCookie(&http.Cookie{Name: name, Value: value})
 			got := s.resolveUnits(req)
 			if got != tt.want {
 				t.Errorf("resolveUnits() = %q, want %q", got, tt.want)
@@ -516,10 +529,62 @@ func TestResolveUnitsInvalidCookieFallsBackToConfig(t *testing.T) {
 	s := &Server{config: cfg}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: "units", Value: "bogus"})
+	req.AddCookie(&http.Cookie{Name: "search_pref_units", Value: "bogus"})
 	got := s.resolveUnits(req)
 	if got != "metric" {
 		t.Errorf("resolveUnits() = %q, want %q", got, "metric")
+	}
+}
+
+func TestResolveGeneralPrefsSaveHistoryCookie(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+	req.AddCookie(&http.Cookie{Name: "search_pref_save_history", Value: "0"})
+	prefs := resolveGeneralPrefs(req)
+	if prefs.SaveHistory {
+		t.Fatal("SaveHistory = true, want false from the preference cookie")
+	}
+}
+
+func TestResolveGeneralPrefsVideoPreviewCookie(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "default enabled", want: true},
+		{name: "enabled", value: "1", want: true},
+		{name: "disabled", value: "0", want: false},
+		{name: "invalid defaults enabled", value: "maybe", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+			if tc.value != "" {
+				req.AddCookie(&http.Cookie{Name: "search_pref_video_previews", Value: tc.value})
+			}
+			if got := resolveGeneralPrefs(req).VideoPreviews; got != tc.want {
+				t.Errorf("VideoPreviews = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveGeneralPrefsWeatherUnits(t *testing.T) {
+	for _, tc := range []struct {
+		cookie string
+		want   string
+	}{
+		{"auto", "auto"},
+		{"metric", "metric"},
+		{"imperial", "imperial"},
+		{"invalid", "auto"},
+	} {
+		t.Run(tc.cookie, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+			req.AddCookie(&http.Cookie{Name: "search_widget_weather_units", Value: tc.cookie})
+			if got := resolveGeneralPrefs(req).WeatherUnits; got != tc.want {
+				t.Errorf("WeatherUnits = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

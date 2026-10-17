@@ -6,14 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/apimgr/search/src/alert"
@@ -22,15 +25,19 @@ import (
 	"github.com/apimgr/search/src/cache"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/qr"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
 	graphqlpkg "github.com/apimgr/search/src/graphql"
+	"github.com/apimgr/search/src/i2p"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/logging"
 	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/notify"
+	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/bang"
@@ -44,35 +51,42 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	config     *config.Config
-	httpServer *http.Server
+	config            *config.Config
+	publicIPProviders []string
+	httpServer        *http.Server
 	// For dual port mode
-	httpsServer      *http.Server
-	redirectServer   *http.Server
-	pidFile          string
-	registry         *engine.Registry
-	aggregator       *search.Aggregator
-	startTime        time.Time
-	middleware       *Middleware
-	rateLimiter      *RateLimiter
-	csrf             *CSRFMiddleware
-	renderer         *TemplateRenderer
-	apiHandler       *api.Handler
-	torService       *service.TorService
-	bangManager      *bang.Manager
-	widgetManager    *widget.Manager
-	logManager       *logging.Manager
-	tlsManager       *ssl.Manager
-	instantManager   *instant.Manager
-	directManager    *direct.Manager
-	geoipLookup      *geoip.Lookup
-	mailer           *email.Mailer
-	scheduler        *scheduler.Scheduler
-	metrics          *Metrics
-	dbManager        *database.DatabaseManager
-	alertManager     *alert.Manager
-	blocklistManager *security.BlocklistManager
-	cveManager       *security.CVEManager
+	httpsServer       *http.Server
+	preboundListeners map[int]net.Listener
+	preboundRedirect  net.Listener
+	redirectServer    *http.Server
+	pidFile           string
+	registry          *engine.Registry
+	aggregator        *search.Aggregator
+	startTime         time.Time
+	middleware        *Middleware
+	rateLimiter       *RateLimiter
+	csrf              *CSRFMiddleware
+	renderer          *TemplateRenderer
+	apiHandler        *api.Handler
+	torService        *service.TorService
+	bangManager       *bang.Manager
+	widgetManager     *widget.Manager
+	relatedSearches   *search.RelatedSearches
+	logManager        *logging.Manager
+	tlsManager        *ssl.Manager
+	instantManager    *instant.Manager
+	directManager     *direct.Manager
+	geoipLookup       *geoip.Lookup
+	mailer            *email.Mailer
+	notifyManager     *notify.Manager
+	notifyCancel      context.CancelFunc
+	scheduler         *scheduler.Scheduler
+	metrics           *Metrics
+	dbManager         *database.DatabaseManager
+	alertManager      *alert.Manager
+	ownerManager      *owner.Manager
+	blocklistManager  *security.BlocklistManager
+	cveManager        *security.CVEManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
 	configSync *config.ConfigSync
 
@@ -83,10 +97,34 @@ type Server struct {
 	router chi.Router
 	cache  *search.ResultCache
 	db     *sql.DB
+
+	// Loopback port of the Tor PROXY-protocol backend listener; 0 when Tor is
+	// not running. Mirrors Metrics.torBackendPort so middleware can identify
+	// hidden-service requests per AI.md PART 12/31. Set after StartTorService.
+	torBackendPort atomic.Int64
+
+	// I2P eepsite manager per AI.md PART 31.2 — opt-in, disabled by default
+	i2pManager *i2p.I2PManager
+
+	// Set at the top of Shutdown per AI.md PART 13: the server reports
+	// status "shutting_down" (503) once it begins draining.
+	shuttingDown atomic.Bool
 }
 
-// NewServer creates a new server instance
+// NewServer creates a new server instance with the production public-IP providers.
 func NewServer(cfg *config.Config) *Server {
+	return newServer(cfg, append([]string(nil), publicIPProviders...))
+}
+
+// NewServerWithPublicIPProviders creates a server with an explicit public-IP
+// provider list. An empty list disables outbound public-IP discovery, which is
+// useful for deterministic tests and deployments that supply this value by
+// another mechanism.
+func NewServerWithPublicIPProviders(cfg *config.Config, providers []string) *Server {
+	return newServer(cfg, append([]string{}, providers...))
+}
+
+func newServer(cfg *config.Config, providers []string) *Server {
 	// Per AI.md PART 21: resolve and cache the backup dir once at startup —
 	// cleanup/retention logic must never re-resolve the path later
 	backup.SetBackupDir(config.GetBackupDir())
@@ -96,18 +134,20 @@ func NewServer(cfg *config.Config) *Server {
 	logMgr := logging.NewManager(logDir)
 
 	// Configure log levels based on config
-	if cfg.Server.Logs.Level == "debug" {
+	switch cfg.Server.Logs.Level {
+	case "debug":
 		logMgr.Server().SetLevel(logging.LevelDebug)
-	} else if cfg.Server.Logs.Level == "warn" {
+	case "warn":
 		logMgr.Server().SetLevel(logging.LevelWarn)
-	} else if cfg.Server.Logs.Level == "error" {
+	case "error":
 		logMgr.Server().SetLevel(logging.LevelError)
 	}
 
 	// Configure access log format
-	if cfg.Server.Logs.Access.Format == "json" {
+	switch cfg.Server.Logs.Access.Format {
+	case "json":
 		logMgr.Access().SetFormat("json")
-	} else if cfg.Server.Logs.Access.Format == "common" {
+	case "common":
 		logMgr.Access().SetFormat("common")
 	}
 
@@ -154,7 +194,9 @@ func NewServer(cfg *config.Config) *Server {
 		} else {
 			if err := redisCache.Ping(context.Background()); err != nil {
 				slog.Warn("Redis ping failed, using memory cache", "err", err)
-				redisCache.Close()
+				if err := redisCache.Close(); err != nil {
+					slog.Warn("failed to close inactive Redis cache", "error", err)
+				}
 			} else {
 				cacheBackend = redisCache
 				slog.Info("Redis cache enabled", "type", cacheType)
@@ -178,8 +220,23 @@ func NewServer(cfg *config.Config) *Server {
 	// Private ranges (loopback, RFC1918, link-local) are always trusted without config.
 	httputil.SetAdditionalTrustedProxies(cfg.Server.TrustedProxies.Additional)
 	// Re-sync on every hot-reload so a live server.yml change takes effect immediately.
+	// Tracks the last-applied SMTP config so only real SMTP changes are audited.
+	lastSMTP := cfg.Server.Notifications.Email.SMTP
 	cfg.OnReload(func(c *config.Config) {
 		httputil.SetAdditionalTrustedProxies(c.Server.TrustedProxies.Additional)
+
+		// Per AI.md audit table: an SMTP settings change is audited as
+		// config.smtp_updated with the source IP (never the credentials).
+		prevSMTP := lastSMTP
+		cur := c.Server.Notifications.Email.SMTP
+		if cur.Host != prevSMTP.Host || cur.Port != prevSMTP.Port ||
+			cur.Username != prevSMTP.Username || cur.Password != prevSMTP.Password ||
+			cur.TLS != prevSMTP.TLS {
+			if al := logMgr.Audit(); al != nil {
+				al.LogSMTPUpdated("operator", "-")
+			}
+		}
+		lastSMTP = cur
 	})
 
 	// Create rate limiter
@@ -201,6 +258,27 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Set Tor service on API handler for health checks per AI.md PART 32
 	apiHandler.SetTorService(torSvc)
+
+	// Create I2P manager per AI.md PART 31.2 — opt-in only, disabled by default.
+	// Started in StartHTTPServer when config enables it.
+	var i2pMgr *i2p.I2PManager
+	if cfg.Server.I2P.Enabled {
+		i2pMgr = i2p.NewI2PManager(context.Background(),
+			&i2p.I2PConfig{
+				Enabled:          cfg.Server.I2P.Enabled,
+				Binary:           cfg.Server.I2P.Binary,
+				SAMAddress:       cfg.Server.I2P.SAMAddress,
+				VirtualPort:      cfg.Server.I2P.VirtualPort,
+				InboundLength:    cfg.Server.I2P.InboundLength,
+				OutboundLength:   cfg.Server.I2P.OutboundLength,
+				InboundQuantity:  cfg.Server.I2P.InboundQuantity,
+				OutboundQuantity: cfg.Server.I2P.OutboundQuantity,
+			},
+			fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.Port))
+	}
+
+	// Set I2P manager on API handler for health checks per AI.md PART 31.2
+	apiHandler.SetI2PManager(i2pMgr)
 
 	// Create bang manager
 	bangMgr := bang.NewManager()
@@ -225,7 +303,7 @@ func NewServer(cfg *config.Config) *Server {
 	var tlsMgr *ssl.Manager
 	if cfg.Server.SSL.Enabled {
 		dataDir := config.GetDataDir()
-		tlsMgr = ssl.NewManager(&cfg.Server.SSL, dataDir)
+		tlsMgr = ssl.NewManagerWithSecretAndHost(&cfg.Server.SSL, dataDir, cfg.Server.SecretKey, cfg.Server.FQDN)
 	}
 
 	// Create GeoIP lookup if enabled (uses MMDB from sapics/ip-location-db)
@@ -239,13 +317,11 @@ func NewServer(cfg *config.Config) *Server {
 		geoCfg := &geoip.Config{
 			Enabled:          true,
 			Dir:              geoDir,
-			Update:           cfg.Server.GeoIP.Update,
 			DenyCountries:    cfg.Server.GeoIP.DenyCountries,
 			AllowedCountries: cfg.Server.GeoIP.AllowedCountries,
-			ASN:              cfg.Server.GeoIP.ASN,
-			Country:          cfg.Server.GeoIP.Country,
-			City:             cfg.Server.GeoIP.City,
-			WHOIS:            cfg.Server.GeoIP.WHOIS,
+			ASN:              cfg.Server.GeoIP.Databases.ASN,
+			Country:          cfg.Server.GeoIP.Databases.Country,
+			City:             cfg.Server.GeoIP.Databases.City,
 		}
 		geoLookup = geoip.NewLookup(geoCfg)
 		if err := geoLookup.LoadDatabases(); err != nil {
@@ -282,7 +358,7 @@ func NewServer(cfg *config.Config) *Server {
 	// Register additional widget fetchers (use free APIs, no API keys needed)
 	// These widgets are always available when widgets are enabled
 	if cfg.Search.Widgets.Enabled {
-		widgetMgr.RegisterFetcher(widget.NewCurrencyFetcher(""))
+		widgetMgr.RegisterFetcher(widget.NewCurrencyFetcher())
 		widgetMgr.RegisterFetcher(widget.NewDictionaryFetcher())
 		widgetMgr.RegisterFetcher(widget.NewNutritionFetcher(""))
 		widgetMgr.RegisterFetcher(widget.NewTrackingFetcher())
@@ -291,10 +367,25 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	// Create instant answer manager
-	instantMgr := instant.NewManager()
+	instantMgr := instant.NewManager(widgetMgr)
 
 	// Create direct answer manager (full-page results per IDEA.md)
 	directMgr := direct.NewManager()
+	directMgr.SetDirectorySearcher(func(ctx context.Context, searchText string) ([]direct.DirectoryResult, error) {
+		query := model.NewQuery(searchText)
+		query.Category = model.CategoryGeneral
+		query.Page = 1
+		query.PerPage = 20
+		results, err := aggregator.Search(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		directResults := make([]direct.DirectoryResult, 0, len(results.Results))
+		for _, result := range results.Results {
+			directResults = append(directResults, direct.DirectoryResult{Title: result.Title, URL: result.URL, Description: result.Content})
+		}
+		return directResults, nil
+	})
 
 	// Create email mailer
 	// Per AI.md PART 18: Email is auto-enabled if SMTP is configured
@@ -309,6 +400,13 @@ func NewServer(cfg *config.Config) *Server {
 		}
 
 		if m, ok := email.NewMailerFromConfig(cfg); ok {
+			// Per AI.md PART 17 "Email Queue with Retry Logic": SMTP-configured
+			// mail must be delivered through the built-in queue, which retries
+			// with exponential backoff and logs every success and failure.
+			if err := m.StartQueue(context.Background(), email.QueueConfig{}); err != nil {
+				slog.Error("Email queue failed to start", "err", err)
+			}
+			email.SetDefaultMailer(m)
 			mailer = m
 			slog.Info("Email mailer configured", "smtp_host", cfg.Server.Notifications.Email.SMTP.Host, "smtp_port", cfg.Server.Notifications.Email.SMTP.Port)
 		}
@@ -319,6 +417,7 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Create database manager for server persistence
 	var dbMgr *database.DatabaseManager
+	var ownerMgr *owner.Manager
 	var err error
 
 	dbConfig := &database.Config{
@@ -336,6 +435,17 @@ func NewServer(cfg *config.Config) *Server {
 			slog.Warn("Database schema initialization failed", "err", err)
 		} else {
 			slog.Info("Database schema initialized")
+			prefix := ""
+			if dbMgr.ServerDB().Driver() == "libsql" {
+				prefix = "srv_"
+			}
+			var ownerErr error
+			ownerMgr, ownerErr = owner.NewManager(dbMgr.ServerDB().SQL(), prefix, cfg.Server.Security.EncryptionKey, cfg.Server.Tokens.MaxLinked)
+			if ownerErr != nil {
+				slog.Error("Owner token manager initialization failed", "err", ownerErr)
+			} else {
+				apiHandler.SetOwnerManager(ownerMgr)
+			}
 		}
 	}
 
@@ -344,6 +454,7 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
+	apiHandler.SetHealthMetrics(metrics)
 	rl.SetMetrics(metrics)
 
 	// Initialize i18n manager per AI.md PART 32
@@ -362,14 +473,41 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	// Create blocklist manager per AI.md PART 18
-	blocklistMgr := security.NewBlocklistManager(config.GetDataDir(), nil)
+	blocklistMgr := security.NewBlocklistManagerWithSecurityDir(config.GetDataDir(), cfg.Data.SecurityDir, blocklistSources(cfg.Server.Security.Blocklists))
+	mw.SetBlocklistManager(blocklistMgr)
+	if handler, exists := directMgr.GetHandler(direct.AnswerTypeSafe); exists {
+		if safeHandler, ok := handler.(*direct.SafeHandler); ok {
+			safeHandler.SetDomainBlacklistLookup(func(domain string) (bool, bool) {
+				return blocklistMgr.IsBlockedDomain(domain), blocklistMgr.DomainCount() > 0
+			})
+		}
+	}
+	cfg.OnReload(func(c *config.Config) {
+		blocklistMgr.SetSecurityDir(c.Data.SecurityDir)
+		blocklistMgr.SetSources(blocklistSources(c.Server.Security.Blocklists))
+	})
 	// Load any previously downloaded blocklists
 	if err := blocklistMgr.LoadFromDisk(); err != nil {
 		slog.Warn("blocklist load from disk failed", "err", err)
 	}
 
-	// Create CVE manager per AI.md PART 18
-	cveMgr := security.NewCVEManager(config.GetDataDir(), nil)
+	// Create CVE manager per AI.md PART 18.
+	dataConfig := cfg.Data
+	cveSource := strings.TrimSpace(dataConfig.CVE.Source)
+	if cveSource == "" {
+		cveSource = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+	}
+	cveMgr := security.NewCVEManagerWithSecurityDir(config.GetDataDir(), dataConfig.SecurityDir, []security.CVESource{{Name: "nvd", URL: cveSource}})
+	cfg.OnReload(func(c *config.Config) {
+		source := strings.TrimSpace(c.Data.CVE.Source)
+		if source == "" {
+			source = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+		}
+		cveMgr.SetSources([]security.CVESource{{Name: "nvd", URL: source}})
+		if err := cveMgr.SetSecurityDir(c.Data.SecurityDir); err != nil {
+			slog.Warn("CVE data reload after security directory change failed", "err", err)
+		}
+	})
 	// Load any previously downloaded CVE data
 	if err := cveMgr.LoadFromDisk(); err != nil {
 		slog.Warn("CVE data load from disk failed", "err", err)
@@ -388,34 +526,39 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	s := &Server{
-		config:         cfg,
-		registry:       registry,
-		aggregator:     aggregator,
-		middleware:     mw,
-		rateLimiter:    rl,
-		csrf:           csrf,
-		renderer:       renderer,
-		apiHandler:     apiHandler,
-		torService:     torSvc,
-		bangManager:    bangMgr,
-		widgetManager:  widgetMgr,
-		logManager:     logMgr,
-		tlsManager:     tlsMgr,
-		instantManager: instantMgr,
-		directManager:  directMgr,
-		geoipLookup:    geoLookup,
-		mailer:         mailer,
+		config:            cfg,
+		publicIPProviders: providers,
+		registry:          registry,
+		aggregator:        aggregator,
+		middleware:        mw,
+		rateLimiter:       rl,
+		csrf:              csrf,
+		renderer:          renderer,
+		apiHandler:        apiHandler,
+		torService:        torSvc,
+		bangManager:       bangMgr,
+		widgetManager:     widgetMgr,
+		logManager:        logMgr,
+		tlsManager:        tlsMgr,
+		instantManager:    instantMgr,
+		directManager:     directMgr,
+		geoipLookup:       geoLookup,
+		mailer:            mailer,
 		// scheduler is initialized below after Server creation
 		metrics:          metrics,
 		dbManager:        dbMgr,
 		alertManager:     alertMgr,
+		ownerManager:     ownerMgr,
 		blocklistManager: blocklistMgr,
 		cveManager:       cveMgr,
 		i18nManager:      i18nMgr,
+		i2pManager:       i2pMgr,
 		// Debug accessors per AI.md PART 6
 		cache: resultCache,
 		db:    serverDB,
 	}
+	s.notifyManager = notify.NewManager(func() *config.Config { return s.config }, nil, nil)
+	s.middleware.SetNotificationManager(s.notifyManager)
 
 	// Per AI.md PART 5: server.yml is the source of truth (single-instance, AI.md line 2055)
 	if dbMgr != nil {
@@ -424,6 +567,12 @@ func NewServer(cfg *config.Config) *Server {
 			configPath = "/etc/search/server.yml"
 		}
 		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath)
+	}
+
+	// Share contact delivery with the REST and GraphQL APIs.
+	s.apiHandler.SetContactSubmitter(s)
+	if s.config.Server.ImageProxy.Enabled {
+		s.apiHandler.SetThumbnailRewriter(s.proxyImageURL)
 	}
 
 	// Set widget manager on API handler
@@ -436,8 +585,8 @@ func NewServer(cfg *config.Config) *Server {
 	s.apiHandler.SetDirectManager(directMgr)
 
 	// Set related searches provider on API handler
-	relatedSearches := search.NewRelatedSearches()
-	s.apiHandler.SetRelatedSearches(relatedSearches)
+	s.relatedSearches = search.NewRelatedSearches()
+	s.apiHandler.SetRelatedSearches(s.relatedSearches)
 	s.apiHandler.SetAlertManager(alertMgr)
 	s.apiHandler.SetGeoIPLookup(s.geoipLookup)
 
@@ -448,6 +597,14 @@ func NewServer(cfg *config.Config) *Server {
 		schedulerDB = dbMgr.ServerDB().SQL()
 	}
 	s.initScheduler(schedulerDB)
+	s.apiHandler.SetHealthProvider(s)
+
+	// Wire the scheduler and audit logger into the API handler so the
+	// /api/v1/server/scheduler/* endpoints (AI.md PART 18) work.
+	s.apiHandler.SetScheduler(s.scheduler)
+	if s.logManager != nil {
+		s.apiHandler.SetAuditLogger(s.logManager.Audit())
+	}
 
 	return s
 }
@@ -493,6 +650,21 @@ func (s *Server) TorAddress() string {
 	return s.torService.GetOnionAddress()
 }
 
+// SetPreboundListeners supplies sockets bound during privileged startup. The
+// server consumes them by configured port after the process drops privileges.
+func (s *Server) SetPreboundListeners(listeners map[int]net.Listener, redirect net.Listener) {
+	s.preboundListeners = listeners
+	s.preboundRedirect = redirect
+}
+
+func (s *Server) listen(port int, addr string) (net.Listener, error) {
+	if listener, ok := s.preboundListeners[port]; ok {
+		delete(s.preboundListeners, port)
+		return listener, nil
+	}
+	return net.Listen("tcp", addr)
+}
+
 // StartHTTPServer starts the server and signals readyCh once the TCP socket is bound.
 // Per AI.md PART 8 step 17-18: Tor starts first (inside here), then HTTP binds, then readyCh is closed.
 // readyCh must be a buffered channel (capacity ≥ 1) or nil to skip the signal.
@@ -507,8 +679,39 @@ func (s *Server) StartHTTPServer(readyCh chan<- struct{}) error {
 			slog.Warn("Tor service start failed", "err", err)
 		}
 	}
+	// Record the PROXY-protocol backend port so middleware and metrics can
+	// identify hidden-service requests and key them on the Tor circuit ID
+	// (AI.md PART 12 lines 16098/16109, PART 31 backend-listener rules).
+	torBackendPort := 0
+	if s.torService != nil {
+		torBackendPort = s.torService.BackendPort()
+	}
+	if s.metrics != nil {
+		s.metrics.SetTorBackendPort(torBackendPort)
+	}
+	s.torBackendPort.Store(int64(torBackendPort))
+	// Share the live backend port and the circuit-ID resolver with the
+	// middleware so hidden-service requests are keyed on tor:{circuit_id}
+	// instead of the loopback peer (AI.md PART 12 lines 16097-16109).
+	setMiddlewareTorBackendPort(&s.torBackendPort)
+	setMiddlewareCircuitResolver(func(r *http.Request) string {
+		return s.torIdentity(r)
+	})
 	if s.torService != nil && s.torService.IsRunning() {
 		slog.Info("Tor hidden service active", "onion_address", s.torService.GetOnionAddress())
+	}
+
+	// Start the I2P eepsite when enabled per AI.md PART 31.2 (opt-in).
+	// Monitor watches tunnel state so healthz reports live status.
+	if s.i2pManager != nil {
+		if err := s.i2pManager.Start(); err != nil {
+			slog.Warn("I2P eepsite start failed", "err", err)
+		} else {
+			go s.i2pManager.Monitor()
+			if addr := s.i2pManager.EepsiteAddress(); addr != "" {
+				slog.Info("I2P eepsite active", "hostname", addr)
+			}
+		}
 	}
 
 	// Scheduler is already started by initScheduler() per AI.md PART 19
@@ -526,13 +729,28 @@ func (s *Server) StartHTTPServer(readyCh chan<- struct{}) error {
 
 	s.startTime = time.Now()
 
+	// HTTPS configurations must never silently fall back to plaintext HTTP
+	// when their certificate is unavailable.
+	tlsEnabled := s.tlsManager != nil && s.tlsManager.IsEnabled()
+	if (s.config.Server.IsDualPortMode() || s.config.Server.Port == 443) && !tlsEnabled {
+		return fmt.Errorf("configured HTTPS port requires a valid TLS certificate")
+	}
 	// Check for dual port mode
-	if s.config.Server.IsDualPortMode() && s.tlsManager != nil && s.tlsManager.IsEnabled() {
+	if s.config.Server.IsDualPortMode() && tlsEnabled {
 		return s.startDualPortMode(mux, httpPort, readyCh)
 	}
 
 	// Single port mode
 	return s.startSinglePortMode(mux, httpPort, readyCh)
+}
+
+func (s *Server) startNotifyWorkers() {
+	if s.notifyManager == nil || s.notifyCancel != nil {
+		return
+	}
+	workerCtx, cancel := context.WithCancel(context.Background())
+	s.notifyCancel = cancel
+	s.notifyManager.Start(workerCtx)
 }
 
 // startDualPortMode starts both HTTP and HTTPS servers on separate ports.
@@ -544,18 +762,23 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 	httpsAddr := fmt.Sprintf("%s:%d", s.config.Server.Address, httpsPort)
 
 	// Bind HTTP socket
-	httpLn, err := net.Listen("tcp", httpAddr)
+	httpLn, err := s.listen(httpPort, httpAddr)
 	if err != nil {
 		return fmt.Errorf("HTTP listen error: %w", err)
 	}
 
 	// Bind HTTPS socket
-	httpsLn, err := net.Listen("tcp", httpsAddr)
+	httpsLn, err := s.listen(httpsPort, httpsAddr)
 	if err != nil {
-		httpLn.Close()
-		return fmt.Errorf("HTTPS listen error: %w", err)
+		return fmt.Errorf("HTTPS listen error: %w", errors.Join(err, httpLn.Close()))
 	}
 
+	// HTTP-01 ACME challenges arrive on the cleartext listener, so install the
+	// challenge handler there and leave HTTPS to serve the issued certificate.
+	httpHandler := mux
+	if s.tlsManager != nil && s.config.Server.SSL.LetsEncrypt.Enabled {
+		httpHandler = s.tlsManager.GetHTTPChallengeHandler(mux)
+	}
 	// Create HTTP server
 	// Timeouts come from server.yml server.limits (AI.md "Request Limits"),
 	// defaulting to 30s/30s/120s. WriteTimeout must stay >= the search
@@ -563,7 +786,7 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 	// instead of the aggregator returning a proper error response.
 	s.httpServer = &http.Server{
 		Addr:         httpAddr,
-		Handler:      mux,
+		Handler:      httpHandler,
 		ReadTimeout:  s.config.Server.Limits.GetReadTimeout(),
 		WriteTimeout: s.config.Server.Limits.GetWriteTimeout(),
 		IdleTimeout:  s.config.Server.Limits.GetIdleTimeout(),
@@ -571,9 +794,6 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 
 	// Create HTTPS server
 	httpsHandler := mux
-	if s.tlsManager != nil && s.config.Server.SSL.LetsEncrypt.Enabled {
-		httpsHandler = s.tlsManager.GetHTTPSHandler(mux)
-	}
 	s.httpsServer = &http.Server{
 		Addr:         httpsAddr,
 		Handler:      httpsHandler,
@@ -590,6 +810,7 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 	slog.Info("HTTPS server listening", "addr", "https://"+httpsAddr)
 
 	// Both sockets bound — signal readiness before blocking
+	s.startNotifyWorkers()
 	if readyCh != nil {
 		close(readyCh)
 	}
@@ -634,12 +855,9 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 
 	if s.tlsManager != nil && s.tlsManager.IsEnabled() {
 		s.httpServer.TLSConfig = s.tlsManager.GetTLSConfig()
-		if s.config.Server.SSL.LetsEncrypt.Enabled {
-			s.httpServer.Handler = s.tlsManager.GetHTTPSHandler(mux)
-		}
 
 		// Bind the TLS socket before signaling readiness
-		ln, err := net.Listen("tcp", addr)
+		ln, err := s.listen(port, addr)
 		if err != nil {
 			return fmt.Errorf("server listen error: %w", err)
 		}
@@ -648,11 +866,21 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 
 		// Start HTTP->HTTPS redirect server on port 80 if configured
 		if s.config.Server.SSL.AutoTLS {
-			redirectAddr := fmt.Sprintf("%s:80", s.config.Server.Address)
-			s.redirectServer = ssl.StartHTTPSRedirect(redirectAddr, s.config.Server.Port)
+			redirectAddr := net.JoinHostPort(s.config.Server.Address, "80")
+			redirectHandler := ssl.HTTPSRedirectHandler(port)
+			if s.config.Server.SSL.LetsEncrypt.Enabled {
+				redirectHandler = s.tlsManager.GetHTTPChallengeHandler(redirectHandler)
+			}
+			if s.preboundRedirect != nil {
+				s.redirectServer = ssl.StartHTTPSRedirectListenerWithHandler(s.preboundRedirect, port, redirectHandler)
+				s.preboundRedirect = nil
+			} else {
+				s.redirectServer = ssl.StartHTTPSRedirectWithHandler(redirectAddr, port, redirectHandler)
+			}
 		}
 
 		// Socket is bound — signal readiness
+		s.startNotifyWorkers()
 		if readyCh != nil {
 			close(readyCh)
 		}
@@ -662,7 +890,7 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 			return fmt.Errorf("server error: %w", err)
 		}
 	} else {
-		ln, err := net.Listen("tcp", addr)
+		ln, err := s.listen(port, addr)
 		if err != nil {
 			return fmt.Errorf("server listen error: %w", err)
 		}
@@ -670,6 +898,7 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 		slog.Info("Server listening", "addr", "http://"+addr)
 
 		// Socket is bound — signal readiness
+		s.startNotifyWorkers()
 		if readyCh != nil {
 			close(readyCh)
 		}
@@ -685,7 +914,13 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 
 // Shutdown gracefully shuts down the server with a context
 func (s *Server) Shutdown(ctx context.Context) error {
+	// Flag first per AI.md PART 13: healthz reports "shutting_down" (503)
+	// from the moment draining begins.
+	s.shuttingDown.Store(true)
 	s.logManager.Server().Info("Server shutting down...")
+	if s.notifyCancel != nil {
+		s.notifyCancel()
+	}
 
 	// Stop scheduler
 	if s.scheduler != nil {
@@ -693,14 +928,31 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		slog.Info("Scheduler stopped")
 	}
 
+	// Drain and stop the email delivery queue. StopQueue drains messages
+	// already accepted before workers exit (AI.md PART 17: queue shutdown).
+	if s.mailer != nil {
+		s.mailer.StopQueue()
+	}
+
 	// Stop Tor service
 	if s.torService != nil {
-		s.torService.StopTorService()
+		if err := s.torService.StopTorService(); err != nil {
+			slog.Warn("failed to stop Tor service during shutdown", "error", err)
+		}
+	}
+
+	// Stop the I2P eepsite manager per AI.md PART 31.2
+	if s.i2pManager != nil {
+		if err := s.i2pManager.Close(); err != nil {
+			slog.Warn("failed to stop I2P service during shutdown", "error", err)
+		}
 	}
 
 	// Stop HTTP->HTTPS redirect server if running
 	if s.redirectServer != nil {
-		s.redirectServer.Shutdown(ctx)
+		if err := s.redirectServer.Shutdown(ctx); err != nil {
+			slog.Warn("failed to stop redirect server", "error", err)
+		}
 	}
 
 	// Remove PID file
@@ -728,7 +980,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	// Close log files
-	s.logManager.Close()
+	if err := s.logManager.Close(); err != nil {
+		slog.Warn("failed to close log manager", "error", err)
+	}
 
 	slog.Info("Server stopped gracefully")
 	return nil
@@ -790,10 +1044,16 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 			data.TorStatus = "starting..."
 		}
 	}
-	// Set HasConsentCookie: skip banner when a valid cookie_consent cookie exists
-	if c, err := r.Cookie("cookie_consent"); err == nil && c.Value != "" {
+	// Set HasConsentCookie: skip banner when a valid cookie_consent cookie exists.
+	// A cookie that is present but unparseable is NOT a valid consent, so the
+	// banner is re-shown and the visitor can choose again (AI.md PART 16).
+	consent := consentFromRequest(r)
+	if consent != nil {
 		data.HasConsentCookie = true
 	}
+	// Analytics injection is gated on the same consent, per AI.md PART 16:
+	// no valid analytics consent means no third-party script in the page.
+	data.TrackingHTML = s.trackingScript(r)
 	// Reflect the CCPA "Do Not Sell" opt-out cookie so the privacy page can render
 	// the correct toggle state (opt-out vs opt-in) without JavaScript.
 	if c, err := r.Cookie("ccpa_opt_out"); err == nil && c.Value == "true" {
@@ -848,7 +1108,9 @@ func (s *Server) createPIDFile() error {
 // removePIDFile removes the PID file
 func (s *Server) removePIDFile() {
 	if s.pidFile != "" {
-		os.Remove(s.pidFile)
+		if err := os.Remove(s.pidFile); err != nil && !os.IsNotExist(err) {
+			slog.Warn("failed to remove server PID file", "error", err)
+		}
 	}
 }
 
@@ -864,6 +1126,9 @@ func (s *Server) csrfProtect(h http.HandlerFunc) http.HandlerFunc {
 // setupRoutes sets up HTTP routes with middleware
 func (s *Server) setupRoutes() http.Handler {
 	r := chi.NewRouter()
+	if s.metrics != nil {
+		r.Use(s.metrics.MetricsMiddleware)
+	}
 	// Store router reference for debug route introspection per AI.md PART 6
 	s.router = r
 	// chi NotFound handler: stdlib mux's "/" matched everything; with chi we
@@ -873,7 +1138,7 @@ func (s *Server) setupRoutes() http.Handler {
 	// Health check endpoints per AI.md PART 13
 	// Canonical route: /server/healthz (content-negotiated HTML/JSON/text)
 	// Root alias (/healthz) is opt-in via server.healthz.root.enabled in server.yml (default: false)
-	// Note: /api/v1/server/healthz and /api/v1/healthz are registered by apiHandler.RegisterRoutes()
+	// Versioned /api/v1/server/healthz and direct /api/healthz are registered by apiHandler.RegisterRoutes().
 	r.HandleFunc("/server/healthz", s.handleHealthz)
 	r.HandleFunc("/server/healthz.txt", s.handleHealthz)
 	if s.config.Server.Healthz.Root.Enabled {
@@ -882,6 +1147,11 @@ func (s *Server) setupRoutes() http.Handler {
 	}
 	r.HandleFunc("/readyz", s.handleReadyz)
 	r.HandleFunc("/livez", s.handleLivez)
+
+	r.Get("/s/{code}", s.handleQRShortlinkRedirect)
+	if s.config.Server.ImageProxy.Enabled {
+		r.Get("/image-proxy", newImageProxyHandler(s.config.Server.ImageProxy, s.config.Server.SecretKey).ServeHTTP)
+	}
 
 	// Home page (root catch-all)
 	r.HandleFunc("/", s.handleHome)
@@ -894,7 +1164,10 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/alerts/*", s.csrfProtect(s.handleAlertAction))
 
 	// Direct answers (full-page results for type:term queries per IDEA.md)
-	r.HandleFunc("/direct/*", s.handleDirect)
+	r.HandleFunc("/direct/cache-download", s.handleCacheDownload)
+	r.HandleFunc("/direct/cache-download-archive-today", s.handleArchiveTodayDownload)
+	r.HandleFunc("/direct/audio", handleDictionaryAudio)
+	r.HandleFunc("/direct/*", s.csrfProtect(s.handleDirect))
 
 	// Autocomplete (per AI.md PART 32 line 28280)
 	r.HandleFunc("/autocomplete", s.handleAutocomplete)
@@ -971,7 +1244,14 @@ func (s *Server) setupRoutes() http.Handler {
 	// action, one route. /preferences/widgets remains for the homepage
 	// widget grid's drag-and-drop reorder, which has no form of its own.
 	r.Post("/server/preferences/widgets", s.csrfProtect(s.handleWidgetOrderSave))
-	r.Post("/server/preferences/general", s.csrfProtect(s.handleGeneralPreferencesSave))
+	r.Post("/server/preferences/token/reveal", s.csrfProtect(s.handleOwnerPrimaryReveal))
+	r.Post("/server/preferences/token/rotate", s.csrfProtect(s.handleOwnerPrimaryRotate))
+	r.Post("/server/preferences/token/restore", s.csrfProtect(s.handleOwnerRestore))
+	r.Post("/server/preferences/tokens", s.csrfProtect(s.handleOwnerLinkedCreate))
+	r.Post("/server/preferences/tokens/{id}/reveal", s.csrfProtect(s.handleOwnerLinkedReveal))
+	r.Post("/server/preferences/tokens/{id}/rotate", s.csrfProtect(s.handleOwnerLinkedRotate))
+	r.Post("/server/preferences/tokens/{id}/update", s.csrfProtect(s.handleOwnerLinkedUpdate))
+	r.Post("/server/preferences/tokens/{id}/revoke", s.csrfProtect(s.handleOwnerLinkedRevoke))
 	// Cross-device preference sync (stateless export/import, no CSRF needed - GET only)
 	r.Get("/server/preferences/export", s.handlePreferencesExport)
 	r.Get("/server/preferences/import", s.handlePreferencesImport)
@@ -1009,20 +1289,37 @@ func (s *Server) setupRoutes() http.Handler {
 	// GET /server/docs/graphql → GraphiQL UI (interactive explorer, POSTs to /api/graphql)
 	r.Get("/server/docs/graphql", graphqlpkg.UIHandler(s.config))
 	// POST /api/graphql → GraphQL queries (unversioned alias for current api version)
-	r.Post("/api/graphql", graphqlpkg.QueryHandler(s.config))
+	graphqlDependencies := graphqlpkg.Dependencies{
+		Aggregator:   s.aggregator,
+		Direct:       s.directManager,
+		Instant:      s.instantManager,
+		StartedAt:    s.startTime,
+		Autocomplete: s.apiHandler.AutocompleteSuggestions,
+		RelatedSearches: func(ctx context.Context, query string, limit int) ([]string, error) {
+			return s.relatedSearches.GetRelated(ctx, query, limit)
+		},
+		Widgets:           s.widgetManager,
+		API:               s.apiHandler,
+		ServerInfo:        s.apiHandler.Info,
+		GeoIPLookup:       s.apiHandler.LookupGeoIP,
+		OperatorStatus:    s.apiHandler.OperatorServerStatus,
+		OperatorConfig:    s.apiHandler.OperatorServerConfig,
+		Preferences:       func() interface{} { return s.apiHandler.PreferenceSchema() },
+		SavePreferences:   func() interface{} { return s.apiHandler.SavePreferences() },
+		EngineInventory:   s.apiHandler.EngineInventory,
+		ThumbnailRewriter: s.apiHandler.RewriteThumbnail,
+	}
+	r.Post("/api/graphql", graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies))
 	// POST /api/{api_version}/server/graphql → GraphQL queries (versioned canonical)
-	r.Post(api.APIPrefix+"/server/graphql", graphqlpkg.QueryHandler(s.config))
+	r.Post(api.APIPrefix+"/server/graphql", graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies))
 
 	// OpenAPI/Swagger routes
 	s.apiHandler.RegisterOpenAPIRoutes(r)
 
-	// Metrics endpoint (Prometheus-compatible)
+	// Metrics endpoints (Prometheus/Grafana/Loki) per AI.md PART 20 —
+	// every alias invokes the same handler, never a redirect.
 	if s.config.Server.Metrics.Enabled {
-		metricsPath := s.config.Server.Metrics.Endpoint
-		if metricsPath == "" {
-			metricsPath = "/server/metrics"
-		}
-		r.HandleFunc(metricsPath, s.metrics.AuthenticatedHandler())
+		s.registerMetricsRoutes(r)
 	}
 
 	// Debug endpoints (DEBUG=true only)
@@ -1083,8 +1380,8 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	lastMod := time.Now().Format("2006-01-02")
 
 	// XML header
-	fmt.Fprintln(w, `<?xml version="1.0" encoding="UTF-8"?>`)
-	fmt.Fprintln(w, `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`)
+	writeResponseText(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	writeResponseText(w, "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
 
 	// Define sitemap entries with priority and change frequency
 	type sitemapEntry struct {
@@ -1100,7 +1397,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/privacy", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
 		{"/server/terms", "0.3", "monthly"},
-		{"/openapi", "0.4", "weekly"},
+		{"/server/docs/swagger", "0.4", "weekly"},
 		{"/server/docs/graphql", "0.4", "weekly"},
 		{"/server/healthz", "0.2", "always"},
 	}
@@ -1112,15 +1409,15 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 	// Write each URL entry
 	for _, entry := range entries {
-		fmt.Fprintln(w, "  <url>")
-		fmt.Fprintf(w, "    <loc>%s%s</loc>\n", baseURL, entry.loc)
-		fmt.Fprintf(w, "    <lastmod>%s</lastmod>\n", lastMod)
-		fmt.Fprintf(w, "    <changefreq>%s</changefreq>\n", entry.changefreq)
-		fmt.Fprintf(w, "    <priority>%s</priority>\n", entry.priority)
-		fmt.Fprintln(w, "  </url>")
+		writeResponseText(w, "  <url>\n")
+		writeResponseText(w, fmt.Sprintf("    <loc>%s%s</loc>\n", baseURL, entry.loc))
+		writeResponseText(w, fmt.Sprintf("    <lastmod>%s</lastmod>\n", lastMod))
+		writeResponseText(w, fmt.Sprintf("    <changefreq>%s</changefreq>\n", entry.changefreq))
+		writeResponseText(w, fmt.Sprintf("    <priority>%s</priority>\n", entry.priority))
+		writeResponseText(w, "  </url>\n")
 	}
 
-	fmt.Fprintln(w, `</urlset>`)
+	writeResponseText(w, "</urlset>\n")
 }
 
 // handleSearch handles search requests
@@ -1129,7 +1426,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 // localStorage preference, consistent with other client-side widget
 // preferences) overrides the operator-configured server default.
 func (s *Server) resolveUnits(r *http.Request) string {
-	if c, err := r.Cookie("units"); err == nil {
+	if c, err := r.Cookie("search_pref_units"); err == nil {
 		if c.Value == "metric" || c.Value == "imperial" {
 			return c.Value
 		}
@@ -1140,11 +1437,24 @@ func (s *Server) resolveUnits(r *http.Request) string {
 	return "imperial"
 }
 
+func (s *Server) resolveWeatherUnits(r *http.Request) string {
+	if c, err := r.Cookie("search_widget_weather_units"); err == nil {
+		if c.Value == "auto" || c.Value == "metric" || c.Value == "imperial" {
+			return c.Value
+		}
+	}
+	return "auto"
+}
+
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	prefs := parseSearchPreferences(r.URL.Query().Get("prefs"))
 
 	// Sanitize and validate input
 	queryStr := sanitizeInput(strings.TrimSpace(r.URL.Query().Get("q")))
+	if queryStr == "" {
+		queryStr = buildAdvancedSearchQuery(r.URL.Query())
+	}
+	queryStr = appendDirectoryFilterParams(queryStr, r.URL.Query())
 	categoryParam := sanitizeInput(strings.TrimSpace(r.URL.Query().Get("category")))
 	category := prefs.DefaultCategory.String()
 	if category == "" {
@@ -1207,7 +1517,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		answerType, term := s.directManager.Parse(queryStr)
 		if answerType != "" {
 			// Redirect to direct answer page
-			http.Redirect(w, r, "/direct/"+string(answerType)+"/"+url.PathEscape(term), http.StatusFound)
+			target := "/direct/" + string(answerType) + "/" + url.PathEscape(term)
+			if language := firstNonEmptyQueryValue(r.URL.Query(), "lang", "as_lang"); language != "" {
+				target += "?lang=" + url.QueryEscape(language)
+			}
+			http.Redirect(w, r, target, http.StatusFound)
 			return
 		}
 	}
@@ -1234,6 +1548,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// cookie (set from the visitor's localStorage preference) overrides the
 	// operator-configured server default.
 	ctx = instant.WithUnits(ctx, s.resolveUnits(r))
+	ctx = instant.WithWeatherUnits(ctx, s.resolveWeatherUnits(r))
 
 	// Check for instant answers first (only for general category)
 	var instantAnswer *instant.Answer
@@ -1250,6 +1565,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query.Page = page
 	query.PerPage = perPage
 	query.SafeSearch = safeSearch
+	query.Language = firstNonEmptyQueryValue(r.URL.Query(), "lang", "as_lang")
+	if query.Language == "" {
+		query.Language = s.getI18nManager().DetectLanguage(r)
+	}
+	query.Region = firstNonEmptyQueryValue(r.URL.Query(), "region", "as_region")
+	query.TimeRange = firstNonEmptyQueryValue(r.URL.Query(), "time_range", "as_time")
+	query.DateAfter = strings.TrimSpace(r.URL.Query().Get("time_from"))
+	query.DateBefore = strings.TrimSpace(r.URL.Query().Get("time_to"))
 
 	results, err := s.aggregator.Search(ctx, query)
 
@@ -1257,13 +1580,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		// For HTTP tools, render the error as plain text
 		if httputil.IsHttpTool(r) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			fmt.Fprintf(w, "Search error: %v\n", err)
+			writeResponseFormatted(w, "Search error: %v\n", err)
 			return
 		}
 		// For our CLI, encode the error as JSON
 		if httputil.IsOurCliClient(r) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			fmt.Fprintf(w, `{"ok":false,"error":"SEARCH_ERROR","message":%q}`+"\n", err.Error())
+			writeResponseFormatted(w, `{"ok":false,"error":"SEARCH_ERROR","message":%q}`+"\n", err.Error())
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1298,27 +1621,105 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	s.renderSearchResultsWithInstant(w, r, queryStr, results, category, instantAnswer)
 }
 
+var advancedSearchFileTypePattern = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+
+func firstNonEmptyQueryValue(parameters url.Values, names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(parameters.Get(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func buildAdvancedSearchQuery(parameters url.Values) string {
+	parts := make([]string, 0, 6)
+	if value := strings.TrimSpace(sanitizeInput(parameters.Get("as_allwords"))); value != "" {
+		parts = append(parts, value)
+	}
+	if value := strings.TrimSpace(sanitizeInput(parameters.Get("as_exactphrase"))); value != "" {
+		parts = append(parts, `"`+value+`"`)
+	}
+	if value := strings.TrimSpace(sanitizeInput(parameters.Get("as_anywords"))); value != "" {
+		words := strings.Fields(value)
+		if len(words) > 0 {
+			parts = append(parts, "("+strings.Join(words, " OR ")+")")
+		}
+	}
+	if value := strings.TrimSpace(sanitizeInput(parameters.Get("as_nonewords"))); value != "" {
+		words := strings.Fields(value)
+		for index := range words {
+			words[index] = "-" + strings.TrimLeft(words[index], "-")
+		}
+		parts = append(parts, strings.Join(words, " "))
+	}
+	if value := strings.TrimSpace(sanitizeInput(parameters.Get("as_site"))); value != "" && !strings.ContainsAny(value, " \t\r\n") {
+		parts = append(parts, "site:"+strings.TrimPrefix(value, "site:"))
+	}
+	if value := strings.ToLower(strings.TrimSpace(parameters.Get("as_filetype"))); advancedSearchFileTypePattern.MatchString(value) {
+		parts = append(parts, "filetype:"+value)
+	}
+	return strings.Join(parts, " ")
+}
+
+func appendDirectoryFilterParams(query string, parameters url.Values) string {
+	if !strings.HasPrefix(strings.ToLower(query), "directory:") {
+		return query
+	}
+	for _, filter := range []struct{ parameter, operator string }{
+		{"directory_type", "type"},
+		{"directory_min_size", "min-size"},
+		{"directory_after", "after"},
+		{"directory_before", "before"},
+		{"directory_site", "site"},
+		{"directory_scan", "scan"},
+	} {
+		value := sanitizeInput(strings.TrimSpace(parameters.Get(filter.parameter)))
+		if value != "" && !strings.ContainsAny(value, " \t\r\n") {
+			query += " " + filter.operator + ":" + value
+		}
+	}
+	return query
+}
+
 // handleDirect handles direct answer requests
 // URL format: /direct/{type}/{term}
 func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
-	// Only allow GET requests
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		s.handleError(w, r, http.StatusMethodNotAllowed, i18n.RequestString(r, "errors.method_not_allowed_title"), i18n.RequestString(r, "errors.method_not_allowed_message"))
 		return
 	}
 
 	// Parse path: /direct/{type}/{term}
-	path := strings.TrimPrefix(r.URL.Path, "/direct/")
+	requestPath := strings.SplitN(r.RequestURI, "?", 2)[0]
+	if requestPath == "" {
+		requestPath = r.URL.EscapedPath()
+	}
+	path := strings.TrimPrefix(requestPath, "/direct/")
 	parts := strings.SplitN(path, "/", 2)
-	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+	if len(parts) < 1 || parts[0] == "" {
 		s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.invalid_request_direct"))
 		return
 	}
 
 	answerType := direct.AnswerType(parts[0])
-	term, err := url.PathUnescape(parts[1])
-	if err != nil {
-		term = parts[1]
+	if r.Method == http.MethodPost && answerType != direct.AnswerTypeQR {
+		s.handleError(w, r, http.StatusMethodNotAllowed, i18n.RequestString(r, "errors.method_not_allowed_title"), i18n.RequestString(r, "errors.method_not_allowed_message"))
+		return
+	}
+	var term string
+	var err error
+	if len(parts) < 2 || parts[1] == "" {
+		if answerType != direct.AnswerTypeQR {
+			s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.invalid_request_direct"))
+			return
+		}
+		term = r.URL.Query().Get("url")
+	} else {
+		term, err = url.PathUnescape(parts[1])
+		if err != nil {
+			term = parts[1]
+		}
 	}
 	term = strings.TrimSpace(term)
 
@@ -1339,16 +1740,185 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	// handlers can render unit-bearing fields (area, distance, etc.) using
 	// the visitor's preference instead of a hardcoded unit.
 	ctx = direct.WithUnits(ctx, s.resolveUnits(r))
+	ctx = direct.WithGeoIPLookup(ctx, s.geoipLookup)
+	if answerType == direct.AnswerTypeQR {
+		var logo []byte
+		if r.Method == http.MethodPost {
+			r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+			if err := r.ParseMultipartForm(2 << 20); err != nil {
+				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), "Invalid QR customization form")
+				return
+			}
+			if r.MultipartForm != nil {
+				defer func() {
+					if err := r.MultipartForm.RemoveAll(); err != nil {
+						slog.Warn("failed to remove multipart form temp files", "error", err)
+					}
+				}()
+			}
+			file, _, fileErr := r.FormFile("logo")
+			if fileErr == nil {
+				logo, err = io.ReadAll(io.LimitReader(file, (1<<20)+1))
+				_ = file.Close()
+				if err != nil || len(logo) > 1<<20 || qr.ValidateLogo(logo) != nil {
+					s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), "QR logo must be a PNG or JPEG image no larger than 512 by 512 pixels and 1 MiB")
+					return
+				}
+			} else if !errors.Is(fileErr, http.ErrMissingFile) {
+				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), "Invalid QR logo upload")
+				return
+			}
+		}
+		query := r.URL.Query()
+		getOption := func(key string) string {
+			if r.Method == http.MethodPost {
+				if r.MultipartForm != nil {
+					if values := r.MultipartForm.Value[key]; len(values) > 0 {
+						return values[0]
+					}
+				}
+				return r.PostFormValue(key)
+			}
+			return query.Get(key)
+		}
+		options := direct.QROptions{Size: 256, Level: "M", Foreground: "#000000", Background: "#FFFFFF", Logo: logo, CSRFToken: s.getCSRFToken(w, r)}
+		if r.Method == http.MethodGet {
+			options.FormAction = "/direct/qr?url=" + url.QueryEscape(term)
+		}
+		switch getOption("size") {
+		case "S":
+			options.Size = 128
+		case "L":
+			options.Size = 512
+		case "XL":
+			options.Size = 1024
+		case "M", "":
+		}
+		if level := strings.ToUpper(getOption("level")); level == "L" || level == "M" || level == "Q" || level == "H" {
+			options.Level = level
+		}
+		if foreground := getOption("foreground"); qr.ValidColor(foreground) {
+			options.Foreground = foreground
+		}
+		if background := getOption("background"); qr.ValidColor(background) {
+			options.Background = background
+		}
+		if config.IsTruthy(getOption("shorten_url")) {
+			code, shortErr := s.createQRShortlink(ctx, term)
+			if shortErr != nil {
+				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), shortErr.Error())
+				return
+			}
+			term = s.getBaseURL(r) + "/s/" + code
+			options.ShortURL = term
+		}
+		ctx = direct.WithQROptions(ctx, options)
+	}
+	if answerType == direct.AnswerTypeCache {
+		ctx = direct.WithArchiveSnapshot(ctx, r.URL.Query().Get("snapshot"))
+		ctx = direct.WithArchiveSnapshotIndex(ctx, r.URL.Query().Get("snapshot_index"))
+		ctx = direct.WithArchiveSnapshotID(ctx, r.URL.Query().Get("snapshot_id"))
+	}
 
 	// Process the direct answer
 	answer, err := s.directManager.ProcessType(ctx, answerType, term)
 	if err != nil {
+		if answerType == direct.AnswerTypeQR {
+			s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), err.Error())
+			return
+		}
 		s.handleInternalError(w, r, "direct answer processing", err)
 		return
 	}
 
 	// Render the direct answer page
+	if answer != nil && answer.Type == direct.AnswerTypeWiki {
+		answer.Content = s.proxyWikipediaImageSources(answer.Content)
+	}
 	s.renderDirectAnswer(w, r, answer)
+}
+
+func (s *Server) handleCacheDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	query := r.URL.Query()
+	original := query.Get("url")
+	parsed, err := url.Parse(original)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+		return
+	}
+	filename := query.Get("filename")
+	if !strings.HasPrefix(filename, "crawl-data/") || strings.Contains(filename, "..") || strings.ContainsAny(filename, "\\?#") {
+		http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+		return
+	}
+	offset, offsetErr := strconv.ParseInt(query.Get("offset"), 10, 64)
+	length, lengthErr := strconv.ParseInt(query.Get("length"), 10, 64)
+	if offsetErr != nil || lengthErr != nil || offset < 0 || length <= 0 || length > 20<<20 || offset > int64(^uint64(0)>>1)-length+1 {
+		http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	body, contentType, err := direct.NewCacheHandler().DownloadCommonCrawlRecord(ctx, parsed.String(), filename, offset, length)
+	if err != nil {
+		slog.Warn("Common Crawl archive download failed", "err", err)
+		http.Error(w, "Archived capture is unavailable", http.StatusBadGateway)
+		return
+	}
+	if strings.HasPrefix(strings.ToLower(contentType), "text/html") {
+		w.Header().Set("Content-Disposition", `attachment; filename="archive-capture.html"`)
+	} else {
+		w.Header().Set("Content-Disposition", `attachment; filename="archive-capture.txt"`)
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+func (s *Server) handleArchiveTodayDownload(w http.ResponseWriter, r *http.Request) {
+	handleArchiveTodayDownload(w, r, direct.NewCacheHandler().DownloadArchiveTodaySnapshot)
+}
+
+func handleArchiveTodayDownload(w http.ResponseWriter, r *http.Request, download func(context.Context, string, string, string) ([]byte, string, error)) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	query := r.URL.Query()
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	body, contentType, err := download(ctx, query.Get("url"), query.Get("timestamp"), query.Get("snapshot_url"))
+	if err != nil {
+		if errors.Is(err, direct.ErrInvalidArchiveTodaySnapshot) {
+			http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+			return
+		}
+		slog.Warn("archive.today download failed", "err", err)
+		http.Error(w, "Archived capture is unavailable", http.StatusBadGateway)
+		return
+	}
+	filename := "archive-capture.txt"
+	if strings.HasPrefix(strings.ToLower(contentType), "text/html") {
+		filename = "archive-capture.html"
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }
 
 // renderDirectAnswer renders a direct answer page
@@ -1401,20 +1971,20 @@ func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Build minimal HTML5 page
-	fmt.Fprint(w, `<!DOCTYPE html>
+	writeResponseText(w, `<!DOCTYPE html>
 <html lang="`)
-	fmt.Fprint(w, html.EscapeString(baseData.Lang))
-	fmt.Fprint(w, `" dir="`)
-	fmt.Fprint(w, html.EscapeString(baseData.Dir))
-	fmt.Fprint(w, `">
+	writeResponseText(w, html.EscapeString(baseData.Lang))
+	writeResponseText(w, `" dir="`)
+	writeResponseText(w, html.EscapeString(baseData.Dir))
+	writeResponseText(w, `">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>`)
-	fmt.Fprint(w, html.EscapeString(answer.Title))
-	fmt.Fprint(w, ` - `)
-	fmt.Fprint(w, html.EscapeString(appName))
-	fmt.Fprint(w, `</title>
+	writeResponseText(w, html.EscapeString(answer.Title))
+	writeResponseText(w, ` - `)
+	writeResponseText(w, html.EscapeString(appName))
+	writeResponseText(w, `</title>
 <style>
 :root{--bg:#0f0f0f;--fg:#e0e0e0;--accent:#4a9eff;--surface:#1a1a1a;--border:#2a2a2a;--code-bg:#1e1e1e}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1448,54 +2018,54 @@ footer a{color:var(--accent);text-decoration:none}
 <div class="container">
 <header>
 <h1><span class="answer-type">`)
-	fmt.Fprint(w, html.EscapeString(string(answer.Type)))
-	fmt.Fprint(w, `</span>`)
-	fmt.Fprint(w, html.EscapeString(answer.Title))
-	fmt.Fprint(w, `</h1>
+	writeResponseText(w, html.EscapeString(string(answer.Type)))
+	writeResponseText(w, `</span>`)
+	writeResponseText(w, html.EscapeString(answer.Title))
+	writeResponseText(w, `</h1>
 <div class="meta">`)
 	if answer.Description != "" {
-		fmt.Fprint(w, html.EscapeString(answer.Description))
+		writeResponseText(w, html.EscapeString(answer.Description))
 	}
-	fmt.Fprint(w, `</div>
+	writeResponseText(w, `</div>
 </header>
 <main>
 <div class="content`)
 	if answer.Error != "" {
-		fmt.Fprint(w, ` error`)
+		writeResponseText(w, ` error`)
 	}
-	fmt.Fprint(w, `">`)
+	writeResponseText(w, `">`)
 	// Content is already HTML formatted by handlers
-	fmt.Fprint(w, answer.Content)
-	fmt.Fprint(w, `</div>`)
+	writeResponseText(w, answer.Content)
+	writeResponseText(w, `</div>`)
 	if answer.Source != "" || answer.SourceURL != "" {
-		fmt.Fprint(w, `<div class="source">`)
-		fmt.Fprint(w, html.EscapeString(t("direct.source_label")))
-		fmt.Fprint(w, ` `)
+		writeResponseText(w, `<div class="source">`)
+		writeResponseText(w, html.EscapeString(t("direct.source_label")))
+		writeResponseText(w, ` `)
 		if answer.SourceURL != "" {
-			fmt.Fprint(w, `<a href="`)
-			fmt.Fprint(w, html.EscapeString(answer.SourceURL))
-			fmt.Fprint(w, `" rel="noopener noreferrer">`)
+			writeResponseText(w, `<a href="`)
+			writeResponseText(w, html.EscapeString(answer.SourceURL))
+			writeResponseText(w, `" rel="noopener noreferrer">`)
 			if answer.Source != "" {
-				fmt.Fprint(w, html.EscapeString(answer.Source))
+				writeResponseText(w, html.EscapeString(answer.Source))
 			} else {
-				fmt.Fprint(w, html.EscapeString(answer.SourceURL))
+				writeResponseText(w, html.EscapeString(answer.SourceURL))
 			}
-			fmt.Fprint(w, `</a>`)
+			writeResponseText(w, `</a>`)
 		} else {
-			fmt.Fprint(w, html.EscapeString(answer.Source))
+			writeResponseText(w, html.EscapeString(answer.Source))
 		}
-		fmt.Fprint(w, `</div>`)
+		writeResponseText(w, `</div>`)
 	}
-	fmt.Fprint(w, `
+	writeResponseText(w, `
 </main>
 <footer>
 <a href="`)
-	fmt.Fprint(w, baseURL)
-	fmt.Fprint(w, `/">`)
-	fmt.Fprint(w, html.EscapeString(appName))
-	fmt.Fprint(w, `</a> &middot; `)
-	fmt.Fprint(w, html.EscapeString(t("direct.footer_label")))
-	fmt.Fprint(w, `
+	writeResponseText(w, baseURL)
+	writeResponseText(w, `/">`)
+	writeResponseText(w, html.EscapeString(appName))
+	writeResponseText(w, `</a> &middot; `)
+	writeResponseText(w, html.EscapeString(t("direct.footer_label")))
+	writeResponseText(w, `
 </footer>
 </div>
 </body>
@@ -1543,22 +2113,62 @@ func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query
 // Used by renderSearchResultsWithInstant, renderNoJSSearch, and renderHTMLToText.
 func (s *Server) buildSearchPageData(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) *SearchPageData {
 	safeSearch, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("safe_search")))
+	s.prepareInstantWikipediaAnswer(instantAnswer)
+	filters := make(url.Values)
+	for name, value := range map[string]string{
+		"lang":       firstNonEmptyQueryValue(r.URL.Query(), "lang", "as_lang"),
+		"region":     firstNonEmptyQueryValue(r.URL.Query(), "region", "as_region"),
+		"time_range": firstNonEmptyQueryValue(r.URL.Query(), "time_range", "as_time"),
+		"time_from":  strings.TrimSpace(r.URL.Query().Get("time_from")),
+		"time_to":    strings.TrimSpace(r.URL.Query().Get("time_to")),
+	} {
+		if value != "" {
+			filters.Set(name, value)
+		}
+	}
+	for _, name := range []string{"engines", "exclude_engines"} {
+		for _, value := range r.URL.Query()[name] {
+			if value = strings.TrimSpace(value); value != "" {
+				filters.Add(name, value)
+			}
+		}
+	}
 
 	baseData := s.newPageData(w, r, query, "search")
 	baseData.Description = fmt.Sprintf("Search results for: %s", query)
 	baseData.Query = query
 	baseData.Category = category
 
+	pageResults := append([]model.Result(nil), results.GetPage(results.Page)...)
+	if s.config.Server.ImageProxy.Enabled {
+		for i := range pageResults {
+			if pageResults[i].Thumbnail != "" {
+				pageResults[i].Thumbnail = s.proxyImageURL(pageResults[i].Thumbnail)
+			}
+			if pageResults[i].ImageURL == "" && pageResults[i].Metadata != nil {
+				pageResults[i].ImageURL, _ = pageResults[i].Metadata["full_image"].(string)
+			}
+			if pageResults[i].ImageURL != "" {
+				pageResults[i].ImageURL = s.proxyImageURL(pageResults[i].ImageURL)
+			}
+		}
+	}
 	data := &SearchPageData{
 		PageData:      *baseData,
 		Query:         query,
 		Category:      category,
-		Results:       results.GetPage(results.Page),
+		Results:       pageResults,
 		TotalResults:  results.TotalResults,
 		SearchTime:    results.SearchTime,
 		Engines:       results.Engines,
 		PerPage:       results.PerPage,
 		SafeSearch:    safeSearch,
+		Language:      firstNonEmptyQueryValue(r.URL.Query(), "lang", "as_lang"),
+		Region:        firstNonEmptyQueryValue(r.URL.Query(), "region", "as_region"),
+		TimeRange:     firstNonEmptyQueryValue(r.URL.Query(), "time_range", "as_time"),
+		TimeFrom:      strings.TrimSpace(r.URL.Query().Get("time_from")),
+		TimeTo:        strings.TrimSpace(r.URL.Query().Get("time_to")),
+		FilterQuery:   filters.Encode(),
 		InstantAnswer: instantAnswer,
 	}
 
@@ -1593,7 +2203,7 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.R
 // renderSearchResultsInline is a fallback for when templates fail
 func (s *Server) renderSearchResultsInline(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string) {
 	baseData := s.newPageData(w, r, query, "search")
-	fmt.Fprintf(w, `<!DOCTYPE html>
+	writeResponseFormatted(w, `<!DOCTYPE html>
 <html lang="%s" dir="%s" class="theme-%s">
 <head>
     <meta charset="UTF-8">
@@ -1618,7 +2228,7 @@ func (s *Server) renderSearchResultsInline(w http.ResponseWriter, r *http.Reques
 		if i >= 20 {
 			break
 		}
-		fmt.Fprintf(w, `
+		writeResponseFormatted(w, `
         <article class="result">
             <h3><a href="%s" target="_blank">%s</a></h3>
             <p>%s</p>
@@ -1629,7 +2239,7 @@ func (s *Server) renderSearchResultsInline(w http.ResponseWriter, r *http.Reques
 		)
 	}
 
-	fmt.Fprintf(w, `
+	writeResponseFormatted(w, `
     </main>
 </body>
 </html>`)

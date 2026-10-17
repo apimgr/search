@@ -32,7 +32,7 @@ func TestCleanTrackingNumber(t *testing.T) {
 			}
 			// All results must contain only uppercase letters and digits
 			for _, c := range got {
-				if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+				if (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 					t.Errorf("cleanTrackingNumber(%q) result %q contains non-alphanumeric char %q", tt.input, got, c)
 				}
 			}
@@ -80,7 +80,7 @@ func TestCleanTrackingNumberProperties(t *testing.T) {
 		got := cleanTrackingNumber("1Z 999 AA1 01 2345 678")
 		// Verify only alphanumerics remain and they are uppercased
 		for _, c := range got {
-			if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			if (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 				t.Errorf("cleanTrackingNumber result contains non-alphanumeric char %q in %q", c, got)
 			}
 		}

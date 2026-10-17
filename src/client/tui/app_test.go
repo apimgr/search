@@ -192,9 +192,10 @@ func TestModelUpdateQuit(t *testing.T) {
 	for _, key := range keys {
 		t.Run(key, func(t *testing.T) {
 			msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
-			if key == "ctrl+c" {
+			switch key {
+			case "ctrl+c":
 				msg = tea.KeyMsg{Type: tea.KeyCtrlC}
-			} else if key == "q" {
+			case "q":
 				msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
 			}
 
@@ -247,6 +248,9 @@ func TestModelUpdateEnterWithoutQuery(t *testing.T) {
 	}
 }
 
+// Esc is two-stage (AI.md PART 32 "back": "escape"): the first press blurs the
+// input so the user can browse results, and the second press clears the
+// search state and returns focus to the input.
 func TestModelUpdateEsc(t *testing.T) {
 	client := &api.Client{}
 	m := initialModel(client, false)
@@ -254,18 +258,34 @@ func TestModelUpdateEsc(t *testing.T) {
 	m.results = []api.SearchResult{{Title: "Test"}}
 	m.err = &testError{msg: "test error"}
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
-	newModel, _ := m.Update(msg)
+	// First Esc: leave the input, but keep the query, results and error so
+	// the user can browse what they just searched for.
+	blurred, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	blurredModel := blurred.(model)
+	if blurredModel.inputFocused {
+		t.Error("first Esc should blur the input")
+	}
+	if blurredModel.input.Value() != "test" {
+		t.Errorf("first Esc should keep the query, got %q", blurredModel.input.Value())
+	}
+	if len(blurredModel.results) != 1 {
+		t.Errorf("first Esc should keep results, got %d", len(blurredModel.results))
+	}
 
-	updatedModel := newModel.(model)
-	if updatedModel.input.Value() != "" {
-		t.Error("Esc should clear input")
+	// Second Esc: clear the search state and refocus for a new query.
+	cleared, _ := blurredModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	clearedModel := cleared.(model)
+	if clearedModel.input.Value() != "" {
+		t.Error("second Esc should clear input")
 	}
-	if updatedModel.results != nil {
-		t.Error("Esc should clear results")
+	if clearedModel.results != nil {
+		t.Error("second Esc should clear results")
 	}
-	if updatedModel.err != nil {
-		t.Error("Esc should clear error")
+	if clearedModel.err != nil {
+		t.Error("second Esc should clear error")
+	}
+	if !clearedModel.inputFocused {
+		t.Error("second Esc should return focus to the input")
 	}
 }
 
@@ -508,7 +528,7 @@ func TestModelViewWithError(t *testing.T) {
 
 func TestRunFunctionExists(t *testing.T) {
 	// Just verify the RunTUIApp function exists and has correct signature
-	var runFunc func(*api.Client, string, bool) error = RunTUIApp
+	var runFunc = RunTUIApp
 	// A function value assigned from a known function is never nil;
 	// verify via reflect that the assignment compiled successfully
 	_ = runFunc
@@ -564,17 +584,22 @@ func TestModelInputValue(t *testing.T) {
 	}
 }
 
+// Esc clears the input once the model is already browsing (input blurred),
+// which is the second stage of the back binding.
 func TestModelInputClearOnEsc(t *testing.T) {
 	client := &api.Client{}
 	m := initialModel(client, false)
 	m.input.SetValue("test")
+	m.inputFocused = false
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
-	newModel, _ := m.Update(msg)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	updatedModel := newModel.(model)
 	if updatedModel.input.Value() != "" {
-		t.Error("input should be cleared on Esc")
+		t.Error("input should be cleared on Esc while browsing results")
+	}
+	if !updatedModel.inputFocused {
+		t.Error("clearing with Esc should refocus the input for the next query")
 	}
 }
 
@@ -623,12 +648,26 @@ func TestModelStateTransitions(t *testing.T) {
 		t.Error("After results: should have results")
 	}
 
-	// Press Esc to clear
+	// First Esc leaves the input so the results can be browsed.
 	escMsg := tea.KeyMsg{Type: tea.KeyEsc}
 	newModel, _ = m.Update(escMsg)
 	m = newModel.(model)
 
+	if m.inputFocused {
+		t.Error("After first Esc: input should no longer be focused")
+	}
+	if len(m.results) != 1 {
+		t.Errorf("After first Esc: results should be kept for browsing, got %d", len(m.results))
+	}
+
+	// Second Esc clears the search state.
+	newModel, _ = m.Update(escMsg)
+	m = newModel.(model)
+
 	if len(m.results) != 0 {
-		t.Error("After Esc: results should be cleared")
+		t.Error("After second Esc: results should be cleared")
+	}
+	if m.input.Value() != "" {
+		t.Errorf("After second Esc: input should be cleared, got %q", m.input.Value())
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"os/user"
 	"strconv"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // GetServiceUser returns the service user name for Linux (matches the service name).
@@ -61,7 +63,7 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 
 	// Create user per AI.md PART 23: home dir is config dir /etc/{org}/{name},
 	// shell is /sbin/nologin (Linux), GID must be numeric.
-	homeDir := "/etc/apimgr/" + name
+	homeDir := "/etc/" + config.InternalOrg + "/" + name
 	cmd = exec.Command("useradd", "--system",
 		"--uid", strconv.Itoa(id),
 		"--gid", strconv.Itoa(id),
@@ -80,4 +82,28 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 		Home:  homeDir,
 		Shell: "/sbin/nologin",
 	}, nil
+}
+
+// DeleteSystemUser removes the Linux system user and group created by the
+// server. Per AI.md PART 23 uninstall: userdel/groupdel are the inverse of the
+// groupadd/useradd creation commands.
+func DeleteSystemUser(name string) error {
+	// userdel also removes any lingering membership references.
+	if err := exec.Command("userdel", "--remove", name).Run(); err != nil {
+		if _, lookErr := user.Lookup(name); lookErr != nil {
+			// User no longer exists — treat as deleted.
+			if _, grpErr := user.LookupGroup(name); grpErr != nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	// userdel removes a same-named primary group automatically; clean up
+	// leftovers (e.g. user pre-existed before install).
+	if err := exec.Command("groupdel", name).Run(); err != nil {
+		if _, grpErr := user.LookupGroup(name); grpErr == nil {
+			return fmt.Errorf("failed to delete group: %w", err)
+		}
+	}
+	return nil
 }

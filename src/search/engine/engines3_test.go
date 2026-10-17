@@ -81,10 +81,8 @@ func TestBaiduParseResultsMaxResultsCap(t *testing.T) {
 	// Build more entries than the default maxResults (10)
 	var sb strings.Builder
 	for i := 0; i < 15; i++ {
-		sb.WriteString(fmt.Sprintf(
-			`<div mu="https://example%d.com/"><h3 class="c-title">Title %d</h3><div class="c-abstract">Snippet %d</div></div>`,
-			i, i, i,
-		))
+		fmt.Fprintf(&sb, `<div mu="https://example%d.com/"><h3 class="c-title">Title %d</h3><div class="c-abstract">Snippet %d</div></div>`,
+			i, i, i)
 	}
 
 	results, err := engine.parseResults(sb.String(), model.CategoryGeneral)
@@ -341,10 +339,8 @@ func TestBraveParseResultsMaxResultsCap(t *testing.T) {
 	// Build more snippets than the default maxResults (10)
 	var sb strings.Builder
 	for i := 0; i < 15; i++ {
-		sb.WriteString(fmt.Sprintf(
-			`<div class="snippet svelte-jmfu5f" data-pos="%d" data-type="web"><a href="https://example%d.com"><div class="title search-snippet-title" title="Title %d">Title %d</div></a><div class="content">Desc %d</div></div>`,
-			i, i, i, i, i,
-		))
+		fmt.Fprintf(&sb, `<div class="snippet svelte-jmfu5f" data-pos="%d" data-type="web"><a href="https://example%d.com"><div class="title search-snippet-title" title="Title %d">Title %d</div></a><div class="content">Desc %d</div></div>`,
+			i, i, i, i, i)
 	}
 
 	results, err := engine.parseResults(sb.String(), model.CategoryGeneral)

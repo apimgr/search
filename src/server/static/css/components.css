@@ -10,7 +10,7 @@ dialog.modal {
     padding: 0;
     max-width: 95vw;
     margin: 1rem;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 40px var(--color-shadow);
     background: var(--color-bg-active);
     color: var(--color-text);
 }
@@ -24,7 +24,7 @@ dialog.modal {
 }
 
 dialog.modal::backdrop {
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--color-overlay);
     backdrop-filter: blur(3px);
 }
 
@@ -62,7 +62,7 @@ dialog.modal .modal-close {
 }
 
 dialog.modal .modal-close:hover {
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--color-code-bg);
     color: var(--color-text);
 }
 
@@ -87,7 +87,7 @@ dialog.modal .modal-body input {
 dialog.modal .modal-body input:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.15);
+    box-shadow: var(--focus-ring);
 }
 
 dialog.modal .modal-footer {
@@ -324,4 +324,74 @@ dialog.modal .modal-footer {
 
 #offline-indicator.visible {
     transform: translateY(0);
+}
+
+.calendar-result > p {
+    margin: 0 0 1rem;
+}
+
+.calendar-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.calendar-preview {
+    width: min(100%, 21rem);
+    border-collapse: collapse;
+    color: var(--color-text);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.calendar-preview caption {
+    padding: 0.5rem;
+    font-weight: 700;
+}
+
+.calendar-preview th,
+.calendar-preview td {
+    min-width: 2.25rem;
+    padding: 0.35rem;
+    border: 1px solid var(--color-border);
+}
+
+.calendar-preview th {
+    background: var(--color-bg-secondary);
+}
+
+.calendar-preview [aria-current="date"] {
+    background: var(--color-primary);
+    color: var(--color-bg);
+}
+
+@media (max-width: 480px) {
+    .calendar-preview {
+        font-size: 0.75rem;
+    }
+
+    .calendar-preview th,
+    .calendar-preview td {
+        min-width: 1.75rem;
+        padding: 0.25rem;
+    }
+}
+
+.world-clock {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.world-clock ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 0.5rem 1rem;
+    list-style: none;
+    padding: 0;
+}
+
+.world-clock time,
+.world-clock li span {
+    white-space: nowrap;
 }

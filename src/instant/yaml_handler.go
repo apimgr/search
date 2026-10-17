@@ -125,7 +125,9 @@ func (h *YAMLHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		var yamlBuf bytes.Buffer
 		yamlEncoder := yaml.NewEncoder(&yamlBuf)
 		yamlEncoder.SetIndent(2)
-		yamlEncoder.Encode(parsed)
+		if err := yamlEncoder.Encode(parsed); err != nil {
+			return nil, fmt.Errorf("encode YAML output: %w", err)
+		}
 		yamlOutput = strings.TrimSpace(yamlBuf.String())
 
 	case "to-json":
@@ -160,7 +162,9 @@ func (h *YAMLHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		jsonEncoder := json.NewEncoder(&jsonBuf)
 		jsonEncoder.SetIndent("", "  ")
 		jsonEncoder.SetEscapeHTML(false)
-		jsonEncoder.Encode(parsed)
+		if err := jsonEncoder.Encode(parsed); err != nil {
+			return nil, fmt.Errorf("encode JSON output: %w", err)
+		}
 		jsonOutput = strings.TrimSpace(jsonBuf.String())
 
 	default:
@@ -200,14 +204,18 @@ func (h *YAMLHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		var yamlBuf bytes.Buffer
 		yamlEncoder := yaml.NewEncoder(&yamlBuf)
 		yamlEncoder.SetIndent(2)
-		yamlEncoder.Encode(parsed)
+		if err := yamlEncoder.Encode(parsed); err != nil {
+			return nil, fmt.Errorf("encode YAML output: %w", err)
+		}
 		yamlOutput = strings.TrimSpace(yamlBuf.String())
 
 		var jsonBuf bytes.Buffer
 		jsonEncoder := json.NewEncoder(&jsonBuf)
 		jsonEncoder.SetIndent("", "  ")
 		jsonEncoder.SetEscapeHTML(false)
-		jsonEncoder.Encode(parsed)
+		if err := jsonEncoder.Encode(parsed); err != nil {
+			return nil, fmt.Errorf("encode JSON output: %w", err)
+		}
 		jsonOutput = strings.TrimSpace(jsonBuf.String())
 	}
 
@@ -367,7 +375,7 @@ func addYAMLLineNumbers(s string) string {
 	lines := strings.Split(s, "\n")
 	var result strings.Builder
 	for i, line := range lines {
-		result.WriteString(fmt.Sprintf("%3d | %s\n", i+1, line))
+		fmt.Fprintf(&result, "%3d | %s\n", i+1, line)
 	}
 	return result.String()
 }

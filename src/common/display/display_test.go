@@ -490,23 +490,32 @@ func TestDetectColorSupport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear all color-related env vars
-			os.Unsetenv("NO_COLOR")
-			os.Unsetenv("TERM")
-			os.Unsetenv("COLORTERM")
-			os.Unsetenv("FORCE_COLOR")
+			for _, key := range []string{"NO_COLOR", "TERM", "COLORTERM", "FORCE_COLOR"} {
+				if err := os.Unsetenv(key); err != nil {
+					t.Fatalf("Unsetenv(%s): %v", key, err)
+				}
+			}
 
 			// Set specific env vars for this test
 			if tt.noColor != "" {
-				os.Setenv("NO_COLOR", tt.noColor)
+				if err := os.Setenv("NO_COLOR", tt.noColor); err != nil {
+					t.Fatalf("Setenv(NO_COLOR): %v", err)
+				}
 			}
 			if tt.term != "" {
-				os.Setenv("TERM", tt.term)
+				if err := os.Setenv("TERM", tt.term); err != nil {
+					t.Fatalf("Setenv(TERM): %v", err)
+				}
 			}
 			if tt.colorTerm != "" {
-				os.Setenv("COLORTERM", tt.colorTerm)
+				if err := os.Setenv("COLORTERM", tt.colorTerm); err != nil {
+					t.Fatalf("Setenv(COLORTERM): %v", err)
+				}
 			}
 			if tt.forceColor != "" {
-				os.Setenv("FORCE_COLOR", tt.forceColor)
+				if err := os.Setenv("FORCE_COLOR", tt.forceColor); err != nil {
+					t.Fatalf("Setenv(FORCE_COLOR): %v", err)
+				}
 			}
 
 			got := detectColorSupport()

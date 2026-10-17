@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -27,6 +28,7 @@ func NewDefinitionHandler() *DefinitionHandler {
 			regexp.MustCompile(`(?i)^define[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^definition[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^meaning\s+of\s+(.+)$`),
+			regexp.MustCompile(`(?i)^(.+?)\s+definition$`),
 			regexp.MustCompile(`(?i)^what\s+is\s+(.+)\??$`),
 			regexp.MustCompile(`(?i)^what\s+does\s+(.+)\s+mean\??$`),
 		},
@@ -55,7 +57,7 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 	word := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
-			word = strings.TrimSpace(matches[1])
+			word = unquoteDefinitionWord(matches[1])
 			break
 		}
 	}
@@ -78,7 +80,7 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		// Not found — return nil so the caller treats this as no instant answer
@@ -117,37 +119,43 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>%s</strong>", entry.Word))
+	fmt.Fprintf(&content, "<strong>%s</strong>", escapeHTML(entry.Word))
 
 	if entry.Phonetic != "" {
-		content.WriteString(fmt.Sprintf(" <span class=\"phonetic\">%s</span>", entry.Phonetic))
+		fmt.Fprintf(&content, " <span class=\"phonetic\">%s</span>", escapeHTML(entry.Phonetic))
+	}
+	for _, phonetic := range entry.Phonetics {
+		if audioURL := safePronunciationURL(phonetic.Audio); audioURL != "" {
+			fmt.Fprintf(&content, ` <audio controls preload="none" aria-label="Pronunciation of %s" src="%s">Audio pronunciation</audio>`, escapeHTML(entry.Word), escapeHTML(audioURL))
+			break
+		}
 	}
 
 	content.WriteString("<br><br>")
 
 	for _, meaning := range entry.Meanings {
-		content.WriteString(fmt.Sprintf("<em>%s</em><br>", meaning.PartOfSpeech))
+		fmt.Fprintf(&content, "<em>%s</em><br>", escapeHTML(meaning.PartOfSpeech))
 
 		for i, def := range meaning.Definitions {
 			if i >= 3 {
 				break
 			}
-			content.WriteString(fmt.Sprintf("%d. %s<br>", i+1, def.Definition))
+			fmt.Fprintf(&content, "%d. %s<br>", i+1, escapeHTML(def.Definition))
 			if def.Example != "" {
-				content.WriteString(fmt.Sprintf("   <span class=\"example\">Example: \"%s\"</span><br>", def.Example))
+				fmt.Fprintf(&content, "   <span class=\"example\">Example: \"%s\"</span><br>", escapeHTML(def.Example))
 			}
 		}
 		content.WriteString("<br>")
 	}
 
 	if entry.Origin != "" {
-		content.WriteString(fmt.Sprintf("<strong>Origin:</strong> %s", entry.Origin))
+		fmt.Fprintf(&content, "<strong>Origin:</strong> %s", escapeHTML(entry.Origin))
 	}
 
 	return &Answer{
 		Type:      AnswerTypeDefinition,
 		Query:     query,
-		Title:     fmt.Sprintf("Definition: %s", entry.Word),
+		Title:     fmt.Sprintf("Definition: %s", escapeHTML(entry.Word)),
 		Content:   content.String(),
 		Source:    "Free Dictionary API",
 		SourceURL: "https://dictionaryapi.dev/",
@@ -157,6 +165,25 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 			"meanings": entry.Meanings,
 		},
 	}, nil
+}
+
+func unquoteDefinitionWord(word string) string {
+	word = strings.TrimSpace(word)
+	if len(word) >= 2 {
+		first, last := word[0], word[len(word)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			word = strings.TrimSpace(word[1 : len(word)-1])
+		}
+	}
+	return word
+}
+
+func safePronunciationURL(raw string) string {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return ""
+	}
+	return parsed.String()
 }
 
 // DictionaryHandler is an alias for DefinitionHandler with different patterns

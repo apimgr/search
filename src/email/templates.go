@@ -44,11 +44,36 @@ const (
 	TemplateSSLRenewed       TemplateType = "ssl_renewed"
 	TemplateSSLRenewalFailed TemplateType = "ssl_renewal_failed"
 	TemplateSchedulerError   TemplateType = "scheduler_error"
-	TemplateTest             TemplateType = "test"
-	TemplateAdminAlert       TemplateType = "admin_alert"
 	TemplateUpdateAvailable  TemplateType = "update_available"
 	TemplateUpdateInstalled  TemplateType = "update_installed"
+	TemplateTest             TemplateType = "test"
 )
+
+// AllTemplateTypes is the complete set of email templates, in the order of the
+// AI.md PART 17 "Default Templates" table. The table has exactly ten rows and
+// no template may be added outside it.
+var AllTemplateTypes = []TemplateType{
+	TemplateSecurityAlert,
+	TemplateBackupCompleted,
+	TemplateBackupFailed,
+	TemplateSSLExpiring,
+	TemplateSSLRenewed,
+	TemplateSSLRenewalFailed,
+	TemplateSchedulerError,
+	TemplateUpdateAvailable,
+	TemplateUpdateInstalled,
+	TemplateTest,
+}
+
+// IsValidTemplateType reports whether t is one of the ten PART 17 templates.
+func IsValidTemplateType(t TemplateType) bool {
+	for _, known := range AllTemplateTypes {
+		if known == t {
+			return true
+		}
+	}
+	return false
+}
 
 // TemplateData holds common template variables for constructing vars maps.
 // Kept for backward compatibility in helpers that build vars maps.
@@ -262,10 +287,9 @@ func GetAllTemplateTypes() []TemplateInfo {
 		{TemplateSSLRenewed, "SSL Renewed", "SSL certificate renewal confirmation", false},
 		{TemplateSSLRenewalFailed, "SSL Renewal Failed", "SSL certificate renewal failure notification", false},
 		{TemplateSchedulerError, "Scheduler Error", "Scheduled task failure notification", false},
-		{TemplateTest, "Test Email", "Test email to verify SMTP configuration", false},
-		{TemplateAdminAlert, "Admin Alert", "System alerts for administrators", false},
 		{TemplateUpdateAvailable, "Update Available", "New version available notification", false},
 		{TemplateUpdateInstalled, "Update Installed", "Self-update completion notification", false},
+		{TemplateTest, "Test Email", "Test email to verify SMTP configuration", false},
 	}
 }
 

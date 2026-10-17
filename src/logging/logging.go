@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,7 +58,9 @@ func NewManager(logDir string) *Manager {
 	}
 
 	// Ensure log directory exists
-	os.MkdirAll(logDir, 0755)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("create logging directory %s: %v", logDir, err)
+	}
 
 	m := &Manager{
 		logDir: logDir,
@@ -74,7 +78,20 @@ func NewManager(logDir string) *Manager {
 	return m
 }
 
+func reportLoggingError(operation string, err error) {
+	if err != nil {
+		log.Printf("logging %s: %v", operation, err)
+	}
+}
+
 // Access returns the access logger
+// LogDir returns the directory this manager writes its log files into.
+// The metrics loki service (AI.md PART 20) reads the recent tail of those
+// files to build its Loki-compatible streams.
+func (m *Manager) LogDir() string {
+	return m.logDir
+}
+
 func (m *Manager) Access() *AccessLogger {
 	return m.access
 }
@@ -261,7 +278,7 @@ func NewAccessLogger(path string) *AccessLogger {
 		path:   path,
 		format: "combined",
 	}
-	l.openFile()
+	reportLoggingError("open access log", l.openFile())
 	return l
 }
 
@@ -271,7 +288,9 @@ func (l *AccessLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create access log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -327,7 +346,8 @@ func (l *AccessLogger) Log(entry AccessEntry) {
 	}
 
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write access log", err)
 	}
 }
 
@@ -534,7 +554,9 @@ func (l *AccessLogger) rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close access log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -544,7 +566,9 @@ func (l *AccessLogger) rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate access log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -552,9 +576,13 @@ func (l *AccessLogger) rotate() error {
 func (l *AccessLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -673,7 +701,7 @@ func NewServerLogger(path string) *ServerLogger {
 		format: "text",
 		stdout: true,
 	}
-	l.openFile()
+	reportLoggingError("open server log", l.openFile())
 	return l
 }
 
@@ -683,7 +711,9 @@ func (l *ServerLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create server log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -783,7 +813,8 @@ func (l *ServerLogger) log(level LogLevel, msg string, fields map[string]interfa
 		fmt.Println(line)
 	}
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write server log", err)
 	}
 }
 
@@ -843,7 +874,9 @@ func (l *ServerLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close server log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -852,7 +885,9 @@ func (l *ServerLogger) Rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate server log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -860,9 +895,13 @@ func (l *ServerLogger) Rotate() error {
 func (l *ServerLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -926,7 +965,7 @@ func NewAppLogger(path string) *AppLogger {
 		path:   path,
 		format: "logfmt",
 	}
-	l.openFile()
+	reportLoggingError("open app log", l.openFile())
 	return l
 }
 
@@ -936,7 +975,9 @@ func (l *AppLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create app log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -990,7 +1031,8 @@ func (l *AppLogger) log(level, msg string, fields map[string]interface{}) {
 	}
 
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write app log", err)
 	}
 }
 
@@ -1021,7 +1063,9 @@ func (l *AppLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close app log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -1030,7 +1074,9 @@ func (l *AppLogger) Rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate app log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -1038,9 +1084,13 @@ func (l *AppLogger) Rotate() error {
 func (l *AppLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -1087,7 +1137,7 @@ func NewAuthLogger(path string) *AuthLogger {
 		path:   path,
 		format: "syslog",
 	}
-	l.openFile()
+	reportLoggingError("open auth log", l.openFile())
 	return l
 }
 
@@ -1097,7 +1147,9 @@ func (l *AuthLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create auth log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -1122,6 +1174,10 @@ func (l *AuthLogger) Log(entry AuthEntry) {
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
+
+	// Masking happens here, at the single write point, so no caller can leak a
+	// full token value into auth.log by passing one where an ID was expected.
+	entry.TokenID = MaskTokenID(entry.TokenID)
 
 	var line string
 	if l.format == "json" {
@@ -1175,8 +1231,21 @@ func (l *AuthLogger) Log(entry AuthEntry) {
 	}
 
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write auth log", err)
 	}
+}
+
+// MaskTokenID truncates a token or token identifier to its first 8 characters
+// followed by an ellipsis, per AI.md PART 11 lines 15335-15337
+// ("Token/ID Masking: Show only first 8 characters: token_abc12345...").
+// Values of 8 characters or fewer are returned unchanged - there is nothing
+// left to hide once the value is that short.
+func MaskTokenID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8] + "..."
 }
 
 // LogTokenIssue logs a token issuance event
@@ -1233,7 +1302,9 @@ func (l *AuthLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close auth log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -1242,7 +1313,9 @@ func (l *AuthLogger) Rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate auth log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -1250,9 +1323,13 @@ func (l *AuthLogger) Rotate() error {
 func (l *AuthLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -1315,7 +1392,7 @@ func NewSecurityLogger(path string) *SecurityLogger {
 		path:   path,
 		format: "fail2ban",
 	}
-	l.openFile()
+	reportLoggingError("open security log", l.openFile())
 	return l
 }
 
@@ -1432,7 +1509,9 @@ func (l *SecurityLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create security log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -1452,7 +1531,8 @@ func (l *SecurityLogger) Log(entry SecurityEntry) {
 	line := l.formatEntry(entry)
 
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write security log", err)
 	}
 
 	// Also print to stdout for visibility
@@ -1596,7 +1676,9 @@ func (l *SecurityLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close security log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -1605,7 +1687,9 @@ func (l *SecurityLogger) Rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate security log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -1613,9 +1697,13 @@ func (l *SecurityLogger) Rotate() error {
 func (l *SecurityLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -1673,7 +1761,20 @@ const (
 	AuditActionPGPPrivateKeyExport AuditAction = "security.private_key_exported"
 	AuditActionPGPPrivateKeyImport AuditAction = "security.private_key_imported"
 	AuditActionPGPKeyDeleted       AuditAction = "security.pgp_key_deleted"
+
+	// Secret rotation events (AI.md PART 11 "Secret Rotation")
+	AuditActionInstallationSecretRotated AuditAction = "security.installation_secret_rotated"
+	AuditActionEncryptionKeyRotated      AuditAction = "security.encryption_key_rotated"
+
+	// Compliance events (AI.md PART 12 "Compliance Audit Events")
+	AuditActionDataExportCompleted   AuditAction = "compliance.data_export_completed"
+	AuditActionDataDeletionCompleted AuditAction = "compliance.data_deletion_completed"
+	AuditActionComplianceReport      AuditAction = "compliance.report_generated"
 )
+
+// AuditCategoryCompliance groups the compliance.* events emitted by
+// --maintenance data / --maintenance compliance (AI.md PART 12).
+const AuditCategoryCompliance AuditCategory = "compliance"
 
 // AuditCategory represents audit event categories per AI.md PART 11
 type AuditCategory string
@@ -1772,7 +1873,7 @@ func NewAuditLogger(path string) *AuditLogger {
 		path:    path,
 		entropy: rand.Reader,
 	}
-	l.openFile()
+	reportLoggingError("open audit log", l.openFile())
 	return l
 }
 
@@ -1782,10 +1883,24 @@ func (l *AuditLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create audit log directory: %w", err)
+	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Per AI.md PART 11 line 15371 the audit log is 0640 (rw-r-----) - it is
+	// the only log with a mandated mode because it records who did what and
+	// must not be world-readable. O_APPEND (never O_TRUNC) keeps it append-only
+	// per AI.md PART 11 lines 15360-15366.
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
 	if err != nil {
+		return err
+	}
+	// OpenFile only applies the mode when creating the file; an audit log that
+	// already exists with looser permissions is tightened here.
+	if err := os.Chmod(l.path, 0640); err != nil {
+		if closeErr := file.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("close audit log: %w", closeErr))
+		}
 		return err
 	}
 	l.file = file
@@ -1816,7 +1931,8 @@ func (l *AuditLogger) Log(entry AuditEntry) {
 	data, _ := json.Marshal(entry)
 
 	if l.file != nil {
-		l.file.WriteString(string(data) + "\n")
+		_, err := l.file.WriteString(string(data) + "\n")
+		reportLoggingError("write audit log", err)
 	}
 
 	// Also print to stdout for visibility (pretty is OK for console per PART 11)
@@ -1911,16 +2027,22 @@ func (l *AuditLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close audit log before rotation: %w", err)
+	}
 
-	timestamp := time.Now().Format("20060102")
+	// Per AI.md PART 11 line 15389 rotated audit logs are named
+	// audit.log.2025-01-15 (hyphenated ISO date), not a compact stamp.
+	timestamp := time.Now().Format("2006-01-02")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
 
 	if _, err := os.Stat(rotatedPath); err == nil {
-		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
+		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("2006-01-02-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate audit log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -1928,9 +2050,13 @@ func (l *AuditLogger) Rotate() error {
 func (l *AuditLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -1988,7 +2114,7 @@ const (
 
 // QueryAuditLogs queries audit logs with filtering options
 // Reads the audit log file and returns matching entries
-func (l *AuditLogger) QueryAuditLogs(opts AuditQueryOptions) (*AuditQueryResult, error) {
+func (l *AuditLogger) QueryAuditLogs(opts AuditQueryOptions) (result *AuditQueryResult, retErr error) {
 	start := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -2006,7 +2132,11 @@ func (l *AuditLogger) QueryAuditLogs(opts AuditQueryOptions) (*AuditQueryResult,
 		}
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("close audit log after query: %w", closeErr))
+		}
+	}()
 
 	var allMatching []AuditEntry
 	scanner := NewLineScanner(file)
@@ -2538,150 +2668,91 @@ func (l *AuditLogger) LogSchedulerTaskManualRun(actor, ip, taskName string, succ
 // Audit Log Retention and Cleanup per AI.md PART 11
 // ============================================================
 
-// AuditRetentionPolicy defines the retention policy for audit logs
+// AuditRetentionPolicy defines the retention policy for rotated audit logs per
+// AI.md PART 11 "Audit Log Retention" (keep: none | Nd | forever).
+// Retention only ever deletes ROTATED files - the live audit.log is append-only
+// and is never rewritten or truncated (AI.md PART 11 lines 15360-15366:
+// "Application can only append, never modify or delete entries",
+// "Only log rotation can remove old entries").
 type AuditRetentionPolicy struct {
-	// Maximum age of audit entries (0 = no limit)
+	// MaxAge is how long a rotated audit log is kept.
+	// Zero is `keep: none` - rotated logs are deleted immediately.
+	// Negative is `keep: forever` - rotated logs are never deleted.
 	MaxAge time.Duration
-	// Maximum number of entries to keep (0 = no limit)
-	MaxEntries int
-	// Keep critical events regardless of age
-	PreserveCritical bool
 }
 
-// DefaultAuditRetentionPolicy returns the default retention policy
-// 90 days retention, no entry limit, preserve critical events
+// DefaultAuditRetentionPolicy returns the default retention policy.
+// Per AI.md PART 11 "Sane Defaults" the default is `keep: none` - rotated
+// audit logs are deleted on rotation and no history is kept.
 func DefaultAuditRetentionPolicy() AuditRetentionPolicy {
-	return AuditRetentionPolicy{
-		MaxAge:           90 * 24 * time.Hour,
-		MaxEntries:       0,
-		PreserveCritical: true,
-	}
+	return AuditRetentionPolicy{MaxAge: 0}
 }
 
-// CleanupAuditLogs removes old audit entries based on retention policy
-// Returns the number of entries removed
+// CleanupAuditLogs deletes rotated audit log files that have outlived the
+// retention policy and returns the number of files removed.
+// Per AI.md PART 11 lines 15360-15366 the live audit.log is append-only: it is
+// never rewritten, truncated, or pruned entry-by-entry. Only rotated files
+// (audit.log.2025-01-15, optionally .gz) are ever removed.
 func (l *AuditLogger) CleanupAuditLogs(policy AuditRetentionPolicy) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Read all entries
-	file, err := os.Open(l.path)
+	if l.path == "" {
+		return 0, nil
+	}
+
+	// keep: forever - nothing is ever deleted
+	if policy.MaxAge < 0 {
+		return 0, nil
+	}
+
+	matches, err := filepath.Glob(l.path + ".*")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("failed to open audit log: %w", err)
-	}
-
-	var entries []AuditEntry
-	scanner := NewLineScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		var entry AuditEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	file.Close()
-
-	if err := scanner.Err(); err != nil {
-		return 0, fmt.Errorf("error reading audit log: %w", err)
+		return 0, fmt.Errorf("failed to list rotated audit logs: %w", err)
 	}
 
 	cutoff := time.Now().Add(-policy.MaxAge)
-	var keepEntries []AuditEntry
+	removed := 0
 
-	for _, e := range entries {
-		keep := false
-
-		// Keep if within retention period
-		if policy.MaxAge == 0 || e.Time.After(cutoff) {
-			keep = true
+	for _, path := range matches {
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			continue
 		}
-
-		// Keep critical events if policy says so
-		if policy.PreserveCritical && e.Severity == AuditSeverityCritical {
-			keep = true
+		// keep: none deletes every rotated file; keep: Nd deletes only those
+		// whose rotation timestamp is older than the cutoff.
+		if policy.MaxAge > 0 && !rotatedBefore(path, l.path, info, cutoff) {
+			continue
 		}
-
-		if keep {
-			keepEntries = append(keepEntries, e)
+		if err := os.Remove(path); err != nil {
+			return removed, fmt.Errorf("failed to remove rotated audit log %s: %w", path, err)
 		}
+		removed++
 	}
-
-	// Sort by time (oldest first for proper log ordering)
-	sort.Slice(keepEntries, func(i, j int) bool {
-		return keepEntries[i].Time.Before(keepEntries[j].Time)
-	})
-
-	// Apply max entries limit (keep newest, but always preserve critical if policy says so)
-	if policy.MaxEntries > 0 && len(keepEntries) > policy.MaxEntries {
-		if policy.PreserveCritical {
-			// Separate critical entries from non-critical
-			var criticalEntries, nonCriticalEntries []AuditEntry
-			for _, e := range keepEntries {
-				if e.Severity == AuditSeverityCritical {
-					criticalEntries = append(criticalEntries, e)
-				} else {
-					nonCriticalEntries = append(nonCriticalEntries, e)
-				}
-			}
-			// Keep all critical plus as many non-critical as possible up to limit
-			remaining := policy.MaxEntries - len(criticalEntries)
-			if remaining <= 0 {
-				// No room for non-critical entries, keep only critical
-				nonCriticalEntries = nil
-			} else if len(nonCriticalEntries) > remaining {
-				// Keep only the newest non-critical entries up to remaining
-				nonCriticalEntries = nonCriticalEntries[len(nonCriticalEntries)-remaining:]
-			}
-			keepEntries = append(criticalEntries, nonCriticalEntries...)
-			// Re-sort by time
-			sort.Slice(keepEntries, func(i, j int) bool {
-				return keepEntries[i].Time.Before(keepEntries[j].Time)
-			})
-		} else {
-			keepEntries = keepEntries[len(keepEntries)-policy.MaxEntries:]
-		}
-	}
-
-	removed := len(entries) - len(keepEntries)
-
-	// Close current file before rewriting
-	if l.file != nil {
-		l.file.Close()
-	}
-
-	// Rewrite the file with kept entries
-	file, err = os.Create(l.path)
-	if err != nil {
-		return 0, fmt.Errorf("failed to rewrite audit log: %w", err)
-	}
-
-	for _, e := range keepEntries {
-		data, _ := json.Marshal(e)
-		file.WriteString(string(data) + "\n")
-	}
-	file.Close()
-
-	// Reopen for appending
-	l.openFile()
 
 	return removed, nil
 }
 
+// rotatedBefore reports whether a rotated audit log predates cutoff. The date
+// encoded in the filename by Rotate (basePath + ".2006-01-02") is authoritative;
+// files whose suffix is not a parseable date fall back to their modification time.
+func rotatedBefore(path, basePath string, info os.FileInfo, cutoff time.Time) bool {
+	suffix := strings.TrimPrefix(path, basePath+".")
+	suffix = strings.TrimSuffix(suffix, ".gz")
+	for _, layout := range []string{"2006-01-02", "2006-01-02-150405"} {
+		if ts, err := time.Parse(layout, suffix); err == nil {
+			return ts.Before(cutoff)
+		}
+	}
+	return info.ModTime().Before(cutoff)
+}
+
 // GetAuditStats returns statistics about the audit log
-func (l *AuditLogger) GetAuditStats() (*AuditStats, error) {
+func (l *AuditLogger) GetAuditStats() (stats *AuditStats, retErr error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	stats := &AuditStats{
+	stats = &AuditStats{
 		ByCategory: make(map[AuditCategory]int),
 		BySeverity: make(map[AuditSeverity]int),
 		ByResult:   make(map[string]int),
@@ -2694,7 +2765,11 @@ func (l *AuditLogger) GetAuditStats() (*AuditStats, error) {
 		}
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("close audit log after statistics: %w", closeErr))
+		}
+	}()
 
 	scanner := NewLineScanner(file)
 
@@ -2772,7 +2847,7 @@ func NewErrorLogger(path string) *ErrorLogger {
 		format: "text",
 		stdout: true,
 	}
-	l.openFile()
+	reportLoggingError("open error log", l.openFile())
 	return l
 }
 
@@ -2782,7 +2857,9 @@ func (l *ErrorLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create error log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -2842,7 +2919,8 @@ func (l *ErrorLogger) Log(entry ErrorEntry) {
 	}
 
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write error log", err)
 	}
 	if l.stdout {
 		fmt.Println("[ERROR] " + line)
@@ -2907,7 +2985,9 @@ func (l *ErrorLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close error log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -2916,7 +2996,9 @@ func (l *ErrorLogger) Rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate error log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -2924,9 +3006,13 @@ func (l *ErrorLogger) Rotate() error {
 func (l *ErrorLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -2975,7 +3061,9 @@ func (l *DebugLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create debug log directory: %w", err)
+	}
 
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -2990,7 +3078,7 @@ func (l *DebugLogger) Enable() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.enabled = true
-	l.openFile()
+	reportLoggingError("open debug log", l.openFile())
 }
 
 // Disable disables the debug logger and closes the file
@@ -2999,7 +3087,7 @@ func (l *DebugLogger) Disable() {
 	defer l.mu.Unlock()
 	l.enabled = false
 	if l.file != nil {
-		l.file.Close()
+		reportLoggingError("close debug log", l.file.Close())
 		l.file = nil
 	}
 }
@@ -3065,7 +3153,8 @@ func (l *DebugLogger) Log(entry DebugEntry) {
 	}
 
 	if l.file != nil {
-		l.file.WriteString(line + "\n")
+		_, err := l.file.WriteString(line + "\n")
+		reportLoggingError("write debug log", err)
 	}
 	if l.stdout {
 		fmt.Println("[DEBUG] " + line)
@@ -3132,7 +3221,9 @@ func (l *DebugLogger) Rotate() error {
 		return nil
 	}
 
-	l.file.Close()
+	if err := l.file.Close(); err != nil {
+		return fmt.Errorf("close debug log before rotation: %w", err)
+	}
 
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
@@ -3141,7 +3232,9 @@ func (l *DebugLogger) Rotate() error {
 		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
 	}
 
-	os.Rename(l.path, rotatedPath)
+	if err := os.Rename(l.path, rotatedPath); err != nil {
+		return fmt.Errorf("rotate debug log: %w", err)
+	}
 	return l.openFile()
 }
 
@@ -3149,8 +3242,12 @@ func (l *DebugLogger) Rotate() error {
 func (l *DebugLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.file != nil {
-		return l.file.Close()
+	if l.file == nil {
+		return nil
 	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }

@@ -9,8 +9,29 @@ import (
 	"testing"
 
 	"github.com/apimgr/search/src/config"
-	gql "github.com/graphql-go/graphql"
+	"github.com/graphql-go/graphql/language/ast"
 )
+
+func TestParseJSONLiteralPreservesNestedInput(t *testing.T) {
+	literal := &ast.ObjectValue{Fields: []*ast.ObjectField{
+		{Name: &ast.Name{Value: "enabled"}, Value: &ast.BooleanValue{Value: true}},
+		{Name: &ast.Name{Value: "filters"}, Value: &ast.ListValue{Values: []ast.Value{
+			&ast.StringValue{Value: "web"},
+			&ast.IntValue{Value: "3"},
+		}}},
+	}}
+	parsed, ok := parseJSONLiteral(literal).(map[string]interface{})
+	if !ok {
+		t.Fatalf("parsed literal type = %T, want object", parseJSONLiteral(literal))
+	}
+	if parsed["enabled"] != true {
+		t.Fatalf("enabled = %#v, want true", parsed["enabled"])
+	}
+	filters, ok := parsed["filters"].([]interface{})
+	if !ok || len(filters) != 2 || filters[0] != "web" || filters[1] != int64(3) {
+		t.Fatalf("filters = %#v, want [\"web\", 3]", parsed["filters"])
+	}
+}
 
 // Tests for resolveDirectAnswer
 
@@ -23,20 +44,15 @@ func TestResolveDirectAnswer(t *testing.T) {
 		wantTerm   string
 		wantFound  bool
 	}{
-		{"dns lookup", "dns", "example.com", "dns", "example.com", false},
-		{"ip lookup", "ip", "8.8.8.8", "ip", "8.8.8.8", false},
-		{"empty args", "", "", "", "", false},
-		{"type only", "whois", "", "whois", "", false},
+		{"unknown answer type", "notregistered", "example.test", "notregistered", "example.test", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			params := gql.ResolveParams{
-				Args: map[string]interface{}{
-					"type": tt.answerType,
-					"term": tt.term,
-				},
-			}
+			params := testResolverParams(map[string]interface{}{
+				"type": tt.answerType,
+				"term": tt.term,
+			})
 
 			result, err := resolveDirectAnswer(params)
 			if err != nil {
@@ -49,8 +65,8 @@ func TestResolveDirectAnswer(t *testing.T) {
 			}
 
 			okVal, _ := m["ok"].(bool)
-			if !okVal {
-				t.Errorf("resolveDirectAnswer() ok = %v, want true", m["ok"])
+			if okVal != tt.wantFound {
+				t.Errorf("resolveDirectAnswer() ok = %v, want %v", m["ok"], tt.wantFound)
 			}
 
 			data, ok := m["data"].(map[string]interface{})
@@ -73,9 +89,7 @@ func TestResolveDirectAnswer(t *testing.T) {
 
 // TestResolveDirectAnswerRequiredFields verifies all expected fields are present.
 func TestResolveDirectAnswerRequiredFields(t *testing.T) {
-	params := gql.ResolveParams{
-		Args: map[string]interface{}{"type": "dns", "term": "example.com"},
-	}
+	params := testResolverParams(map[string]interface{}{"type": "notregistered", "term": "example.test"})
 	result, err := resolveDirectAnswer(params)
 	if err != nil {
 		t.Fatalf("resolveDirectAnswer() error = %v", err)
@@ -101,17 +115,13 @@ func TestResolveInstant(t *testing.T) {
 		wantQuery string
 		wantFound bool
 	}{
-		{"math expression", "2+2", "2+2", false},
-		{"natural language", "capital of France", "capital of France", false},
-		{"empty query", "", "", false},
-		{"unit conversion", "5km in miles", "5km in miles", false},
+		{"math expression", "2+2", "2+2", true},
+		{"unmatched natural language", "this phrase has no instant answer", "this phrase has no instant answer", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			params := gql.ResolveParams{
-				Args: map[string]interface{}{"q": tt.query},
-			}
+			params := testResolverParams(map[string]interface{}{"q": tt.query})
 
 			result, err := resolveInstant(params)
 			if err != nil {
@@ -145,9 +155,7 @@ func TestResolveInstant(t *testing.T) {
 
 // TestResolveInstantRequiredFields verifies all expected fields are present.
 func TestResolveInstantRequiredFields(t *testing.T) {
-	params := gql.ResolveParams{
-		Args: map[string]interface{}{"q": "test"},
-	}
+	params := testResolverParams(map[string]interface{}{"q": "2+2"})
 	result, err := resolveInstant(params)
 	if err != nil {
 		t.Fatalf("resolveInstant() error = %v", err)
@@ -267,7 +275,7 @@ func TestQueryHandlerPOST(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	handler := QueryHandler(cfg)
+	handler := QueryHandler(cfg, testGraphQLDependencies())
 
 	body := `{"query":"{ health { status } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/graphql", bytes.NewBufferString(body))
@@ -293,7 +301,7 @@ func TestQueryHandlerNonPOSTReturns405(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	handler := QueryHandler(cfg)
+	handler := QueryHandler(cfg, testGraphQLDependencies())
 
 	methods := []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch}
 	for _, method := range methods {
@@ -317,7 +325,7 @@ func TestQueryHandlerInvalidJSONReturns400(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	handler := QueryHandler(cfg)
+	handler := QueryHandler(cfg, testGraphQLDependencies())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/graphql", bytes.NewBufferString("not-json{"))
 	req.Header.Set("Content-Type", "application/json")
@@ -337,9 +345,9 @@ func TestQueryHandlerDirectAnswerQuery(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	handler := QueryHandler(cfg)
+	handler := QueryHandler(cfg, testGraphQLDependencies())
 
-	body := `{"query":"{ directAnswer(type: \"dns\", term: \"example.com\") { ok } }"}`
+	body := `{"query":"{ directAnswer(type: \"notregistered\", term: \"example.test\") { ok } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/graphql", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -358,7 +366,7 @@ func TestQueryHandlerInstantQuery(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	handler := QueryHandler(cfg)
+	handler := QueryHandler(cfg, testGraphQLDependencies())
 
 	body := `{"query":"{ instant(q: \"2+2\") { ok } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/graphql", bytes.NewBufferString(body))

@@ -100,9 +100,9 @@ func (h *IPHandler) handleMyIP(ctx context.Context, query string) (*Answer, erro
 		}, nil
 	}
 
-	content.WriteString(fmt.Sprintf("<strong>Your IP:</strong> <code>%s</code><br>", safeIP))
-	content.WriteString(fmt.Sprintf("<strong>Version:</strong> %s<br>", ipVersion(parsed)))
-	content.WriteString(fmt.Sprintf("<strong>Type:</strong> %s<br>", ipClassification(parsed)))
+	fmt.Fprintf(&content, "<strong>Your IP:</strong> <code>%s</code><br>", safeIP)
+	fmt.Fprintf(&content, "<strong>Version:</strong> %s<br>", ipVersion(parsed))
+	fmt.Fprintf(&content, "<strong>Type:</strong> %s<br>", ipClassification(parsed))
 
 	// Enrich with GeoIP data when available — fail-open, never block on lookup error.
 	if lookup := GeoIPLookupFromContext(ctx); lookup != nil && parsed.IsGlobalUnicast() {
@@ -143,9 +143,9 @@ func (h *IPHandler) lookupSpecificIP(ctx context.Context, query, rawIP string) (
 	}
 
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>IP:</strong> <code>%s</code><br>", safeIP))
-	content.WriteString(fmt.Sprintf("<strong>Version:</strong> %s<br>", ipVersion(ip)))
-	content.WriteString(fmt.Sprintf("<strong>Type:</strong> %s<br>", class))
+	fmt.Fprintf(&content, "<strong>IP:</strong> <code>%s</code><br>", safeIP)
+	fmt.Fprintf(&content, "<strong>Version:</strong> %s<br>", ipVersion(ip))
+	fmt.Fprintf(&content, "<strong>Type:</strong> %s<br>", class)
 
 	// Enrich with GeoIP data for public unicast addresses only.
 	if lookup := GeoIPLookupFromContext(ctx); lookup != nil && ip.IsGlobalUnicast() {
@@ -171,7 +171,7 @@ func appendGeoFields(content *strings.Builder, data map[string]interface{}, geo 
 		if geo.CountryName != "" {
 			line = fmt.Sprintf("%s (%s)", geo.CountryName, geo.CountryCode)
 		}
-		content.WriteString(fmt.Sprintf("<strong>Country:</strong> %s<br>", line))
+		fmt.Fprintf(content, "<strong>Country:</strong> %s<br>", line)
 		data["country_code"] = geo.CountryCode
 		data["country_name"] = geo.CountryName
 	}
@@ -182,14 +182,14 @@ func appendGeoFields(content *strings.Builder, data map[string]interface{}, geo 
 
 	if geo.City != "" {
 		if geo.Region != "" {
-			content.WriteString(fmt.Sprintf("<strong>City:</strong> %s, %s<br>", geo.City, geo.Region))
+			fmt.Fprintf(content, "<strong>City:</strong> %s, %s<br>", geo.City, geo.Region)
 		} else {
-			content.WriteString(fmt.Sprintf("<strong>City:</strong> %s<br>", geo.City))
+			fmt.Fprintf(content, "<strong>City:</strong> %s<br>", geo.City)
 		}
 		data["city"] = geo.City
 		data["region"] = geo.Region
 	} else if geo.Region != "" {
-		content.WriteString(fmt.Sprintf("<strong>Region:</strong> %s<br>", geo.Region))
+		fmt.Fprintf(content, "<strong>Region:</strong> %s<br>", geo.Region)
 		data["region"] = geo.Region
 	}
 
@@ -198,7 +198,7 @@ func appendGeoFields(content *strings.Builder, data map[string]interface{}, geo 
 	}
 
 	if geo.Timezone != "" {
-		content.WriteString(fmt.Sprintf("<strong>Timezone:</strong> %s<br>", geo.Timezone))
+		fmt.Fprintf(content, "<strong>Timezone:</strong> %s<br>", geo.Timezone)
 		data["timezone"] = geo.Timezone
 	}
 
@@ -209,19 +209,12 @@ func appendGeoFields(content *strings.Builder, data map[string]interface{}, geo 
 
 	if geo.ASN != 0 {
 		if geo.ASNOrg != "" {
-			content.WriteString(fmt.Sprintf("<strong>ASN:</strong> AS%d (%s)<br>", geo.ASN, geo.ASNOrg))
+			fmt.Fprintf(content, "<strong>ASN:</strong> AS%d (%s)<br>", geo.ASN, geo.ASNOrg)
 		} else {
-			content.WriteString(fmt.Sprintf("<strong>ASN:</strong> AS%d<br>", geo.ASN))
+			fmt.Fprintf(content, "<strong>ASN:</strong> AS%d<br>", geo.ASN)
 		}
 		data["asn"] = geo.ASN
 		data["asn_org"] = geo.ASNOrg
-	}
-
-	if geo.RegistrantOrg != "" {
-		data["registrant_org"] = geo.RegistrantOrg
-	}
-	if geo.RegistrantNet != "" {
-		data["registrant_net"] = geo.RegistrantNet
 	}
 }
 

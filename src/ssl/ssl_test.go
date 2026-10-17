@@ -103,7 +103,7 @@ func TestNewManagerWithLetsEncryptStaging(t *testing.T) {
 	}
 }
 
-func TestNewManagerWithDNS01ChallengeFallback(t *testing.T) {
+func TestNewManagerWithDNS01ChallengeDoesNotFallback(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "tls-test-dns01-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -117,16 +117,15 @@ func TestNewManagerWithDNS01ChallengeFallback(t *testing.T) {
 	cfg.LetsEncrypt.Domains = []string{"example.com"}
 	cfg.LetsEncrypt.Email = "test@example.com"
 	cfg.LetsEncrypt.Challenge = "dns-01"
-	// DNS-01 will fail due to missing provider config, should fallback to HTTP-01
+	// DNS-01 remains selected when its required provider configuration is missing.
 
 	m := NewManager(cfg, tempDir)
 
 	if m == nil {
 		t.Fatal("NewManager() returned nil")
 	}
-	// Should have fallen back to certManager (HTTP-01)
-	if m.certManager == nil {
-		t.Error("Should fallback to HTTP-01 when DNS-01 fails")
+	if m.certManager != nil {
+		t.Error("DNS-01 configuration failure must not silently initialize HTTP-01")
 	}
 }
 
@@ -191,7 +190,7 @@ func TestManagerGetTLSConfig(t *testing.T) {
 	_ = tlsCfg
 }
 
-func TestManagerGetHTTPSHandler(t *testing.T) {
+func TestManagerGetHTTPChallengeHandlerWithoutCertManager(t *testing.T) {
 	cfg := &config.SSLConfig{
 		Enabled: false,
 	}
@@ -201,9 +200,9 @@ func TestManagerGetHTTPSHandler(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := m.GetHTTPSHandler(fallback)
+	handler := m.GetHTTPChallengeHandler(fallback)
 	if handler == nil {
-		t.Fatal("GetHTTPSHandler() returned nil")
+		t.Fatal("GetHTTPChallengeHandler() returned nil")
 	}
 
 	// Test that handler works
@@ -217,7 +216,7 @@ func TestManagerGetHTTPSHandler(t *testing.T) {
 	}
 }
 
-func TestManagerGetHTTPSHandlerWithCertManager(t *testing.T) {
+func TestManagerGetHTTPChallengeHandlerWithCertManager(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "tls-test-handler-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -237,9 +236,9 @@ func TestManagerGetHTTPSHandlerWithCertManager(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := m.GetHTTPSHandler(fallback)
+	handler := m.GetHTTPChallengeHandler(fallback)
 	if handler == nil {
-		t.Fatal("GetHTTPSHandler() returned nil")
+		t.Fatal("GetHTTPChallengeHandler() returned nil")
 	}
 
 	// Test that handler returns something
@@ -481,6 +480,7 @@ func TestManagerReloadCertificatesValid(t *testing.T) {
 	}
 	m := &Manager{
 		config:    cfg,
+		fqdn:      "localhost",
 		tlsConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
 	}
 
@@ -510,7 +510,7 @@ func TestManagerInitManualCerts(t *testing.T) {
 		KeyFile:  keyFile,
 	}
 
-	m := NewManager(cfg, tempDir)
+	m := NewManagerWithSecretAndHost(cfg, tempDir, "", "localhost")
 
 	if m.tlsConfig == nil {
 		t.Error("TLS config should be set after loading manual certs")
@@ -649,13 +649,9 @@ func TestManagerLoadOrCreateAccountKeyInvalidExisting(t *testing.T) {
 		dataDir: tempDir,
 	}
 
-	// Should create new key when existing one is invalid
-	key, err := m.loadOrCreateAccountKey()
-	if err != nil {
-		t.Fatalf("loadOrCreateAccountKey() error = %v", err)
-	}
-	if key == nil {
-		t.Fatal("Key should not be nil")
+	// A corrupt existing account key must fail safely instead of being overwritten.
+	if _, err := m.loadOrCreateAccountKey(); err == nil {
+		t.Fatal("loadOrCreateAccountKey() should reject a corrupt existing account key")
 	}
 }
 
@@ -978,6 +974,9 @@ func TestDNSProviders(t *testing.T) {
 	if len(providers) == 0 {
 		t.Fatal("DNSProviders() returned empty list")
 	}
+	if len(providers) < 200 {
+		t.Fatalf("DNSProviders() returned %d providers; want the full lego catalog", len(providers))
+	}
 
 	// Check for expected providers
 	expectedIDs := []string{"cloudflare", "cloudflare_legacy", "route53", "digitalocean", "godaddy", "namecheap", "rfc2136"}
@@ -1004,9 +1003,6 @@ func TestDNSProviderInfo(t *testing.T) {
 		}
 		if p.Name == "" {
 			t.Errorf("Provider %q: Name should not be empty", p.ID)
-		}
-		if len(p.Fields) == 0 {
-			t.Errorf("Provider %q: Fields should not be empty", p.ID)
 		}
 		// Check that each field has required properties
 		for _, f := range p.Fields {
@@ -1146,8 +1142,9 @@ func TestIsDevTLD(t *testing.T) {
 		// Project-specific
 		{"dev.search", "search", true},
 		{"prod.search", "search", true},
-		// Exact match without suffix
-		{"search", "search", false},
+		// Exact match without suffix: AI.md PART 15 lists {project_name} itself
+		// as a dynamic dev TLD, so a bare "search" is dev too.
+		{"search", "search", true},
 		{"app.home", "", true},
 		{"app.home.arpa", "", true},
 		{"app.intranet", "", true},

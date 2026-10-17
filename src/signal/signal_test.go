@@ -1169,8 +1169,8 @@ func TestGracefulShutdownGetChildPIDsWithPIDs(t *testing.T) {
 	// Simulate GetChildPIDs check from gracefulShutdown
 	if cfg.GetChildPIDs != nil {
 		pids := cfg.GetChildPIDs()
-		if len(pids) > 0 {
-			// Would call stopChildProcesses here
+		if len(pids) != 2 || pids[0] != 12345 || pids[1] != 12346 {
+			t.Errorf("GetChildPIDs() = %v, want [12345 12346]", pids)
 		}
 	}
 

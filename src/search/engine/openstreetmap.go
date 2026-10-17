@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"golang.org/x/text/cases"
@@ -132,7 +134,7 @@ func (e *OpenStreetMap) Search(ctx context.Context, query *model.Query) ([]model
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nominatim API returned status %d", resp.StatusCode)

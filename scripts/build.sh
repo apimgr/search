@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build script for Search metasearch engine
-set -e
+set -eo pipefail
 
 # Colors for output
 BUILD_RED='\033[0;31m'
@@ -28,8 +28,6 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BUILD_PROJECT_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
 
 # Parse command line arguments (kept for backward-compatible invocation)
-BUILD_ARM64=false
-
 while [[ $# -gt 0 ]]; do
     case $1 in
         --all|--current)
@@ -37,7 +35,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --arm64)
-            BUILD_ARM64=true
+            # make build already covers linux/arm64 as one of the 8 platforms
             shift
             ;;
         --no-docker)
@@ -60,10 +58,5 @@ export VERSION
 
 __print_info "Delegating to 'make build' (single source of truth for the build pipeline)..."
 make -C "$BUILD_PROJECT_DIR" build
-
-if [ "$BUILD_ARM64" = "true" ]; then
-    __print_info "Delegating to 'make build-arm64'..."
-    make -C "$BUILD_PROJECT_DIR" build-arm64
-fi
 
 echo -e "${BUILD_GREEN}=== Build Complete ===${BUILD_NC}"

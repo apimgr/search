@@ -56,11 +56,11 @@ func printShellHelp() {
 	fmt.Println("  completions [SHELL]  Generate shell completions")
 	fmt.Println("  init [SHELL]         Generate shell init command")
 	fmt.Println("")
-	fmt.Println("Supported shells: bash, zsh, fish, powershell")
+	fmt.Println("Supported shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh")
 	fmt.Println("")
 	fmt.Println("Examples:")
-	fmt.Printf("  %s shell completions bash > ~/.local/share/bash-completion/completions/%s\n", getBinaryName(), getBinaryName())
-	fmt.Printf("  eval \"$(%s shell init)\"\n", getBinaryName())
+	fmt.Printf("  %s --shell completions bash > ~/.local/share/bash-completion/completions/%s\n", getBinaryName(), getBinaryName())
+	fmt.Printf("  eval \"$(%s --shell init)\"\n", getBinaryName())
 }
 
 // detectShell auto-detects shell from $SHELL environment variable
@@ -117,7 +117,7 @@ var completionFlags = []string{
 }
 
 // completionSubcommands lists the subcommands offered for completion.
-var completionSubcommands = []string{"status", "shell"}
+var completionSubcommands = []string{"alerts", "answer", "autocomplete", "autodiscover", "bangs", "categories", "engines", "health", "info", "instant", "metrics", "preferences", "scheduler", "search", "server-config", "shell", "widget", "widgets"}
 
 // bashCompletion returns a hand-written bash completion script.
 func bashCompletion(bin string) string {
@@ -223,15 +223,15 @@ func printInit(shell string) error {
 
 	switch shell {
 	case "bash":
-		fmt.Printf("source <(%s shell completions bash)\n", binaryName)
+		fmt.Printf("source <(%s --shell completions bash)\n", binaryName)
 	case "zsh":
-		fmt.Printf("source <(%s shell completions zsh)\n", binaryName)
+		fmt.Printf("source <(%s --shell completions zsh)\n", binaryName)
 	case "fish":
-		fmt.Printf("%s shell completions fish | source\n", binaryName)
+		fmt.Printf("%s --shell completions fish | source\n", binaryName)
 	case "sh", "dash", "ksh":
-		fmt.Printf("eval \"$(%s shell completions %s)\"\n", binaryName, shell)
+		fmt.Printf("eval \"$(%s --shell completions %s)\"\n", binaryName, shell)
 	case "powershell", "pwsh":
-		fmt.Printf("Invoke-Expression (& %s shell completions powershell)\n", binaryName)
+		fmt.Printf("Invoke-Expression (& %s --shell completions powershell)\n", binaryName)
 	default:
 		return fmt.Errorf("unsupported shell: %s\nSupported: bash, zsh, fish, powershell", shell)
 	}

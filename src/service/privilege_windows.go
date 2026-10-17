@@ -88,6 +88,13 @@ func CreateSystemUser(name string) (*SystemUser, error) {
 	return createWindowsVirtualServiceAccount(name)
 }
 
+// DeleteSystemUser is a no-op on Windows. Virtual service accounts
+// (NT SERVICE\<name>) are removed automatically when the service is deleted.
+// Per AI.md PART 23 uninstall: no inverse account command is required.
+func DeleteSystemUser(name string) error {
+	return nil
+}
+
 // CanEscalate checks if the current process can request UAC elevation.
 // Per AI.md PART 23: Smart escalation flow — only prompt if user actually can escalate.
 func CanEscalate() bool {

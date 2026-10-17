@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -eo pipefail
 
 # =============================================================================
 # Container Entrypoint Script - MINIMAL
@@ -18,7 +18,7 @@ export DATA_DIR="${DATA_DIR:-/data/${APP_NAME}}"
 # Track background PIDs for cleanup
 declare -a PIDS=()
 
-log() { echo "[entrypoint] $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+log() { echo "[entrypoint] $(date '+%Y-%m-%dT%H:%M:%S%z') $*"; }
 
 # Signal handling for graceful shutdown
 cleanup() {
@@ -37,8 +37,10 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 log "Starting ${APP_NAME}..."
 
 # Build flags from environment
-FLAGS="--address ${ADDRESS:-0.0.0.0} --port ${PORT:-80}"
-[ "${DEBUG:-false}" = "true" ] && FLAGS="$FLAGS --debug"
+APP_FLAGS=(--address "${ADDRESS:-0.0.0.0}" --port "${PORT:-80}")
+if [ "${DEBUG:-false}" = "true" ]; then
+    APP_FLAGS+=(--debug)
+fi
 
 # Start binary (binary handles ALL setup: dirs, perms, user/group, Tor, etc.)
-exec $APP_BIN $FLAGS "$@"
+exec "$APP_BIN" "${APP_FLAGS[@]}" "$@"

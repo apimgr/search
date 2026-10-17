@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
@@ -130,7 +131,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 			}, nil
 		}
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return &Answer{
@@ -177,18 +178,18 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"robots-result\">")
-	content.WriteString(fmt.Sprintf("<strong>URL:</strong> <a href=\"%s\" target=\"_blank\">%s</a><br><br>", escapeHTML(robotsURL), escapeHTML(robotsURL)))
+	fmt.Fprintf(&content, "<strong>URL:</strong> <a href=\"%s\" target=\"_blank\">%s</a><br><br>", escapeHTML(robotsURL), escapeHTML(robotsURL))
 
 	// Summary
 	content.WriteString("<strong>Summary:</strong><br>")
-	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;User-Agent sections: %d<br>", len(parsed.UserAgents)))
-	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Sitemaps: %d<br><br>", len(parsed.Sitemaps)))
+	fmt.Fprintf(&content, "&nbsp;&nbsp;User-Agent sections: %d<br>", len(parsed.UserAgents))
+	fmt.Fprintf(&content, "&nbsp;&nbsp;Sitemaps: %d<br><br>", len(parsed.Sitemaps))
 
 	// Show sitemaps first
 	if len(parsed.Sitemaps) > 0 {
 		content.WriteString("<strong>Sitemaps:</strong><br>")
 		for _, sitemap := range parsed.Sitemaps {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\">%s</a><br>", escapeHTML(sitemap), escapeHTML(sitemap)))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\">%s</a><br>", escapeHTML(sitemap), escapeHTML(sitemap))
 		}
 		content.WriteString("<br>")
 	}
@@ -197,7 +198,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 	if len(parsed.UserAgents) > 0 {
 		content.WriteString("<strong>Rules by User-Agent:</strong><br>")
 		for _, ua := range parsed.UserAgents {
-			content.WriteString(fmt.Sprintf("<br><em>User-Agent: %s</em><br>", escapeHTML(ua.Agent)))
+			fmt.Fprintf(&content, "<br><em>User-Agent: %s</em><br>", escapeHTML(ua.Agent))
 			for _, directive := range ua.Directives {
 				icon := ""
 				switch directive.Type {
@@ -210,7 +211,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 				default:
 					icon = directive.Type + ":"
 				}
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s %s<br>", icon, escapeHTML(directive.Value)))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;%s %s<br>", icon, escapeHTML(directive.Value))
 			}
 		}
 	}

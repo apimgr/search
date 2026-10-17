@@ -22,19 +22,11 @@ func withArgs(t *testing.T, args []string) {
 	t.Cleanup(func() { os.Args = orig })
 }
 
-// TestShowConfigInfo verifies showConfigInfo prints configuration sections without panicking.
-func TestShowConfigInfo(t *testing.T) {
-	out := captureStdout(t, showConfigInfo)
-	if out == "" {
-		t.Error("showConfigInfo produced no output")
-	}
-	if lineCount := len(strings.Split(strings.TrimSpace(out), "\n")); lineCount < 4 {
-		t.Errorf("showConfigInfo expected multiple sections, got %d lines", lineCount)
-	}
-}
-
 // TestShowStatusNotRunning verifies showStatus produces output without panicking.
 func TestShowStatusNotRunning(t *testing.T) {
+	// showStatus() calls exitFunc(1) when no server is running; without this
+	// the real os.Exit(1) would kill the whole test binary.
+	withExitFunc(t)
 	withArgs(t, []string{"search"})
 	out := captureStdout(t, showStatus)
 	if out == "" {
@@ -79,10 +71,11 @@ func TestRunShellUnknown(t *testing.T) {
 	}
 }
 
-// TestRunMaintenanceHelp verifies runMaintenance("help") prints maintenance commands.
+// TestRunMaintenanceHelp verifies runMaintenance("--help") prints maintenance commands.
 func TestRunMaintenanceHelp(t *testing.T) {
-	withArgs(t, []string{"search", "--maintenance", "help"})
-	out := captureStdout(t, func() { runMaintenance("help") })
+	withExitFunc(t)
+	withArgs(t, []string{"search", "--maintenance", "--help"})
+	out := captureStdout(t, func() { runMaintenance("--help") })
 	if out == "" {
 		t.Error("runMaintenance(help) produced no output")
 	}
@@ -90,6 +83,7 @@ func TestRunMaintenanceHelp(t *testing.T) {
 
 // TestRunMaintenanceDefault verifies runMaintenance with unknown action prints an error.
 func TestRunMaintenanceDefault(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "unknown-xyz-action"})
 	out := captureStdout(t, func() { runMaintenance("unknown-xyz-action") })
 	if out == "" {
@@ -97,17 +91,9 @@ func TestRunMaintenanceDefault(t *testing.T) {
 	}
 }
 
-// TestRunMaintenanceList verifies runMaintenance("list") handles empty backup list.
-func TestRunMaintenanceList(t *testing.T) {
-	withArgs(t, []string{"search", "--maintenance", "list"})
-	out := captureStdout(t, func() { runMaintenance("list") })
-	if out == "" {
-		t.Error("runMaintenance(list) produced no output")
-	}
-}
-
 // TestRunMaintenanceRestoreNoFile verifies runMaintenance("restore") with no filename prints usage.
 func TestRunMaintenanceRestoreNoFile(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "restore"})
 	out := captureStdout(t, func() { runMaintenance("restore") })
 	if !strings.Contains(out, "restore") && !strings.Contains(out, "backup") && !strings.Contains(out, "specify") {
@@ -128,6 +114,7 @@ func TestRunMaintenanceBackupNoPassword(t *testing.T) {
 
 // TestRunUpdateDefault verifies runUpdate with unknown subcommand prints an error.
 func TestRunUpdateDefault(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "unknown-xyz"})
 	out := captureStdout(t, func() { runUpdate("unknown-xyz") })
 	if out == "" {
@@ -137,6 +124,7 @@ func TestRunUpdateDefault(t *testing.T) {
 
 // TestRunUpdateBranchNoArgs verifies runUpdate("branch") with no branch name prints usage.
 func TestRunUpdateBranchNoArgs(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "branch"})
 	out := captureStdout(t, func() { runUpdate("branch") })
 	if out == "" {
@@ -146,6 +134,7 @@ func TestRunUpdateBranchNoArgs(t *testing.T) {
 
 // TestRunUpdateBranchStable verifies runUpdate("branch") with stable branch succeeds.
 func TestRunUpdateBranchStable(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "branch", "stable"})
 	out := captureStdout(t, func() { runUpdate("branch") })
 	if !strings.Contains(out, "stable") {
@@ -155,6 +144,7 @@ func TestRunUpdateBranchStable(t *testing.T) {
 
 // TestRunUpdateBranchBeta verifies runUpdate("branch") with beta branch succeeds.
 func TestRunUpdateBranchBeta(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "branch", "beta"})
 	out := captureStdout(t, func() { runUpdate("branch") })
 	if !strings.Contains(out, "beta") {
@@ -250,38 +240,31 @@ func TestRunServiceReload(t *testing.T) {
 	captureStdout(t, func() { runService("reload") })
 }
 
-// TestRunServiceUninstall verifies runService("uninstall") checks privileges.
+// TestRunServiceUninstall verifies runService("--uninstall") checks privileges.
 func TestRunServiceUninstall(t *testing.T) {
 	withExitFunc(t)
-	withArgs(t, []string{"search", "--service", "uninstall"})
-	out := captureStdout(t, func() { runService("uninstall") })
+	withArgs(t, []string{"search", "--service", "--uninstall"})
+	out := captureStdout(t, func() { runService("--uninstall") })
 	if out == "" {
 		t.Error("runService(uninstall) produced no output")
 	}
 }
 
-// TestRunServiceEnable verifies runService("enable") checks privileges.
-func TestRunServiceEnable(t *testing.T) {
+// TestRunServiceEnableIsRejected verifies that no separate enable action exists.
+func TestRunServiceEnableIsRejected(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--service", "enable"})
-	captureStdout(t, func() { runService("enable") })
+	out := captureStdout(t, func() { runService("enable") })
+	if !strings.Contains(out, "Unknown action") {
+		t.Fatalf("runService(enable) output = %q, want unsupported-action message", out)
+	}
 }
 
-// TestRunServiceDisable verifies runService("disable") checks privileges.
+// TestRunServiceDisable verifies runService("--disable") checks privileges.
 func TestRunServiceDisable(t *testing.T) {
 	withExitFunc(t)
-	withArgs(t, []string{"search", "--service", "disable"})
-	captureStdout(t, func() { runService("disable") })
-}
-
-// TestRunInitSuccess verifies runInit runs without panicking in a container environment.
-func TestRunInitSuccess(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--init"})
-	out := captureStdout(t, runInit)
-	if out == "" {
-		t.Error("runInit produced no output")
-	}
+	withArgs(t, []string{"search", "--service", "--disable"})
+	captureStdout(t, func() { runService("--disable") })
 }
 
 // TestRunMaintenanceMode verifies runMaintenance("mode") toggles without panic.
@@ -289,22 +272,4 @@ func TestRunMaintenanceMode(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "mode"})
 	captureStdout(t, func() { runMaintenance("mode") })
-}
-
-// TestRunMaintenanceRotateTokenCancelled verifies rotate-token cancel path.
-func TestRunMaintenanceRotateTokenCancelled(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--maintenance", "rotate-token"})
-
-	origStdin := os.Stdin
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Skip("cannot create pipe for stdin")
-	}
-	os.Stdin = r
-	w.Write([]byte("no\n"))
-	w.Close()
-	t.Cleanup(func() { os.Stdin = origStdin })
-
-	captureStdout(t, func() { runMaintenance("rotate-token") })
 }

@@ -1,0 +1,26 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    # golangci-lint v2 includes gosimple checks in staticcheck.
+    - staticcheck
+    - unused
+
+  exclusions:
+    rules:
+      # Test setup and teardown helpers have separate assertions and are excluded from production error checking.
+      - path: _test\.go$
+        linters:
+          - errcheck
+
+  settings:
+    lll:
+      line-length: 120
+      tab-width: 4
+

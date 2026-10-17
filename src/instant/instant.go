@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/geoip"
+	"github.com/apimgr/search/src/widget"
 )
 
 // clientIPKeyType is an unexported type for context keys to prevent collisions.
@@ -20,6 +21,8 @@ type langKeyType struct{}
 // unitsKeyType is an unexported type for the global unit-system context key.
 type unitsKeyType struct{}
 
+type weatherUnitsKeyType struct{}
+
 // ClientIPKey is the context key used to pass the client's IP address to instant handlers.
 var ClientIPKey = clientIPKeyType{}
 
@@ -29,6 +32,8 @@ var langKey = langKeyType{}
 // unitsKey is the context key used to pass the resolved global unit system
 // ("metric" or "imperial") to instant handlers such as the unit converter.
 var unitsKey = unitsKeyType{}
+
+var weatherUnitsKey = weatherUnitsKeyType{}
 
 // WithUnits returns a new context carrying the resolved global unit system
 // so instant handlers (e.g. the unit converter) can pick a conversion
@@ -44,6 +49,23 @@ func UnitsFromContext(ctx context.Context) string {
 		return units
 	}
 	return "imperial"
+}
+
+// WithWeatherUnits returns a context carrying the weather widget's explicit
+// unit override ("auto", "metric", or "imperial").
+func WithWeatherUnits(ctx context.Context, units string) context.Context {
+	if units != "auto" && units != "metric" && units != "imperial" {
+		units = "auto"
+	}
+	return context.WithValue(ctx, weatherUnitsKey, units)
+}
+
+// WeatherUnitsFromContext returns the weather override, defaulting to auto.
+func WeatherUnitsFromContext(ctx context.Context) string {
+	if units, ok := ctx.Value(weatherUnitsKey).(string); ok && (units == "auto" || units == "metric" || units == "imperial") {
+		return units
+	}
+	return "auto"
 }
 
 // WithLang returns a new context carrying the resolved i18n language code so
@@ -127,6 +149,7 @@ const (
 	AnswerTypeWHOIS      AnswerType = "whois"
 	AnswerTypeDNS        AnswerType = "dns"
 	AnswerTypeBeautify   AnswerType = "beautify"
+	AnswerTypeLorem      AnswerType = "lorem"
 
 	// Direct answer types (type:query pattern)
 	AnswerTypeTLDR      AnswerType = "tldr"
@@ -178,7 +201,11 @@ type Manager struct {
 }
 
 // NewManager creates a new instant answer manager
-func NewManager() *Manager {
+// NewManager builds the ordered instant-answer handler registry.
+//
+// widgetMgr supplies the widget data the WidgetAnswerHandler needs; it may be
+// nil, in which case the widget-backed instant answers are simply not offered.
+func NewManager(widgetMgr *widget.Manager) *Manager {
 	m := &Manager{
 		handlers: make([]Handler, 0),
 	}
@@ -187,6 +214,10 @@ func NewManager() *Manager {
 	// IPHandler must precede DefinitionHandler because "what is my ip?" matches both;
 	// IPHandler handles it correctly while DefinitionHandler would waste an HTTP round-trip.
 	m.Register(NewIPHandler())
+	// WidgetAnswerHandler also matches "what is [thing]" (Wikipedia), and per IDEA.md
+	// that trigger belongs to Wikipedia rather than the definition lookup, so it is
+	// registered after IPHandler but before DefinitionHandler.
+	m.Register(NewWidgetAnswerHandler(widgetMgr))
 	m.Register(NewDefinitionHandler())
 	m.Register(NewDictionaryHandler())
 	m.Register(NewSynonymHandler())
@@ -212,6 +243,7 @@ func NewManager() *Manager {
 	m.Register(NewYAMLHandler())
 	m.Register(NewEscapeHandler())
 	m.Register(NewBeautifyHandler())
+	m.Register(NewLoremHandler())
 
 	// Network and security handlers
 	m.Register(NewCertHandler())

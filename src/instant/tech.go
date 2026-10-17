@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/version"
 )
 
@@ -111,15 +113,15 @@ func (h *TechHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>Technologies detected on %s:</strong><br><br>", domain))
+	fmt.Fprintf(&content, "<strong>Technologies detected on %s:</strong><br><br>", domain)
 
 	for _, category := range categories {
-		content.WriteString(fmt.Sprintf("<strong>%s:</strong><br>", category))
+		fmt.Fprintf(&content, "<strong>%s:</strong><br>", category)
 		for _, tech := range byCategory[category] {
 			if tech.Version != "" {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;- %s (%s)<br>", tech.Name, tech.Version))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;- %s (%s)<br>", tech.Name, tech.Version)
 			} else {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;- %s<br>", tech.Name))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;- %s<br>", tech.Name)
 			}
 		}
 		content.WriteString("<br>")
@@ -150,7 +152,7 @@ func (h *TechHandler) detectTechnologies(ctx context.Context, baseURL string) ([
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Read body (limited)
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))

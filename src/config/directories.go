@@ -27,8 +27,9 @@ const (
 
 // CLI directory overrides (per AI.md PART 17)
 var (
-	cliOverrides  = make(map[string]string)
-	cliOverrideMu sync.RWMutex
+	cliOverrides    = make(map[string]string)
+	cliOverrideMu   sync.RWMutex
+	startedElevated = IsPrivileged()
 )
 
 // SetConfigDirOverride sets a CLI override for the config directory
@@ -427,162 +428,125 @@ func GetCacheDir() string {
 	}
 }
 
-// GetBackupDir returns the OS-appropriate backup directory
+// GetBackupDir resolves an explicit override first, then a writable system
+// backup location, and finally a mode-appropriate fallback. The startup
+// privilege state is captured before privilege dropping so paths stay stable.
 func GetBackupDir() string {
-	// Check CLI override first (--backup flag)
 	if dir, ok := getOverride("backup"); ok && dir != "" {
 		return dir
 	}
-
-	// Check environment variable
 	if dir := os.Getenv("SEARCH_BACKUP_DIR"); dir != "" {
 		return dir
 	}
 	if dir := os.Getenv("BACKUP_DIR"); dir != "" {
 		return dir
 	}
-
-	// Container paths (per AI.md PART 4)
 	if IsRunningInContainer() {
 		return "/data/backups/" + InternalName
 	}
 
-	isRoot := IsPrivileged()
+	systemDir := systemBackupDir()
+	if writableBackupDir(systemDir) {
+		return systemDir
+	}
+	if startedElevated {
+		return filepath.Join(GetDataDir(), "backup")
+	}
+	return userBackupDir()
+}
 
-	switch GetOS() {
-	case "linux":
-		if isRoot {
-			return "/mnt/Backups/" + InternalOrg + "/" + InternalName
-		}
-		return os.ExpandEnv("$HOME/.local/share/Backups/" + InternalOrg + "/" + InternalName)
-
+func systemBackupDir() string {
+	switch runtime.GOOS {
 	case "darwin":
-		if isRoot {
-			return "/Library/Backups/" + InternalOrg + "/" + InternalName
-		}
-		return os.ExpandEnv("$HOME/Library/Backups/" + InternalOrg + "/" + InternalName)
-
+		return filepath.Join("/Library/Backups", InternalOrg, InternalName)
 	case "windows":
-		if isRoot {
-			return os.ExpandEnv("%ProgramData%\\Backups\\" + InternalOrg + "\\" + InternalName)
-		}
-		return os.ExpandEnv("%LocalAppData%\\Backups\\" + InternalOrg + "\\" + InternalName)
-
+		return filepath.Join(os.Getenv("ProgramData"), "Backups", InternalOrg, InternalName)
 	case "freebsd", "openbsd", "netbsd":
-		if isRoot {
-			return "/var/backups/" + InternalOrg + "/" + InternalName
-		}
-		return os.ExpandEnv("$HOME/.local/share/Backups/" + InternalOrg + "/" + InternalName)
-
+		return filepath.Join("/var/backups", InternalOrg, InternalName)
 	default:
-		return os.ExpandEnv("$HOME/.local/share/Backups/" + InternalOrg + "/" + InternalName)
+		return filepath.Join("/mnt/Backups", InternalOrg, InternalName)
 	}
 }
 
-// GetPIDFile returns the OS-appropriate PID file path
+func userBackupDir() string {
+	home, _ := os.UserHomeDir()
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library/Backups", InternalOrg, InternalName)
+	case "windows":
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Backups", InternalOrg, InternalName)
+	default:
+		return filepath.Join(home, ".local/share/Backups", InternalOrg, InternalName)
+	}
+}
+
+func writableBackupDir(path string) bool {
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return false
+	}
+	test, err := os.CreateTemp(path, ".write-test-")
+	if err != nil {
+		return false
+	}
+	name := test.Name()
+	if err := test.Close(); err != nil {
+		_ = os.Remove(name)
+		return false
+	}
+	return os.Remove(name) == nil
+}
+
+// GetPIDFile returns the PID file location for the startup privilege mode.
 func GetPIDFile() string {
-	// Check CLI override first (--pid flag)
 	if path, ok := getOverride("pid"); ok && path != "" {
 		return path
 	}
-
-	// Check environment variable
 	if path := os.Getenv("SEARCH_PID_FILE"); path != "" {
 		return path
 	}
 	if path := os.Getenv("PID_FILE"); path != "" {
 		return path
 	}
-
-	// Container paths
 	if IsRunningInContainer() {
 		return "/data/" + ProjectName + ".pid"
 	}
-
-	isRoot := IsPrivileged()
-
-	switch GetOS() {
-	case "linux":
-		if isRoot {
-			return "/var/run/" + ProjectOrg + "/" + ProjectName + ".pid"
-		}
-		return filepath.Join(GetDataDir(), ProjectName+".pid")
-
-	case "darwin":
-		if isRoot {
-			return "/var/run/" + ProjectOrg + "/" + ProjectName + ".pid"
-		}
-		return filepath.Join(GetDataDir(), ProjectName+".pid")
-
-	case "windows":
-		return filepath.Join(GetDataDir(), ProjectName+".pid")
-
-	case "freebsd", "openbsd", "netbsd":
-		if isRoot {
-			return "/var/run/" + ProjectOrg + "/" + ProjectName + ".pid"
-		}
-		return filepath.Join(GetDataDir(), ProjectName+".pid")
-
-	default:
-		return filepath.Join(GetDataDir(), ProjectName+".pid")
+	if startedElevated && (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd") {
+		return "/var/run/" + ProjectOrg + "/" + ProjectName + ".pid"
 	}
+	return filepath.Join(GetDataDir(), ProjectName+".pid")
 }
 
-// GetSSLDir returns the OS-appropriate SSL certificates directory
-// Per AI.md PART 4: SSL is under config directory with letsencrypt/ and local/ subdirs
+// GetSSLDir returns the SSL certificate directory.
 func GetSSLDir() string {
-	// Container paths (per AI.md PART 4)
 	if IsRunningInContainer() {
 		return "/config/" + ProjectName + "/ssl"
 	}
-
 	return filepath.Join(GetConfigDir(), "ssl")
 }
 
-// GetDatabaseDir returns the OS-appropriate database directory
+// GetDatabaseDir returns the database directory for this project.
 func GetDatabaseDir() string {
-	// Check CLI override first
 	if dir, ok := getOverride("database"); ok && dir != "" {
 		return dir
 	}
-
-	// Check environment variable
 	if dir := os.Getenv("SEARCH_DATABASE_DIR"); dir != "" {
 		return dir
 	}
 	if dir := os.Getenv("DATABASE_DIR"); dir != "" {
 		return dir
 	}
-
-	// Container paths
 	if IsRunningInContainer() {
 		return "/data/db"
 	}
-
-	isRoot := IsPrivileged()
-
-	switch GetOS() {
-	case "linux":
-		if isRoot {
-			return "/var/lib/" + ProjectOrg + "/" + ProjectName + "/db"
-		}
-		return filepath.Join(GetDataDir(), "db")
-
-	case "darwin":
-		return filepath.Join(GetDataDir(), "db")
-
-	case "windows":
-		return filepath.Join(GetDataDir(), "db")
-
-	case "freebsd", "openbsd", "netbsd":
-		if isRoot {
+	if runtime.GOOS == "linux" && startedElevated {
+		return "/var/lib/" + ProjectOrg + "/" + ProjectName + "/db"
+	}
+	if runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" {
+		if startedElevated {
 			return "/var/db/" + ProjectOrg + "/" + ProjectName + "/db"
 		}
-		return filepath.Join(GetDataDir(), "db")
-
-	default:
-		return filepath.Join(GetDataDir(), "db")
 	}
+	return filepath.Join(GetDataDir(), "db")
 }
 
 // GetGeoIPDir returns the OS-appropriate GeoIP database directory
@@ -678,6 +642,7 @@ func EnsureDirectories() error {
 		GetCacheDir(),
 		GetDatabaseDir(),
 		GetGeoIPDir(),
+		GetBackupDir(),
 		GetEmailTemplatesDir(),
 		GetWebDataDir(),
 		GetWellKnownDir(),

@@ -20,6 +20,7 @@ RUN go mod download
 
 # Copy source and build
 COPY . .
+RUN go run ./src/cmd/apigen
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -buildvcs=false -trimpath \
     -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/version.Version=${VERSION}' -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'" \
@@ -33,6 +34,7 @@ FROM alpine:latest
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=dev
 ARG BUILD_DATE
+ARG BUILD_EPOCH
 ARG COMMIT_ID
 ARG LICENSE=MIT
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -114,15 +115,15 @@ func (h *ExpandHandler) HandleInstantQuery(ctx context.Context, query string) (*
 
 	// Original URL
 	content.WriteString("<strong>Original URL:</strong><br>")
-	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br><br>", escapeHTML(urlStr)))
+	fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br><br>", escapeHTML(urlStr))
 
 	// Final URL
 	content.WriteString("<strong>Final URL:</strong><br>")
-	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\">%s</a><br><br>", escapeHTML(finalURL), escapeHTML(finalURL)))
+	fmt.Fprintf(&content, "&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\">%s</a><br><br>", escapeHTML(finalURL), escapeHTML(finalURL))
 
 	// Redirect chain
 	if len(hops) > 1 {
-		content.WriteString(fmt.Sprintf("<strong>Redirect Chain (%d hops):</strong><br>", len(hops)-1))
+		fmt.Fprintf(&content, "<strong>Redirect Chain (%d hops):</strong><br>", len(hops)-1)
 		for i, hop := range hops {
 			statusColor := "green"
 			if hop.StatusCode >= 400 {
@@ -136,8 +137,8 @@ func (h *ExpandHandler) HandleInstantQuery(ctx context.Context, query string) (*
 				prefix = "&nbsp;&nbsp;&#x2192;&nbsp;"
 			}
 
-			content.WriteString(fmt.Sprintf("%s<span style=\"color: %s;\">[%d]</span> %s<br>",
-				prefix, statusColor, hop.StatusCode, escapeHTML(truncateURL(hop.URL, 80))))
+			fmt.Fprintf(&content, "%s<span style=\"color: %s;\">[%d]</span> %s<br>",
+				prefix, statusColor, hop.StatusCode, escapeHTML(truncateURL(hop.URL, 80)))
 		}
 	} else {
 		content.WriteString("<strong>No redirects</strong> - URL points directly to final destination<br>")
@@ -147,20 +148,20 @@ func (h *ExpandHandler) HandleInstantQuery(ctx context.Context, query string) (*
 	finalParsed, _ := url.Parse(finalURL)
 	if finalParsed != nil {
 		content.WriteString("<br><strong>Final URL Analysis:</strong><br>")
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Host: %s<br>", escapeHTML(finalParsed.Host)))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Host: %s<br>", escapeHTML(finalParsed.Host))
 		if finalParsed.Path != "" && finalParsed.Path != "/" {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Path: %s<br>", escapeHTML(finalParsed.Path)))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;Path: %s<br>", escapeHTML(finalParsed.Path))
 		}
 		if finalParsed.RawQuery != "" {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Query: %s<br>", escapeHTML(finalParsed.RawQuery)))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;Query: %s<br>", escapeHTML(finalParsed.RawQuery))
 		}
 	}
 
 	// Compare domains
 	originalParsed, _ := url.Parse(urlStr)
 	if originalParsed != nil && finalParsed != nil && originalParsed.Host != finalParsed.Host {
-		content.WriteString(fmt.Sprintf("<br><span style=\"color: orange;\">Note: Domain changed from <strong>%s</strong> to <strong>%s</strong></span>",
-			escapeHTML(originalParsed.Host), escapeHTML(finalParsed.Host)))
+		fmt.Fprintf(&content, "<br><span style=\"color: orange;\">Note: Domain changed from <strong>%s</strong> to <strong>%s</strong></span>",
+			escapeHTML(originalParsed.Host), escapeHTML(finalParsed.Host))
 	}
 
 	content.WriteString("</div>")
@@ -213,7 +214,7 @@ func (h *ExpandHandler) followRedirects(ctx context.Context, startURL string) ([
 				return hops, currentURL, err
 			}
 		}
-		resp.Body.Close()
+		closeutil.Close(resp.Body)
 
 		hops = append(hops, RedirectHop{
 			URL:        currentURL,

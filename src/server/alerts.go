@@ -34,9 +34,10 @@ type AlertNewPageData struct {
 
 type AlertCreatedPageData struct {
 	PageData
-	Alert     *alert.Alert
-	ManageURL string
-	RSSURL    string
+	Alert      *alert.Alert
+	ManageURL  string
+	RSSURL     string
+	OwnerToken string
 }
 
 type AlertManagePageData struct {
@@ -61,6 +62,10 @@ func (s *Server) handleAlertNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.alertManager == nil {
+		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
+		return
+	}
+	if s.ownerManager == nil {
 		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
 		return
 	}
@@ -110,12 +115,16 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
 		return
 	}
+	if s.ownerManager == nil {
+		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		alertRedirectWithMessage(w, r, "/alerts/new", "error", "alerts.invalid_form_data")
 		return
 	}
 	safeSearch, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("safe_search")))
-	created, err := s.alertManager.Create(r.Context(), alert.CreateRequest{
+	createRequest := alert.CreateRequest{
 		Query:          r.FormValue("query"),
 		Category:       r.FormValue("category"),
 		Language:       r.FormValue("language"),
@@ -130,7 +139,31 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		WebhookURL:     r.FormValue("webhook_url"),
 		BaseURL:        s.getBaseURL(r),
 		CreatedFromIP:  getClientIPSimple(r),
-	})
+	}
+	if err := s.alertManager.ValidateCreate(createRequest); err != nil {
+		params := fmt.Sprintf("/alerts/new?q=%s&category=%s&language=%s&region=%s&safe_search=%s&error=%s%s",
+			urlQueryEscape(r.FormValue("query")),
+			urlQueryEscape(r.FormValue("category")),
+			urlQueryEscape(r.FormValue("language")),
+			urlQueryEscape(r.FormValue("region")),
+			urlQueryEscape(r.FormValue("safe_search")),
+			urlQueryEscape(localizeAlertUserError(r, err)),
+			buildAlertEnginesQuery(r.Form["engines"]),
+		)
+		http.Redirect(w, r, params, http.StatusSeeOther)
+		return
+	}
+	ownerToken := ""
+	if cookie, err := r.Cookie(ownerTokenCookie); err == nil {
+		ownerToken = cookie.Value
+	}
+	identity, issuedToken, err := s.ownerManager.IssueOrResolve(r.Context(), ownerToken)
+	if err != nil {
+		s.renderAlertError(w, r, http.StatusInternalServerError, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
+		return
+	}
+	createRequest.OwnerID = identity.OwnerID
+	created, err := s.alertManager.Create(r.Context(), createRequest)
 	if err != nil {
 		params := fmt.Sprintf("/alerts/new?q=%s&category=%s&language=%s&region=%s&safe_search=%s&error=%s%s",
 			urlQueryEscape(r.FormValue("query")),
@@ -144,14 +177,18 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, params, http.StatusSeeOther)
 		return
 	}
+	if issuedToken != "" {
+		s.setOwnerCookie(w, issuedToken)
+	}
 
 	baseData := s.newPageData(w, r, "", "alerts-created")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.created_title")
 	data := &AlertCreatedPageData{
-		PageData:  *baseData,
-		Alert:     created.Alert,
-		ManageURL: s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
-		RSSURL:    s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
+		PageData:   *baseData,
+		Alert:      created.Alert,
+		ManageURL:  s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
+		RSSURL:     s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
+		OwnerToken: issuedToken,
 	}
 	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
 		slog.Error("template render error", "err", err)

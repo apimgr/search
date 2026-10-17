@@ -19,11 +19,13 @@
     <div class="cookie-buttons">
       <form method="post" action="/server/consent">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="return_to" value="{{ .RequestPath }}">
         <input type="hidden" name="choice" value="decline">
         <button type="submit" class="btn-decline">{{t "common.decline"}}</button>
       </form>
       <form method="post" action="/server/consent">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="return_to" value="{{ .RequestPath }}">
         <input type="hidden" name="choice" value="accept">
         <button type="submit" class="btn-accept">{{t "common.accept"}}</button>
       </form>

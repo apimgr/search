@@ -1,18 +1,24 @@
-// Package scheduler provides a built-in task scheduler per AI.md PART 19
+// Package scheduler provides a built-in task scheduler per AI.md PART 18.
 // The scheduler is ALWAYS RUNNING - there is no enable/disable option.
 // All scheduled tasks are managed internally, never via external cron/schedulers.
 package scheduler
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // defaultTimezone is the default timezone for the scheduler (allows testing)
@@ -34,6 +40,7 @@ const (
 	TaskBackupHourly    TaskID = "backup_hourly"
 	TaskHealthcheckSelf TaskID = "healthcheck_self"
 	TaskTorHealth       TaskID = "tor_health"
+	TaskI2PHealth       TaskID = "i2p_health"
 	TaskAlertsImmediate TaskID = "alerts_immediate"
 	TaskAlertsDaily     TaskID = "alerts_daily"
 	TaskAlertsWeekly    TaskID = "alerts_weekly"
@@ -64,11 +71,26 @@ const (
 	TaskTypeLocal TaskType = "local"
 )
 
-// Default retry policy values per AI.md PART 19
+// Default retry policy values per AI.md PART 18
 const (
 	DefaultMaxRetries = 3
 	DefaultRetryDelay = 5 * time.Minute
 )
+
+// shutdownGracePeriod bounds how long StopTaskScheduler waits for running
+// tasks to finish per AI.md PART 18 "Shutdown Behavior" ("Wait for running
+// tasks to complete (max 30 seconds)"). On timeout the node's locks are
+// force-released and still-running tasks are marked for retry on next start.
+const shutdownGracePeriod = 30 * time.Second
+
+// historyRetainPerTask is how many execution history rows are kept per task.
+// Per AI.md PART 18 the CLI shows recent history (`scheduler history <id>`);
+// older rows are pruned so the table cannot grow without bound.
+const historyRetainPerTask = 50
+
+// slowTaskRetryDelay is the retry delay for tasks whose AI.md PART 18 config
+// block sets retry_on_fail with retry_delay: 1h (blocklist_update, cve_update).
+const slowTaskRetryDelay = time.Hour
 
 // lockRetryCooldown bounds how soon a TaskTypeGlobal task becomes eligible
 // again after a failed lock acquisition (another node holds it, or the lock
@@ -80,7 +102,7 @@ const (
 // failure. Per AI.md PART 18 retry_delay intent, back off instead.
 const lockRetryCooldown = 30 * time.Second
 
-// Task represents a scheduled task per AI.md PART 19
+// Task represents a scheduled task per AI.md PART 18
 type Task struct {
 	ID          TaskID
 	Name        string
@@ -95,7 +117,7 @@ type Task struct {
 	// Run immediately on scheduler start?
 	RunOnStart bool
 
-	// Retry policy per AI.md PART 19
+	// Retry policy per AI.md PART 18
 	// Default: max_retries=3, retry_delay=5m, backoff=exponential (5m, 10m, 20m)
 	// Maximum retry attempts (default: 3)
 	MaxRetries int
@@ -139,7 +161,7 @@ type TaskState struct {
 }
 
 // TaskFailureNotification contains details about a failed task
-// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+// Per AI.md PART 18: Failed tasks trigger notifications (if configured)
 type TaskFailureNotification struct {
 	TaskID    string
 	TaskName  string
@@ -150,10 +172,41 @@ type TaskFailureNotification struct {
 }
 
 // NotifyFunc is a callback function for task failure notifications
-// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+// Per AI.md PART 18: Failed tasks trigger notifications (if configured)
 type NotifyFunc func(notification *TaskFailureNotification)
 
-// Scheduler manages periodic tasks per AI.md PART 19
+// TaskExecution describes one completed task execution.
+// Per AI.md PART 18 "Task Execution Flow": every execution (success, failure,
+// or skipped) is written to the audit log.
+type TaskExecution struct {
+	TaskID    string
+	TaskName  string
+	Status    TaskStatus
+	Error     string
+	Attempts  int
+	StartedAt time.Time
+	Duration  time.Duration
+}
+
+// AuditFunc is a callback invoked after every task execution so the host
+// application can write the event to its audit log.
+// Per AI.md PART 18 Implementation Requirements: "Audit logging - All task
+// executions logged".
+type AuditFunc func(execution *TaskExecution)
+
+// TaskHistoryEntry is one persisted execution history record.
+// Per AI.md PART 18 CLI Commands: `{project_name} scheduler history <id>`.
+type TaskHistoryEntry struct {
+	TaskID     string        `json:"task_id"`
+	StartedAt  time.Time     `json:"started_at"`
+	FinishedAt time.Time     `json:"finished_at"`
+	Duration   time.Duration `json:"duration"`
+	Status     string        `json:"status"`
+	Success    bool          `json:"success"`
+	Error      string        `json:"error,omitempty"`
+}
+
+// Scheduler manages periodic tasks per AI.md PART 18
 // The scheduler is ALWAYS RUNNING - no enable/disable option exists
 type Scheduler struct {
 	mu            sync.RWMutex
@@ -166,8 +219,13 @@ type Scheduler struct {
 	wg            sync.WaitGroup
 	timezone      *time.Location
 	catchUpWindow time.Duration
-	// Per AI.md PART 19: Task failure notifications
+	// Per AI.md PART 18: Task failure notifications
 	notifyFunc NotifyFunc
+	// Per AI.md PART 18: every task execution is written to the audit log
+	auditFunc AuditFunc
+	// taskWG tracks in-progress task goroutines so shutdown can wait for
+	// them per AI.md PART 18 "Shutdown Behavior" (max 30 seconds).
+	taskWG sync.WaitGroup
 	// inFlight tracks tasks with a runTask goroutine currently executing
 	// (including one still blocked trying to acquire the DB lock). Without
 	// this, a slow/contended lock query (up to its own context timeout)
@@ -179,7 +237,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scheduler
-// Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+// Per AI.md PART 18: Scheduler is ALWAYS RUNNING
 func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -229,11 +287,67 @@ func (s *Scheduler) SetCatchUpWindow(d time.Duration) {
 }
 
 // SetNotifyFunc sets the callback function for task failure notifications
-// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+// Per AI.md PART 18: Failed tasks trigger notifications (if configured)
 func (s *Scheduler) SetNotifyFunc(fn NotifyFunc) {
 	s.mu.Lock()
 	s.notifyFunc = fn
 	s.mu.Unlock()
+}
+
+// SetAuditFunc sets the callback invoked after every task execution.
+// Per AI.md PART 18: all task executions are logged to the audit log.
+func (s *Scheduler) SetAuditFunc(fn AuditFunc) {
+	s.mu.Lock()
+	s.auditFunc = fn
+	s.mu.Unlock()
+}
+
+// SetTaskSchedule overrides a task's schedule from configuration.
+// Per AI.md PART 18 "Task Configuration": every built-in task's schedule is
+// configurable through server.scheduler.tasks.<task>.schedule.
+func (s *Scheduler) SetTaskSchedule(id TaskID, schedule string) error {
+	if schedule == "" {
+		return fmt.Errorf("task schedule is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	task.Schedule = schedule
+	task.NextRun = s.calculateNextRunLocked(schedule)
+
+	if s.db != nil {
+		s.saveTaskState(task)
+	}
+
+	return nil
+}
+
+// SetTaskRetry overrides a task's retry policy from configuration.
+// Per AI.md PART 18 "Retry Policy": max_retries (default 3) and retry_delay
+// (default 5m, exponential backoff). Zero or negative values keep the default.
+func (s *Scheduler) SetTaskRetry(id TaskID, maxRetries int, retryDelay time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	if maxRetries > 0 {
+		task.MaxRetries = maxRetries
+	}
+	if retryDelay > 0 {
+		task.RetryDelay = retryDelay
+	}
+
+	return nil
 }
 
 // Register adds a task to the scheduler
@@ -269,11 +383,11 @@ func (s *Scheduler) Register(task *Task) error {
 	return nil
 }
 
-// RegisterBuiltinTasks registers all required tasks per AI.md PART 19
+// RegisterBuiltinTasks registers all required tasks per AI.md PART 18
 func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 	// SSL Renewal - Daily at 03:00, NOT skippable
 	if handlers.SSLRenewal != nil {
-		s.Register(&Task{
+		if err := s.Register(&Task{
 			ID:          TaskSSLRenewal,
 			Name:        "SSL Certificate Renewal",
 			Description: "Check and renew SSL certificates 7 days before expiry",
@@ -283,26 +397,30 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Skippable:   false,
 			RunOnStart:  true,
 			Enabled:     true,
-		})
+		}); err != nil {
+			slog.Error("failed to register SSL renewal task", "error", err)
+		}
 	}
 
 	// GeoIP Update - Weekly Sunday at 03:00, skippable
 	if handlers.GeoIPUpdate != nil {
-		s.Register(&Task{
+		if err := s.Register(&Task{
 			ID:          TaskGeoIPUpdate,
 			Name:        "GeoIP Database Update",
-			Description: "Download and update MaxMind GeoLite2 databases",
+			Description: "Download and update ip-location-db GeoIP databases",
 			Schedule:    "0 3 * * 0",
 			TaskType:    TaskTypeGlobal,
 			Run:         handlers.GeoIPUpdate,
 			Skippable:   true,
 			Enabled:     true,
-		})
+		}); err != nil {
+			slog.Error("failed to register GeoIP update task", "error", err)
+		}
 	}
 
 	// Blocklist Update - Daily at 04:00, skippable
 	if handlers.BlocklistUpdate != nil {
-		s.Register(&Task{
+		if err := s.Register(&Task{
 			ID:          TaskBlocklistUpdate,
 			Name:        "Blocklist Update",
 			Description: "Download and update IP/domain blocklists",
@@ -311,12 +429,16 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.BlocklistUpdate,
 			Skippable:   true,
 			Enabled:     true,
-		})
+			// Per AI.md PART 18 task config: retry_on_fail with retry_delay 1h
+			RetryDelay: slowTaskRetryDelay,
+		}); err != nil {
+			slog.Error("failed to register blocklist update task", "error", err)
+		}
 	}
 
 	// CVE Update - Daily at 05:00, skippable
 	if handlers.CVEUpdate != nil {
-		s.Register(&Task{
+		if err := s.Register(&Task{
 			ID:          TaskCVEUpdate,
 			Name:        "CVE Database Update",
 			Description: "Download and update CVE/security databases",
@@ -325,14 +447,18 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.CVEUpdate,
 			Skippable:   true,
 			Enabled:     true,
-		})
+			// Per AI.md PART 18 task config: retry_on_fail with retry_delay 1h
+			RetryDelay: slowTaskRetryDelay,
+		}); err != nil {
+			slog.Error("failed to register CVE update task", "error", err)
+		}
 	}
 
 	// Update Check - Daily at 06:00, skippable
 	// Per AI.md PART 18/22: notify-only check for a newer release; honors
 	// update.defer_days and stays notify-only unless update.auto_install is set.
 	if handlers.UpdateCheck != nil {
-		s.Register(&Task{
+		if err := s.Register(&Task{
 			ID:          TaskUpdateCheck,
 			Name:        "Update Check",
 			Description: "Check release channel for a newer version (notify-only by default)",
@@ -341,12 +467,14 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.UpdateCheck,
 			Skippable:   true,
 			Enabled:     true,
-		})
+		}); err != nil {
+			slog.Error("failed to register update check task", "error", err)
+		}
 	}
 
 	// Token Cleanup - Every 15 minutes, NOT skippable
 	if handlers.TokenCleanup != nil {
-		s.Register(&Task{
+		if err := s.Register(&Task{
 			ID:          TaskTokenCleanup,
 			Name:        "Token Cleanup",
 			Description: "Remove expired tokens",
@@ -355,12 +483,14 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.TokenCleanup,
 			Skippable:   false,
 			Enabled:     true,
-		})
+		}); err != nil {
+			slog.Error("failed to register token cleanup task", "error", err)
+		}
 	}
 
 	// Log Rotation - Daily at 00:00, NOT skippable
 	if handlers.LogRotation != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskLogRotation,
 			Name:        "Log Rotation",
 			Description: "Rotate and compress old logs",
@@ -374,7 +504,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 
 	// Backup Daily - Daily at 02:00, skippable
 	if handlers.BackupDaily != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskBackupDaily,
 			Name:        "Daily Backup",
 			Description: "Full backup with daily incremental",
@@ -397,14 +527,14 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.BackupHourly,
 			Skippable:   true,
 		}
-		s.Register(task)
+		s.registerBuiltinTask(task)
 		// Disable after registration (Register sets Enabled=true by default)
 		task.Enabled = false
 	}
 
 	// Health Check Self - Every 5 minutes, NOT skippable
 	if handlers.HealthcheckSelf != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskHealthcheckSelf,
 			Name:        "Self Health Check",
 			Description: "Self-health verification",
@@ -419,7 +549,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 
 	// Tor Health - Every 10 minutes, NOT skippable when Tor installed
 	if handlers.TorHealth != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskTorHealth,
 			Name:        "Tor Health Check",
 			Description: "Check Tor connectivity, restart if needed",
@@ -432,8 +562,26 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
+	// I2P Health - Every 10 minutes, only registered when I2P is opt-in enabled
+	// Per AI.md PART 18 Built-in Tasks: i2p_health runs only when the operator
+	// has enabled I2P (PART 31.2 - I2P is opt-in, disabled by default), so the
+	// host application supplies this handler only in that case.
+	if handlers.I2PHealth != nil {
+		s.registerBuiltinTask(&Task{
+			ID:          TaskI2PHealth,
+			Name:        "I2P Health Check",
+			Description: "Check I2P provider, restart if needed",
+			Schedule:    "@every 10m",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.I2PHealth,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
 	if handlers.AlertsImmediate != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskAlertsImmediate,
 			Name:        "Immediate Search Alerts",
 			Description: "Check and deliver immediate search alerts",
@@ -447,7 +595,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 	}
 
 	if handlers.AlertsDaily != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskAlertsDaily,
 			Name:        "Daily Search Alerts",
 			Description: "Check and deliver daily search alerts",
@@ -460,7 +608,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 	}
 
 	if handlers.AlertsWeekly != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskAlertsWeekly,
 			Name:        "Weekly Search Alerts",
 			Description: "Check and deliver weekly search alerts",
@@ -475,7 +623,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 	// Public IP Refresh - Startup + every 12 hours, hardcoded per AI.md
 	// PART 8 step 16. NOT skippable; FQDN detection depends on it.
 	if handlers.PublicIPRefresh != nil {
-		s.Register(&Task{
+		s.registerBuiltinTask(&Task{
 			ID:          TaskPublicIPRefresh,
 			Name:        "Public IP Refresh",
 			Description: "Detect and cache the server's public IPv4 address (every 12h, hardcoded)",
@@ -488,6 +636,12 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
+}
+
+func (s *Scheduler) registerBuiltinTask(task *Task) {
+	if err := s.Register(task); err != nil {
+		slog.Error("failed to register built-in scheduler task", "task_id", task.ID, "error", err)
+	}
 }
 
 // TaskHandlers holds handler functions for built-in tasks
@@ -503,6 +657,9 @@ type TaskHandlers struct {
 	BackupHourly    func(ctx context.Context) error
 	HealthcheckSelf func(ctx context.Context) error
 	TorHealth       func(ctx context.Context) error
+	// I2PHealth is supplied only when I2P is enabled (AI.md PART 31.2:
+	// I2P is opt-in and disabled by default).
+	I2PHealth       func(ctx context.Context) error
 	AlertsImmediate func(ctx context.Context) error
 	AlertsDaily     func(ctx context.Context) error
 	AlertsWeekly    func(ctx context.Context) error
@@ -512,7 +669,7 @@ type TaskHandlers struct {
 }
 
 // Start starts the scheduler
-// Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+// Per AI.md PART 18: Scheduler is ALWAYS RUNNING
 func (s *Scheduler) StartTaskScheduler() {
 	s.mu.Lock()
 	if s.running {
@@ -536,7 +693,7 @@ func (s *Scheduler) StartTaskScheduler() {
 	s.wg.Add(1)
 	go s.run()
 
-	slog.Info("Scheduler started - always running per AI.md PART 19")
+	slog.Info("Scheduler started - always running per AI.md PART 18")
 }
 
 // run is the main scheduler loop.
@@ -574,17 +731,42 @@ func (s *Scheduler) checkAndRunTasks(now time.Time) {
 	for _, task := range s.tasks {
 		if task.Enabled && now.After(task.NextRun) && !s.inFlight[task.ID] {
 			dueTasks = append(dueTasks, task)
-			// Mark in-flight now, under the same lock, so a lock query that
-			// blocks for several seconds can't let subsequent ticks pile up
-			// more goroutines for the same task before it finishes.
-			s.inFlight[task.ID] = true
 		}
 	}
 	s.mu.Unlock()
 
 	for _, task := range dueTasks {
+		// beginTask marks the task in-flight under the lock, so a lock query
+		// that blocks for several seconds can't let subsequent ticks pile up
+		// more goroutines for the same task before it finishes.
+		if !s.beginTask(task) {
+			continue
+		}
 		go s.runTask(task)
 	}
+}
+
+// beginTask reserves a task for execution: it rejects a duplicate run while one
+// is already in flight, refuses to start new work once shutdown has begun, and
+// registers the run with taskWG so StopTaskScheduler can wait for it.
+// Every caller that reaches runTask must go through beginTask first.
+func (s *Scheduler) beginTask(task *Task) bool {
+	select {
+	case <-s.ctx.Done():
+		return false
+	default:
+	}
+
+	s.mu.Lock()
+	if s.inFlight[task.ID] {
+		s.mu.Unlock()
+		return false
+	}
+	s.inFlight[task.ID] = true
+	s.mu.Unlock()
+
+	s.taskWG.Add(1)
+	return true
 }
 
 // runTask runs a single task with DB-level deduplication for global tasks.
@@ -595,6 +777,9 @@ func (s *Scheduler) checkAndRunTasks(now time.Time) {
 // of which goroutine panicked, taking the whole server down. Recovering here
 // keeps a single misbehaving task handler from causing a full outage.
 func (s *Scheduler) runTask(task *Task) {
+	// Release the shutdown WaitGroup slot reserved by beginTask.
+	defer s.taskWG.Done()
+
 	// Clear the in-flight marker on every exit path (success, failure, lock
 	// not acquired, or panic) so the task becomes eligible for pickup again.
 	defer func() {
@@ -602,6 +787,31 @@ func (s *Scheduler) runTask(task *Task) {
 		delete(s.inFlight, task.ID)
 		s.mu.Unlock()
 	}()
+
+	// Per AI.md PART 18 "Task Execution Flow": a triggered task (scheduled or
+	// manual) is skipped when it is disabled.
+	s.mu.RLock()
+	enabled := task.Enabled
+	s.mu.RUnlock()
+	if !enabled {
+		skipStart := time.Now()
+		s.mu.Lock()
+		task.LastStatus = StatusSkipped
+		s.mu.Unlock()
+
+		if s.db != nil {
+			s.saveTaskState(task)
+		}
+
+		s.recordHistory(task, skipStart, time.Now(), StatusSkipped, "task is disabled")
+		s.emitAudit(task, StatusSkipped, "task is disabled", 0, skipStart, 0)
+		slog.Info("Task skipped - disabled", "task", task.ID)
+		return
+	}
+
+	// execStart is the wall-clock start of this execution; it is the history
+	// and audit start timestamp for every exit path, including a panic.
+	execStart := time.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -622,6 +832,10 @@ func (s *Scheduler) runTask(task *Task) {
 			if s.db != nil {
 				s.saveTaskState(task)
 			}
+
+			panicErr := fmt.Sprintf("panic: %v", r)
+			s.recordHistory(task, execStart, time.Now(), StatusFailed, panicErr)
+			s.emitAudit(task, StatusFailed, panicErr, 1, execStart, time.Since(execStart))
 
 			if notifyFn != nil {
 				notifyFn(&TaskFailureNotification{
@@ -697,9 +911,11 @@ func (s *Scheduler) runTask(task *Task) {
 		s.mu.Unlock()
 
 		// Execute task with timeout
+		attemptStart := time.Now()
 		ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
 		lastErr = task.Run(ctx)
 		cancel()
+		attemptEnd := time.Now()
 
 		if lastErr == nil {
 			// Success - update state and return
@@ -714,6 +930,9 @@ func (s *Scheduler) runTask(task *Task) {
 			if s.db != nil {
 				s.saveTaskState(task)
 			}
+
+			s.recordHistory(task, attemptStart, attemptEnd, StatusSuccess, "")
+			s.emitAudit(task, StatusSuccess, "", attempt+1, attemptStart, attemptEnd.Sub(attemptStart))
 
 			slog.Info("Task completed successfully", "task", task.ID)
 			return
@@ -737,9 +956,12 @@ func (s *Scheduler) runTask(task *Task) {
 		s.saveTaskState(task)
 	}
 
+	s.recordHistory(task, execStart, time.Now(), StatusFailed, lastErr.Error())
+	s.emitAudit(task, StatusFailed, lastErr.Error(), maxRetries+1, execStart, time.Since(execStart))
+
 	slog.Error("Task failed after all attempts", "task", task.ID, "attempts", maxRetries+1, "err", lastErr)
 
-	// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+	// Per AI.md PART 18: Failed tasks trigger notifications (if configured)
 	if notifyFn != nil {
 		notifyFn(&TaskFailureNotification{
 			TaskID:    string(task.ID),
@@ -913,27 +1135,42 @@ func (s *Scheduler) catchUpMissedTasks() {
 		return
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	now := time.Now()
 	catchUpDeadline := now.Add(-s.catchUpWindow)
 
+	s.mu.RLock()
+	missed := make([]*Task, 0)
 	for _, task := range s.tasks {
 		if !task.Enabled {
 			continue
 		}
 
-		// Check if task was missed (last run before catch-up window and next run in the past)
-		if task.LastRun.Before(catchUpDeadline) && task.NextRun.Before(now) {
-			slog.Info("Catching up missed task", "task", task.ID, "last_run", task.LastRun)
-			go s.runTask(task)
+		// Per AI.md PART 18 "Startup Behavior": a task is caught up only when
+		// its scheduled run is in the past AND the miss is still inside the
+		// catch-up window. A run missed by longer than the window is dropped -
+		// the task simply waits for its next scheduled slot.
+		if task.NextRun.Before(now) && task.NextRun.After(catchUpDeadline) {
+			missed = append(missed, task)
 		}
+	}
+	s.mu.RUnlock()
+
+	// Queue missed tasks in order of their original scheduled time.
+	sort.Slice(missed, func(i, j int) bool {
+		return missed[i].NextRun.Before(missed[j].NextRun)
+	})
+
+	for _, task := range missed {
+		if !s.beginTask(task) {
+			continue
+		}
+		slog.Info("Catching up missed task", "task", task.ID, "last_run", task.LastRun, "missed_run", task.NextRun)
+		go s.runTask(task)
 	}
 }
 
 // runStartupTasks runs tasks marked with RunOnStart
-// Per AI.md PART 19 line 28760-28761: Tasks execute "in order of original scheduled time"
+// Per AI.md PART 18 "Startup Behavior": tasks execute "in order of original scheduled time"
 func (s *Scheduler) runStartupTasks() {
 	s.mu.RLock()
 	startupTasks := make([]*Task, 0)
@@ -945,7 +1182,14 @@ func (s *Scheduler) runStartupTasks() {
 	s.mu.RUnlock()
 
 	// Run startup tasks sequentially per spec (in order of original scheduled time)
+	sort.Slice(startupTasks, func(i, j int) bool {
+		return startupTasks[i].NextRun.Before(startupTasks[j].NextRun)
+	})
+
 	for _, task := range startupTasks {
+		if !s.beginTask(task) {
+			continue
+		}
 		slog.Info("Running startup task", "task", task.ID)
 		s.runTask(task)
 	}
@@ -983,14 +1227,42 @@ func (s *Scheduler) initDatabase() {
 
 	// Idempotent migrations — add columns missing from older schema versions
 	// SQLite silently errors if the column already exists; errors are intentionally ignored
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN task_name TEXT")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN schedule TEXT")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN last_status TEXT")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN fail_count INTEGER DEFAULT 0")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER DEFAULT 0")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN next_retry DATETIME")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN locked_by TEXT")
-	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN locked_at DATETIME")
+	for _, column := range []struct{ name, definition string }{
+		{"task_name", "TEXT"}, {"schedule", "TEXT"}, {"last_status", "TEXT"},
+		{"fail_count", "INTEGER DEFAULT 0"}, {"retry_count", "INTEGER DEFAULT 0"},
+		{"next_retry", "DATETIME"}, {"locked_by", "TEXT"}, {"locked_at", "DATETIME"},
+	} {
+		query := "ALTER TABLE scheduler_tasks ADD COLUMN " + column.name + " " + column.definition
+		if _, err := s.db.ExecContext(initCtx, query); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			slog.Warn("failed to apply scheduler schema migration", "column", column.name, "error", err)
+		}
+	}
+
+	// Execution history per AI.md PART 18 (task detail "RECENT HISTORY" and
+	// the `scheduler history <id>` CLI command). Schema matches the
+	// scheduler_history migration in src/database/migrations.go.
+	historyQuery := `
+		CREATE TABLE IF NOT EXISTS scheduler_history (
+			id TEXT PRIMARY KEY,
+			task_id TEXT NOT NULL,
+			started_at DATETIME NOT NULL,
+			finished_at DATETIME,
+			success INTEGER NOT NULL DEFAULT 0,
+			error TEXT
+		)
+	`
+	if _, err := s.db.ExecContext(initCtx, historyQuery); err != nil {
+		slog.Error("Failed to create scheduler history table", "err", err)
+	}
+
+	// Idempotent migration — status distinguishes skipped runs from failures,
+	// which the migration's success flag alone cannot express
+	if _, err := s.db.ExecContext(initCtx, "ALTER TABLE scheduler_history ADD COLUMN status TEXT"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+		slog.Warn("failed to add scheduler history status column", "error", err)
+	}
+	if _, err := s.db.ExecContext(initCtx, "CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id, started_at)"); err != nil {
+		slog.Warn("failed to create scheduler history index", "error", err)
+	}
 }
 
 // loadTaskState loads persisted state for a task
@@ -1084,6 +1356,132 @@ func (s *Scheduler) saveTaskState(task *Task) {
 	}
 }
 
+// newHistoryID generates the random identifier for a history row. The
+// scheduler_history table keys on a TEXT id (see src/database/migrations.go).
+func newHistoryID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		// A failed CSPRNG read must not lose the history record; fall back to
+		// a timestamp-derived id, which is still unique per task execution.
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(buf)
+}
+
+// recordHistory persists one execution record and prunes older rows for the
+// same task. Per AI.md PART 18 the CLI exposes this as
+// `{project_name} scheduler history <id>` and the task detail view's
+// "RECENT HISTORY" section.
+func (s *Scheduler) recordHistory(task *Task, startedAt, finishedAt time.Time, status TaskStatus, errMsg string) {
+	if s.db == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	insert := `INSERT INTO scheduler_history (id, task_id, started_at, finished_at, success, error, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
+	success := 0
+	if status == StatusSuccess {
+		success = 1
+	}
+
+	if _, err := s.db.ExecContext(ctx, insert, newHistoryID(), string(task.ID), startedAt, finishedAt, success, errMsg, string(status)); err != nil {
+		slog.Error("Failed to record task history", "task", task.ID, "err", err)
+		return
+	}
+
+	prune := `DELETE FROM scheduler_history WHERE task_id = ? AND id NOT IN (
+		SELECT id FROM scheduler_history WHERE task_id = ? ORDER BY started_at DESC LIMIT ?)`
+	if _, err := s.db.ExecContext(ctx, prune, string(task.ID), string(task.ID), historyRetainPerTask); err != nil {
+		slog.Warn("Failed to prune task history", "task", task.ID, "err", err)
+	}
+}
+
+// GetHistory returns the most recent execution records for a task, newest
+// first. Per AI.md PART 18 CLI Commands: `scheduler history <id>`.
+func (s *Scheduler) GetHistory(id TaskID, limit int) ([]*TaskHistoryEntry, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("scheduler history requires a database")
+	}
+	if limit <= 0 || limit > historyRetainPerTask {
+		limit = historyRetainPerTask
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `SELECT started_at, finished_at, success, error, status
+		FROM scheduler_history WHERE task_id = ? ORDER BY started_at DESC LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, string(id), limit)
+	if err != nil {
+		return nil, fmt.Errorf("query task history: %w", err)
+	}
+	defer closeutil.Close(rows)
+
+	entries := make([]*TaskHistoryEntry, 0, limit)
+	for rows.Next() {
+		var startedAt time.Time
+		var finishedAt sql.NullTime
+		var success int
+		var errMsg, status sql.NullString
+
+		if err := rows.Scan(&startedAt, &finishedAt, &success, &errMsg, &status); err != nil {
+			return nil, fmt.Errorf("scan task history: %w", err)
+		}
+
+		entry := &TaskHistoryEntry{
+			TaskID:    string(id),
+			StartedAt: startedAt,
+			Success:   success == 1,
+			Status:    status.String,
+			Error:     errMsg.String,
+		}
+		if finishedAt.Valid {
+			entry.FinishedAt = finishedAt.Time
+			entry.Duration = finishedAt.Time.Sub(startedAt)
+		}
+		if entry.Status == "" {
+			entry.Status = string(StatusFailed)
+			if entry.Success {
+				entry.Status = string(StatusSuccess)
+			}
+		}
+		entries = append(entries, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read task history: %w", err)
+	}
+
+	return entries, nil
+}
+
+// emitAudit hands a completed execution to the audit callback.
+// Per AI.md PART 18 Implementation Requirements: all task executions are
+// logged to the audit log.
+func (s *Scheduler) emitAudit(task *Task, status TaskStatus, errMsg string, attempts int, startedAt time.Time, duration time.Duration) {
+	s.mu.RLock()
+	auditFn := s.auditFunc
+	s.mu.RUnlock()
+
+	if auditFn == nil {
+		return
+	}
+
+	auditFn(&TaskExecution{
+		TaskID:    string(task.ID),
+		TaskName:  task.Name,
+		Status:    status,
+		Error:     errMsg,
+		Attempts:  attempts,
+		StartedAt: startedAt,
+		Duration:  duration,
+	})
+}
+
 // acquireTaskLock attempts to acquire a distributed lock for a task
 func (s *Scheduler) acquireTaskLock(task *Task) bool {
 	// Lock timeout is 5 minutes per spec
@@ -1114,7 +1512,9 @@ func (s *Scheduler) releaseTaskLock(task *Task) {
 	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
 	relCtx, relCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer relCancel()
-	s.db.ExecContext(relCtx, query, string(task.ID), s.nodeID)
+	if _, err := s.db.ExecContext(relCtx, query, string(task.ID), s.nodeID); err != nil {
+		slog.Warn("failed to release scheduler task lock", "task_id", task.ID, "error", err)
+	}
 }
 
 // Enable enables a task
@@ -1176,6 +1576,13 @@ func (s *Scheduler) RunNow(id TaskID) error {
 		return fmt.Errorf("task not found: %s", id)
 	}
 
+	// Per AI.md PART 18 "Shutdown Behavior": no new task executions are
+	// accepted once shutdown has started. beginTask also rejects a manual run
+	// while the same task is already executing.
+	if !s.beginTask(task) {
+		return fmt.Errorf("task %s is already running or the scheduler is shutting down", id)
+	}
+
 	go s.runTask(task)
 	return nil
 }
@@ -1190,9 +1597,92 @@ func (s *Scheduler) StopTaskScheduler() {
 	s.running = false
 	s.mu.Unlock()
 
+	// Stop accepting new task executions, then drain the dispatch loop.
 	s.cancel()
 	s.wg.Wait()
+
+	// Per AI.md PART 18 "Shutdown Behavior": wait for running tasks to
+	// complete, for at most 30 seconds. The waiter goroutine always finishes
+	// once the last task returns, whether or not the timeout fired first.
+	drained := make(chan struct{})
+	go func() {
+		s.taskWG.Wait()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+		slog.Info("Scheduler tasks completed before shutdown deadline")
+	case <-time.After(shutdownGracePeriod):
+		slog.Warn("Scheduler shutdown timeout - forcing lock release", "grace_period", shutdownGracePeriod)
+		s.markInterruptedTasks()
+	}
+
+	// Release all locks held by this node (force release on the timeout path)
+	// and persist final task state.
+	s.forceReleaseLocks()
+	s.saveAllTaskState()
+
 	slog.Info("Scheduler stopped")
+}
+
+// markInterruptedTasks flags tasks still executing at the shutdown deadline so
+// they are retried on the next start.
+// Per AI.md PART 18 "Shutdown Behavior": "Mark interrupted tasks for retry on
+// next start."
+func (s *Scheduler) markInterruptedTasks() {
+	s.mu.Lock()
+	interrupted := make([]*Task, 0)
+	for _, task := range s.tasks {
+		if task.LastStatus == StatusRunning || task.LastStatus == StatusRetrying {
+			task.LastStatus = StatusFailed
+			task.LastError = "interrupted by shutdown"
+			// Due immediately on the next start so the catch-up pass picks it up.
+			task.NextRun = time.Now()
+			interrupted = append(interrupted, task)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, task := range interrupted {
+		slog.Warn("Task interrupted by shutdown - marked for retry on next start", "task", task.ID)
+	}
+}
+
+// forceReleaseLocks clears every scheduler lock held by this node.
+// Per AI.md PART 18 "Shutdown Behavior": release all locks (force release when
+// the grace period expires).
+func (s *Scheduler) forceReleaseLocks() {
+	if s.db == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	query := `UPDATE scheduler_tasks SET locked_by = NULL, locked_at = NULL WHERE locked_by = ?`
+	if _, err := s.db.ExecContext(ctx, query, s.nodeID); err != nil {
+		slog.Error("Failed to release scheduler locks on shutdown", "err", err)
+	}
+}
+
+// saveAllTaskState persists every task's state at shutdown.
+// Per AI.md PART 18 "Shutdown Behavior": "Save scheduler state to database."
+func (s *Scheduler) saveAllTaskState() {
+	if s.db == nil {
+		return
+	}
+
+	s.mu.RLock()
+	tasks := make([]*Task, 0, len(s.tasks))
+	for _, task := range s.tasks {
+		tasks = append(tasks, task)
+	}
+	s.mu.RUnlock()
+
+	for _, task := range tasks {
+		s.saveTaskState(task)
+	}
 }
 
 // IsRunning returns whether the scheduler is running
@@ -1292,7 +1782,7 @@ type TaskInfo struct {
 	Enabled     bool      `json:"enabled"`
 	Skippable   bool      `json:"skippable"`
 
-	// Retry state per AI.md PART 19
+	// Retry state per AI.md PART 18
 	RetryCount int       `json:"retry_count"`
 	NextRetry  time.Time `json:"next_retry,omitempty"`
 	MaxRetries int       `json:"max_retries"`

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
@@ -83,7 +84,7 @@ func (h *RFCHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	if err != nil {
 		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_connect_failed")), nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_not_found", rfcNum)), nil
@@ -106,34 +107,34 @@ func (h *RFCHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	// Build response content
 	var htmlContent strings.Builder
-	htmlContent.WriteString(fmt.Sprintf("<strong>RFC %d</strong><br><br>", rfcNumInt))
+	fmt.Fprintf(&htmlContent, "<strong>RFC %d</strong><br><br>", rfcNumInt)
 
 	if rfcInfo.Title != "" {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Title:</strong> %s<br><br>", escapeHTML(rfcInfo.Title)))
+		fmt.Fprintf(&htmlContent, "<strong>Title:</strong> %s<br><br>", escapeHTML(rfcInfo.Title))
 	}
 
 	if len(rfcInfo.Authors) > 0 {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Author(s):</strong> %s<br>", escapeHTML(strings.Join(rfcInfo.Authors, ", "))))
+		fmt.Fprintf(&htmlContent, "<strong>Author(s):</strong> %s<br>", escapeHTML(strings.Join(rfcInfo.Authors, ", ")))
 	}
 
 	if rfcInfo.Date != "" {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Date:</strong> %s<br>", escapeHTML(rfcInfo.Date)))
+		fmt.Fprintf(&htmlContent, "<strong>Date:</strong> %s<br>", escapeHTML(rfcInfo.Date))
 	}
 
 	if rfcInfo.Status != "" {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Status:</strong> %s<br>", escapeHTML(rfcInfo.Status)))
+		fmt.Fprintf(&htmlContent, "<strong>Status:</strong> %s<br>", escapeHTML(rfcInfo.Status))
 	}
 
 	if rfcInfo.Category != "" {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Category:</strong> %s<br>", escapeHTML(rfcInfo.Category)))
+		fmt.Fprintf(&htmlContent, "<strong>Category:</strong> %s<br>", escapeHTML(rfcInfo.Category))
 	}
 
 	if len(rfcInfo.Obsoletes) > 0 {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Obsoletes:</strong> %s<br>", escapeHTML(strings.Join(rfcInfo.Obsoletes, ", "))))
+		fmt.Fprintf(&htmlContent, "<strong>Obsoletes:</strong> %s<br>", escapeHTML(strings.Join(rfcInfo.Obsoletes, ", ")))
 	}
 
 	if len(rfcInfo.Updates) > 0 {
-		htmlContent.WriteString(fmt.Sprintf("<strong>Updates:</strong> %s<br>", escapeHTML(strings.Join(rfcInfo.Updates, ", "))))
+		fmt.Fprintf(&htmlContent, "<strong>Updates:</strong> %s<br>", escapeHTML(strings.Join(rfcInfo.Updates, ", ")))
 	}
 
 	htmlContent.WriteString("<br>")
@@ -144,14 +145,14 @@ func (h *RFCHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		if len(abstractPreview) > 500 {
 			abstractPreview = abstractPreview[:500] + "..."
 		}
-		htmlContent.WriteString(fmt.Sprintf("<strong>Abstract:</strong><br>%s<br>", escapeHTML(abstractPreview)))
+		fmt.Fprintf(&htmlContent, "<strong>Abstract:</strong><br>%s<br>", escapeHTML(abstractPreview))
 	}
 
 	// Links
 	htmlContent.WriteString("<br><strong>Links:</strong><br>")
-	htmlContent.WriteString(fmt.Sprintf("&bull; <a href=\"%s\" target=\"_blank\">Plain Text</a><br>", rfcURL))
-	htmlContent.WriteString(fmt.Sprintf("&bull; <a href=\"https://www.rfc-editor.org/info/rfc%d\" target=\"_blank\">RFC Info Page</a><br>", rfcNumInt))
-	htmlContent.WriteString(fmt.Sprintf("&bull; <a href=\"https://datatracker.ietf.org/doc/rfc%d/\" target=\"_blank\">IETF Datatracker</a><br>", rfcNumInt))
+	fmt.Fprintf(&htmlContent, "&bull; <a href=\"%s\" target=\"_blank\">Plain Text</a><br>", rfcURL)
+	fmt.Fprintf(&htmlContent, "&bull; <a href=\"https://www.rfc-editor.org/info/rfc%d\" target=\"_blank\">RFC Info Page</a><br>", rfcNumInt)
+	fmt.Fprintf(&htmlContent, "&bull; <a href=\"https://datatracker.ietf.org/doc/rfc%d/\" target=\"_blank\">IETF Datatracker</a><br>", rfcNumInt)
 
 	return &Answer{
 		Type:      AnswerTypeRFC,

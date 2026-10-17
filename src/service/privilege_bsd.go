@@ -71,3 +71,23 @@ func createFreeBSDSystemUser(name string) (*SystemUser, error) {
 		Shell: "/usr/sbin/nologin",
 	}, nil
 }
+
+// DeleteSystemUser removes the BSD system user and group created by the
+// server. Per AI.md PART 23 uninstall: pw userdel/pw groupdel are the inverse
+// of the pw useradd creation commands.
+func DeleteSystemUser(name string) error {
+	if err := exec.Command("pw", "userdel", name, "-r").Run(); err != nil {
+		if _, lookErr := user.Lookup(name); lookErr != nil {
+			if _, grpErr := user.LookupGroup(name); grpErr != nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	if err := exec.Command("pw", "groupdel", name).Run(); err != nil {
+		if _, grpErr := user.LookupGroup(name); grpErr == nil {
+			return fmt.Errorf("failed to delete group: %w", err)
+		}
+	}
+	return nil
+}

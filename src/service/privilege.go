@@ -1,13 +1,17 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"os/user"
 	"strconv"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // PrivilegeEscalator handles privilege escalation for service installation
@@ -53,7 +57,7 @@ func (p *PrivilegeEscalator) EscalateCommand(cmd string, args ...string) *exec.C
 		fullArgs := strings.Join(append([]string{cmd}, args...), " ")
 		return exec.Command("powershell", "-Command",
 			fmt.Sprintf("Start-Process -FilePath '%s' -ArgumentList '%s' -Verb RunAs -Wait",
-				cmd, strings.Replace(fullArgs, "'", "''", -1)))
+				cmd, strings.ReplaceAll(fullArgs, "'", "''")))
 	default:
 		return exec.Command(cmd, args...)
 	}
@@ -86,8 +90,34 @@ var reservedSystemIDs = map[int]bool{
 	995: true,
 	// systemd-network
 	994: true,
-	// systemd-journal
+	// systemd-timesync
 	993: true,
+	// input
+	992: true,
+	// kvm
+	991: true,
+	// render
+	990: true,
+	// sgx
+	989: true,
+	// pipewire
+	988: true,
+	// pipewire (gid)
+	987: true,
+	// colord
+	986: true,
+	// geoclue
+	985: true,
+	// avahi
+	984: true,
+	// rtkit
+	983: true,
+	// saned
+	982: true,
+	// usbmux
+	981: true,
+	// cups-pk-helper
+	980: true,
 	// systemd-journal
 	101: true,
 	// systemd-network
@@ -241,9 +271,12 @@ func handleEscalation() error {
 		return nil
 	}
 	// Interactive prompt for privilege escalation — intentional stdout I/O.
-	fmt.Print("Install system service? Requires elevated privileges. [Y/n]: ")
+	// Per AI.md PART 30: user-facing text comes from the i18n catalog.
+	fmt.Print(i18n.TDefault("service.escalation_prompt"))
 	var answer string
-	fmt.Scanln(&answer)
+	if _, err := fmt.Scanln(&answer); err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("read privilege escalation choice: %w", err)
+	}
 	answer = strings.TrimSpace(answer)
 	if strings.EqualFold(answer, "n") || strings.EqualFold(answer, "no") {
 		slog.Info("Installing as user service (operator declined system install)")

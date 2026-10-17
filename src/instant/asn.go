@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -139,37 +140,37 @@ func (h *ASNHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	data := asnInfo.Data
 
 	content.WriteString("<div class=\"asn-result\">")
-	content.WriteString(fmt.Sprintf("<strong>AS%d</strong>", data.ASN))
+	fmt.Fprintf(&content, "<strong>AS%d</strong>", data.ASN)
 	if data.Name != "" {
-		content.WriteString(fmt.Sprintf(" - %s", data.Name))
+		fmt.Fprintf(&content, " - %s", data.Name)
 	}
 	content.WriteString("<br><br>")
 
 	if data.DescriptionShort != "" {
-		content.WriteString(fmt.Sprintf("<strong>Description:</strong> %s<br>", data.DescriptionShort))
+		fmt.Fprintf(&content, "<strong>Description:</strong> %s<br>", data.DescriptionShort)
 	}
 
 	if data.CountryCode != "" {
-		content.WriteString(fmt.Sprintf("<strong>Country:</strong> %s<br>", data.CountryCode))
+		fmt.Fprintf(&content, "<strong>Country:</strong> %s<br>", data.CountryCode)
 	}
 
 	if data.Website != "" {
-		content.WriteString(fmt.Sprintf("<strong>Website:</strong> <a href=\"%s\" target=\"_blank\">%s</a><br>", data.Website, data.Website))
+		fmt.Fprintf(&content, "<strong>Website:</strong> <a href=\"%s\" target=\"_blank\">%s</a><br>", data.Website, data.Website)
 	}
 
 	if len(data.OwnerAddress) > 0 {
 		content.WriteString("<strong>Organization:</strong><br>")
 		for _, line := range data.OwnerAddress {
 			if line != "" {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s<br>", line))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;%s<br>", line)
 			}
 		}
 	}
 
 	if data.RIRAllocation.RIRName != "" {
-		content.WriteString(fmt.Sprintf("<br><strong>RIR:</strong> %s", data.RIRAllocation.RIRName))
+		fmt.Fprintf(&content, "<br><strong>RIR:</strong> %s", data.RIRAllocation.RIRName)
 		if data.RIRAllocation.DateAllocated != "" {
-			content.WriteString(fmt.Sprintf(" (allocated: %s)", data.RIRAllocation.DateAllocated))
+			fmt.Fprintf(&content, " (allocated: %s)", data.RIRAllocation.DateAllocated)
 		}
 		content.WriteString("<br>")
 	}
@@ -181,8 +182,8 @@ func (h *ASNHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 		if ipv4Count > 0 || ipv6Count > 0 {
 			content.WriteString("<br><strong>IP Prefixes:</strong><br>")
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;IPv4: %d prefixes<br>", ipv4Count))
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;IPv6: %d prefixes<br>", ipv6Count))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;IPv4: %d prefixes<br>", ipv4Count)
+			fmt.Fprintf(&content, "&nbsp;&nbsp;IPv6: %d prefixes<br>", ipv6Count)
 
 			// Show first few prefixes
 			if ipv4Count > 0 {
@@ -193,14 +194,14 @@ func (h *ASNHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 				}
 				for i := 0; i < maxShow; i++ {
 					p := prefixes.Data.IPv4Prefixes[i]
-					content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code>", p.Prefix))
+					fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code>", p.Prefix)
 					if p.Name != "" {
-						content.WriteString(fmt.Sprintf(" (%s)", p.Name))
+						fmt.Fprintf(&content, " (%s)", p.Name)
 					}
 					content.WriteString("<br>")
 				}
 				if ipv4Count > maxShow {
-					content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<em>... and %d more</em><br>", ipv4Count-maxShow))
+					fmt.Fprintf(&content, "&nbsp;&nbsp;<em>... and %d more</em><br>", ipv4Count-maxShow)
 				}
 			}
 
@@ -212,14 +213,14 @@ func (h *ASNHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 				}
 				for i := 0; i < maxShow; i++ {
 					p := prefixes.Data.IPv6Prefixes[i]
-					content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code>", p.Prefix))
+					fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code>", p.Prefix)
 					if p.Name != "" {
-						content.WriteString(fmt.Sprintf(" (%s)", p.Name))
+						fmt.Fprintf(&content, " (%s)", p.Name)
 					}
 					content.WriteString("<br>")
 				}
 				if ipv6Count > maxShow {
-					content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<em>... and %d more</em><br>", ipv6Count-maxShow))
+					fmt.Fprintf(&content, "&nbsp;&nbsp;<em>... and %d more</em><br>", ipv6Count-maxShow)
 				}
 			}
 		}
@@ -271,7 +272,7 @@ func (h *ASNHandler) fetchASNInfo(ctx context.Context, asn string) (*bgpViewASNR
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
@@ -300,7 +301,7 @@ func (h *ASNHandler) fetchASNPrefixes(ctx context.Context, asn string) (*bgpView
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)

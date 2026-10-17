@@ -70,15 +70,15 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		}
 
 		var content strings.Builder
-		content.WriteString(fmt.Sprintf("<strong>URL:</strong> %s<br><br>", escapeHTML(text)))
-		content.WriteString(fmt.Sprintf("<strong>Scheme:</strong> %s<br>", escapeHTML(parsed.Scheme)))
-		content.WriteString(fmt.Sprintf("<strong>Host:</strong> %s<br>", escapeHTML(parsed.Host)))
-		content.WriteString(fmt.Sprintf("<strong>Path:</strong> %s<br>", escapeHTML(parsed.Path)))
+		content.WriteString(urlParseRow("URL", text))
+		content.WriteString(urlParseRow("Scheme", parsed.Scheme))
+		content.WriteString(urlParseRow("Host", parsed.Host))
+		content.WriteString(urlParseRow("Path", parsed.Path))
 		if parsed.RawQuery != "" {
-			content.WriteString(fmt.Sprintf("<strong>Query:</strong> %s<br>", escapeHTML(parsed.RawQuery)))
+			content.WriteString(urlParseRow("Query", parsed.RawQuery))
 		}
 		if parsed.Fragment != "" {
-			content.WriteString(fmt.Sprintf("<strong>Fragment:</strong> %s<br>", escapeHTML(parsed.Fragment)))
+			content.WriteString(urlParseRow("Fragment", parsed.Fragment))
 		}
 
 		return &Answer{
@@ -107,6 +107,11 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		Type:    AnswerTypeURL,
 		Query:   query,
 		Title:   i18n.T(lang, "instant.url_operation_title", operation),
-		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), operation, escapeHTML(result)),
+		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code> <button class=\"copy-btn\" data-copy=\"%s\">Copy</button>", escapeHTML(text), operation, escapeHTML(result), escapeHTML(result)),
 	}, nil
+}
+
+func urlParseRow(label, value string) string {
+	escaped := escapeHTML(value)
+	return fmt.Sprintf(`<strong>%s:</strong> %s <button class="copy-btn" data-copy="%s">Copy</button><br>`, escapeHTML(label), escaped, escaped)
 }

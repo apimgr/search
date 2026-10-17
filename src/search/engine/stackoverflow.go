@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -66,7 +68,7 @@ func (e *StackOverflow) Search(ctx context.Context, query *model.Query) ([]model
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("stack overflow API returned status %d", resp.StatusCode)
@@ -126,7 +128,7 @@ func (e *StackOverflow) Search(ctx context.Context, query *model.Query) ([]model
 			URL:      item.Link,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: model.CategoryGeneral,
+			Category: query.Category,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})

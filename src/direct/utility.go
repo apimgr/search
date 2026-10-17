@@ -160,10 +160,10 @@ func formatHTTPContent(code int, name, description, category string) string {
 
 	// Category badge color
 	categoryClass := strings.ToLower(strings.ReplaceAll(category, " ", "-"))
-	html.WriteString(fmt.Sprintf("<span class=\"category-badge %s\">%s</span>", categoryClass, category))
+	fmt.Fprintf(&html, "<span class=\"category-badge %s\">%s</span>", categoryClass, category)
 
-	html.WriteString(fmt.Sprintf("<h1>%d %s</h1>", code, escapeHTML(name)))
-	html.WriteString(fmt.Sprintf("<p class=\"description\">%s</p>", escapeHTML(description)))
+	fmt.Fprintf(&html, "<h1>%d %s</h1>", code, escapeHTML(name))
+	fmt.Fprintf(&html, "<p class=\"description\">%s</p>", escapeHTML(description))
 
 	// Related codes
 	html.WriteString("<h2>Related Status Codes</h2>")
@@ -171,7 +171,7 @@ func formatHTTPContent(code int, name, description, category string) string {
 	baseCode := (code / 100) * 100
 	for c := baseCode; c < baseCode+20; c++ {
 		if s, ok := httpStatusCodes[c]; ok && c != code {
-			html.WriteString(fmt.Sprintf("<li><a href=\"/direct/http/%d\">%d %s</a></li>", c, c, escapeHTML(s.Name)))
+			fmt.Fprintf(&html, "<li><a href=\"/direct/http/%d\">%d %s</a></li>", c, c, escapeHTML(s.Name))
 		}
 	}
 	html.WriteString("</ul>")
@@ -310,12 +310,12 @@ func (h *PortHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 func formatPortContent(port int, service, description, protocol string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"port-content\">")
-	html.WriteString(fmt.Sprintf("<h1>Port %d</h1>", port))
-	html.WriteString(fmt.Sprintf("<h2>%s</h2>", escapeHTML(service)))
+	fmt.Fprintf(&html, "<h1>Port %d</h1>", port)
+	fmt.Fprintf(&html, "<h2>%s</h2>", escapeHTML(service))
 
 	html.WriteString("<dl>")
-	html.WriteString(fmt.Sprintf("<dt>Description</dt><dd>%s</dd>", escapeHTML(description)))
-	html.WriteString(fmt.Sprintf("<dt>Protocol</dt><dd>%s</dd>", escapeHTML(protocol)))
+	fmt.Fprintf(&html, "<dt>Description</dt><dd>%s</dd>", escapeHTML(description))
+	fmt.Fprintf(&html, "<dt>Protocol</dt><dd>%s</dd>", escapeHTML(protocol))
 
 	// Port category
 	category := ""
@@ -327,7 +327,7 @@ func formatPortContent(port int, service, description, protocol string) string {
 	default:
 		category = "Dynamic/Private port"
 	}
-	html.WriteString(fmt.Sprintf("<dt>Category</dt><dd>%s</dd>", category))
+	fmt.Fprintf(&html, "<dt>Category</dt><dd>%s</dd>", category)
 	html.WriteString("</dl>")
 
 	html.WriteString("</div>")
@@ -337,9 +337,9 @@ func formatPortContent(port int, service, description, protocol string) string {
 func formatUnknownPortContent(port int, category string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"port-content\">")
-	html.WriteString(fmt.Sprintf("<h1>Port %d</h1>", port))
+	fmt.Fprintf(&html, "<h1>Port %d</h1>", port)
 	html.WriteString("<p>No well-known service registered for this port.</p>")
-	html.WriteString(fmt.Sprintf("<p><strong>Category:</strong> %s</p>", category))
+	fmt.Fprintf(&html, "<p><strong>Category:</strong> %s</p>", category)
 	html.WriteString("</div>")
 	return html.String()
 }
@@ -363,8 +363,13 @@ func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return nil, fmt.Errorf("cron expression required")
 	}
 
-	parts := strings.Fields(term)
-	if len(parts) < 5 || len(parts) > 7 {
+	// Normalize the expression to its five positional fields. This is what makes
+	// the @-macros work and what keeps the displayed breakdown in step with what
+	// the scheduler will actually run — the old code counted raw whitespace
+	// fields, so "@daily" was rejected and a 6-field expression's sixth value
+	// (a day-of-week) was labelled "Year".
+	parts, yearExpr, err := splitCronExpression(term)
+	if err != nil {
 		return &Answer{
 			Type:        AnswerTypeCron,
 			Term:        term,
@@ -375,7 +380,8 @@ func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		}, nil
 	}
 
-	// Parse cron fields
+	// Field breakdown, labelled by position rather than by index into the raw
+	// input.
 	fields := []struct {
 		name   string
 		value  string
@@ -388,19 +394,25 @@ func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		{"Day of Week", parts[4], "0-6"},
 	}
 
-	if len(parts) >= 6 {
+	if yearExpr != "" {
 		fields = append(fields, struct {
 			name   string
 			value  string
 			range_ string
-		}{"Year", parts[5], "1970-2099"})
+		}{"Year", yearExpr, "1970-2099"})
 	}
 
 	// Generate human-readable description
 	description := generateCronDescription(parts)
 
-	// Calculate next run times
-	nextRuns := calculateNextCronRuns(parts, 5)
+	// Next run times, computed from the expression itself. A field that is
+	// syntactically valid but out of range for a particular day (Feb 30) is
+	// reported as having no future run rather than given a fabricated time.
+	sched, schedErr := parseCronSchedule(term)
+	nextRuns := []string{}
+	if schedErr == nil {
+		nextRuns = sched.nextRuns(time.Now(), 5)
+	}
 
 	data := map[string]interface{}{
 		"expression":  term,
@@ -452,29 +464,29 @@ func generateCronDescription(parts []string) string {
 	if minute == "*" {
 		desc.WriteString("every minute")
 	} else if strings.HasPrefix(minute, "*/") {
-		desc.WriteString(fmt.Sprintf("every %s minutes", minute[2:]))
+		fmt.Fprintf(&desc, "every %s minutes", minute[2:])
 	} else {
-		desc.WriteString(fmt.Sprintf("minute %s", minute))
+		fmt.Fprintf(&desc, "minute %s", minute)
 	}
 
 	if hour != "*" {
 		if strings.HasPrefix(hour, "*/") {
-			desc.WriteString(fmt.Sprintf(" of every %s hours", hour[2:]))
+			fmt.Fprintf(&desc, " of every %s hours", hour[2:])
 		} else {
-			desc.WriteString(fmt.Sprintf(" past hour %s", hour))
+			fmt.Fprintf(&desc, " past hour %s", hour)
 		}
 	}
 
 	if dom != "*" && dow == "*" {
-		desc.WriteString(fmt.Sprintf(" on day %s", dom))
+		fmt.Fprintf(&desc, " on day %s", dom)
 	}
 
 	if dow != "*" {
 		days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 		if i, err := strconv.Atoi(dow); err == nil && i >= 0 && i <= 6 {
-			desc.WriteString(fmt.Sprintf(" on %s", days[i]))
+			fmt.Fprintf(&desc, " on %s", days[i])
 		} else {
-			desc.WriteString(fmt.Sprintf(" on day of week %s", dow))
+			fmt.Fprintf(&desc, " on day of week %s", dow)
 		}
 	}
 
@@ -482,24 +494,13 @@ func generateCronDescription(parts []string) string {
 		months := []string{"", "January", "February", "March", "April", "May", "June",
 			"July", "August", "September", "October", "November", "December"}
 		if i, err := strconv.Atoi(month); err == nil && i >= 1 && i <= 12 {
-			desc.WriteString(fmt.Sprintf(" in %s", months[i]))
+			fmt.Fprintf(&desc, " in %s", months[i])
 		} else {
-			desc.WriteString(fmt.Sprintf(" in month %s", month))
+			fmt.Fprintf(&desc, " in month %s", month)
 		}
 	}
 
 	return desc.String()
-}
-
-func calculateNextCronRuns(parts []string, count int) []string {
-	// Simplified - just show format
-	// Real implementation would calculate actual next run times
-	now := time.Now()
-	runs := make([]string, count)
-	for i := 0; i < count; i++ {
-		runs[i] = now.Add(time.Duration(i+1) * time.Hour).Format(time.RFC1123)
-	}
-	return runs
 }
 
 func formatCronContent(expression string, fields []struct {
@@ -510,9 +511,9 @@ func formatCronContent(expression string, fields []struct {
 	var html strings.Builder
 	html.WriteString("<div class=\"cron-content\">")
 	html.WriteString("<h1>Cron Expression</h1>")
-	html.WriteString(fmt.Sprintf("<pre class=\"cron-expr\"><code>%s</code></pre>", escapeHTML(expression)))
+	fmt.Fprintf(&html, "<pre class=\"cron-expr\"><code>%s</code></pre>", escapeHTML(expression))
 
-	html.WriteString(fmt.Sprintf("<p class=\"description\">%s</p>", escapeHTML(description)))
+	fmt.Fprintf(&html, "<p class=\"description\">%s</p>", escapeHTML(description))
 
 	// Field breakdown
 	html.WriteString("<h2>Fields</h2>")
@@ -520,8 +521,8 @@ func formatCronContent(expression string, fields []struct {
 	html.WriteString("<thead><tr><th>Field</th><th>Value</th><th>Allowed</th></tr></thead>")
 	html.WriteString("<tbody>")
 	for _, f := range fields {
-		html.WriteString(fmt.Sprintf("<tr><td>%s</td><td><code>%s</code></td><td>%s</td></tr>",
-			f.name, escapeHTML(f.value), f.range_))
+		fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%s</code></td><td>%s</td></tr>",
+			f.name, escapeHTML(f.value), f.range_)
 	}
 	html.WriteString("</tbody></table>")
 
@@ -536,6 +537,21 @@ func formatCronContent(expression string, fields []struct {
 	html.WriteString("│ └──────── Hour (0-23)\n")
 	html.WriteString("└────────── Minute (0-59)\n")
 	html.WriteString("</pre>")
+
+	// Next run times. The empty branch matters: an expression like "0 0 30 2 *"
+	// parses cleanly but names a date that does not exist, so there is no run to
+	// show. Saying so is the honest answer; the alternative — omitting the
+	// section — reads as "not computed".
+	html.WriteString("<h2>Next Runs</h2>")
+	if len(nextRuns) == 0 {
+		html.WriteString("<p class=\"no-runs\">This expression has no upcoming run dates.</p>")
+	} else {
+		html.WriteString("<ol class=\"cron-runs\">")
+		for _, run := range nextRuns {
+			fmt.Fprintf(&html, "<li>%s</li>", escapeHTML(run))
+		}
+		html.WriteString("</ol>")
+	}
 
 	html.WriteString("</div>")
 	return html.String()
@@ -562,6 +578,7 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 
 	var owner, group, other int
 	var symbolic string
+	relativeMode := false
 
 	// Try to parse as octal
 	if len(term) == 3 || len(term) == 4 {
@@ -575,6 +592,15 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 			group = int((n >> 3) & 7)
 			other = int(n & 7)
 			symbolic = permToSymbolic(owner) + permToSymbolic(group) + permToSymbolic(other)
+		}
+	}
+
+	// Relative symbolic modes are evaluated from 000 because no current file mode is supplied.
+	if strings.ContainsAny(term, "+-=") {
+		if permissions, ok := applyRelativeChmod(term, [3]int{}); ok {
+			owner, group, other = permissions[0], permissions[1], permissions[2]
+			symbolic = permToSymbolic(owner) + permToSymbolic(group) + permToSymbolic(other)
+			relativeMode = true
 		}
 	}
 
@@ -601,21 +627,69 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 
 	data := map[string]interface{}{
 		"octal":    octalValue,
+		"relative": relativeMode,
 		"symbolic": symbolic,
 		"owner":    owner,
 		"group":    group,
 		"other":    other,
 	}
+	if relativeMode {
+		data["baseline"] = "000"
+	}
 
+	content := formatChmodContent(octalValue, symbolic, owner, group, other)
+	if relativeMode {
+		content = strings.Replace(content, "<h2>Usage</h2>", "<p>Relative symbolic changes are shown as if applied to an empty starting mode (000).</p><h2>Usage</h2>", 1)
+	}
 	return &Answer{
 		Type:        AnswerTypeChmod,
 		Term:        term,
 		Title:       fmt.Sprintf("chmod %s", octalValue),
 		Description: symbolic,
-		Content:     formatChmodContent(octalValue, symbolic, owner, group, other),
+		Content:     content,
 		Source:      "chmod Calculator",
 		Data:        data,
 	}, nil
+}
+
+func applyRelativeChmod(expression string, current [3]int) ([3]int, bool) {
+	for _, clause := range strings.Split(expression, ",") {
+		match := regexp.MustCompile(`^([ugoa]*)([+=-])([rwx]*)$`).FindStringSubmatch(clause)
+		if len(match) != 4 || match[2] == "" || (match[2] != "=" && match[3] == "") {
+			return current, false
+		}
+		who := match[1]
+		if who == "" || strings.Contains(who, "a") {
+			who = "ugo"
+		}
+		mask := 0
+		for _, permission := range match[3] {
+			switch permission {
+			case 'r':
+				mask |= 4
+			case 'w':
+				mask |= 2
+			case 'x':
+				mask |= 1
+			default:
+				return current, false
+			}
+		}
+		for index, target := range []byte{'u', 'g', 'o'} {
+			if !strings.ContainsRune(who, rune(target)) {
+				continue
+			}
+			switch match[2] {
+			case "+":
+				current[index] |= mask
+			case "-":
+				current[index] &^= mask
+			case "=":
+				current[index] = mask
+			}
+		}
+	}
+	return current, true
 }
 
 func permToSymbolic(perm int) string {
@@ -659,8 +733,8 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 
 	// Display both formats
 	html.WriteString("<div class=\"chmod-display\">")
-	html.WriteString(fmt.Sprintf("<div class=\"octal\"><span class=\"label\">Octal</span><code>%s</code></div>", octal))
-	html.WriteString(fmt.Sprintf("<div class=\"symbolic\"><span class=\"label\">Symbolic</span><code>%s</code></div>", symbolic))
+	fmt.Fprintf(&html, "<div class=\"octal\"><span class=\"label\">Octal</span><code>%s</code></div>", octal)
+	fmt.Fprintf(&html, "<div class=\"symbolic\"><span class=\"label\">Symbolic</span><code>%s</code></div>", symbolic)
 	html.WriteString("</div>")
 
 	// Permission grid
@@ -674,11 +748,11 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 		perm int
 	}{{"Owner", owner}, {"Group", group}, {"Other", other}} {
 		html.WriteString("<tr>")
-		html.WriteString(fmt.Sprintf("<td><strong>%s</strong></td>", row.name))
-		html.WriteString(fmt.Sprintf("<td>%s</td>", checkMark(row.perm&4 != 0)))
-		html.WriteString(fmt.Sprintf("<td>%s</td>", checkMark(row.perm&2 != 0)))
-		html.WriteString(fmt.Sprintf("<td>%s</td>", checkMark(row.perm&1 != 0)))
-		html.WriteString(fmt.Sprintf("<td><code>%d</code></td>", row.perm))
+		fmt.Fprintf(&html, "<td><strong>%s</strong></td>", row.name)
+		fmt.Fprintf(&html, "<td>%s</td>", checkMark(row.perm&4 != 0))
+		fmt.Fprintf(&html, "<td>%s</td>", checkMark(row.perm&2 != 0))
+		fmt.Fprintf(&html, "<td>%s</td>", checkMark(row.perm&1 != 0))
+		fmt.Fprintf(&html, "<td><code>%d</code></td>", row.perm)
 		html.WriteString("</tr>")
 	}
 
@@ -686,8 +760,8 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 
 	// Usage
 	html.WriteString("<h2>Usage</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>chmod %s filename</code></pre>", octal))
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+	fmt.Fprintf(&html, "<pre><code>chmod %s filename</code></pre>", octal)
+	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 
 	// Common permissions
 	html.WriteString("<h2>Common Permissions</h2>")
@@ -811,17 +885,17 @@ func formatRegexContent(pattern string, analysis []string, numSubexp int) string
 	html.WriteString("<h1>Regex Analyzer</h1>")
 
 	html.WriteString("<h2>Pattern</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(pattern)))
+	fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(pattern))
 	html.WriteString("<p class=\"valid\">✓ Valid regex pattern</p>")
 
 	if numSubexp > 0 {
-		html.WriteString(fmt.Sprintf("<p>Capture groups: %d</p>", numSubexp))
+		fmt.Fprintf(&html, "<p>Capture groups: %d</p>", numSubexp)
 	}
 
 	html.WriteString("<h2>Analysis</h2>")
 	html.WriteString("<ul>")
 	for _, a := range analysis {
-		html.WriteString(fmt.Sprintf("<li>%s</li>", escapeHTML(a)))
+		fmt.Fprintf(&html, "<li>%s</li>", escapeHTML(a))
 	}
 	html.WriteString("</ul>")
 
@@ -905,11 +979,15 @@ func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 
 	// Parse header
 	var header map[string]interface{}
-	json.Unmarshal(headerJSON, &header)
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		return invalidJWTAnswer(term, lang, "invalid_header", err)
+	}
 
 	// Parse payload
 	var payload map[string]interface{}
-	json.Unmarshal(payloadJSON, &payload)
+	if err := json.Unmarshal(payloadJSON, &payload); err != nil {
+		return invalidJWTAnswer(term, lang, "invalid_payload", err)
+	}
 
 	// Check expiration
 	expired := false
@@ -946,6 +1024,21 @@ func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	}, nil
 }
 
+func invalidJWTAnswer(term, lang, code string, cause error) (*Answer, error) {
+	description := i18n.T(lang, "direct.invalid_header")
+	if code == "invalid_payload" {
+		description = i18n.T(lang, "direct.invalid_payload")
+	}
+	return &Answer{
+		Type:        AnswerTypeJWT,
+		Term:        truncateString(term, 50),
+		Title:       i18n.T(lang, "direct.jwt_decoder_title"),
+		Description: description,
+		Content:     fmt.Sprintf("<p class=\"error\">Invalid JWT: %s</p>", escapeHTML(cause.Error())),
+		Error:       code,
+	}, nil
+}
+
 func base64URLDecode(s string) ([]byte, error) {
 	// Add padding if needed
 	switch len(s) % 4 {
@@ -972,37 +1065,37 @@ func formatJWTContent(header, payload string, expired bool, expiresIn string, cl
 	// Expiration status
 	if expiresIn != "" {
 		if expired {
-			html.WriteString(fmt.Sprintf("<p class=\"expired\">⚠️ %s</p>", expiresIn))
+			fmt.Fprintf(&html, "<p class=\"expired\">⚠️ %s</p>", expiresIn)
 		} else {
-			html.WriteString(fmt.Sprintf("<p class=\"valid\">✓ %s</p>", expiresIn))
+			fmt.Fprintf(&html, "<p class=\"valid\">✓ %s</p>", expiresIn)
 		}
 	}
 
 	// Header
 	html.WriteString("<h2>Header</h2>")
-	html.WriteString(fmt.Sprintf("<pre class=\"jwt-json\"><code>%s</code></pre>", escapeHTML(header)))
+	fmt.Fprintf(&html, "<pre class=\"jwt-json\"><code>%s</code></pre>", escapeHTML(header))
 
 	// Payload
 	html.WriteString("<h2>Payload</h2>")
-	html.WriteString(fmt.Sprintf("<pre class=\"jwt-json\"><code>%s</code></pre>", escapeHTML(payload)))
+	fmt.Fprintf(&html, "<pre class=\"jwt-json\"><code>%s</code></pre>", escapeHTML(payload))
 
 	// Standard claims explanation
 	html.WriteString("<h2>Standard Claims</h2>")
 	html.WriteString("<dl>")
 	if v, ok := claims["iss"]; ok {
-		html.WriteString(fmt.Sprintf("<dt>iss (Issuer)</dt><dd>%v</dd>", v))
+		fmt.Fprintf(&html, "<dt>iss (Issuer)</dt><dd>%v</dd>", v)
 	}
 	if v, ok := claims["sub"]; ok {
-		html.WriteString(fmt.Sprintf("<dt>sub (Subject)</dt><dd>%v</dd>", v))
+		fmt.Fprintf(&html, "<dt>sub (Subject)</dt><dd>%v</dd>", v)
 	}
 	if v, ok := claims["aud"]; ok {
-		html.WriteString(fmt.Sprintf("<dt>aud (Audience)</dt><dd>%v</dd>", v))
+		fmt.Fprintf(&html, "<dt>aud (Audience)</dt><dd>%v</dd>", v)
 	}
 	if v, ok := claims["exp"].(float64); ok {
-		html.WriteString(fmt.Sprintf("<dt>exp (Expiration)</dt><dd>%s</dd>", time.Unix(int64(v), 0).Format(time.RFC1123)))
+		fmt.Fprintf(&html, "<dt>exp (Expiration)</dt><dd>%s</dd>", time.Unix(int64(v), 0).Format(time.RFC1123))
 	}
 	if v, ok := claims["iat"].(float64); ok {
-		html.WriteString(fmt.Sprintf("<dt>iat (Issued At)</dt><dd>%s</dd>", time.Unix(int64(v), 0).Format(time.RFC1123)))
+		fmt.Fprintf(&html, "<dt>iat (Issued At)</dt><dd>%s</dd>", time.Unix(int64(v), 0).Format(time.RFC1123))
 	}
 	html.WriteString("</dl>")
 
@@ -1133,19 +1226,19 @@ func formatTimestampContent(t time.Time, relative string) string {
 	html.WriteString("<div class=\"timestamp-content\">")
 	html.WriteString("<h1>Timestamp Converter</h1>")
 
-	html.WriteString(fmt.Sprintf("<p class=\"relative\">%s</p>", escapeHTML(relative)))
+	fmt.Fprintf(&html, "<p class=\"relative\">%s</p>", escapeHTML(relative))
 
 	html.WriteString("<table class=\"timestamp-table\">")
 	html.WriteString("<tbody>")
-	html.WriteString(fmt.Sprintf("<tr><td>Unix (seconds)</td><td><code>%d</code></td></tr>", t.Unix()))
-	html.WriteString(fmt.Sprintf("<tr><td>Unix (milliseconds)</td><td><code>%d</code></td></tr>", t.UnixMilli()))
-	html.WriteString(fmt.Sprintf("<tr><td>ISO 8601</td><td><code>%s</code></td></tr>", t.Format(time.RFC3339)))
-	html.WriteString(fmt.Sprintf("<tr><td>RFC 2822</td><td><code>%s</code></td></tr>", t.Format(time.RFC1123Z)))
-	html.WriteString(fmt.Sprintf("<tr><td>Human Readable</td><td>%s</td></tr>", t.Format("Monday, January 2, 2006 3:04:05 PM")))
-	html.WriteString(fmt.Sprintf("<tr><td>UTC</td><td><code>%s</code></td></tr>", t.UTC().Format(time.RFC3339)))
-	html.WriteString(fmt.Sprintf("<tr><td>Day of Year</td><td>%d</td></tr>", t.YearDay()))
+	fmt.Fprintf(&html, "<tr><td>Unix (seconds)</td><td><code>%d</code></td></tr>", t.Unix())
+	fmt.Fprintf(&html, "<tr><td>Unix (milliseconds)</td><td><code>%d</code></td></tr>", t.UnixMilli())
+	fmt.Fprintf(&html, "<tr><td>ISO 8601</td><td><code>%s</code></td></tr>", t.Format(time.RFC3339))
+	fmt.Fprintf(&html, "<tr><td>RFC 2822</td><td><code>%s</code></td></tr>", t.Format(time.RFC1123Z))
+	fmt.Fprintf(&html, "<tr><td>Human Readable</td><td>%s</td></tr>", t.Format("Monday, January 2, 2006 3:04:05 PM"))
+	fmt.Fprintf(&html, "<tr><td>UTC</td><td><code>%s</code></td></tr>", t.UTC().Format(time.RFC3339))
+	fmt.Fprintf(&html, "<tr><td>Day of Year</td><td>%d</td></tr>", t.YearDay())
 	_, week := t.ISOWeek()
-	html.WriteString(fmt.Sprintf("<tr><td>Week Number</td><td>%d</td></tr>", week))
+	fmt.Fprintf(&html, "<tr><td>Week Number</td><td>%d</td></tr>", week)
 	html.WriteString("</tbody></table>")
 
 	html.WriteString("</div>")

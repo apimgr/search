@@ -8,8 +8,9 @@ Search provides both REST and GraphQL APIs for programmatic access.
 |----------|--------|-------------|
 | `/api/v1/` | — | Versioned REST API root |
 | `/healthz` | GET | Public health check |
-| `/openapi` | GET | Swagger UI |
-| `/openapi.json` | GET | OpenAPI specification (JSON) |
+| `/server/docs/swagger` | GET | Swagger UI |
+| `/api/v1/server/swagger` | GET | Versioned OpenAPI specification (JSON) |
+| `/api/swagger` | GET | OpenAPI specification for the current API version (JSON) |
 | `/server/docs/graphql` | GET | GraphiQL interactive explorer |
 | `/api/graphql` | POST | GraphQL queries (unversioned alias) |
 | `/api/v1/server/graphql` | POST | GraphQL queries (versioned canonical) |
@@ -22,8 +23,9 @@ namespaces:
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/openapi` | GET | Swagger UI |
-| `/openapi.json` | GET | OpenAPI 3 specification |
+| `/server/docs/swagger` | GET | Swagger UI |
+| `/api/v1/server/swagger` | GET | Versioned OpenAPI 3 specification |
+| `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
 | `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/graphql`) |
 
 ### Unversioned aliases

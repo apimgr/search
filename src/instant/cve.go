@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -72,7 +73,7 @@ func (h *CVEHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	if err != nil {
 		return h.errorAnswer(query, cveID, "Failed to connect to NVD API"), nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Handle rate limiting
 	if resp.StatusCode == http.StatusTooManyRequests {
@@ -97,13 +98,13 @@ func (h *CVEHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>%s</strong><br><br>", cve.ID))
+	fmt.Fprintf(&content, "<strong>%s</strong><br><br>", cve.ID)
 
 	// Description
 	if len(cve.Descriptions) > 0 {
 		for _, desc := range cve.Descriptions {
 			if desc.Lang == "en" {
-				content.WriteString(fmt.Sprintf("<strong>Description:</strong><br>%s<br><br>", escapeHTML(desc.Value)))
+				fmt.Fprintf(&content, "<strong>Description:</strong><br>%s<br><br>", escapeHTML(desc.Value))
 				break
 			}
 		}
@@ -115,20 +116,20 @@ func (h *CVEHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		severity := cvss.CVSSData.BaseSeverity
 		score := cvss.CVSSData.BaseScore
 		severityClass := getSeverityClass(severity)
-		content.WriteString(fmt.Sprintf("<strong>CVSS 3.1 Score:</strong> <span class=\"%s\">%.1f (%s)</span><br>", severityClass, score, severity))
-		content.WriteString(fmt.Sprintf("<strong>Vector:</strong> <code>%s</code><br><br>", cvss.CVSSData.VectorString))
+		fmt.Fprintf(&content, "<strong>CVSS 3.1 Score:</strong> <span class=\"%s\">%.1f (%s)</span><br>", severityClass, score, severity)
+		fmt.Fprintf(&content, "<strong>Vector:</strong> <code>%s</code><br><br>", cvss.CVSSData.VectorString)
 	} else if len(cve.Metrics.CVSSMetricV2) > 0 {
 		cvss := cve.Metrics.CVSSMetricV2[0]
 		severity := cvss.BaseSeverity
 		score := cvss.CVSSData.BaseScore
 		severityClass := getSeverityClass(severity)
-		content.WriteString(fmt.Sprintf("<strong>CVSS 2.0 Score:</strong> <span class=\"%s\">%.1f (%s)</span><br>", severityClass, score, severity))
-		content.WriteString(fmt.Sprintf("<strong>Vector:</strong> <code>%s</code><br><br>", cvss.CVSSData.VectorString))
+		fmt.Fprintf(&content, "<strong>CVSS 2.0 Score:</strong> <span class=\"%s\">%.1f (%s)</span><br>", severityClass, score, severity)
+		fmt.Fprintf(&content, "<strong>Vector:</strong> <code>%s</code><br><br>", cvss.CVSSData.VectorString)
 	}
 
 	// Dates
-	content.WriteString(fmt.Sprintf("<strong>Published:</strong> %s<br>", formatCVEDate(cve.Published)))
-	content.WriteString(fmt.Sprintf("<strong>Last Modified:</strong> %s<br><br>", formatCVEDate(cve.LastModified)))
+	fmt.Fprintf(&content, "<strong>Published:</strong> %s<br>", formatCVEDate(cve.Published))
+	fmt.Fprintf(&content, "<strong>Last Modified:</strong> %s<br><br>", formatCVEDate(cve.LastModified))
 
 	// References (first 5)
 	if len(cve.References) > 0 {
@@ -139,10 +140,10 @@ func (h *CVEHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		}
 		for i := 0; i < maxRefs; i++ {
 			ref := cve.References[i]
-			content.WriteString(fmt.Sprintf("&bull; <a href=\"%s\" target=\"_blank\">%s</a><br>", ref.URL, truncateString(ref.URL, 60)))
+			fmt.Fprintf(&content, "&bull; <a href=\"%s\" target=\"_blank\">%s</a><br>", ref.URL, truncateString(ref.URL, 60))
 		}
 		if len(cve.References) > 5 {
-			content.WriteString(fmt.Sprintf("&bull; ... and %d more<br>", len(cve.References)-5))
+			fmt.Fprintf(&content, "&bull; ... and %d more<br>", len(cve.References)-5)
 		}
 	}
 

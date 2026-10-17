@@ -77,7 +77,7 @@ func DefaultConfig() *Config {
 		PoolSize: 10,
 		MinIdle:  2,
 		Timeout:  5 * time.Second,
-		Prefix:   "apimgr:",
+		Prefix:   "search:",
 		// 1 hour
 		TTL:     3600,
 		MaxSize: 10000,

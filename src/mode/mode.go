@@ -20,27 +20,31 @@ type AppMode int
 const (
 	Production AppMode = iota
 	Development
+	Debug
 )
 
 func (m AppMode) String() string {
 	switch m {
 	case Development:
 		return "development"
+	case Debug:
+		return "debug"
 	default:
 		return "production"
 	}
 }
 
 // SetAppMode sets the application mode
-// Per AI.md PART 6: Mode shortcuts (dev/devel/development, prod/production)
-// The "debug" alias expands to development + debug on
+// Per AI.md PART 6: Mode shortcuts (dev/devel/development, prod/production, debug)
 func SetAppMode(m string) {
 	switch strings.ToLower(m) {
 	case "dev", "devel", "development":
 		currentMode = Development
 	case "debug":
-		currentMode = Development
-		debugEnabled = true
+		// Debug mode — explicit opt-in only; defaults the debug flag on
+		// (an explicit --debug flag or DEBUG env var still wins)
+		currentMode = Debug
+		SetDebugEnabled(true)
 	default:
 		currentMode = Production
 	}
@@ -99,15 +103,18 @@ func GetAppModeString() string {
 	return s
 }
 
-// FromEnv sets mode and debug from environment variables
-// Per AI.md PART 6: Mode and Debug Detection Priority
+// FromEnv sets mode and debug from environment variables.
+// Per AI.md PART 6: MODE=debug selects debug mode and defaults the debug flag
+// to on, but an explicitly set DEBUG env var (truthy OR falsy) always wins over
+// that default — MODE=debug DEBUG=false runs debug mode with debug off.
+// The --debug CLI flag (applied after this) wins over both.
 func FromEnv() {
 	if m := os.Getenv("MODE"); m != "" {
 		SetAppMode(m)
 	}
-	// An explicit DEBUG env var wins over the MODE=debug alias
-	// Per AI.md PART 6: MODE=debug DEBUG=false runs development with debug off
-	if v, ok := os.LookupEnv("DEBUG"); ok && v != "" {
+	// LookupEnv distinguishes "explicitly set" from "unset": an unset
+	// DEBUG leaves the mode-defaulted value alone; a set DEBUG overrides it
+	if v, set := os.LookupEnv("DEBUG"); set {
 		SetDebugEnabled(config.IsTruthy(v))
 	}
 }

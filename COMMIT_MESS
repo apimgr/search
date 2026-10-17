@@ -1,0 +1,19 @@
+Complete PART 8-32 compliance audit across server, client, infra
+
+Complete the project compliance audit and CI/CD hardening across backend, frontend, client, infrastructure, tests, documentation, and provider workflow parity. This includes security workflow restoration, test coverage corrections, SSRF and bang fixes, service concurrency fixes, and spec compliance updates.
+
+- .forgejo/: provider workflow parity, security workflow, and CI/CD hardening.
+- .gitea/: provider workflow parity, security workflow, and CI/CD hardening.
+- .github/: provider workflow parity, security workflow, and CI/CD hardening.
+- .gitignore: exclude local IDE metadata.
+- AUDIT.AI.md: record audit findings and resolutions.
+- TODO.AI.md: record resolved implementation items.
+- Jenkinsfile: CI security and workflow SHA gates.
+- Makefile: build, test, lint, and release targets.
+- README.md: project usage and compliance documentation.
+- docker/: container build and development configuration.
+- scripts/: build, release, and test automation.
+- go.mod: dependency declarations.
+- go.sum: dependency checksums.
+- src/: backend, frontend, client, service, database, update, search, API, security, and test implementations.
+- tests/: end-to-end test harness.

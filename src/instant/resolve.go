@@ -175,7 +175,7 @@ func (h *ResolveHandler) HandleInstantQuery(ctx context.Context, query string) (
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"resolve-result\">")
-	content.WriteString(fmt.Sprintf("<strong>Hostname:</strong> %s<br><br>", escapeHTML(hostname)))
+	fmt.Fprintf(&content, "<strong>Hostname:</strong> %s<br><br>", escapeHTML(hostname))
 
 	// Group records by type
 	recordsByType := make(map[string][]DNSRecord)
@@ -193,14 +193,14 @@ func (h *ResolveHandler) HandleInstantQuery(ctx context.Context, query string) (
 	// Display records by type
 	for _, recordType := range types {
 		recs := recordsByType[recordType]
-		content.WriteString(fmt.Sprintf("<strong>%s Records (%d):</strong><br>", recordType, len(recs)))
+		fmt.Fprintf(&content, "<strong>%s Records (%d):</strong><br>", recordType, len(recs))
 		for _, rec := range recs {
 			value := rec.Value
 			// Truncate long TXT records
 			if recordType == "TXT" && len(value) > 100 {
 				value = value[:100] + "..."
 			}
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br>", escapeHTML(value)))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br>", escapeHTML(value))
 		}
 		content.WriteString("<br>")
 	}
@@ -212,8 +212,8 @@ func (h *ResolveHandler) HandleInstantQuery(ctx context.Context, query string) (
 			names, err := h.resolver.LookupAddr(resolveCtx, rec.Value)
 			if err == nil && len(names) > 0 {
 				reverseHostname = strings.TrimSuffix(names[0], ".")
-				content.WriteString(fmt.Sprintf("<strong>Reverse DNS (PTR):</strong><br>&nbsp;&nbsp;%s -> %s<br><br>",
-					escapeHTML(rec.Value), escapeHTML(reverseHostname)))
+				fmt.Fprintf(&content, "<strong>Reverse DNS (PTR):</strong><br>&nbsp;&nbsp;%s -> %s<br><br>",
+					escapeHTML(rec.Value), escapeHTML(reverseHostname))
 			}
 			break
 		}
@@ -222,7 +222,7 @@ func (h *ResolveHandler) HandleInstantQuery(ctx context.Context, query string) (
 	// Summary
 	content.WriteString("<strong>Summary:</strong><br>")
 	for _, t := range types {
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s: %d record(s)<br>", t, len(recordsByType[t])))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;%s: %d record(s)<br>", t, len(recordsByType[t]))
 	}
 
 	content.WriteString("</div>")

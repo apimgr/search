@@ -3,18 +3,23 @@ package direct
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/version"
 )
+
+var dnsResolverAddress = "8.8.8.8:53"
 
 // DNSHandler handles dns:{domain} queries
 type DNSHandler struct {
@@ -28,7 +33,7 @@ func NewDNSHandler() *DNSHandler {
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 				d := net.Dialer{Timeout: 5 * time.Second}
-				return d.DialContext(ctx, network, "8.8.8.8:53")
+				return d.DialContext(ctx, network, dnsResolverAddress)
 			},
 		},
 	}
@@ -151,7 +156,7 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 func formatDNSRecords(domain string, records map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"dns-records\">")
-	html.WriteString(fmt.Sprintf("<h2>DNS Records for %s</h2>", escapeHTML(domain)))
+	fmt.Fprintf(&html, "<h2>DNS Records for %s</h2>", escapeHTML(domain))
 	html.WriteString("<table class=\"records-table\">")
 	html.WriteString("<thead><tr><th>Type</th><th>Value</th></tr></thead>")
 	html.WriteString("<tbody>")
@@ -160,17 +165,17 @@ func formatDNSRecords(domain string, records map[string]interface{}) string {
 		switch v := values.(type) {
 		case []string:
 			for _, val := range v {
-				html.WriteString(fmt.Sprintf("<tr><td>%s</td><td><code>%s</code></td></tr>", recordType, escapeHTML(val)))
+				fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%s</code></td></tr>", recordType, escapeHTML(val))
 			}
 		case []map[string]interface{}:
 			for _, val := range v {
 				if recordType == "MX" {
-					html.WriteString(fmt.Sprintf("<tr><td>%s</td><td><code>%v %s</code></td></tr>",
-						recordType, val["pref"], escapeHTML(val["host"].(string))))
+					fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%v %s</code></td></tr>",
+						recordType, val["pref"], escapeHTML(val["host"].(string)))
 				}
 			}
 		case string:
-			html.WriteString(fmt.Sprintf("<tr><td>%s</td><td><code>%s</code></td></tr>", recordType, escapeHTML(v)))
+			fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%s</code></td></tr>", recordType, escapeHTML(v))
 		}
 	}
 
@@ -214,7 +219,7 @@ func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	if err != nil {
 		return h.fallbackWhois(ctx, term)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return h.fallbackWhois(ctx, term)
@@ -237,7 +242,7 @@ func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		} `json:"entities"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&rdap); err != nil {
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &rdap); err != nil {
 		return h.fallbackWhois(ctx, term)
 	}
 
@@ -290,29 +295,29 @@ func (h *WhoisHandler) fallbackWhois(ctx context.Context, domain string) (*Answe
 func formatWhoisData(domain string, data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"whois-data\">")
-	html.WriteString(fmt.Sprintf("<h2>WHOIS: %s</h2>", escapeHTML(domain)))
+	fmt.Fprintf(&html, "<h2>WHOIS: %s</h2>", escapeHTML(domain))
 	html.WriteString("<dl class=\"whois-details\">")
 
 	if v, ok := data["created"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>Registered</dt><dd>%s</dd>", escapeHTML(v)))
+		fmt.Fprintf(&html, "<dt>Registered</dt><dd>%s</dd>", escapeHTML(v))
 	}
 	if v, ok := data["expires"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>Expires</dt><dd>%s</dd>", escapeHTML(v)))
+		fmt.Fprintf(&html, "<dt>Expires</dt><dd>%s</dd>", escapeHTML(v))
 	}
 	if v, ok := data["updated"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>Updated</dt><dd>%s</dd>", escapeHTML(v)))
+		fmt.Fprintf(&html, "<dt>Updated</dt><dd>%s</dd>", escapeHTML(v))
 	}
 	if v, ok := data["status"].([]string); ok && len(v) > 0 {
 		html.WriteString("<dt>Status</dt><dd>")
 		for _, s := range v {
-			html.WriteString(fmt.Sprintf("<span class=\"status-badge\">%s</span> ", escapeHTML(s)))
+			fmt.Fprintf(&html, "<span class=\"status-badge\">%s</span> ", escapeHTML(s))
 		}
 		html.WriteString("</dd>")
 	}
 	if v, ok := data["nameservers"].([]string); ok && len(v) > 0 {
 		html.WriteString("<dt>Name Servers</dt><dd><ul>")
 		for _, ns := range v {
-			html.WriteString(fmt.Sprintf("<li><code>%s</code></li>", escapeHTML(ns)))
+			fmt.Fprintf(&html, "<li><code>%s</code></li>", escapeHTML(ns))
 		}
 		html.WriteString("</ul></dd>")
 	}
@@ -326,10 +331,17 @@ type ResolveHandler struct {
 	resolver *net.Resolver
 }
 
+var resolveDNSServers = []string{"1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"}
+
 // NewResolveHandler creates a new resolve handler
 func NewResolveHandler() *ResolveHandler {
 	return &ResolveHandler{
-		resolver: &net.Resolver{PreferGo: true},
+		resolver: &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, network, dnsResolverAddress)
+			},
+		},
 	}
 }
 
@@ -375,6 +387,21 @@ func (h *ResolveHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 			data["ptr"] = names
 		}
 	}
+	if lookup := geoIPLookupFromContext(ctx); lookup != nil {
+		geo := make(map[string]*geoip.Result)
+		for _, addr := range append(ipv4Addrs, ipv6Addrs...) {
+			result := lookup.Lookup(addr.String())
+			if result.Found {
+				geo[addr.String()] = result
+			}
+		}
+		if len(geo) > 0 {
+			data["geoip"] = geo
+		}
+	}
+	if timings := resolveDNSTimings(ctx, term); len(timings) > 0 {
+		data["dns_timings"] = timings
+	}
 
 	if data["ipv4"] == nil && data["ipv6"] == nil {
 		return &Answer{
@@ -401,12 +428,12 @@ func (h *ResolveHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 func formatResolveData(hostname string, data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"resolve-data\">")
-	html.WriteString(fmt.Sprintf("<h2>%s</h2>", escapeHTML(hostname)))
+	fmt.Fprintf(&html, "<h2>%s</h2>", escapeHTML(hostname))
 
 	if v, ok := data["ipv4"].([]string); ok && len(v) > 0 {
 		html.WriteString("<h3>IPv4 Addresses</h3><ul>")
 		for _, ip := range v {
-			html.WriteString(fmt.Sprintf("<li><code>%s</code></li>", ip))
+			fmt.Fprintf(&html, "<li><code>%s</code></li>", ip)
 		}
 		html.WriteString("</ul>")
 	}
@@ -414,7 +441,7 @@ func formatResolveData(hostname string, data map[string]interface{}) string {
 	if v, ok := data["ipv6"].([]string); ok && len(v) > 0 {
 		html.WriteString("<h3>IPv6 Addresses</h3><ul>")
 		for _, ip := range v {
-			html.WriteString(fmt.Sprintf("<li><code>%s</code></li>", ip))
+			fmt.Fprintf(&html, "<li><code>%s</code></li>", ip)
 		}
 		html.WriteString("</ul>")
 	}
@@ -422,13 +449,66 @@ func formatResolveData(hostname string, data map[string]interface{}) string {
 	if v, ok := data["ptr"].([]string); ok && len(v) > 0 {
 		html.WriteString("<h3>Reverse DNS</h3><ul>")
 		for _, name := range v {
-			html.WriteString(fmt.Sprintf("<li><code>%s</code></li>", escapeHTML(name)))
+			fmt.Fprintf(&html, "<li><code>%s</code></li>", escapeHTML(name))
+		}
+		html.WriteString("</ul>")
+	}
+	if v, ok := data["geoip"].(map[string]*geoip.Result); ok && len(v) > 0 {
+		html.WriteString("<h3>GeoIP and ASN</h3><ul>")
+		for ip, result := range v {
+			details := result.CountryName
+			if result.City != "" {
+				details = result.City + ", " + details
+			}
+			if result.ASN != 0 {
+				details += fmt.Sprintf(" (AS%d", result.ASN)
+				if result.ASNOrg != "" {
+					details += " " + result.ASNOrg
+				}
+				details += ")"
+			}
+			fmt.Fprintf(&html, "<li><code>%s</code>: %s</li>", escapeHTML(ip), escapeHTML(details))
+		}
+		html.WriteString("</ul>")
+	}
+	if v, ok := data["dns_timings"].(map[string]time.Duration); ok && len(v) > 0 {
+		html.WriteString("<h3>DNS Resolver Response Times</h3><ul>")
+		for server, duration := range v {
+			fmt.Fprintf(&html, "<li>%s: %s</li>", escapeHTML(strings.TrimSuffix(server, ":53")), escapeHTML(duration.Round(time.Millisecond).String()))
 		}
 		html.WriteString("</ul>")
 	}
 
 	html.WriteString("</div>")
 	return html.String()
+}
+
+func resolveDNSTimings(ctx context.Context, hostname string) map[string]time.Duration {
+	timings := make(map[string]time.Duration, len(resolveDNSServers))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, server := range resolveDNSServers {
+		server := server
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resolver := &net.Resolver{
+				PreferGo: true,
+				Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+					return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, network, server)
+				},
+			}
+			start := time.Now()
+			_, err := resolver.LookupIPAddr(ctx, hostname)
+			if err == nil {
+				mu.Lock()
+				timings[server] = time.Since(start)
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	return timings
 }
 
 // CertHandler handles cert:{domain} queries
@@ -451,17 +531,15 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 
 	lang := LangFromContext(ctx)
 
-	// Add port if not specified
-	host := term
-	if !strings.Contains(term, ":") {
-		host = term + ":443"
+	hostname, port, err := parseCertificateTarget(term)
+	if err != nil {
+		return nil, err
 	}
 
-	// Create TLS connection
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	conn, err := tls.DialWithDialer(dialer, "tcp", host, &tls.Config{
-		InsecureSkipVerify: true,
-	})
+	address := net.JoinHostPort(hostname, strconv.Itoa(port))
+	connectionContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	connection, err := publicNetworkDialOverride(connectionContext, "tcp", address)
 	if err != nil {
 		return &Answer{
 			Type:        AnswerTypeCert,
@@ -472,7 +550,23 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Error:       "connection_failed",
 		}, nil
 	}
-	defer conn.Close()
+	conn := tls.Client(connection, &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         hostname,
+		MinVersion:         tls.VersionTLS12,
+	})
+	if err = conn.HandshakeContext(connectionContext); err != nil {
+		closeutil.Close(connection)
+		return &Answer{
+			Type:        AnswerTypeCert,
+			Term:        term,
+			Title:       fmt.Sprintf("Certificate: %s", term),
+			Description: i18n.T(lang, "direct.failed_to_connect"),
+			Content:     fmt.Sprintf("<p>Unable to connect to <code>%s</code>: %s</p>", escapeHTML(term), escapeHTML(err.Error())),
+			Error:       "connection_failed",
+		}, nil
+	}
+	defer closeutil.Close(conn)
 
 	certs := conn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
@@ -519,41 +613,69 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	}, nil
 }
 
+func parseCertificateTarget(target string) (string, int, error) {
+	target = strings.TrimSpace(target)
+	if target == "" || strings.Contains(target, "@") || strings.ContainsAny(target, "/?#") {
+		return "", 0, fmt.Errorf("invalid certificate host")
+	}
+	hostname := strings.Trim(target, "[]")
+	port := 443
+	if host, portText, err := net.SplitHostPort(target); err == nil {
+		hostname = host
+		parsedPort, parseErr := strconv.Atoi(portText)
+		if parseErr != nil || parsedPort < 1 || parsedPort > 65535 {
+			return "", 0, fmt.Errorf("invalid certificate port")
+		}
+		port = parsedPort
+	} else if strings.Count(target, ":") == 1 {
+		host, portText, found := strings.Cut(target, ":")
+		parsedPort, parseErr := strconv.Atoi(portText)
+		if !found || parseErr != nil || parsedPort < 1 || parsedPort > 65535 {
+			return "", 0, fmt.Errorf("invalid certificate host or port")
+		}
+		hostname, port = host, parsedPort
+	}
+	if hostname == "" {
+		return "", 0, fmt.Errorf("invalid certificate host")
+	}
+	return hostname, port, nil
+}
+
 func formatCertData(domain string, data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"cert-data\">")
-	html.WriteString(fmt.Sprintf("<h2>Certificate for %s</h2>", escapeHTML(domain)))
+	fmt.Fprintf(&html, "<h2>Certificate for %s</h2>", escapeHTML(domain))
 
 	// Validity status
 	valid := data["valid"].(bool)
 	days := data["daysUntilExpiry"].(int)
 	if valid {
 		if days < 30 {
-			html.WriteString(fmt.Sprintf("<p class=\"status warning\">Valid (expires in %d days)</p>", days))
+			fmt.Fprintf(&html, "<p class=\"status warning\">Valid (expires in %d days)</p>", days)
 		} else {
-			html.WriteString(fmt.Sprintf("<p class=\"status valid\">Valid (%d days remaining)</p>", days))
+			fmt.Fprintf(&html, "<p class=\"status valid\">Valid (%d days remaining)</p>", days)
 		}
 	} else {
 		html.WriteString("<p class=\"status invalid\">Invalid or Expired</p>")
 	}
 
 	html.WriteString("<dl class=\"cert-details\">")
-	html.WriteString(fmt.Sprintf("<dt>Subject</dt><dd><code>%s</code></dd>", escapeHTML(data["subject"].(string))))
-	html.WriteString(fmt.Sprintf("<dt>Issuer</dt><dd><code>%s</code></dd>", escapeHTML(data["issuer"].(string))))
-	html.WriteString(fmt.Sprintf("<dt>Valid From</dt><dd>%s</dd>", escapeHTML(data["notBefore"].(string))))
-	html.WriteString(fmt.Sprintf("<dt>Valid Until</dt><dd>%s</dd>", escapeHTML(data["notAfter"].(string))))
+	fmt.Fprintf(&html, "<dt>Subject</dt><dd><code>%s</code></dd>", escapeHTML(data["subject"].(string)))
+	fmt.Fprintf(&html, "<dt>Issuer</dt><dd><code>%s</code></dd>", escapeHTML(data["issuer"].(string)))
+	fmt.Fprintf(&html, "<dt>Valid From</dt><dd>%s</dd>", escapeHTML(data["notBefore"].(string)))
+	fmt.Fprintf(&html, "<dt>Valid Until</dt><dd>%s</dd>", escapeHTML(data["notAfter"].(string)))
 
 	if sans, ok := data["sans"].([]string); ok && len(sans) > 0 {
 		html.WriteString("<dt>Subject Alternative Names</dt><dd><ul>")
 		for _, san := range sans {
-			html.WriteString(fmt.Sprintf("<li><code>%s</code></li>", escapeHTML(san)))
+			fmt.Fprintf(&html, "<li><code>%s</code></li>", escapeHTML(san))
 		}
 		html.WriteString("</ul></dd>")
 	}
 
-	html.WriteString(fmt.Sprintf("<dt>Key Algorithm</dt><dd>%s</dd>", escapeHTML(data["keyAlgo"].(string))))
-	html.WriteString(fmt.Sprintf("<dt>Signature Algorithm</dt><dd>%s</dd>", escapeHTML(data["sigAlgo"].(string))))
-	html.WriteString(fmt.Sprintf("<dt>Chain Length</dt><dd>%d certificates</dd>", data["chainLen"].(int)))
+	fmt.Fprintf(&html, "<dt>Key Algorithm</dt><dd>%s</dd>", escapeHTML(data["keyAlgo"].(string)))
+	fmt.Fprintf(&html, "<dt>Signature Algorithm</dt><dd>%s</dd>", escapeHTML(data["sigAlgo"].(string)))
+	fmt.Fprintf(&html, "<dt>Chain Length</dt><dd>%d certificates</dd>", data["chainLen"].(int))
 
 	html.WriteString("</dl></div>")
 	return html.String()
@@ -566,15 +688,9 @@ type HeadersHandler struct {
 
 // NewHeadersHandler creates a new HTTP headers handler
 func NewHeadersHandler() *HeadersHandler {
-	return &HeadersHandler{
-		client: &http.Client{
-			Timeout: 15 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// Don't follow redirects
-				return http.ErrUseLastResponse
-			},
-		},
-	}
+	client := newPublicHTTPClient(15 * time.Second)
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	return &HeadersHandler{client: client}
 }
 
 func (h *HeadersHandler) Type() AnswerType {
@@ -591,8 +707,11 @@ func (h *HeadersHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 
 	// Add https:// if no scheme
 	targetURL := term
-	if !strings.HasPrefix(term, "http://") && !strings.HasPrefix(term, "https://") {
+	if !strings.HasPrefix(strings.ToLower(term), "http://") && !strings.HasPrefix(strings.ToLower(term), "https://") {
 		targetURL = "https://" + term
+	}
+	if _, err := validatePublicHTTPURL(targetURL); err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", targetURL, nil)
@@ -612,7 +731,7 @@ func (h *HeadersHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 			Error:       "request_failed",
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	headers := make(map[string][]string)
 	for key, values := range resp.Header {
@@ -696,17 +815,17 @@ func formatHeadersData(url string, data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"headers-data\">")
 	html.WriteString("<h2>HTTP Headers</h2>")
-	html.WriteString(fmt.Sprintf("<p><code>%s</code></p>", escapeHTML(url)))
+	fmt.Fprintf(&html, "<p><code>%s</code></p>", escapeHTML(url))
 	statusText, _ := data["statusText"].(string)
-	html.WriteString(fmt.Sprintf("<p>Status: <strong>%s</strong></p>", escapeHTML(statusText)))
+	fmt.Fprintf(&html, "<p>Status: <strong>%s</strong></p>", escapeHTML(statusText))
 
 	// Security grade
 	if sec, ok := data["security"].(map[string]interface{}); ok {
 		grade, _ := sec["grade"].(string)
 		present, _ := sec["present"].(int)
 		total, _ := sec["total"].(int)
-		html.WriteString(fmt.Sprintf("<p>Security Grade: <span class=\"grade grade-%s\">%s</span> (%d/%d headers present)</p>",
-			strings.ToLower(grade), grade, present, total))
+		fmt.Fprintf(&html, "<p>Security Grade: <span class=\"grade grade-%s\">%s</span> (%d/%d headers present)</p>",
+			strings.ToLower(grade), grade, present, total)
 	}
 
 	// All headers
@@ -718,133 +837,13 @@ func formatHeadersData(url string, data map[string]interface{}) string {
 	if headers, ok := data["headers"].(map[string][]string); ok {
 		for key, values := range headers {
 			for _, val := range values {
-				html.WriteString(fmt.Sprintf("<tr><td><code>%s</code></td><td><code>%s</code></td></tr>",
-					escapeHTML(key), escapeHTML(val)))
+				fmt.Fprintf(&html, "<tr><td><code>%s</code></td><td><code>%s</code></td></tr>",
+					escapeHTML(key), escapeHTML(val))
 			}
 		}
 	}
 
 	html.WriteString("</tbody></table></div>")
-	return html.String()
-}
-
-// ASNHandler handles asn:{number} queries
-type ASNHandler struct {
-	client *http.Client
-}
-
-// NewASNHandler creates a new ASN handler
-func NewASNHandler() *ASNHandler {
-	return &ASNHandler{
-		client: &http.Client{Timeout: 10 * time.Second},
-	}
-}
-
-func (h *ASNHandler) Type() AnswerType {
-	return AnswerTypeASN
-}
-
-func (h *ASNHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
-	term = strings.TrimSpace(strings.ToUpper(term))
-	if term == "" {
-		return nil, fmt.Errorf("ASN number required")
-	}
-
-	lang := LangFromContext(ctx)
-
-	// Remove AS prefix if present
-	asn := strings.TrimPrefix(term, "AS")
-
-	// Fetch from BGPView API
-	apiURL := fmt.Sprintf("https://api.bgpview.io/asn/%s", url.PathEscape(asn))
-
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", version.BrowserUserAgent)
-
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data struct {
-			ASN           int      `json:"asn"`
-			Name          string   `json:"name"`
-			Description   string   `json:"description_short"`
-			CountryCode   string   `json:"country_code"`
-			EmailContacts []string `json:"email_contacts"`
-			AbuseContacts []string `json:"abuse_contacts"`
-			RIRAllocation struct {
-				RIRName       string `json:"rir_name"`
-				CountryCode   string `json:"country_code"`
-				DateAllocated string `json:"date_allocated"`
-			} `json:"rir_allocation"`
-		} `json:"data"`
-		Status        string `json:"status"`
-		StatusMessage string `json:"status_message"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	if result.Status != "ok" {
-		return &Answer{
-			Type:        AnswerTypeASN,
-			Term:        term,
-			Title:       fmt.Sprintf("ASN: %s", term),
-			Description: i18n.T(lang, "direct.asn_not_found"),
-			Content:     fmt.Sprintf("<p>No information found for ASN <code>%s</code>.</p>", escapeHTML(term)),
-			Error:       "not_found",
-		}, nil
-	}
-
-	data := map[string]interface{}{
-		"asn":           result.Data.ASN,
-		"name":          result.Data.Name,
-		"description":   result.Data.Description,
-		"country":       result.Data.CountryCode,
-		"rir":           result.Data.RIRAllocation.RIRName,
-		"dateAllocated": result.Data.RIRAllocation.DateAllocated,
-	}
-
-	return &Answer{
-		Type:        AnswerTypeASN,
-		Term:        term,
-		Title:       fmt.Sprintf("AS%d - %s", result.Data.ASN, result.Data.Name),
-		Description: result.Data.Description,
-		Content:     formatASNData(data),
-		Source:      "BGPView",
-		SourceURL:   fmt.Sprintf("https://bgpview.io/asn/%s", asn),
-		Data:        data,
-	}, nil
-}
-
-func formatASNData(data map[string]interface{}) string {
-	var html strings.Builder
-	html.WriteString("<div class=\"asn-data\">")
-	html.WriteString(fmt.Sprintf("<h2>AS%d</h2>", data["asn"].(int)))
-	html.WriteString(fmt.Sprintf("<p class=\"asn-name\">%s</p>", escapeHTML(data["name"].(string))))
-
-	html.WriteString("<dl class=\"asn-details\">")
-	if v, ok := data["description"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>Description</dt><dd>%s</dd>", escapeHTML(v)))
-	}
-	if v, ok := data["country"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>Country</dt><dd>%s</dd>", escapeHTML(v)))
-	}
-	if v, ok := data["rir"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>RIR</dt><dd>%s</dd>", escapeHTML(v)))
-	}
-	if v, ok := data["dateAllocated"].(string); ok && v != "" {
-		html.WriteString(fmt.Sprintf("<dt>Allocated</dt><dd>%s</dd>", escapeHTML(v)))
-	}
-	html.WriteString("</dl></div>")
-
 	return html.String()
 }
 
@@ -989,19 +988,19 @@ func decrementIP(ip net.IP) net.IP {
 func formatSubnetData(data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"subnet-data\">")
-	html.WriteString(fmt.Sprintf("<h2>%s</h2>", escapeHTML(data["cidr"].(string))))
+	fmt.Fprintf(&html, "<h2>%s</h2>", escapeHTML(data["cidr"].(string)))
 
 	html.WriteString("<table class=\"subnet-table\">")
 	html.WriteString("<tbody>")
-	html.WriteString(fmt.Sprintf("<tr><td>Network Address</td><td><code>%s</code></td></tr>", escapeHTML(data["network"].(string))))
-	html.WriteString(fmt.Sprintf("<tr><td>Broadcast Address</td><td><code>%s</code></td></tr>", escapeHTML(data["broadcast"].(string))))
-	html.WriteString(fmt.Sprintf("<tr><td>First Usable</td><td><code>%s</code></td></tr>", escapeHTML(data["firstUsable"].(string))))
-	html.WriteString(fmt.Sprintf("<tr><td>Last Usable</td><td><code>%s</code></td></tr>", escapeHTML(data["lastUsable"].(string))))
-	html.WriteString(fmt.Sprintf("<tr><td>Subnet Mask</td><td><code>%s</code></td></tr>", escapeHTML(data["subnetMask"].(string))))
-	html.WriteString(fmt.Sprintf("<tr><td>Wildcard Mask</td><td><code>%s</code></td></tr>", escapeHTML(data["wildcardMask"].(string))))
-	html.WriteString(fmt.Sprintf("<tr><td>Prefix Length</td><td><code>/%d</code></td></tr>", data["prefixLength"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Total Hosts</td><td>%s</td></tr>", data["totalHosts"].(string)))
-	html.WriteString(fmt.Sprintf("<tr><td>Usable Hosts</td><td>%s</td></tr>", data["usableHosts"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Network Address</td><td><code>%s</code></td></tr>", escapeHTML(data["network"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Broadcast Address</td><td><code>%s</code></td></tr>", escapeHTML(data["broadcast"].(string)))
+	fmt.Fprintf(&html, "<tr><td>First Usable</td><td><code>%s</code></td></tr>", escapeHTML(data["firstUsable"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Last Usable</td><td><code>%s</code></td></tr>", escapeHTML(data["lastUsable"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Subnet Mask</td><td><code>%s</code></td></tr>", escapeHTML(data["subnetMask"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Wildcard Mask</td><td><code>%s</code></td></tr>", escapeHTML(data["wildcardMask"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Prefix Length</td><td><code>/%d</code></td></tr>", data["prefixLength"].(int))
+	fmt.Fprintf(&html, "<tr><td>Total Hosts</td><td>%s</td></tr>", data["totalHosts"].(string))
+	fmt.Fprintf(&html, "<tr><td>Usable Hosts</td><td>%s</td></tr>", data["usableHosts"].(string))
 	html.WriteString("</tbody></table>")
 
 	// Binary representation for IPv4
@@ -1022,9 +1021,9 @@ func formatSubnetData(data map[string]interface{}) string {
 					for bit := 7; bit >= 0; bit-- {
 						bitPos := i*8 + (7 - bit)
 						if bitPos < prefixLen {
-							html.WriteString(fmt.Sprintf("<span class=\"network-bit\">%d</span>", (octet>>bit)&1))
+							fmt.Fprintf(&html, "<span class=\"network-bit\">%d</span>", (octet>>bit)&1)
 						} else {
-							html.WriteString(fmt.Sprintf("<span class=\"host-bit\">%d</span>", (octet>>bit)&1))
+							fmt.Fprintf(&html, "<span class=\"host-bit\">%d</span>", (octet>>bit)&1)
 						}
 					}
 				}

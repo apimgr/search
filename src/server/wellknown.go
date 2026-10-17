@@ -1,14 +1,15 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/security"
+	"github.com/apimgr/search/src/swagger"
 )
 
 // handleWellKnownChangePassword handles /.well-known/change-password per RFC 8615.
@@ -43,11 +44,11 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 	web := s.config.Server.Web
 
 	// Header comment per AI.md spec
-	fmt.Fprintln(w, "# robots.txt - Search Engine Crawling Rules")
-	fmt.Fprintf(w, "# %s\n", s.config.Server.Title)
-	fmt.Fprintln(w)
+	writeResponseText(w, "# robots.txt - Search Engine Crawling Rules\n")
+	writeResponseFormatted(w, "# %s\n", s.config.Server.Title)
+	writeResponseText(w, "\n")
 
-	fmt.Fprintln(w, "User-agent: *")
+	writeResponseText(w, "User-agent: *\n")
 
 	// Allow paths (default: /, /api)
 	allowPaths := web.Robots.Allow
@@ -55,18 +56,18 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 		allowPaths = []string{"/", "/api"}
 	}
 	for _, path := range allowPaths {
-		fmt.Fprintf(w, "Allow: %s\n", path)
+		writeResponseFormatted(w, "Allow: %s\n", path)
 	}
 
 	// Deny paths (no defaults — there is no admin panel in this project).
 	for _, path := range web.Robots.Deny {
-		fmt.Fprintf(w, "Disallow: %s\n", path)
+		writeResponseFormatted(w, "Disallow: %s\n", path)
 	}
 
 	// Add sitemap URL per AI.md spec
-	fmt.Fprintln(w)
+	writeResponseText(w, "\n")
 	baseURL := s.getBaseURL(r)
-	fmt.Fprintf(w, "Sitemap: %s/sitemap.xml\n", baseURL)
+	writeResponseFormatted(w, "Sitemap: %s/sitemap.xml\n", baseURL)
 }
 
 // handleSecurityTxtEnhanced serves security.txt per RFC 9116 and AI.md PART 11.
@@ -86,12 +87,12 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 
 	// Contact 1 (REQUIRED per RFC 9116): primary vulnerability-reporting channel
 	if webSecurity.ReportURL != "" {
-		fmt.Fprintf(w, "Contact: %s\n", webSecurity.ReportURL)
+		writeResponseFormatted(w, "Contact: %s\n", webSecurity.ReportURL)
 	}
 
 	// Contact 2: rotating {security_id} contact-form URL per AI.md PART 11
 	securityID := security.GenerateSecurityID(s.config.Server.Security.InstallationSecret, time.Now().Unix())
-	fmt.Fprintf(w, "Contact: %s/server/contact?security_id=%s\n", baseURL, securityID)
+	writeResponseFormatted(w, "Contact: %s/server/contact?security_id=%s\n", baseURL, securityID)
 
 	// Contact 3: mailto: fallback
 	// Uses security.contact then general.contact per AI.md PART 12 fallback chain
@@ -111,7 +112,7 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 	if strings.Contains(contact, "@") && !strings.HasPrefix(contact, "mailto:") && !strings.HasPrefix(contact, "https://") && !strings.HasPrefix(contact, "tel:") {
 		contact = "mailto:" + contact
 	}
-	fmt.Fprintf(w, "Contact: %s\n", contact)
+	writeResponseFormatted(w, "Contact: %s\n", contact)
 
 	// Expires (REQUIRED per RFC 9116)
 	// Must be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
@@ -121,13 +122,13 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 		expiryTime := time.Now().AddDate(1, 0, 0)
 		expires = expiryTime.UTC().Format(time.RFC3339)
 	}
-	fmt.Fprintf(w, "Expires: %s\n", expires)
+	writeResponseFormatted(w, "Expires: %s\n", expires)
 
 	// Encryption (OPTIONAL per RFC 9116): only when a keypair exists and
 	// publishing is enabled, per AI.md PART 11 GPG Keypair Management.
 	if webSecurity.PublishPGPKey {
 		if _, err := security.LoadPublicKey(config.GetConfigDir()); err == nil {
-			fmt.Fprintf(w, "Encryption: %s/.well-known/pgp-key.asc\n", baseURL)
+			writeResponseFormatted(w, "Encryption: %s/.well-known/pgp-key.asc\n", baseURL)
 		}
 	}
 
@@ -135,12 +136,12 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 	// Auto-generated from i18n config per AI.md
 	languages := s.getPreferredLanguages()
 	if len(languages) > 0 {
-		fmt.Fprintf(w, "Preferred-Languages: %s\n", strings.Join(languages, ", "))
+		writeResponseFormatted(w, "Preferred-Languages: %s\n", strings.Join(languages, ", "))
 	}
 
 	// Canonical (OPTIONAL per RFC 9116)
 	// Canonical URL of the security.txt file
-	fmt.Fprintf(w, "Canonical: %s/.well-known/security.txt\n", baseURL)
+	writeResponseFormatted(w, "Canonical: %s/.well-known/security.txt\n", baseURL)
 }
 
 // handlePGPKeyAsc serves the project's PGP public key per AI.md PART 11
@@ -160,7 +161,7 @@ func (s *Server) handlePGPKeyAsc(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pgp-keys")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	fmt.Fprint(w, pubArmor)
+	writeResponseText(w, pubArmor)
 }
 
 // getPreferredLanguages returns the list of supported languages for security.txt
@@ -208,41 +209,60 @@ func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Header
-	fmt.Fprintf(w, "# %s\n", s.config.Server.Title)
+	writeResponseFormatted(w, "# %s\n", s.config.Server.Title)
 	if s.config.Server.Branding.Tagline != "" {
-		fmt.Fprintf(w, "> %s\n", s.config.Server.Branding.Tagline)
+		writeResponseFormatted(w, "> %s\n", s.config.Server.Branding.Tagline)
 	}
-	fmt.Fprintln(w)
+	writeResponseText(w, "\n")
 
 	// API section
-	fmt.Fprintln(w, "## API")
-	fmt.Fprintf(w, "Base URL: %s/api/%s\n", baseURL, apiVersion)
-	fmt.Fprintln(w, "Authentication: Bearer token (operator token for admin endpoints)")
-	fmt.Fprintf(w, "Rate limit: %d requests per %ds (read), %d requests per %ds (write)\n",
+	writeResponseFormatted(w, "%s\n", "## API")
+	writeResponseFormatted(w, "Base URL: %s/api/%s\n", baseURL, apiVersion)
+	writeResponseFormatted(w, "%s\n", "Authentication: Bearer token (owner token, linked token, or operator token)")
+	writeResponseFormatted(w, "Rate limit: %d requests per %ds (read), %d requests per %ds (write)\n",
 		s.config.Server.RateLimit.Read.Requests, s.config.Server.RateLimit.Read.Window,
 		s.config.Server.RateLimit.Write.Requests, s.config.Server.RateLimit.Write.Window)
-	fmt.Fprintln(w)
+	writeResponseFormatted(w, "MCP: %s/mcp (Streamable HTTP; same Bearer token as the API)\n", baseURL)
+	writeResponseText(w, "\n")
 
 	// Endpoints section - public API endpoints
-	fmt.Fprintln(w, "## Endpoints")
-	fmt.Fprintln(w, "- GET /server/healthz - Health check (no auth)")
-	fmt.Fprintln(w, "- GET /server/status - Server status (operator auth)")
-	fmt.Fprintf(w, "- GET /api/%s/search - Search API (no auth, rate limited)\n", apiVersion)
-	fmt.Fprintf(w, "- GET /api/%s/engines - List search engines (no auth)\n", apiVersion)
-	fmt.Fprintf(w, "- GET /api/%s/instant - Instant answers (no auth)\n", apiVersion)
-	fmt.Fprintf(w, "- GET /api/%s/server/preferences - User preferences (no auth)\n", apiVersion)
-	fmt.Fprintln(w)
+	writeResponseFormatted(w, "%s\n", "## Endpoints")
+	spec := swagger.GenerateSpec(s.config, baseURL)
+	paths := make([]string, 0, len(spec.Paths))
+	for path := range spec.Paths {
+		if strings.HasPrefix(path, "/api/"+apiVersion+"/") {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		item := spec.Paths[path]
+		for _, operation := range []struct {
+			method string
+			value  *swagger.Operation
+		}{{"GET", item.Get}, {"POST", item.Post}, {"PUT", item.Put}, {"PATCH", item.Patch}, {"DELETE", item.Delete}} {
+			if operation.value == nil {
+				continue
+			}
+			summary := operation.value.Summary
+			if len(operation.value.Security) > 0 {
+				summary += " (Bearer token required)"
+			}
+			writeResponseFormatted(w, "- %s %s - %s\n", operation.method, strings.TrimPrefix(path, "/api/"+apiVersion), summary)
+		}
+	}
+	writeResponseText(w, "\n")
 
 	// Capabilities
-	fmt.Fprintln(w, "## Capabilities")
-	fmt.Fprintln(w, "- Privacy-respecting metasearch across multiple engines")
-	fmt.Fprintln(w, "- Instant answers (calculator, unit conversion, definitions)")
-	fmt.Fprintln(w, "- Direct answers (wiki:, dns:, http:, tldr:, port:)")
-	fmt.Fprintln(w, "- No tracking, no ads, no user accounts required")
-	fmt.Fprintln(w)
+	writeResponseFormatted(w, "%s\n", "## Capabilities")
+	writeResponseFormatted(w, "%s\n", "- Privacy-respecting metasearch across multiple engines")
+	writeResponseFormatted(w, "%s\n", "- Instant answers (calculator, unit conversion, definitions)")
+	writeResponseFormatted(w, "%s\n", "- Direct answers (wiki:, dns:, http:, tldr:, port:)")
+	writeResponseFormatted(w, "%s\n", "- No tracking, no ads, no user accounts required")
+	writeResponseText(w, "\n")
 
 	// Contact
-	fmt.Fprintln(w, "## Contact")
+	writeResponseFormatted(w, "%s\n", "## Contact")
 	security := s.config.Server.Web.Security
 	contact := security.Contact
 	if contact == "" && s.config.Server.Contact.Security.Email != "" {
@@ -255,6 +275,6 @@ func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
 		fqdn := extractHostFromURL(baseURL)
 		contact = "security@" + fqdn
 	}
-	fmt.Fprintf(w, "Security: %s\n", contact)
-	fmt.Fprintf(w, "Source: https://github.com/apimgr/search\n")
+	writeResponseFormatted(w, "Security: %s\n", contact)
+	writeResponseFormatted(w, "Source: https://github.com/apimgr/search\n")
 }

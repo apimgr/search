@@ -3,22 +3,25 @@
 package cmd
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"golang.org/x/term"
 
 	"github.com/apimgr/search/src/client/api"
 	"github.com/apimgr/search/src/client/clicfg"
+	"github.com/apimgr/search/src/client/gui"
 	"github.com/apimgr/search/src/client/path"
+	"github.com/apimgr/search/src/client/setup"
 	"github.com/apimgr/search/src/client/tui"
+	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -147,7 +150,7 @@ func newRootCommand() *command {
 	fs.StringVar(&token, "token", "", "API token")
 	fs.StringVar(&tokenFile, "token-file", "", "read token from file")
 	fs.StringVar(&userCtx, "user", "", "user or org context (@user, +org, or auto-detect)")
-	fs.StringVar(&output, "output", "table", "output format: json, table, plain")
+	fs.StringVar(&output, "output", "table", "output format: table, json, yaml, plain, csv")
 	// Per AI.md PART 8: --color {auto|yes|no} (not --no-color bool); NO_COLOR env is also respected
 	fs.StringVar(&colorMode, "color", "auto", "color output: auto, yes, no")
 	// Per AI.md PART 8: --shell flag for shell completions (mirrors server binary)
@@ -170,14 +173,11 @@ func newRootCommand() *command {
 	c.localFlags = lfs
 
 	c.run = func(args []string) error {
-		// Per AI.md PART 32 line 40972-40978: Mode detection.
-		// No args + interactive terminal = TUI mode; args provided = CLI search.
+		// Display mode is selected from the local environment or cli.yml.
+		// Remote sessions always remain in the terminal, even when a display
+		// forwarding variable is present.
 		if len(args) == 0 {
-			if term.IsTerminal(int(os.Stdout.Fd())) {
-				return runTUI()
-			}
-			// Non-interactive with no args = error
-			return fmt.Errorf("no search query provided")
+			return runInteractive()
 		}
 		return runSearch(strings.Join(args, " "))
 	}
@@ -190,9 +190,130 @@ func (c *command) addCommand(name string, sub *command) {
 	c.subcommands[name] = sub
 }
 
-// versionString renders the version banner per the previous cobra template.
+// versionString renders the extended version output per AI.md PART 32.
+// It reports the binary build info, the configured server and its version with
+// a compatibility verdict, and the Go toolchain and platform.
+// The server lookup is best-effort: an unreachable or unconfigured server never
+// turns --version into a failure.
 func versionString() string {
-	return fmt.Sprintf("%s %s (%s) built %s\n", getBinaryName(), Version, CommitID, BuildDate)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s %s (%s) built %s\n", getBinaryName(), Version, CommitID, BuildDate)
+
+	serverAddr, _ := resolveServerAddress()
+	sb.WriteString("\n")
+	if serverAddr == "" {
+		sb.WriteString("Server: not configured\n")
+	} else {
+		fmt.Fprintf(&sb, "Server: %s\n", serverAddr)
+		fmt.Fprintf(&sb, "Server Version: %s\n", serverVersionLine(serverAddr))
+	}
+
+	sb.WriteString("\nBuild Info:\n")
+	fmt.Fprintf(&sb, "  Go: %s\n", runtime.Version())
+	fmt.Fprintf(&sb, "  OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	return sb.String()
+}
+
+// serverVersionLine queries the server version and appends a compatibility
+// verdict. Per AI.md PART 32 the CLI warns when the versions differ
+// significantly, which is any difference in the major or minor component.
+func serverVersionLine(serverAddr string) string {
+	api.ProjectName = ProjectName
+	api.Version = Version
+	c := api.NewClient(serverAddr, getToken(), versionProbeTimeout)
+	remote, err := c.GetVersion()
+	if err != nil || remote == "" {
+		return "unavailable"
+	}
+	return fmt.Sprintf("%s (%s)", remote, compatibilityVerdict(Version, remote))
+}
+
+// versionProbeTimeout bounds the --version server lookup in seconds so the
+// command stays responsive when the server is unreachable.
+const versionProbeTimeout = 3
+
+// compatibilityVerdict compares the local and remote versions.
+// Equal versions are "compatible"; a differing major or minor component is
+// "incompatible"; anything else (patch drift, unparseable dev builds) is
+// "compatible" because the API surface is unchanged.
+func compatibilityVerdict(local, remote string) string {
+	if local == remote {
+		return "compatible"
+	}
+	if local == "dev" || remote == "dev" {
+		return "unverified"
+	}
+	l, r := parseSemver(local), parseSemver(remote)
+	if l[0] != r[0] || l[1] != r[1] {
+		return "incompatible"
+	}
+	return "compatible"
+}
+
+// parseSemver splits a "major.minor.patch" string into its numeric parts.
+func parseSemver(v string) [3]int {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.SplitN(v, ".", 3)
+	var nums [3]int
+	for i, p := range parts {
+		if i >= 3 {
+			break
+		}
+		if value, err := strconv.Atoi(p); err == nil {
+			nums[i] = value
+		}
+	}
+	return nums
+}
+
+// runInteractive selects the native GUI or terminal UI from display mode.
+func runInteractive() error {
+	env := display.Detect()
+	mode := env.GetMode()
+	override := strings.ToLower(strings.TrimSpace(clicfg.GetString("display.mode")))
+	switch override {
+	case "", "auto":
+	case "gui":
+		mode = display.ModeGUI
+	case "tui":
+		mode = display.ModeTUI
+	default:
+		return fmt.Errorf("invalid display.mode %q in cli.yml; use auto, gui, or tui", override)
+	}
+	switch mode {
+	case display.ModeGUI:
+		if !env.HasDisplay || env.IsSSH || env.IsMosh {
+			return fmt.Errorf("GUI mode requires a local display")
+		}
+		if gui.Available() {
+			return runGUI()
+		}
+		if override == "gui" {
+			return fmt.Errorf("GUI mode is not included in this build")
+		}
+		if env.IsTerminal {
+			return runTUI()
+		}
+		return fmt.Errorf("native GUI support is not included in this build")
+	case display.ModeTUI:
+		if !env.IsTerminal {
+			return fmt.Errorf("TUI mode requires an interactive terminal")
+		}
+		if !clicfg.GetBool("tui.enabled") {
+			return fmt.Errorf("TUI mode is disabled by tui.enabled in cli.yml")
+		}
+		return runTUI()
+	default:
+		return fmt.Errorf("no search query provided")
+	}
+}
+
+// runGUI initializes the API client and opens the native application.
+func runGUI() error {
+	if err := initClient(); err != nil {
+		return fmt.Errorf("failed to initialize client: %w", err)
+	}
+	return gui.Launch(apiClient)
 }
 
 // runTUI launches the TUI interface
@@ -219,29 +340,25 @@ func runSearch(query string) error {
 		return fmt.Errorf("search failed: %w", err)
 	}
 
-	switch getOutputFormat() {
-	case "json":
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(result)
-	case "plain":
-		for _, r := range result.Results {
-			fmt.Printf("%s\n%s\n\n", r.Title, r.URL)
-		}
-	default:
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(w, "TITLE\tURL\tSCORE\n")
-		for _, r := range result.Results {
-			title := r.Title
-			if len(title) > 50 {
-				title = title[:47] + "..."
-			}
-			fmt.Fprintf(w, "%s\t%s\t%.2f\n", title, r.URL, r.Score)
-		}
-		w.Flush()
-		fmt.Printf("\nTotal: %d results (page %d of %d)\n", result.Pagination.Total, result.Pagination.Page, result.Pagination.Pages)
+	rows := make([][]string, 0, len(result.Results))
+	plain := make([]string, 0, len(result.Results)*3)
+	for _, r := range result.Results {
+		rows = append(rows, []string{
+			truncateCell(r.Title, 50),
+			r.URL,
+			strconv.FormatFloat(r.Score, 'f', 2, 64),
+		})
+		plain = append(plain, r.Title, r.URL, "")
 	}
-	return nil
+
+	return render(getOutputFormat(), view{
+		Data:    result,
+		Headers: []string{"TITLE", "URL", "SCORE"},
+		Rows:    rows,
+		Plain:   plain,
+		Footer: fmt.Sprintf("Total: %d results (page %d of %d)",
+			result.Pagination.Total, result.Pagination.Page, result.Pagination.Pages),
+	})
 }
 
 // initClient initializes the API client
@@ -252,7 +369,15 @@ func initClient() error {
 	// 3. Error with setup instructions
 	serverAddr, shouldSave := resolveServerAddress()
 	if serverAddr == "" {
-		return fmt.Errorf("%w: no server configured; run %s to complete setup", ErrConfiguration, getBinaryName())
+		// Per AI.md PART 32: run the first-run wizard when nothing is
+		// configured; a headless environment cannot prompt and must error.
+		if err := setup.EnsureConfigured(); err != nil {
+			return fmt.Errorf("%w: no server configured (%v)", ErrConfiguration, err)
+		}
+		serverAddr, shouldSave = resolveServerAddress()
+		if serverAddr == "" {
+			return fmt.Errorf("%w: no server configured; run %s to complete setup", ErrConfiguration, getBinaryName())
+		}
 	}
 
 	// Per AI.md PART 32 line 41436-41469: Token sources (priority order)
@@ -380,19 +505,7 @@ func backgroundAutodiscover() {
 // versionLessThan returns true when a is strictly less than b using semver-style comparison.
 // Handles simple "major.minor.patch" strings; returns false on parse failure.
 func versionLessThan(a, b string) bool {
-	parse := func(v string) [3]int {
-		v = strings.TrimPrefix(v, "v")
-		parts := strings.SplitN(v, ".", 3)
-		var nums [3]int
-		for i, p := range parts {
-			if i >= 3 {
-				break
-			}
-			fmt.Sscanf(p, "%d", &nums[i])
-		}
-		return nums
-	}
-	va, vb := parse(a), parse(b)
+	va, vb := parseSemver(a), parseSemver(b)
 	for i := range va {
 		if va[i] < vb[i] {
 			return true
@@ -424,7 +537,11 @@ func getToken() string {
 		return envToken
 	}
 
-	// 4. Config file: cli.yml -> token
+	// 4. Config file: cli.yml -> auth.token
+	if cfgToken := clicfg.GetString("auth.token"); cfgToken != "" {
+		return cfgToken
+	}
+	// Legacy key retained for existing client configurations.
 	if cfgToken := clicfg.GetString("server.token"); cfgToken != "" {
 		return cfgToken
 	}
@@ -460,6 +577,9 @@ func executeArgs(args []string) error {
 			printRootHelp()
 			return nil
 		case "-v", "--version":
+			// Load config first so the extended output can report the
+			// configured server and its version per AI.md PART 32.
+			initConfig()
 			fmt.Print(versionString())
 			return nil
 		}
@@ -507,8 +627,12 @@ func initConfig() {
 
 	// Per AI.md PART 8: apply --lang flag (set env so i18n layer picks it up).
 	if langFlag != "" {
-		os.Setenv("SEARCH_LANG", langFlag)
-		os.Setenv("LANG", langFlag)
+		if err := os.Setenv("SEARCH_LANG", langFlag); err != nil {
+			slog.Warn("failed to set SEARCH_LANG", "error", err)
+		}
+		if err := os.Setenv("LANG", langFlag); err != nil {
+			slog.Warn("failed to set LANG", "error", err)
+		}
 	}
 
 	// Per AI.md PART 8: apply --color / NO_COLOR priority chain.
@@ -553,6 +677,7 @@ func initConfig() {
 	clicfg.SetDefault("output.verbose", false)
 
 	// TUI preferences defaults.
+	clicfg.SetDefault("display.mode", "auto")
 	clicfg.SetDefault("tui.enabled", true)
 	clicfg.SetDefault("tui.theme", "dark")
 	clicfg.SetDefault("tui.mouse", true)
@@ -572,7 +697,9 @@ func initConfig() {
 	// Debug default.
 	clicfg.SetDefault("debug", false)
 
-	clicfg.ReadInConfig()
+	if err := clicfg.ReadInConfig(); err != nil {
+		slog.Debug("failed to read CLI configuration", "error", err)
+	}
 
 	// Per AI.md PART 32: apply --debug/SEARCH_DEBUG priority chain.
 	// Debug mode enables verbose request/response tracing and TUI resize logging.
@@ -627,7 +754,9 @@ func applyColorMode() {
 		}
 	}
 
-	os.Setenv("SEARCH_COLOR", resolved)
+	if err := os.Setenv("SEARCH_COLOR", resolved); err != nil {
+		slog.Warn("failed to set SEARCH_COLOR", "error", err)
+	}
 }
 
 // applyDebugMode applies the --debug/SEARCH_DEBUG priority chain per AI.md PART 32.
@@ -652,9 +781,13 @@ func applyDebugMode() bool {
 	}
 
 	if resolved {
-		os.Setenv("SEARCH_DEBUG", "1")
+		if err := os.Setenv("SEARCH_DEBUG", "1"); err != nil {
+			slog.Warn("failed to enable SEARCH_DEBUG", "error", err)
+		}
 	} else {
-		os.Setenv("SEARCH_DEBUG", "0")
+		if err := os.Setenv("SEARCH_DEBUG", "0"); err != nil {
+			slog.Warn("failed to disable SEARCH_DEBUG", "error", err)
+		}
 	}
 
 	debugMode = resolved

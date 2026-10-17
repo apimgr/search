@@ -4,12 +4,16 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/smtp"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 )
@@ -42,6 +46,18 @@ type Config struct {
 	FQDN string
 	// AppURL is the full application URL used in email templates
 	AppURL string
+	// ReplyTo is the Reply-To address from server.notifications.email.reply_to.
+	// Per AI.md PART 17 "Default Sender" the Reply-To header is omitted when
+	// this is empty.
+	ReplyTo string
+	// OnionAddress is the Tor hidden service address (AI.md PART 31.1), used
+	// for the {onion_url}/{onion_address} global template variables. Empty
+	// when Tor is not running.
+	OnionAddress string
+	// I2PAddress is the I2P eepsite address (AI.md PART 31.2), used for the
+	// {i2p_url}/{i2p_address} global template variables. Empty when I2P is
+	// disabled, which is the default.
+	I2PAddress string
 	// Lang is the BCP 47 language tag used to translate email body/subject
 	// strings before rendering (see AI.md PART 30 "Email Template Translation").
 	// Defaults to "en" when empty.
@@ -93,6 +109,9 @@ func DefaultConfig() *Config {
 // Mailer handles email sending
 type Mailer struct {
 	config *Config
+	// queueMu guards queue, which is nil until StartQueue is called.
+	queueMu sync.RWMutex
+	queue   *Queue
 }
 
 // NewMailer creates a new mailer
@@ -156,12 +175,13 @@ func NewMailerFromConfig(cfg *config.Config) (*Mailer, bool) {
 			Name:  fromName,
 			Email: fromEmail,
 		},
-		AppTitle:    fromName,
-		FQDN:        cfg.Server.FQDN,
-		AppURL:      cfg.Server.BaseURL,
-		Lang:        emailLang,
-		AdminEmails: adminEmails,
-		Events:      cfg.Server.Notifications.Email.Events,
+		AppTitle:     fromName,
+		FQDN:         cfg.Server.FQDN,
+		AppURL:       cfg.Server.BaseURL,
+		Lang:         emailLang,
+		AdminEmails:  adminEmails,
+		Events:       cfg.Server.Notifications.Email.Events,
+		OnionAddress: cfg.Server.Tor.OnionAddress,
 	}), true
 }
 
@@ -194,8 +214,32 @@ func (m *Message) SetHTML(html string) {
 	m.ContentType = "text/html"
 }
 
-// Send sends an email message
+// Send delivers an email message. When a delivery queue is running (see
+// StartQueue) the message is handed to the queue, which retries with
+// exponential backoff and logs every success and failure per the AI.md
+// PART 17 compliance checklist. Without a running queue the message is
+// delivered synchronously in a single attempt.
 func (ml *Mailer) Send(msg *Message) error {
+	if !ml.config.Enabled {
+		return fmt.Errorf("email is not enabled")
+	}
+
+	if len(msg.To) == 0 {
+		return fmt.Errorf("no recipients specified")
+	}
+
+	if q := ml.activeQueue(); q != nil {
+		return q.enqueue(msg)
+	}
+
+	return ml.SendNow(msg)
+}
+
+// SendNow delivers an email message synchronously in a single attempt,
+// bypassing the delivery queue. Used by the queue workers themselves and by
+// operator-facing actions (the test email) that must report the SMTP result
+// immediately.
+func (ml *Mailer) SendNow(msg *Message) error {
 	if !ml.config.Enabled {
 		return fmt.Errorf("email is not enabled")
 	}
@@ -211,6 +255,12 @@ func (ml *Mailer) Send(msg *Message) error {
 	headers["Subject"] = ml.encodeHeader(msg.Subject)
 	headers["Date"] = time.Now().Format(time.RFC1123Z)
 	headers["MIME-Version"] = "1.0"
+
+	// Per AI.md PART 17 "Default Sender": Reply-To is included only when
+	// server.notifications.email.reply_to is set, otherwise omitted.
+	if ml.config.ReplyTo != "" {
+		headers["Reply-To"] = ml.config.ReplyTo
+	}
 
 	if len(msg.CC) > 0 {
 		headers["Cc"] = strings.Join(msg.CC, ", ")
@@ -235,7 +285,7 @@ func (ml *Mailer) Send(msg *Message) error {
 	// Build raw message
 	var rawMsg strings.Builder
 	for k, v := range headers {
-		rawMsg.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		fmt.Fprintf(&rawMsg, "%s: %s\r\n", k, v)
 	}
 	rawMsg.WriteString("\r\n")
 	rawMsg.WriteString(base64.StdEncoding.EncodeToString([]byte(body)))
@@ -275,13 +325,17 @@ func (ml *Mailer) sendMail(recipients []string, message []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to SMTP server: %w", err)
 	}
-	defer conn.Close()
+	defer closeutil.Close(conn)
 
 	client, err := smtpNewClient(conn, ml.config.SMTP.Host)
 	if err != nil {
 		return fmt.Errorf("failed to create SMTP client: %w", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			slog.Warn("failed to close SMTP client", "error", err)
+		}
+	}()
 
 	// STARTTLS if enabled and not already using TLS
 	if useSTARTTLS && !useTLS {
@@ -365,6 +419,18 @@ func (ml *Mailer) IsEnabled() bool {
 	return ml.config.Enabled
 }
 
+// CanSend reports whether notification email may be sent at all, implementing
+// the AI.md PART 17 "SMTP Check Before Sending" predicate: email must be
+// enabled AND an SMTP host must be configured. When it returns false the
+// notification helpers degrade gracefully — they log nothing to SMTP, attempt
+// nothing, and return nil rather than an error.
+func (ml *Mailer) CanSend() bool {
+	if ml == nil || ml.config == nil {
+		return false
+	}
+	return ml.config.Enabled && ml.config.SMTP.Host != ""
+}
+
 // SendToAdmins sends an email to all configured admin addresses
 func (ml *Mailer) SendToAdmins(subject, body string) error {
 	if len(ml.config.AdminEmails) == 0 {
@@ -393,36 +459,28 @@ func (ml *Mailer) baseVars() map[string]string {
 	}
 	now := time.Now()
 	lang := ml.lang()
+	onionURL := ""
+	if ml.config.OnionAddress != "" {
+		onionURL = "http://" + ml.config.OnionAddress
+	}
+	i2pURL := ""
+	if ml.config.I2PAddress != "" {
+		i2pURL = "http://" + ml.config.I2PAddress
+	}
 	return map[string]string{
-		"app_name":   appName,
-		"app_url":    ml.config.AppURL,
-		"fqdn":       ml.config.FQDN,
-		"timestamp":  now.Format("2006-01-02 15:04:05 UTC"),
-		"year":       fmt.Sprintf("%d", now.Year()),
-		"label_from": i18n.T(lang, "email.common.label_from"),
-		"label_time": i18n.T(lang, "email.common.label_time"),
+		"app_name":              appName,
+		"app_url":               ml.config.AppURL,
+		"fqdn":                  ml.config.FQDN,
+		"onion_url":             onionURL,
+		"onion_address":         ml.config.OnionAddress,
+		"i2p_url":               i2pURL,
+		"i2p_address":           ml.config.I2PAddress,
+		"notification_reply_to": ml.config.ReplyTo,
+		"timestamp":             now.Format("2006-01-02 15:04:05 UTC"),
+		"year":                  fmt.Sprintf("%d", now.Year()),
+		"label_from":            i18n.T(lang, "email.common.label_from"),
+		"label_time":            i18n.T(lang, "email.common.label_time"),
 	}
-}
-
-// SendAlert sends an operator alert email to admins.
-// Per AI.md PART 30 "Email Template Translation": translated strings are
-// resolved server-side via i18n.T before being passed as plain {variable}
-// values to the {variable}-substitution template engine (AI.md PART 17).
-func (ml *Mailer) SendAlert(alertType, message string) error {
-	lang := ml.lang()
-	vars := ml.baseVars()
-	vars["alert_type"] = alertType
-	vars["alert_level"] = "warning"
-	vars["message"] = message
-	vars["heading"] = i18n.T(lang, "email.admin_alert.heading")
-	vars["label_level"] = i18n.T(lang, "email.admin_alert.label_level")
-	vars["label_type"] = i18n.T(lang, "email.admin_alert.label_type")
-	vars["label_message"] = i18n.T(lang, "email.admin_alert.label_message")
-	subject, body, err := NewEmailTemplate().Render(TemplateAdminAlert, vars)
-	if err != nil {
-		return err
-	}
-	return ml.SendToAdmins(subject, body)
 }
 
 // SendSecurityAlert sends a security alert email.
@@ -430,7 +488,7 @@ func (ml *Mailer) SendAlert(alertType, message string) error {
 // resolved server-side via i18n.T before being passed as plain {variable}
 // values to the {variable}-substitution template engine (AI.md PART 17).
 func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
-	if !ml.config.Events.SecurityAlert {
+	if !ml.CanSend() || !ml.config.Events.SecurityAlert {
 		return nil
 	}
 	lang := ml.lang()
@@ -455,7 +513,7 @@ func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
 // strings are resolved server-side via i18n.T before being passed as plain
 // {variable} values.
 func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, releaseNotes, updateURL string) error {
-	if !ml.config.Events.UpdateAvailable {
+	if !ml.CanSend() || !ml.config.Events.UpdateAvailable {
 		return nil
 	}
 	lang := ml.lang()
@@ -487,7 +545,7 @@ func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, r
 // (Update Command): fired after `search --update yes` successfully installs
 // a new version.
 func (ml *Mailer) SendUpdateInstalled(previousVersion, newVersion string) error {
-	if !ml.config.Events.UpdateInstalled {
+	if !ml.CanSend() || !ml.config.Events.UpdateInstalled {
 		return nil
 	}
 	vars := ml.baseVars()
@@ -504,7 +562,7 @@ func (ml *Mailer) SendUpdateInstalled(previousVersion, newVersion string) error 
 // completed successfully. Per AI.md PART 17 "Default Templates" →
 // backup_complete and PART 21 (Backup & Restore).
 func (ml *Mailer) SendBackupCompleted(filename, size string) error {
-	if !ml.config.Events.BackupComplete {
+	if !ml.CanSend() || !ml.config.Events.BackupComplete {
 		return nil
 	}
 	vars := ml.baseVars()
@@ -522,7 +580,7 @@ func (ml *Mailer) SendBackupCompleted(filename, size string) error {
 // (Backup & Restore). Per PART 17 "Suppression", this notification suppresses
 // the generic scheduler_error email for the same backup task execution.
 func (ml *Mailer) SendBackupFailed(filename, errMsg string) error {
-	if !ml.config.Events.BackupFailed {
+	if !ml.CanSend() || !ml.config.Events.BackupFailed {
 		return nil
 	}
 	vars := ml.baseVars()
@@ -539,10 +597,13 @@ func (ml *Mailer) SendBackupFailed(filename, errMsg string) error {
 // approaching expiry. Per AI.md PART 17 "Default Templates" → ssl_expiring
 // and PART 15 (SSL/TLS & Let's Encrypt): sent 7, 3, and 1 days before expiry.
 func (ml *Mailer) SendSSLExpiring(domain, expiresIn, expiryDate string) error {
-	if !ml.config.Events.SSLExpiring {
+	if !ml.CanSend() || !ml.config.Events.SSLExpiring {
 		return nil
 	}
 	vars := ml.baseVars()
+	// Per AI.md PART 17 "ssl_expiring / ssl_renewed" variables, {fqdn} in an
+	// SSL template is the domain name on the certificate.
+	vars["fqdn"] = domain
 	vars["domain"] = domain
 	vars["expires_in"] = expiresIn
 	vars["expiry_date"] = expiryDate
@@ -557,10 +618,13 @@ func (ml *Mailer) SendSSLExpiring(domain, expiresIn, expiryDate string) error {
 // successfully renewed. Per AI.md PART 17 "Default Templates" → ssl_renewed
 // and PART 15 (SSL/TLS & Let's Encrypt).
 func (ml *Mailer) SendSSLRenewed(domain, validUntil string) error {
-	if !ml.config.Events.SSLRenewed {
+	if !ml.CanSend() || !ml.config.Events.SSLRenewed {
 		return nil
 	}
 	vars := ml.baseVars()
+	// Per AI.md PART 17 "ssl_expiring / ssl_renewed" variables, {fqdn} in an
+	// SSL template is the domain name on the certificate.
+	vars["fqdn"] = domain
 	vars["domain"] = domain
 	vars["valid_until"] = validUntil
 	subject, body, err := NewEmailTemplate().Render(TemplateSSLRenewed, vars)
@@ -578,13 +642,19 @@ func (ml *Mailer) SendSSLRenewed(domain, validUntil string) error {
 // scheduler_error notification for the same task execution (PART 17
 // Suppression rule).
 func (ml *Mailer) SendSSLRenewalFailed(domain, errMsg string, daysLeft int, nextRetry string) error {
-	if !ml.config.Events.SSLRenewalFailed {
+	if !ml.CanSend() || !ml.config.Events.SSLRenewalFailed {
 		return nil
 	}
 	vars := ml.baseVars()
+	// Per AI.md PART 17 "ssl_renewal_failed" variables: {fqdn} is the domain
+	// whose cert failed to renew, {expires_in} the days until the current cert
+	// expires and {expiry_date} its absolute expiry date.
+	vars["fqdn"] = domain
 	vars["domain"] = domain
 	vars["error"] = errMsg
 	vars["days_left"] = fmt.Sprintf("%d", daysLeft)
+	vars["expires_in"] = fmt.Sprintf("%d days", daysLeft)
+	vars["expiry_date"] = time.Now().AddDate(0, 0, daysLeft).Format("2006-01-02")
 	vars["next_retry"] = nextRetry
 	subject, body, err := NewEmailTemplate().Render(TemplateSSLRenewalFailed, vars)
 	if err != nil {
@@ -599,7 +669,7 @@ func (ml *Mailer) SendSSLRenewalFailed(domain, errMsg string, daysLeft int, next
 // tasks with no dedicated failure event; backup_failed and ssl_renewal_failed
 // suppress it for their respective task executions.
 func (ml *Mailer) SendSchedulerError(taskName, errMsg, nextRun string) error {
-	if !ml.config.Events.SchedulerError {
+	if !ml.CanSend() || !ml.config.Events.SchedulerError {
 		return nil
 	}
 	vars := ml.baseVars()
@@ -627,7 +697,43 @@ func (ml *Mailer) SendTest(to string) error {
 	if err != nil {
 		return err
 	}
-	return ml.Send(NewMessage([]string{to}, subject, body))
+	// Delivered synchronously: the operator is waiting on the result, so the
+	// SMTP outcome must be reported instead of being retried in the queue.
+	if err := ml.SendNow(NewMessage([]string{to}, subject, body)); err != nil {
+		slog.Error("Test email failed", "to", to, "template", string(TemplateTest), "err", err)
+		return err
+	}
+	slog.Info("Test email sent", "to", to, "template", string(TemplateTest), "subject", subject)
+	return nil
+}
+
+// SendTemplateTest renders templateType with the PART 17 preview sample data
+// and sends it to a single recipient. Per AI.md PART 17 "Send Test Email":
+// requires SMTP, uses sample data, subject prefixed `[TEST]`, and the send is
+// logged. This is the service-layer entry point behind the operator's
+// "Send Test" action for a specific template.
+func (ml *Mailer) SendTemplateTest(to string, templateType TemplateType) error {
+	if to == "" {
+		return fmt.Errorf("no recipient specified")
+	}
+	if !ml.CanSend() {
+		return fmt.Errorf("email features require SMTP configuration")
+	}
+	appName := ml.config.AppTitle
+	if appName == "" {
+		appName = i18n.TDefault("common.app_name")
+	}
+	subject, body, err := NewEmailTemplate().PreviewTemplate(templateType, appName, ml.config.AppURL)
+	if err != nil {
+		return err
+	}
+	subject = "[TEST] " + subject
+	if err := ml.SendNow(NewMessage([]string{to}, subject, body)); err != nil {
+		slog.Error("Test email failed", "to", to, "template", string(templateType), "err", err)
+		return err
+	}
+	slog.Info("Test email sent", "to", to, "template", string(templateType), "subject", subject)
+	return nil
 }
 
 // TestConnection tests the SMTP connection
@@ -663,13 +769,17 @@ func (ml *Mailer) TestConnection() error {
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
-	defer conn.Close()
+	defer closeutil.Close(conn)
 
 	client, err := smtpNewClient(conn, ml.config.SMTP.Host)
 	if err != nil {
 		return fmt.Errorf("SMTP client creation failed: %w", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			slog.Warn("failed to close SMTP client", "error", err)
+		}
+	}()
 
 	// Test STARTTLS if needed
 	if useSTARTTLS && !useTLS {
@@ -816,13 +926,17 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer closeutil.Close(conn)
 
 	client, err := smtpNewClient(conn, host)
 	if err != nil {
 		return nil
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			slog.Warn("failed to close SMTP client", "error", err)
+		}
+	}()
 
 	// Check if STARTTLS is supported
 	hasSTARTTLS := false
@@ -833,7 +947,9 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 	// Check if AUTH is required
 	hasAuth, _ := client.Extension("AUTH")
 
-	client.Quit()
+	if err := client.Quit(); err != nil {
+		slog.Warn("failed to close SMTP session", "error", err)
+	}
 
 	return &DetectedSMTP{
 		Host:         host,
@@ -877,4 +993,59 @@ func DetectAndConfigure(fqdn, globalIPv4 string) *Config {
 // IsLocalSMTPAvailable checks if a local SMTP server is available
 func IsLocalSMTPAvailable() bool {
 	return DetectSMTP("", "") != nil
+}
+
+// defaultMailer holds the process-wide mailer used by the package-level
+// Notify* helpers, so that call sites which detect an operator event (rate
+// limiting, authentication failure, blocklist hit) do not have to thread a
+// *Mailer through their own construction.
+var defaultMailer atomic.Pointer[Mailer]
+
+// SetDefaultMailer registers the process-wide mailer used by the package-level
+// Notify* helpers. Passing nil clears it, which makes every helper log-only.
+func SetDefaultMailer(ml *Mailer) {
+	defaultMailer.Store(ml)
+}
+
+// DefaultMailer returns the process-wide mailer registered with
+// SetDefaultMailer, or nil when none has been registered.
+func DefaultMailer() *Mailer {
+	return defaultMailer.Load()
+}
+
+// NotifySecurityAlert records a security event and emails the operator when
+// SMTP is available. It implements the AI.md PART 17 "Log vs Email Decision
+// Matrix" for security events: the event is ALWAYS logged, and email is added
+// only when SMTP is configured and `events.security_alert` is enabled. It is
+// safe to call from any request path — it never blocks on SMTP (delivery goes
+// through the queue when one is running) and never returns an error, so a
+// failing mail server can never break the guarded request.
+//
+// Call sites are the abuse-detection points named in the PART 17 Operator
+// Notifications matrix: rate limit exceeded, authentication failure and IP
+// block (blocklist hit).
+func NotifySecurityAlert(event, ip, details string) {
+	slog.Error("Security alert", "event", event, "ip", ip, "details", details)
+	ml := DefaultMailer()
+	if ml == nil {
+		return
+	}
+	if err := ml.SendSecurityAlert(event, ip, details); err != nil {
+		slog.Error("Security alert email failed", "event", event, "err", err)
+	}
+}
+
+// NotifySchedulerError records a scheduled task failure and emails the
+// operator when SMTP is available. Per AI.md PART 17 "Suppression",
+// callers must NOT invoke this for a backup or SSL renewal task that already
+// emitted backup_failed or ssl_renewal_failed for the same execution.
+func NotifySchedulerError(taskName, errMsg, nextRun string) {
+	slog.Error("Scheduled task failed", "task", taskName, "err", errMsg, "next_run", nextRun)
+	ml := DefaultMailer()
+	if ml == nil {
+		return
+	}
+	if err := ml.SendSchedulerError(taskName, errMsg, nextRun); err != nil {
+		slog.Error("Scheduler error email failed", "task", taskName, "err", err)
+	}
 }

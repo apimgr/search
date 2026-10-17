@@ -81,7 +81,7 @@ func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string
 
 	var content strings.Builder
 	content.WriteString("<div class=\"html-entity-result\">\n")
-	content.WriteString(fmt.Sprintf("<strong>Input:</strong> <code>%s</code><br><br>", html.EscapeString(text)))
+	fmt.Fprintf(&content, "<strong>Input:</strong> <code>%s</code><br><br>", html.EscapeString(text))
 
 	// Auto-detect: if text contains &...; patterns or numeric entities, decode; otherwise encode
 	hasEntities := strings.Contains(text, "&") && (strings.Contains(text, ";") || regexp.MustCompile(`&#\d+`).MatchString(text))
@@ -92,7 +92,7 @@ func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string
 
 	if isDecode {
 		decoded := h.decodeHTMLEntities(text)
-		content.WriteString(fmt.Sprintf("<strong>Decoded:</strong> <code>%s</code><br><br>", html.EscapeString(decoded)))
+		fmt.Fprintf(&content, "<strong>Decoded:</strong> <code>%s</code><br><br>", html.EscapeString(decoded))
 
 		// Show individual entity breakdown
 		entities := h.extractEntities(text)
@@ -103,8 +103,8 @@ func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string
 			for _, ent := range entities {
 				decoded := h.decodeHTMLEntities(ent)
 				r, _ := utf8.DecodeRuneInString(decoded)
-				content.WriteString(fmt.Sprintf("<tr><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>%s</code></td><td style=\"padding: 5px; border: 1px solid #ddd;\">%s</td><td style=\"padding: 5px; border: 1px solid #ddd;\">U+%04X</td></tr>",
-					html.EscapeString(ent), html.EscapeString(decoded), r))
+				fmt.Fprintf(&content, "<tr><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>%s</code></td><td style=\"padding: 5px; border: 1px solid #ddd;\">%s</td><td style=\"padding: 5px; border: 1px solid #ddd;\">U+%04X</td></tr>",
+					html.EscapeString(ent), html.EscapeString(decoded), r)
 			}
 			content.WriteString("</table>")
 		}
@@ -126,8 +126,8 @@ func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string
 	encoded := html.EscapeString(text)
 	fullEncoded := h.encodeAllChars(text)
 
-	content.WriteString(fmt.Sprintf("<strong>Basic Encoded:</strong> <code>%s</code><br><br>", html.EscapeString(encoded)))
-	content.WriteString(fmt.Sprintf("<strong>Full Encoded (numeric):</strong> <code>%s</code><br><br>", html.EscapeString(fullEncoded)))
+	fmt.Fprintf(&content, "<strong>Basic Encoded:</strong> <code>%s</code><br><br>", html.EscapeString(encoded))
+	fmt.Fprintf(&content, "<strong>Full Encoded (numeric):</strong> <code>%s</code><br><br>", html.EscapeString(fullEncoded))
 
 	// Show character breakdown
 	content.WriteString("<strong>Character breakdown:</strong><br>")
@@ -139,8 +139,8 @@ func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string
 		if name, ok := h.reverse[r]; ok {
 			namedEntity = fmt.Sprintf("&%s;", name)
 		}
-		content.WriteString(fmt.Sprintf("<tr><td style=\"padding: 5px; border: 1px solid #ddd;\">%s</td><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>%s</code></td><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>&#%d;</code></td><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>&#x%X;</code></td></tr>",
-			html.EscapeString(string(r)), namedEntity, r, r))
+		fmt.Fprintf(&content, "<tr><td style=\"padding: 5px; border: 1px solid #ddd;\">%s</td><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>%s</code></td><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>&#%d;</code></td><td style=\"padding: 5px; border: 1px solid #ddd;\"><code>&#x%X;</code></td></tr>",
+			html.EscapeString(string(r)), namedEntity, r, r)
 	}
 	content.WriteString("</table>")
 	content.WriteString("</div>")
@@ -203,7 +203,7 @@ func (h *HTMLEntityHandler) encodeAllChars(text string) string {
 	var result strings.Builder
 	for _, r := range text {
 		if r > 127 || r == '<' || r == '>' || r == '&' || r == '"' || r == '\'' {
-			result.WriteString(fmt.Sprintf("&#%d;", r))
+			fmt.Fprintf(&result, "&#%d;", r)
 		} else {
 			result.WriteRune(r)
 		}

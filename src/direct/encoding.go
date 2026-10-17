@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -92,7 +93,7 @@ func htmlEncode(s string) string {
 			result.WriteString("&#39;")
 		default:
 			if r > 127 {
-				result.WriteString(fmt.Sprintf("&#%d;", r))
+				fmt.Fprintf(&result, "&#%d;", r)
 			} else {
 				result.WriteRune(r)
 			}
@@ -151,14 +152,14 @@ func htmlDecode(s string) string {
 func formatHTMLEncodingContent(mode, input, output string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"html-encoding-content\">")
-	html.WriteString(fmt.Sprintf("<h1>HTML %s</h1>", cases.Title(language.Und, cases.NoLower).String(mode)))
+	fmt.Fprintf(&html, "<h1>HTML %s</h1>", cases.Title(language.Und, cases.NoLower).String(mode))
 
 	html.WriteString("<h2>Input</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(input)))
+	fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(input))
 
 	html.WriteString("<h2>Output</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(output)))
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+	fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(output))
+	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 
 	html.WriteString("</div>")
 	return html.String()
@@ -305,20 +306,20 @@ func formatUnicodeContent(r rune, codePoint, category, utf8Hex, utf16Hex string)
 	html.WriteString("<div class=\"unicode-content\">")
 
 	// Large character display
-	html.WriteString(fmt.Sprintf("<div class=\"char-display\">%s</div>", escapeHTML(string(r))))
+	fmt.Fprintf(&html, "<div class=\"char-display\">%s</div>", escapeHTML(string(r)))
 
 	html.WriteString("<table class=\"unicode-table\">")
 	html.WriteString("<tbody>")
-	html.WriteString(fmt.Sprintf("<tr><td>Code Point</td><td><code>%s</code></td></tr>", codePoint))
-	html.WriteString(fmt.Sprintf("<tr><td>Character</td><td><code>%s</code></td></tr>", escapeHTML(string(r))))
-	html.WriteString(fmt.Sprintf("<tr><td>Category</td><td>%s</td></tr>", category))
-	html.WriteString(fmt.Sprintf("<tr><td>UTF-8</td><td><code>%s</code></td></tr>", utf8Hex))
-	html.WriteString(fmt.Sprintf("<tr><td>UTF-16</td><td><code>%s</code></td></tr>", utf16Hex))
-	html.WriteString(fmt.Sprintf("<tr><td>Decimal</td><td><code>%d</code></td></tr>", r))
-	html.WriteString(fmt.Sprintf("<tr><td>HTML Entity</td><td><code>&amp;#%d;</code></td></tr>", r))
-	html.WriteString(fmt.Sprintf("<tr><td>HTML Hex</td><td><code>&amp;#x%X;</code></td></tr>", r))
-	html.WriteString(fmt.Sprintf("<tr><td>CSS</td><td><code>\\%X</code></td></tr>", r))
-	html.WriteString(fmt.Sprintf("<tr><td>JavaScript</td><td><code>\\u%04X</code></td></tr>", r))
+	fmt.Fprintf(&html, "<tr><td>Code Point</td><td><code>%s</code></td></tr>", codePoint)
+	fmt.Fprintf(&html, "<tr><td>Character</td><td><code>%s</code></td></tr>", escapeHTML(string(r)))
+	fmt.Fprintf(&html, "<tr><td>Category</td><td>%s</td></tr>", category)
+	fmt.Fprintf(&html, "<tr><td>UTF-8</td><td><code>%s</code></td></tr>", utf8Hex)
+	fmt.Fprintf(&html, "<tr><td>UTF-16</td><td><code>%s</code></td></tr>", utf16Hex)
+	fmt.Fprintf(&html, "<tr><td>Decimal</td><td><code>%d</code></td></tr>", r)
+	fmt.Fprintf(&html, "<tr><td>HTML Entity</td><td><code>&amp;#%d;</code></td></tr>", r)
+	fmt.Fprintf(&html, "<tr><td>HTML Hex</td><td><code>&amp;#x%X;</code></td></tr>", r)
+	fmt.Fprintf(&html, "<tr><td>CSS</td><td><code>\\%X</code></td></tr>", r)
+	fmt.Fprintf(&html, "<tr><td>JavaScript</td><td><code>\\u%04X</code></td></tr>", r)
 	html.WriteString("</tbody></table>")
 
 	html.WriteString("</div>")
@@ -390,6 +391,14 @@ func (h *EmojiHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 			matches = append(matches, emojis...)
 		}
 	}
+	for _, emojis := range emojiDB {
+		for _, emoji := range emojis {
+			if term == emoji {
+				matches = append(matches, emoji)
+				break
+			}
+		}
+	}
 
 	// Remove duplicates
 	seen := make(map[string]bool)
@@ -432,18 +441,18 @@ func (h *EmojiHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 func formatEmojiContent(search string, emojis []string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"emoji-content\">")
-	html.WriteString(fmt.Sprintf("<h1>Emojis: %s</h1>", escapeHTML(search)))
-	html.WriteString(fmt.Sprintf("<p>Found %d matching emojis</p>", len(emojis)))
+	fmt.Fprintf(&html, "<h1>Emojis: %s</h1>", escapeHTML(search))
+	fmt.Fprintf(&html, "<p>Found %d matching emojis</p>", len(emojis))
 
 	html.WriteString("<div class=\"emoji-grid\">")
 	for _, e := range emojis {
 		// Get code point
 		r, _ := utf8.DecodeRuneInString(e)
 		codePoint := fmt.Sprintf("U+%X", r)
-		html.WriteString(fmt.Sprintf("<div class=\"emoji-item\" onclick=\"copyEmoji('%s')\" title=\"%s\">", e, codePoint))
-		html.WriteString(fmt.Sprintf("<span class=\"emoji\">%s</span>", e))
-		html.WriteString(fmt.Sprintf("<span class=\"code\">%s</span>", codePoint))
-		html.WriteString("</div>")
+		fmt.Fprintf(&html, "<button type=\"button\" class=\"emoji-item copy-btn\" data-copy=\"%s\" title=\"%s\" aria-label=\"Copy %s emoji\">", escapeHTML(e), codePoint, codePoint)
+		fmt.Fprintf(&html, "<span class=\"emoji\">%s</span>", e)
+		fmt.Fprintf(&html, "<span class=\"code\">%s</span>", codePoint)
+		html.WriteString("</button>")
 	}
 	html.WriteString("</div>")
 
@@ -544,7 +553,7 @@ func formatEscapeContent(input string, escapes map[string]string, highlight stri
 	html.WriteString("<h1>String Escape</h1>")
 
 	html.WriteString("<h2>Input</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(input)))
+	fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(input))
 
 	html.WriteString("<h2>Escaped Formats</h2>")
 	html.WriteString("<table class=\"escape-table\">")
@@ -555,8 +564,8 @@ func formatEscapeContent(input string, escapes map[string]string, highlight stri
 		if strings.EqualFold(format, highlight) || strings.EqualFold(format, highlight+"script") {
 			class = " class=\"highlighted\""
 		}
-		html.WriteString(fmt.Sprintf("<tr%s><td><strong>%s</strong></td><td><code>%s</code></td><td><button class=\"copy-btn\" onclick=\"copyText('%s')\">Copy</button></td></tr>",
-			class, format, escapeHTML(escaped), escapeHTML(escaped)))
+		fmt.Fprintf(&html, "<tr%s><td><strong>%s</strong></td><td><code>%s</code></td><td><button type=\"button\" class=\"copy-btn\" data-copy=\"%s\">Copy</button></td></tr>",
+			class, format, escapeHTML(escaped), escapeHTML(escaped))
 	}
 
 	html.WriteString("</tbody></table>")
@@ -588,18 +597,13 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	// default
 	mode := "format"
 	jsonStr := term
-
-	if strings.HasPrefix(strings.ToLower(term), "minify ") {
-		mode = "minify"
-		jsonStr = strings.TrimPrefix(term, "minify ")
-		jsonStr = strings.TrimPrefix(jsonStr, "Minify ")
-	} else if strings.HasPrefix(strings.ToLower(term), "validate ") {
-		mode = "validate"
-		jsonStr = strings.TrimPrefix(term, "validate ")
-		jsonStr = strings.TrimPrefix(jsonStr, "Validate ")
-	} else if strings.HasPrefix(strings.ToLower(term), "format ") {
-		jsonStr = strings.TrimPrefix(term, "format ")
-		jsonStr = strings.TrimPrefix(jsonStr, "Format ")
+	if fields := strings.Fields(term); len(fields) > 1 {
+		mode = strings.ToLower(fields[0])
+		if mode == "format" || mode == "minify" || mode == "validate" || mode == "tree" {
+			jsonStr = strings.TrimSpace(term[len(fields[0]):])
+		} else {
+			mode = "format"
+		}
 	}
 
 	// Parse JSON
@@ -620,8 +624,12 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	case "minify":
 		b, _ := json.Marshal(parsed)
 		output = string(b)
-	// format
+	case "validate":
+		output = "Valid JSON"
+	case "tree":
+		output = formatJSONTree(parsed)
 	default:
+		mode = "format"
 		b, _ := json.MarshalIndent(parsed, "", "  ")
 		output = string(b)
 	}
@@ -650,6 +658,36 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Source:      "JSON Parser",
 		Data:        data,
 	}, nil
+}
+
+func formatJSONTree(value interface{}) string {
+	var lines []string
+	var walk func(string, interface{}, int)
+	walk = func(label string, node interface{}, depth int) {
+		indent := strings.Repeat("  ", depth)
+		switch typed := node.(type) {
+		case map[string]interface{}:
+			lines = append(lines, indent+label+" (object)")
+			keys := make([]string, 0, len(typed))
+			for key := range typed {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				walk(key, typed[key], depth+1)
+			}
+		case []interface{}:
+			lines = append(lines, fmt.Sprintf("%s%s (array, %d items)", indent, label, len(typed)))
+			for index, child := range typed {
+				walk(fmt.Sprintf("[%d]", index), child, depth+1)
+			}
+		default:
+			encoded, _ := json.Marshal(typed)
+			lines = append(lines, fmt.Sprintf("%s%s (%T): %s", indent, label, typed, encoded))
+		}
+	}
+	walk("$", value, 0)
+	return strings.Join(lines, "\n")
 }
 
 func countJSONKeys(v interface{}) int {
@@ -696,14 +734,14 @@ func getJSONDepth(v interface{}) int {
 func formatJSONContent(mode, input, output string, keys, depth int) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"json-content\">")
-	html.WriteString(fmt.Sprintf("<h1>JSON %s</h1>", cases.Title(language.Und, cases.NoLower).String(mode)))
+	fmt.Fprintf(&html, "<h1>JSON %s</h1>", cases.Title(language.Und, cases.NoLower).String(mode))
 
 	html.WriteString("<p class=\"valid\">✓ Valid JSON</p>")
-	html.WriteString(fmt.Sprintf("<p>Keys: %d | Depth: %d | Size: %d → %d bytes</p>", keys, depth, len(input), len(output)))
+	fmt.Fprintf(&html, "<p>Keys: %d | Depth: %d | Size: %d → %d bytes</p>", keys, depth, len(input), len(output))
 
 	html.WriteString("<h2>Output</h2>")
-	html.WriteString(fmt.Sprintf("<pre class=\"json-output\"><code>%s</code></pre>", escapeHTML(output)))
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+	fmt.Fprintf(&html, "<pre class=\"json-output\"><code>%s</code></pre>", escapeHTML(output))
+	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 
 	html.WriteString("</div>")
 	return html.String()
@@ -830,13 +868,13 @@ func formatYAMLMode(mode string) string {
 func formatYAMLContent(mode, input, output string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"yaml-content\">")
-	html.WriteString(fmt.Sprintf("<h1>YAML %s</h1>", formatYAMLMode(mode)))
+	fmt.Fprintf(&html, "<h1>YAML %s</h1>", formatYAMLMode(mode))
 
 	html.WriteString("<p class=\"valid\">✓ Valid</p>")
 
 	html.WriteString("<h2>Output</h2>")
-	html.WriteString(fmt.Sprintf("<pre class=\"yaml-output\"><code>%s</code></pre>", escapeHTML(output)))
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+	fmt.Fprintf(&html, "<pre class=\"yaml-output\"><code>%s</code></pre>", escapeHTML(output))
+	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 
 	html.WriteString("</div>")
 	return html.String()

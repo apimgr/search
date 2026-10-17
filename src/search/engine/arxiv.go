@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -95,7 +97,7 @@ func (e *ArXiv) Search(ctx context.Context, query *model.Query) ([]model.Result,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("arXiv API returned status %d", resp.StatusCode)

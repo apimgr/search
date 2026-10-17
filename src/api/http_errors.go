@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -18,5 +19,7 @@ func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(body)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		slog.Debug("failed to encode API error response", "error", err)
+	}
 }

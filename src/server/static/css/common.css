@@ -128,7 +128,7 @@ html.theme-dark {
     --color-warning-text: #ffb86c;
     --color-primary: #bd93f9;
     --color-primary-bg: rgba(189, 147, 249, 0.15);
-    --color-secondary: #ff79c6;
+    --color-secondary: #50fa7b;
     --color-info: #8be9fd;
     --color-info-bg: rgba(139, 233, 253, 0.15);
     --color-info-text: #8be9fd;
@@ -138,6 +138,18 @@ html.theme-dark {
     /* Shadows and form inputs (project-specific, not in the shared reference palette) */
     --color-shadow: rgba(0, 0, 0, 0.3);
     --color-input-border: #6272a4;
+
+    /* Foreground on filled/colored surfaces (project-specific) */
+    --color-on-primary: #ffffff;
+    --color-on-overlay: #ffffff;
+
+    /* Scrims and translucent overlays (project-specific) */
+    --color-overlay: rgba(0, 0, 0, 0.5);
+    --color-overlay-strong: rgba(0, 0, 0, 0.75);
+    --color-toast-progress: rgba(255, 255, 255, 0.35);
+
+    /* Fixed-light surface for scannable codes - must stay white in every theme */
+    --color-qr-bg: #ffffff;
 
     /* Tor accent color */
     --color-tor-accent: #7D4698;
@@ -182,16 +194,28 @@ html.theme-light {
     --color-warning-text: #9a6700;
     --color-primary: #0969da;
     --color-primary-bg: rgba(9, 105, 218, 0.12);
-    --color-secondary: #db2777;
-    --color-info: #0284c7;
-    --color-info-bg: rgba(2, 132, 199, 0.12);
-    --color-info-text: #0284c7;
+    --color-secondary: #1a7f37;
+    --color-info: #0969da;
+    --color-info-bg: rgba(9, 105, 218, 0.12);
+    --color-info-text: #0969da;
     --color-accent: #8250df;
     --color-on-error: #ffffff;
 
     /* Shadows and form inputs (project-specific, not in the shared reference palette) */
     --color-shadow: rgba(0, 0, 0, 0.1);
     --color-input-border: #d1d5db;
+
+    /* Foreground on filled/colored surfaces (project-specific) */
+    --color-on-primary: #ffffff;
+    --color-on-overlay: #ffffff;
+
+    /* Scrims and translucent overlays (project-specific) */
+    --color-overlay: rgba(0, 0, 0, 0.4);
+    --color-overlay-strong: rgba(0, 0, 0, 0.65);
+    --color-toast-progress: rgba(255, 255, 255, 0.35);
+
+    /* Fixed-light surface for scannable codes - must stay white in every theme */
+    --color-qr-bg: #ffffff;
 
     /* Tor accent color */
     --color-tor-accent: #6B3A82;
@@ -223,14 +247,20 @@ html.theme-light {
         --color-warning-text: #9a6700;
         --color-primary: #0969da;
         --color-primary-bg: rgba(9, 105, 218, 0.12);
-        --color-secondary: #db2777;
-        --color-info: #0284c7;
-        --color-info-bg: rgba(2, 132, 199, 0.12);
-        --color-info-text: #0284c7;
+        --color-secondary: #1a7f37;
+        --color-info: #0969da;
+        --color-info-bg: rgba(9, 105, 218, 0.12);
+        --color-info-text: #0969da;
         --color-accent: #8250df;
         --color-on-error: #ffffff;
         --color-shadow: rgba(0, 0, 0, 0.1);
         --color-input-border: #d1d5db;
+        --color-on-primary: #ffffff;
+        --color-on-overlay: #ffffff;
+        --color-overlay: rgba(0, 0, 0, 0.4);
+        --color-overlay-strong: rgba(0, 0, 0, 0.65);
+        --color-toast-progress: rgba(255, 255, 255, 0.35);
+        --color-qr-bg: #ffffff;
         --color-tor-accent: #6B3A82;
     }
 }

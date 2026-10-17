@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 )
@@ -44,6 +46,101 @@ type alertUpdateRequest struct {
 
 type alertPauseRequest struct {
 	Paused *bool `json:"paused"`
+}
+
+var errAlertStorageUnavailable = errors.New("alert storage is unavailable")
+
+// AlertCreateForGraphQL creates an alert with the same request metadata and response fields as REST.
+func (h *Handler) AlertCreateForGraphQL(ctx context.Context, r *http.Request, req alert.CreateRequest) (map[string]interface{}, error) {
+	if h.alertManager == nil {
+		return nil, errAlertStorageUnavailable
+	}
+	if h.ownerManager == nil {
+		return nil, errors.New("owner token service is unavailable")
+	}
+	req.BaseURL = baseURLFromRequest(h, r)
+	req.CreatedFromIP = clientIPForAPI(r)
+	if err := h.alertManager.ValidateCreate(req); err != nil {
+		return nil, err
+	}
+	ownerToken := ""
+	if header := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(header, "Bearer ") {
+		ownerToken = strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+	}
+	identity, issuedToken, err := h.ownerManager.IssueOrResolve(ctx, ownerToken)
+	if err != nil {
+		return nil, err
+	}
+	req.OwnerID = identity.OwnerID
+	created, err := h.alertManager.Create(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	baseURL := baseURLFromRequest(h, r)
+	data := map[string]interface{}{"alert": created.Alert, "manage_url": baseURL + "/alerts/manage/" + created.ManageToken, "rss_url": baseURL + "/alerts/" + created.RSSToken + ".rss", "manage_token": created.ManageToken, "rss_token": created.RSSToken}
+	if issuedToken != "" {
+		data["owner_token"] = issuedToken
+	}
+	return data, nil
+}
+
+// AlertListForGraphQL returns the operator-only alert inventory.
+func (h *Handler) AlertListForGraphQL(ctx context.Context, r *http.Request) ([]*alert.Alert, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	if h.alertManager == nil {
+		return nil, errAlertStorageUnavailable
+	}
+	return h.alertManager.ListAll(ctx)
+}
+
+// AlertGetForGraphQL loads an alert through its private manage token.
+func (h *Handler) AlertGetForGraphQL(ctx context.Context, r *http.Request, token string) (map[string]interface{}, error) {
+	if h.alertManager == nil {
+		return nil, errAlertStorageUnavailable
+	}
+	item, err := h.alertManager.GetByManageToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return alertManageResponseData(h, r, token, item)
+}
+
+// AlertUpdateForGraphQL updates an alert through its private manage token.
+func (h *Handler) AlertUpdateForGraphQL(ctx context.Context, r *http.Request, token string, req alert.UpdateRequest) (map[string]interface{}, error) {
+	if h.alertManager == nil {
+		return nil, errAlertStorageUnavailable
+	}
+	item, err := h.alertManager.Update(ctx, token, req)
+	if err != nil {
+		return nil, err
+	}
+	return alertManageResponseData(h, r, token, item)
+}
+
+// AlertPauseForGraphQL changes an alert's paused state through its manage token.
+func (h *Handler) AlertPauseForGraphQL(ctx context.Context, token string, paused bool) error {
+	if h.alertManager == nil {
+		return errAlertStorageUnavailable
+	}
+	return h.alertManager.SetPaused(ctx, token, paused)
+}
+
+// AlertDeleteForGraphQL deletes an alert through its private manage token.
+func (h *Handler) AlertDeleteForGraphQL(ctx context.Context, token string) error {
+	if h.alertManager == nil {
+		return errAlertStorageUnavailable
+	}
+	return h.alertManager.Delete(ctx, token)
+}
+
+// AlertFeedForGraphQL returns a bounded private RSS feed through its token.
+func (h *Handler) AlertFeedForGraphQL(ctx context.Context, token string) (*alert.Feed, error) {
+	if h.alertManager == nil {
+		return nil, errAlertStorageUnavailable
+	}
+	return h.alertManager.Feed(ctx, token, 50)
 }
 
 func (h *Handler) handleAlerts(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +180,11 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.alertManager.Create(r.Context(), alert.CreateRequest{
+	if h.ownerManager == nil {
+		h.writeError(w, "OWNER_TOKENS_UNAVAILABLE", "Owner token service is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	createRequest := alert.CreateRequest{
 		Query:          req.Query,
 		Category:       req.Category,
 		Language:       req.Language,
@@ -98,21 +199,40 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 		WebhookURL:     req.WebhookURL,
 		BaseURL:        baseURLFromRequest(h, r),
 		CreatedFromIP:  clientIPForAPI(r),
-	})
+	}
+	if err := h.alertManager.ValidateCreate(createRequest); err != nil {
+		h.writeAlertError(w, err)
+		return
+	}
+	ownerToken := ""
+	if header := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(header, "Bearer ") {
+		ownerToken = strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+	}
+	identity, issuedToken, err := h.ownerManager.IssueOrResolve(r.Context(), ownerToken)
+	if err != nil {
+		h.writeError(w, "INTERNAL_ERROR", "Owner identity could not be created", http.StatusInternalServerError)
+		return
+	}
+	createRequest.OwnerID = identity.OwnerID
+	created, err := h.alertManager.Create(r.Context(), createRequest)
 	if err != nil {
 		h.writeAlertError(w, err)
 		return
 	}
 
+	data := map[string]interface{}{
+		"alert":        created.Alert,
+		"manage_url":   baseURLFromRequest(h, r) + "/alerts/manage/" + created.ManageToken,
+		"rss_url":      baseURLFromRequest(h, r) + "/alerts/" + created.RSSToken + ".rss",
+		"manage_token": created.ManageToken,
+		"rss_token":    created.RSSToken,
+	}
+	if issuedToken != "" {
+		data["owner_token"] = issuedToken
+	}
 	h.writeJSON(w, http.StatusCreated, APIResponse{
-		OK: true,
-		Data: map[string]interface{}{
-			"alert":        created.Alert,
-			"manage_url":   baseURLFromRequest(h, r) + "/alerts/manage/" + created.ManageToken,
-			"rss_url":      baseURLFromRequest(h, r) + "/alerts/" + created.RSSToken + ".rss",
-			"manage_token": created.ManageToken,
-			"rss_token":    created.RSSToken,
-		},
+		OK:   true,
+		Data: data,
 	})
 }
 
@@ -252,7 +372,7 @@ func clientIPForAPI(r *http.Request) string {
 func decodeAlertPauseState(r *http.Request) (bool, error) {
 	paused := true
 	if r.Body != nil {
-		defer r.Body.Close()
+		defer closeutil.Close(r.Body)
 		var req alertPauseRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		switch {

@@ -68,17 +68,25 @@ REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 GO_CACHE  ?= $(HOME)/go/pkg/mod
 # GO_BUILD maps host build cache into container GOCACHE
 GO_BUILD  ?= $(HOME)/.cache/go-build/$(PROJECTNAME)
-GO_DOCKER := docker run --rm \
+TEST_PACKAGES ?= ./...
+
+# Resource limits for build containers (per AI.md PART 25)
+DOCKER_MEM  ?= 4g
+DOCKER_CPUS ?= 2
+
+# GO_DOCKER_RUN: shared docker run prefix (no image) so targets can add mounts before the image
+GO_DOCKER_RUN := docker run --rm \
 	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
 	-v $(PWD):/app \
 	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
 	-v $(GO_BUILD):/usr/local/share/go/cache \
 	-w /app \
 	-e CGO_ENABLED=0 \
-	-e GOFLAGS=-buildvcs=false \
-	casjaysdev/go:latest
+	-e GOFLAGS=-buildvcs=false
+GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
 
-.PHONY: dev local build build-arm64 release docker docker-build test lint clean install
+.PHONY: dev local build release docker test
 
 # =============================================================================
 # DEV - Quick dev build to temp directory (per AI.md PART 25)
@@ -88,13 +96,14 @@ GO_DOCKER := docker run --rm \
 dev:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) go mod tidy
+	@$(GO_DOCKER) go run ./src/cmd/apigen
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
 	BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
 	echo "Quick dev build to $$BUILD_DIR..." && \
 	$(GO_DOCKER) go build -buildvcs=false -trimpath -o $(BINDIR)/.dev-$(BINARY) ./src && \
 	mv $(BINDIR)/.dev-$(BINARY) "$$BUILD_DIR/$(BINARY)" && \
 	if [ -d "src/client" ]; then \
-		$(GO_DOCKER) go build -buildvcs=false -trimpath -o $(BINDIR)/.dev-$(BINARY)-cli ./src/client && \
+		$(GO_DOCKER) go build -buildvcs=false -trimpath -tags gui -o $(BINDIR)/.dev-$(BINARY)-cli ./src/client && \
 		mv $(BINDIR)/.dev-$(BINARY)-cli "$$BUILD_DIR/$(BINARY)-cli"; \
 	fi && \
 	echo "Built: $$BUILD_DIR/$(BINARY)" && \
@@ -104,17 +113,19 @@ dev:
 # LOCAL - Build for current OS/ARCH with version suffix (per AI.md PART 25)
 # =============================================================================
 # Outputs to binaries/search-VERSION for production testing
-local: clean
+local:
+	@rm -rf $(BINDIR) $(RELDIR)
 	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building local binaries version $(VERSION)..."
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
+	@$(GO_DOCKER) go run ./src/cmd/apigen
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
 		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY)-$(VERSION) ./src"
 	@if [ -d "src/client" ]; then \
 		echo "Building local CLI $(VERSION)..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli-$(VERSION) ./src/client"; \
+			go build -buildvcs=false -trimpath -tags gui -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli-$(VERSION) ./src/client"; \
 	fi
 	@echo ""
 	@echo "Built: $(BINDIR)/$(BINARY)-$(VERSION)"
@@ -122,12 +133,14 @@ local: clean
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
 # =============================================================================
-build: clean
+build:
+	@rm -rf $(BINDIR) $(RELDIR)
 	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building version $(VERSION)..."
 	@echo "Tidying and downloading Go modules..."
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
+	@$(GO_DOCKER) go run ./src/cmd/apigen
 	@echo "Building host binary..."
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
 		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY) ./src"
@@ -144,7 +157,7 @@ build: clean
 	@if [ -d "src/client" ]; then \
 		echo "Building CLI..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli ./src/client"; \
+			go build -buildvcs=false -trimpath -tags gui -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli ./src/client"; \
 		for platform in $(PLATFORMS); do \
 			OS=$${platform%/*}; \
 			ARCH=$${platform#*/}; \
@@ -152,7 +165,7 @@ build: clean
 			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-				go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" \
+				go build -buildvcs=false -trimpath -tags gui -ldflags \"$(CLI_LDFLAGS)\" \
 				-o $$OUTPUT ./src/client" || exit 1; \
 		done; \
 	fi
@@ -179,6 +192,7 @@ release: build
 	@tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
 		-czf $(RELDIR)/$(PROJECTNAME)-$(VERSION)-source.tar.gz .
+	@cd $(RELDIR) && FILES="$$(ls)" && sha256sum $$FILES > sha256.txt && sha512sum $$FILES > sha512.txt
 	@gh release delete $(TAG) --yes 2>/dev/null || true
 	@git tag -d $(TAG) 2>/dev/null || true
 	@git push origin :refs/tags/$(TAG) 2>/dev/null || true
@@ -218,11 +232,12 @@ docker:
 # override present in IDEA.md, so the spec default floor applies)
 # Per AI.md PART 28: test artifacts go to /tmp/apimgr/search-XXXXXX/, NEVER project dir
 test:
-	@mkdir -p "/tmp/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD)
+	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD)
 	@echo "Running tests with coverage..." && \
-	COVDIR=$$(mktemp -d "/tmp/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
+	COVDIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
 	docker run --rm \
 		--name $(PROJECTNAME)-test-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+		--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
 		-v $(PWD):/app \
 		-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
 		-v $(GO_BUILD):/usr/local/share/go/cache \
@@ -231,53 +246,5 @@ test:
 		-e CGO_ENABLED=0 \
 		-e GOFLAGS=-buildvcs=false \
 		casjaysdev/go:latest \
-		ash -c 'set -e; apk add --no-cache tor >/dev/null 2>&1 || true; go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out ./...; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 60" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 60%"; exit 1; fi'
+		ash -c 'set -e; go mod download; go run ./src/cmd/apigen; go test -v -cover -coverprofile=/tmp/covout/coverage.out $(TEST_PACKAGES); COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep "^total:" | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 60" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 60%"; exit 1; fi'
 	@echo "Tests complete"
-
-# =============================================================================
-# LINT - Static analysis (go vet + staticcheck) via Docker
-# =============================================================================
-lint:
-	@mkdir -p $(GO_CACHE) $(GO_BUILD)
-	@echo "Running go vet..."
-	@$(GO_DOCKER) sh -c 'go mod download && go vet ./...'
-	@echo "Running staticcheck..."
-	@$(GO_DOCKER) sh -c 'go mod download && staticcheck ./...'
-	@echo "Lint complete"
-
-# =============================================================================
-# BUILD-ARM64 - Compile server + CLI for linux/arm64
-# =============================================================================
-build-arm64:
-	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
-	@echo "Building server linux/arm64..."
-	@$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
-		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
-		-o $(BINDIR)/$(BINARY)-linux-arm64 ./src"
-	@if [ -d "src/client" ]; then \
-		echo "Building CLI linux/arm64..."; \
-		$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
-			go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" \
-			-o $(BINDIR)/$(BINARY)-cli-linux-arm64 ./src/client"; \
-	fi
-	@echo "ARM64 build complete"
-
-# =============================================================================
-# CLEAN - Remove build artifacts
-# =============================================================================
-clean:
-	@rm -rf $(BINDIR) $(RELDIR)
-	@echo "Clean complete"
-
-# =============================================================================
-# INSTALL - Copy binary to /usr/local/bin/
-# =============================================================================
-install:
-	@[ -f $(BINDIR)/$(BINARY) ] || $(MAKE) build
-	@cp $(BINDIR)/$(BINARY) /usr/local/bin/$(BINARY)
-	@echo "Installed: /usr/local/bin/$(BINARY)"
-
-# =============================================================================
-# DOCKER-BUILD - Build Docker image (alias for docker)
-# =============================================================================
-docker-build: docker

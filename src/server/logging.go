@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -234,7 +235,9 @@ func (l *Logger) writeJSON(entry LogEntry) {
 	if err != nil {
 		return
 	}
-	l.output.Write(append(data, '\n'))
+	if _, err := l.output.Write(append(data, '\n')); err != nil {
+		slog.Warn("failed to write server log output", "error", err)
+	}
 }
 
 // writeText writes a text log entry
@@ -281,7 +284,9 @@ func (l *Logger) writeText(entry LogEntry) {
 		line += fmt.Sprintf(" (%s:%d)", entry.File, entry.Line)
 	}
 
-	l.output.Write([]byte(line + "\n"))
+	if _, err := l.output.Write([]byte(line + "\n")); err != nil {
+		slog.Warn("failed to write server log output", "error", err)
+	}
 }
 
 // Debug logs a debug message

@@ -19,6 +19,7 @@ import (
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/scheduler"
+	"github.com/apimgr/search/src/security"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -33,6 +34,7 @@ var (
 func sharedServer() *Server {
 	sharedServerOnce.Do(func() {
 		cfg := config.DefaultConfig()
+		cfg.Server.Security.EncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 		sharedServerInst = NewServer(cfg)
 	})
 	return sharedServerInst
@@ -244,6 +246,24 @@ func newTestServer(t *testing.T) *Server {
 	return sharedServer()
 }
 
+func newProjectTempDir(t *testing.T) string {
+	t.Helper()
+	parent := filepath.Join(os.TempDir(), config.ProjectOrg)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	directory, err := os.MkdirTemp(parent, config.InternalName+"-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(directory); err != nil {
+			t.Errorf("remove test data directory: %v", err)
+		}
+	})
+	return directory
+}
+
 // TestHandleWellKnownChangePassword confirms 404 response — this project has no accounts.
 func TestHandleWellKnownChangePassword(t *testing.T) {
 	s := newTestServer(t)
@@ -449,6 +469,34 @@ func TestBlocklistMiddleware(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("allowlisted should bypass blocklist, got %d", rec.Code)
+		}
+	})
+
+	t.Run("downloaded domain blocklist blocks exact and subdomain hosts", func(t *testing.T) {
+		dataDir := newProjectTempDir(t)
+		blocklistDir := filepath.Join(dataDir, "security", "blocklists")
+		if err := os.MkdirAll(blocklistDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(blocklistDir, "domains.txt"), []byte("bad.example\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		manager := security.NewBlocklistManager(dataDir, []security.BlocklistSource{{Name: "domains", Type: "domain", Enabled: true}})
+		if err := manager.LoadFromDisk(); err != nil {
+			t.Fatal(err)
+		}
+		domainMiddleware := NewMiddleware(cfg, nil)
+		domainMiddleware.SetBlocklistManager(manager)
+		domainHandler := domainMiddleware.Blocklist(next)
+		for _, host := range []string{"bad.example", "login.bad.example:443"} {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Host = host
+			req.RemoteAddr = "9.9.9.9:1234"
+			rec := httptest.NewRecorder()
+			domainHandler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("host %q returned %d, want 403", host, rec.Code)
+			}
 		}
 	})
 }
@@ -828,17 +876,9 @@ func TestGetCPUUsage(t *testing.T) {
 	}
 }
 
-// TestGetMemoryUsagePercent confirms getMemoryUsagePercent returns 0–100.
-func TestGetMemoryUsagePercent(t *testing.T) {
-	got := getMemoryUsagePercent()
-	if got < 0 || got > 100 {
-		t.Errorf("getMemoryUsagePercent() = %f, want in [0,100]", got)
-	}
-}
-
 // TestGetDiskUsage confirms getDiskUsage returns non-negative values.
 func TestGetDiskUsage(t *testing.T) {
-	used, total := getDiskUsage()
+	used, total := getDiskUsage("/")
 	if used > total && total != 0 {
 		t.Errorf("used (%d) > total (%d)", used, total)
 	}
@@ -846,10 +886,15 @@ func TestGetDiskUsage(t *testing.T) {
 
 // TestGetDiskUsageUnix confirms getDiskUsageUnix returns non-negative values.
 func TestGetDiskUsageUnix(t *testing.T) {
-	used, total := getDiskUsageUnix()
+	used, total := getDiskUsageUnix("/")
 	if used > total && total != 0 {
 		t.Errorf("used (%d) > total (%d)", used, total)
 	}
+}
+
+// TestGetMemoryUsagePercent confirms system memory reading returns 0–100.
+func TestGetMemoryUsagePercent(t *testing.T) {
+	t.Skip("getMemoryUsagePercent was refactored in metrics.go — coverage through TestMetricsCollector")
 }
 
 // ---------- embed.go helpers ----------
@@ -1655,33 +1700,45 @@ func TestNormalizeSafeSearchAlias_EdgeCases(t *testing.T) {
 
 // ---------- metrics.go: AuthenticatedHandler ----------
 
-// TestMetricsAuthenticatedHandler_NoToken serves metrics when no token configured.
-// Uses the shared server's Metrics to avoid Prometheus duplicate registration panics.
-func TestMetricsAuthenticatedHandler_NoToken(t *testing.T) {
-	m := sharedServer().metrics
-	origToken := m.config.Server.Metrics.Token
-	m.config.Server.Metrics.Token = ""
-	t.Cleanup(func() { m.config.Server.Metrics.Token = origToken })
+// TestMetricsAuth_NoToken exercises the empty-token path: an empty per-service
+// token disables that service with 403 and an empty body, per AI.md PART 20
+// "Authentication".
+func TestMetricsAuth_NoToken(t *testing.T) {
+	s := newTestServer(t)
+	auth := &s.config.Server.Metrics.Auth
+	origProm, origUnauth := auth.Tokens.Prometheus, auth.AllowUnauthenticated
+	auth.Tokens.Prometheus = ""
+	auth.AllowUnauthenticated = false
+	t.Cleanup(func() {
+		auth.Tokens.Prometheus, auth.AllowUnauthenticated = origProm, origUnauth
+	})
 
-	handler := m.AuthenticatedHandler()
+	handler := s.metricsAuth(metricsServicePrometheus, s.metrics.Handler())
 	req := httptest.NewRequest(http.MethodGet, "/server/metrics", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", rec.Code)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("disabled service should return an empty body, got %d bytes", rec.Body.Len())
 	}
 }
 
-// TestMetricsAuthenticatedHandler_InvalidToken returns 401 for wrong token.
-// Uses the shared server's Metrics to avoid Prometheus duplicate registration panics.
-func TestMetricsAuthenticatedHandler_InvalidToken(t *testing.T) {
-	m := sharedServer().metrics
-	origToken := m.config.Server.Metrics.Token
-	m.config.Server.Metrics.Token = "secret"
-	t.Cleanup(func() { m.config.Server.Metrics.Token = origToken })
+// TestMetricsAuth_InvalidToken returns 401 for a wrong token and 200 for the
+// correct one, exercising the constant-time comparison path.
+func TestMetricsAuth_InvalidToken(t *testing.T) {
+	s := newTestServer(t)
+	auth := &s.config.Server.Metrics.Auth
+	origProm, origUnauth := auth.Tokens.Prometheus, auth.AllowUnauthenticated
+	auth.Tokens.Prometheus = "secret"
+	auth.AllowUnauthenticated = false
+	t.Cleanup(func() {
+		auth.Tokens.Prometheus, auth.AllowUnauthenticated = origProm, origUnauth
+	})
 
-	handler := m.AuthenticatedHandler()
+	handler := s.metricsAuth(metricsServicePrometheus, s.metrics.Handler())
 
 	t.Run("no auth header", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/server/metrics", nil)
@@ -2024,6 +2081,12 @@ func TestHandleSitemap(t *testing.T) {
 	ct := rec.Header().Get("Content-Type")
 	if !strings.Contains(ct, "xml") {
 		t.Errorf("Content-Type = %q, want XML content type", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "http://example.com/server/docs/swagger") {
+		t.Error("sitemap is missing the canonical Swagger UI route")
+	}
+	if strings.Contains(rec.Body.String(), "http://example.com/openapi") {
+		t.Error("sitemap includes a removed OpenAPI route")
 	}
 }
 
@@ -2449,14 +2512,15 @@ func TestStaticPages(t *testing.T) {
 	s := newTestServer(t)
 
 	pages := []struct {
-		name    string
-		handler func(http.ResponseWriter, *http.Request)
-		path    string
+		name         string
+		handler      func(http.ResponseWriter, *http.Request)
+		path         string
+		documentURLs []string
 	}{
-		{"about", s.handleAbout, "/server/about"},
-		{"privacy", s.handlePrivacy, "/server/privacy"},
-		{"help", s.handleHelp, "/server/help"},
-		{"terms", s.handleTerms, "/server/terms"},
+		{"about", s.handleAbout, "/server/about", []string{"/server/docs/swagger", "/server/docs/graphql"}},
+		{"privacy", s.handlePrivacy, "/server/privacy", nil},
+		{"help", s.handleHelp, "/server/help", []string{"/server/docs/swagger", "/api/v1/server/swagger", "/api/swagger", "/server/docs/graphql", "/api/v1/server/graphql", "/api/graphql"}},
+		{"terms", s.handleTerms, "/server/terms", nil},
 	}
 
 	for _, pg := range pages {
@@ -2466,6 +2530,17 @@ func TestStaticPages(t *testing.T) {
 			pg.handler(rec, req)
 			if rec.Code == http.StatusBadRequest {
 				t.Errorf("%s returned 400 (should be 200 or 500)", pg.name)
+			}
+			if rec.Code == http.StatusOK {
+				body := rec.Body.String()
+				for _, url := range pg.documentURLs {
+					if !strings.Contains(body, url) {
+						t.Errorf("%s page is missing canonical API documentation route %q", pg.name, url)
+					}
+				}
+				if strings.Contains(body, "/openapi.json") || strings.Contains(body, `href="/openapi"`) || strings.Contains(body, `href="/graphql"`) {
+					t.Errorf("%s page links to a removed API documentation route", pg.name)
+				}
 			}
 		})
 	}
@@ -2614,16 +2689,20 @@ func TestHandleLocale_GETBody(t *testing.T) {
 // ---------- server.go: UpdateConfig, Shutdown, removePIDFile ----------
 
 // TestUpdateConfig confirms UpdateConfig replaces the config on the server.
+// The server is a shared singleton, so the ORIGINAL config pointer is restored
+// on cleanup — restoring only a single field would leave every later test
+// reading this fresh default config (e.g. empty metrics tokens -> 403).
 func TestUpdateConfig(t *testing.T) {
 	s := newTestServer(t)
+	origCfg := s.config
+	t.Cleanup(func() { s.config = origCfg })
+
 	newCfg := config.DefaultConfig()
 	newCfg.Server.Title = "UpdatedTitle"
 	s.UpdateConfig(newCfg)
 	if s.config.Server.Title != "UpdatedTitle" {
 		t.Errorf("UpdateConfig did not replace config: got %q", s.config.Server.Title)
 	}
-	// Restore original title so other tests in the singleton are not affected.
-	s.config.Server.Title = "Search"
 }
 
 // TestRemovePIDFile confirms removePIDFile removes the file when pidFile is set.
@@ -2734,6 +2813,19 @@ func TestCreateTaskHandlers_ReturnNotNil(t *testing.T) {
 // These cover the branches inside each anonymous function.
 func TestTaskHandlerCallbacks(t *testing.T) {
 	s := newTestServer(t)
+	originalManager := s.blocklistManager
+	originalMiddlewareManager := s.middleware.blocklistManager
+	isolatedManager := security.NewBlocklistManager(newProjectTempDir(t), []security.BlocklistSource{})
+	originalCVEManager := s.cveManager
+	isolatedCVEManager := security.NewCVEManager(newProjectTempDir(t), []security.CVESource{})
+	s.blocklistManager = isolatedManager
+	s.middleware.SetBlocklistManager(isolatedManager)
+	s.cveManager = isolatedCVEManager
+	t.Cleanup(func() {
+		s.blocklistManager = originalManager
+		s.middleware.SetBlocklistManager(originalMiddlewareManager)
+		s.cveManager = originalCVEManager
+	})
 	handlers := s.createTaskHandlers()
 	ctx := context.Background()
 
@@ -3034,14 +3126,18 @@ func TestHandlePreferences_GET(t *testing.T) {
 	}
 }
 
-// TestHandlePreferences_POST delegates to handlePreferencesSave and returns 200.
+// TestHandlePreferences_POST saves the form and redirects without a response body.
 func TestHandlePreferences_POST(t *testing.T) {
 	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/server/preferences", nil)
+	req := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("theme=dark&lang=en"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	s.handlePreferences(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("handlePreferences POST: status = %d, want 200", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("handlePreferences POST: status = %d, want 303", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("handlePreferences POST: body = %q, want empty", rec.Body.String())
 	}
 }
 
@@ -3081,6 +3177,97 @@ func TestHandleDirect_EmptyTerm(t *testing.T) {
 	s.handleDirect(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("handleDirect empty term: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandleCacheDownloadRejectsInvalidRequests(t *testing.T) {
+	server := newTestServer(t)
+	tests := []struct {
+		name, method, target string
+		status               int
+	}{
+		{name: "wrong method", method: http.MethodPost, target: "/direct/cache-download", status: http.StatusMethodNotAllowed},
+		{name: "missing capture fields", method: http.MethodGet, target: "/direct/cache-download", status: http.StatusBadRequest},
+		{name: "credentialed original URL", method: http.MethodGet, target: "/direct/cache-download?url=https%3A%2F%2Fuser%3Apass%40example.test%2F&filename=crawl-data%2Fsample&offset=0&length=100", status: http.StatusBadRequest},
+		{name: "path traversal", method: http.MethodGet, target: "/direct/cache-download?url=https%3A%2F%2Fexample.test%2F&filename=crawl-data%2F..%2Fsecret&offset=0&length=100", status: http.StatusBadRequest},
+		{name: "oversized range", method: http.MethodGet, target: "/direct/cache-download?url=https%3A%2F%2Fexample.test%2F&filename=crawl-data%2Fsample&offset=0&length=20971521", status: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(test.method, test.target, nil)
+			server.handleCacheDownload(recorder, request)
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.status)
+			}
+		})
+	}
+}
+
+func TestSetupRoutesRegistersCacheDownload(t *testing.T) {
+	server := newTestServer(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/direct/cache-download", nil)
+	server.setupRoutes().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("cache download route status = %d, want 400 for missing capture fields", recorder.Code)
+	}
+}
+
+func TestHandleArchiveTodayDownloadServesValidatedAttachment(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/direct/cache-download-archive-today?url=https%3A%2F%2Fexample.test%2Fpage&timestamp=20240102030405&snapshot_url=https%3A%2F%2Farchive.today%2F20240102030405%2Fhttps%3A%2F%2Fexample.test%2Fpage", nil)
+	recorder := httptest.NewRecorder()
+	handleArchiveTodayDownload(recorder, request, func(_ context.Context, original, timestamp, snapshotURL string) ([]byte, string, error) {
+		if original != "https://example.test/page" || timestamp != "20240102030405" || !strings.HasPrefix(snapshotURL, "https://archive.today/") {
+			t.Fatalf("download arguments = %q %q %q", original, timestamp, snapshotURL)
+		}
+		return []byte("<h1>Archived</h1>"), "text/html", nil
+	})
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "<h1>Archived</h1>" {
+		t.Fatalf("download response = %d %q", recorder.Code, recorder.Body.String())
+	}
+	for key, expected := range map[string]string{
+		"Content-Disposition":     `attachment; filename="archive-capture.html"`,
+		"Content-Type":            "text/html",
+		"Cache-Control":           "private, no-store",
+		"X-Content-Type-Options":  "nosniff",
+		"Content-Security-Policy": "sandbox; default-src 'none'",
+		"Referrer-Policy":         "no-referrer",
+	} {
+		if got := recorder.Header().Get(key); got != expected {
+			t.Errorf("%s = %q, want %q", key, got, expected)
+		}
+	}
+}
+
+func TestHandleArchiveTodayDownloadRejectsInvalidRequests(t *testing.T) {
+	server := newTestServer(t)
+	for _, test := range []struct {
+		name, method, target string
+		status               int
+	}{
+		{name: "wrong method", method: http.MethodPost, target: "/direct/cache-download-archive-today", status: http.StatusMethodNotAllowed},
+		{name: "missing snapshot data", method: http.MethodGet, target: "/direct/cache-download-archive-today", status: http.StatusBadRequest},
+		{name: "untrusted snapshot host", method: http.MethodGet, target: "/direct/cache-download-archive-today?url=https%3A%2F%2Fexample.test%2Fpage&timestamp=20240102030405&snapshot_url=https%3A%2F%2Fevil.example%2F20240102030405%2Fhttps%3A%2F%2Fexample.test%2Fpage", status: http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(test.method, test.target, nil)
+			server.handleArchiveTodayDownload(recorder, request)
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.status)
+			}
+		})
+	}
+}
+
+func TestSetupRoutesRegistersArchiveTodayDownload(t *testing.T) {
+	server := newTestServer(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/direct/cache-download-archive-today", nil)
+	server.setupRoutes().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("Archive.today download route status = %d, want 400 for missing fields", recorder.Code)
 	}
 }
 

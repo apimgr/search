@@ -137,6 +137,16 @@ func TestCaseHelperFunctions(t *testing.T) {
 
 // ---- CalendarHandler ----
 
+func TestRenderCalendarMonthMarksSelectedDate(t *testing.T) {
+	date := time.Date(2026, time.October, 12, 0, 0, 0, 0, time.UTC)
+	calendar := renderCalendarMonth(date)
+	for _, marker := range []string{`aria-label="October 2026"`, `<th scope="col">Sun</th>`, `<td aria-current="date"><strong>12</strong></td>`} {
+		if !strings.Contains(calendar, marker) {
+			t.Errorf("calendar preview missing %q", marker)
+		}
+	}
+}
+
 func TestCalendarHandlerNameAndPatterns(t *testing.T) {
 	h := NewCalendarHandler()
 	if h.Name() != "calendar" {
@@ -836,6 +846,16 @@ func TestUnicodeHandlerHandleInstantQuery(t *testing.T) {
 }
 
 // ---- TimezoneHandler ----
+
+func TestRenderWorldClockIncludesSixCities(t *testing.T) {
+	content, cities := renderWorldClock(time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC), "en")
+	if len(cities) != 6 || strings.Count(content, `<li><strong>`) != 6 {
+		t.Fatalf("world clock rows = %d, rendered rows = %d, want six each", len(cities), strings.Count(content, `<li><strong>`))
+	}
+	if !strings.Contains(content, `aria-label="World clock"`) || !strings.Contains(content, `datetime="2026-01-01T12:00:00Z"`) {
+		t.Fatal("world clock is missing its accessible label or machine-readable time")
+	}
+}
 
 func TestTimezoneHandlerNameAndPatterns(t *testing.T) {
 	h := NewTimezoneHandler()
@@ -1865,7 +1885,7 @@ func TestJWTHandlerPatterns(t *testing.T) {
 // ---- Manager includes all handlers ----
 
 func TestManagerIncludesAllHandlers(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	handlers := m.GetHandlers()
 
 	expectedNames := []string{
@@ -1880,6 +1900,110 @@ func TestManagerIncludesAllHandlers(t *testing.T) {
 		if !nameSet[name] {
 			t.Errorf("Manager missing handler %q", name)
 		}
+	}
+}
+
+func TestIDEAInstantAnswerTriggersResolveLocally(t *testing.T) {
+	manager := NewManager(nil)
+	tests := []struct {
+		name    string
+		query   string
+		handler string
+	}{
+		{name: "calculator arithmetic", query: "2 + 2", handler: "math"},
+		{name: "calculator percentage", query: "15% of 200", handler: "math"},
+		{name: "calculator roots", query: "sqrt(144)", handler: "math"},
+		{name: "unit converter", query: "5 miles in km", handler: "convert"},
+		{name: "dictionary meaning", query: "meaning of ephemeral", handler: "definition"},
+		{name: "dictionary word first", query: "serendipity definition", handler: "definition"},
+		{name: "dictionary definition", query: "define ubiquitous", handler: "definition"},
+		{name: "dictionary quoted form", query: `what does "catharsis" mean`, handler: "definition"},
+		{name: "thesaurus synonyms", query: "synonyms for happy", handler: "synonym"},
+		{name: "thesaurus word first", query: "beautiful synonyms", handler: "synonym"},
+		{name: "thesaurus antonyms", query: "antonyms of good", handler: "antonym"},
+		{name: "public ip", query: "my ip address", handler: "ip"},
+		{name: "public ip question", query: "what is my ip", handler: "ip"},
+		{name: "explicit ip", query: "8.8.8.8", handler: "ip"},
+		{name: "explicit ip prefix", query: "ip 1.1.1.1", handler: "ip"},
+		{name: "ip address trigger", query: "ip address", handler: "ip"},
+		{name: "color picker hex", query: "#ff5733", handler: "color"},
+		{name: "color picker rgb", query: "rgb(255,87,51)", handler: "color"},
+		{name: "color picker hsl", query: "hsl(11,100%,60%)", handler: "color"},
+		{name: "color picker name", query: "coral", handler: "color"},
+		{name: "color primary name", query: "red", handler: "color"},
+		{name: "color picker spaced name", query: "dark blue", handler: "color"},
+		{name: "timezone location", query: "time in tokyo", handler: "timezone"},
+		{name: "timezone current time", query: "current time london", handler: "timezone"},
+		{name: "timezone current time with preposition", query: "current time in london", handler: "timezone"},
+		{name: "timezone city question", query: "what time is it in sydney", handler: "timezone"},
+		{name: "timezone conversion", query: "3pm EST to PST", handler: "timezone"},
+		{name: "timezone numeric conversion", query: "14:00 UTC to CET", handler: "timezone"},
+		{name: "timezone current time question", query: "what time is it in sydney", handler: "timezone"},
+		{name: "calendar countdown", query: "days until 2025-12-31", handler: "calendar"},
+		{name: "calendar holiday countdown", query: "days until christmas", handler: "calendar"},
+		{name: "calendar arithmetic", query: "today + 90 days", handler: "calendar"},
+		{name: "calendar date subtraction", query: "2025-06-15 - 30 days", handler: "calendar"},
+		{name: "calendar date difference", query: "days between jan 1 and mar 15", handler: "calendar"},
+		{name: "calendar weekday", query: "what day is july 4 2025", handler: "calendar"},
+		{name: "hash generator", query: "sha256 hello world", handler: "hash"},
+		{name: "hash md5", query: "md5 hello world", handler: "hash"},
+		{name: "hash generic", query: "hash my string", handler: "hash"},
+		{name: "base64 encoder", query: "base64 encode hello world", handler: "base64"},
+		{name: "base64 decoder", query: "base64 decode aGVsbG8gd29ybGQ=", handler: "base64"},
+		{name: "base64 short encoder", query: "b64 encode test", handler: "base64"},
+		{name: "base64 short decoder", query: "b64 decode dGVzdA==", handler: "base64"},
+		{name: "url encoder", query: "url encode hello world!", handler: "url"},
+		{name: "url decoder", query: "url decode hello%20world%21", handler: "url"},
+		{name: "urlencode alias", query: "urlencode special chars: &?=", handler: "url"},
+		{name: "uuid generator", query: "generate uuid", handler: "uuid"},
+		{name: "guid alias", query: "guid", handler: "uuid"},
+		{name: "uuid v4", query: "uuid v4", handler: "uuid"},
+		{name: "random uuid", query: "random uuid", handler: "uuid"},
+		{name: "password generator length", query: "password 16 characters", handler: "password"},
+		{name: "password random", query: "random password", handler: "password"},
+		{name: "strong password", query: "strong password", handler: "password"},
+		{name: "secure password", query: "secure password", handler: "password"},
+		{name: "qr generator", query: "qr code hello world", handler: "qr"},
+		{name: "qr url", query: "qr https://example.com", handler: "qr"},
+		{name: "qr generate", query: "generate qr my wifi password", handler: "qr"},
+		{name: "stopwatch", query: "stopwatch", handler: "stopwatch"},
+		{name: "timer", query: "timer 5 minutes", handler: "stopwatch"},
+		{name: "countdown", query: "countdown 30 seconds", handler: "stopwatch"},
+		{name: "compact timer duration", query: "timer 1h30m", handler: "stopwatch"},
+		{name: "pomodoro timer", query: "pomodoro timer", handler: "stopwatch"},
+		{name: "random number", query: "random 1-100", handler: "random"},
+		{name: "random number six sided", query: "random 1-6", handler: "random"},
+		{name: "random number generic", query: "random number", handler: "random"},
+		{name: "dice generic", query: "roll dice", handler: "random"},
+		{name: "dice", query: "roll d20", handler: "random"},
+		{name: "multiple dice", query: "roll 2d6", handler: "random"},
+		{name: "coin flip", query: "flip coin", handler: "random"},
+		{name: "coin flip reverse", query: "coin flip", handler: "random"},
+		{name: "random pick", query: "pick random 1-10", handler: "random"},
+		{name: "lorem paragraphs", query: "lorem ipsum 3 paragraphs", handler: "lorem"},
+		{name: "lorem word count", query: "placeholder text 100 words", handler: "lorem"},
+		{name: "lorem sentence count", query: "dummy text 5 sentences", handler: "lorem"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for _, handler := range manager.GetHandlers() {
+				if handler.Name() == test.handler && handler.CanHandle(test.query) {
+					return
+				}
+			}
+			t.Errorf("IDEA query %q did not match handler %q", test.query, test.handler)
+		})
+	}
+}
+
+func TestPasswordCharacterCountTriggerUsesRequestedLength(t *testing.T) {
+	answer, err := NewPasswordHandler().HandleInstantQuery(context.Background(), "password 16 characters")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil || answer.Data["length"] != 16 {
+		t.Fatalf("password answer = %#v, want generated length 16", answer)
 	}
 }
 

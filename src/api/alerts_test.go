@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/search"
 	_ "modernc.org/sqlite"
 )
@@ -48,6 +50,7 @@ func setupAlertAPITestDB(t *testing.T) *sql.DB {
 	schema := `
 		CREATE TABLE search_alerts (
 			id TEXT PRIMARY KEY,
+			owner_id TEXT,
 			email TEXT NOT NULL,
 			query TEXT NOT NULL,
 			category TEXT NOT NULL,
@@ -82,6 +85,9 @@ func setupAlertAPITestDB(t *testing.T) *sql.DB {
 		CREATE UNIQUE INDEX idx_search_alerts_rss_token ON search_alerts(rss_token_hash);
 		CREATE INDEX idx_search_alerts_verify_token ON search_alerts(verify_token_hash);
 		CREATE INDEX idx_search_alerts_status_frequency ON search_alerts(status, frequency);
+		CREATE TABLE owners (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL);
+		CREATE TABLE api_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, token_prefix TEXT NOT NULL, active INTEGER DEFAULT 1, expires_at INTEGER, created_at INTEGER, owner_id TEXT, kind TEXT NOT NULL, token_enc TEXT NOT NULL, rotated_at INTEGER, last_used_at INTEGER, revoked_at INTEGER, revoked_reason TEXT);
+		CREATE TABLE audit_log (id TEXT PRIMARY KEY, timestamp DATETIME, actor_type TEXT, actor_id TEXT, action TEXT, resource_type TEXT, resource_id TEXT, details TEXT);
 
 		CREATE TABLE search_alert_results (
 			id TEXT PRIMARY KEY,
@@ -120,6 +126,12 @@ func newAlertAPIHandler(t *testing.T) (*Handler, *alert.Manager, *sql.DB) {
 	})
 
 	handler := NewHandler(cfg, nil, aggregator)
+	cfg.Server.Security.EncryptionKey = base64.StdEncoding.EncodeToString(make([]byte, 32))
+	ownerManager, err := owner.NewManager(db, "", cfg.Server.Security.EncryptionKey, 25)
+	if err != nil {
+		t.Fatalf("create owner manager: %v", err)
+	}
+	handler.SetOwnerManager(ownerManager)
 	manager := alert.NewManager(db, cfg, aggregator, nil)
 	handler.SetAlertManager(manager)
 

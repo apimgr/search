@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/ssl"
 )
 
@@ -55,9 +56,12 @@ func (s *Server) GetPublicIP() (string, time.Time) {
 // well-formed public IPv4 address. On failure it logs a WARN and leaves the
 // cached value untouched, per AI.md PART 8 step 16.
 func (s *Server) refreshPublicIP(ctx context.Context) error {
+	if len(s.publicIPProviders) == 0 {
+		return nil
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	var lastErr error
-	for _, url := range publicIPProviders {
+	for _, url := range s.publicIPProviders {
 		ip, err := fetchPublicIP(ctx, client, url)
 		if err != nil {
 			lastErr = err
@@ -93,7 +97,7 @@ func fetchPublicIP(ctx context.Context, client *http.Client, url string) (string
 	if err != nil {
 		return "", fmt.Errorf("get %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s: status %d", url, resp.StatusCode)
 	}

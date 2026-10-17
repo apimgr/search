@@ -105,16 +105,12 @@ func TestHandleHealthzMaintenanceMode(t *testing.T) {
 		t.Errorf("handleHealthz() maintenance status code = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 
-	var resp APIResponse
+	var resp HealthResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("json decode error: %v", err)
 	}
-	data, ok := resp.Data.(map[string]interface{})
-	if !ok {
-		t.Fatalf("response.Data type = %T, want map[string]interface{}", resp.Data)
-	}
-	if data["status"] != "maintenance" {
-		t.Errorf("handleHealthz() maintenance status = %v, want maintenance", data["status"])
+	if resp.Status != "maintenance" {
+		t.Errorf("handleHealthz() maintenance status = %v, want maintenance", resp.Status)
 	}
 }
 
@@ -132,26 +128,14 @@ func TestHandleHealthzTorEnabledNilService(t *testing.T) {
 		t.Errorf("handleHealthz() status = %d, want 200", w.Code)
 	}
 
-	var resp APIResponse
+	var resp HealthResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("json decode error: %v", err)
 	}
-	data, ok := resp.Data.(map[string]interface{})
-	if !ok {
-		t.Fatalf("response.Data type = %T, want map[string]interface{}", resp.Data)
+	if resp.Features.Tor.Status != "unavailable" {
+		t.Errorf("tor.status = %v, want unavailable", resp.Features.Tor.Status)
 	}
-	features, ok := data["features"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("features type = %T, want map[string]interface{}", data["features"])
-	}
-	tor, ok := features["tor"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("tor type = %T, want map[string]interface{}", features["tor"])
-	}
-	if tor["status"] != "unavailable" {
-		t.Errorf("tor.status = %v, want unavailable", tor["status"])
-	}
-	if tor["enabled"] != true {
-		t.Errorf("tor.enabled = %v, want true", tor["enabled"])
+	if !resp.Features.Tor.Enabled {
+		t.Errorf("tor.enabled = %v, want true", resp.Features.Tor.Enabled)
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -57,7 +59,7 @@ func NewYandex() *Yandex {
 	config := model.NewEngineConfig("yandex")
 	config.DisplayName = "Yandex"
 	config.Priority = 70
-	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
+	config.Categories = []string{"general", "images", "news", "videos"}
 	// Yandex blocks Tor exit nodes
 	config.SupportsTor = false
 
@@ -85,9 +87,10 @@ func (e *Yandex) Search(ctx context.Context, query *model.Query) ([]model.Result
 		searchURL = "https://yandex.com/video/search"
 	}
 
-	if query.SafeSearch == 2 {
+	switch query.SafeSearch {
+	case 2:
 		params.Set("family", "yes")
-	} else if query.SafeSearch == 0 {
+	case 0:
 		params.Set("family", "no")
 	}
 	if query.Language != "" {
@@ -112,7 +115,7 @@ func (e *Yandex) Search(ctx context.Context, query *model.Query) ([]model.Result
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		closeutil.Close(resp.Body)
 		return nil, fmt.Errorf("yandex returned status %d", resp.StatusCode)
 	}
 

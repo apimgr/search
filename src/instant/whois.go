@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // WHOISHandler handles domain WHOIS lookups
@@ -288,44 +290,44 @@ func (h *WHOISHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"whois-result\">")
-	content.WriteString(fmt.Sprintf("<strong>Domain:</strong> %s<br><br>", domain))
+	fmt.Fprintf(&content, "<strong>Domain:</strong> %s<br><br>", domain)
 
 	if parsed.registrar != "" {
-		content.WriteString(fmt.Sprintf("<strong>Registrar:</strong> %s<br>", parsed.registrar))
+		fmt.Fprintf(&content, "<strong>Registrar:</strong> %s<br>", parsed.registrar)
 	}
 
 	if parsed.registrantOrg != "" {
-		content.WriteString(fmt.Sprintf("<strong>Registrant Organization:</strong> %s<br>", parsed.registrantOrg))
+		fmt.Fprintf(&content, "<strong>Registrant Organization:</strong> %s<br>", parsed.registrantOrg)
 	}
 
 	if parsed.creationDate != "" {
-		content.WriteString(fmt.Sprintf("<strong>Creation Date:</strong> %s<br>", parsed.creationDate))
+		fmt.Fprintf(&content, "<strong>Creation Date:</strong> %s<br>", parsed.creationDate)
 	}
 
 	if parsed.expirationDate != "" {
-		content.WriteString(fmt.Sprintf("<strong>Expiration Date:</strong> %s<br>", parsed.expirationDate))
+		fmt.Fprintf(&content, "<strong>Expiration Date:</strong> %s<br>", parsed.expirationDate)
 	}
 
 	if parsed.updatedDate != "" {
-		content.WriteString(fmt.Sprintf("<strong>Updated Date:</strong> %s<br>", parsed.updatedDate))
+		fmt.Fprintf(&content, "<strong>Updated Date:</strong> %s<br>", parsed.updatedDate)
 	}
 
 	if len(parsed.nameServers) > 0 {
 		content.WriteString("<br><strong>Name Servers:</strong><br>")
 		for _, ns := range parsed.nameServers {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s<br>", ns))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;%s<br>", ns)
 		}
 	}
 
 	if len(parsed.status) > 0 {
 		content.WriteString("<br><strong>Status:</strong><br>")
 		for _, s := range parsed.status {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s<br>", s))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;%s<br>", s)
 		}
 	}
 
 	if parsed.dnssec != "" {
-		content.WriteString(fmt.Sprintf("<br><strong>DNSSEC:</strong> %s<br>", parsed.dnssec))
+		fmt.Fprintf(&content, "<br><strong>DNSSEC:</strong> %s<br>", parsed.dnssec)
 	}
 
 	content.WriteString("</div>")
@@ -387,17 +389,20 @@ func (h *WHOISHandler) queryWHOIS(ctx context.Context, server, domain string) (s
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to WHOIS server: %v", err)
 	}
-	defer conn.Close()
+	defer closeutil.Close(conn)
 
 	// Set deadline for read/write operations
-	conn.SetDeadline(time.Now().Add(15 * time.Second))
+	if err := conn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
+		return "", fmt.Errorf("set WHOIS deadline: %w", err)
+	}
 
 	// Send query
 	query := domain + "\r\n"
 	// Special handling for some servers
-	if server == "whois.verisign-grs.com" {
+	switch server {
+	case "whois.verisign-grs.com":
 		query = "=" + domain + "\r\n"
-	} else if server == "whois.denic.de" {
+	case "whois.denic.de":
 		query = "-T dn,ace " + domain + "\r\n"
 	}
 

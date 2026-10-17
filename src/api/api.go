@@ -10,22 +10,32 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/prefsync"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/geoip"
+	"github.com/apimgr/search/src/i2p"
 	"github.com/apimgr/search/src/instant"
+	"github.com/apimgr/search/src/logging"
 	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/notify"
+	"github.com/apimgr/search/src/owner"
+	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
@@ -47,6 +57,36 @@ func APIBasePath() string {
 	return version.APIPrefix
 }
 
+// HealthMetrics supplies live server counters for the public health response.
+type HealthMetrics interface {
+	GetTotalRequests() int64
+	GetRequestsLast24Hours() int64
+	GetActiveConnections() int64
+}
+
+type HealthSnapshot struct {
+	Status         string
+	PendingRestart bool
+	RestartReason  []string
+	Checks         ChecksInfo
+}
+
+type HealthProvider interface {
+	HealthSnapshot() HealthSnapshot
+}
+
+type ContactMessage struct {
+	Name     string
+	Email    string
+	Subject  string
+	Message  string
+	SourceIP string `json:"-"`
+}
+
+type ContactSubmitter interface {
+	SubmitContact(context.Context, ContactMessage) error
+}
+
 // Handler handles API requests
 type Handler struct {
 	config          *config.Config
@@ -57,12 +97,51 @@ type Handler struct {
 	directManager   *direct.Manager
 	relatedSearches *search.RelatedSearches
 	// Per AI.md PART 32: Tor service for health status
-	torService   *service.TorService
-	geoipLookup  *geoip.Lookup
-	startTime    time.Time
-	alertManager *alert.Manager
+	torService *service.TorService
+	// Per AI.md PART 31.2: I2P manager for health status
+	i2pManager        *i2p.I2PManager
+	geoipLookup       *geoip.Lookup
+	startTime         time.Time
+	healthMetrics     HealthMetrics
+	healthProvider    HealthProvider
+	contactSubmitter  ContactSubmitter
+	alertManager      *alert.Manager
+	ownerManager      *owner.Manager
+	apiRoutes         http.Handler
+	thumbnailRewriter func(string) string
+	// scheduler backs the /server/scheduler/* endpoints per AI.md PART 18
+	scheduler *scheduler.Scheduler
+	// auditLogger writes the scheduler.task_manual_run audit event per PART 11
+	auditLogger *logging.AuditLogger
 	// validate is the input validator per AI.md PART 3 requirement
 	validate *validator.Validate
+}
+
+// SetOwnerManager connects anonymous resource-token management to the server database.
+func (h *Handler) SetOwnerManager(manager *owner.Manager) { h.ownerManager = manager }
+
+// SetScheduler sets the scheduler for the API handler (PART 18 endpoints)
+func (h *Handler) SetScheduler(s *scheduler.Scheduler) {
+	h.scheduler = s
+}
+
+// SetHealthMetrics connects the server's live request counters to health responses.
+func (h *Handler) SetHealthMetrics(metrics HealthMetrics) {
+	h.healthMetrics = metrics
+}
+
+// SetHealthProvider shares the server's component checks with API health routes.
+func (h *Handler) SetHealthProvider(provider HealthProvider) {
+	h.healthProvider = provider
+}
+
+func (h *Handler) SetContactSubmitter(submitter ContactSubmitter) {
+	h.contactSubmitter = submitter
+}
+
+// SetAuditLogger sets the audit logger for the API handler
+func (h *Handler) SetAuditLogger(al *logging.AuditLogger) {
+	h.auditLogger = al
 }
 
 // NewHandler creates a new API handler
@@ -102,8 +181,29 @@ func (h *Handler) SetTorService(ts *service.TorService) {
 	h.torService = ts
 }
 
+// SetI2PManager sets the I2P manager for the API handler
+// Per AI.md PART 31.2: eepsite status is checked via the manager, not hardcoded
+func (h *Handler) SetI2PManager(im *i2p.I2PManager) {
+	h.i2pManager = im
+}
+
 func (h *Handler) SetAlertManager(am *alert.Manager) {
 	h.alertManager = am
+}
+
+// SetThumbnailRewriter applies the server's privacy-preserving image proxy to
+// thumbnails returned by the JSON search API.
+func (h *Handler) SetThumbnailRewriter(rewrite func(string) string) {
+	h.thumbnailRewriter = rewrite
+}
+
+// RewriteThumbnail returns a privacy-preserving URL when enabled by the live
+// server configuration, and the source URL otherwise.
+func (h *Handler) RewriteThumbnail(thumbnail string) string {
+	if h.thumbnailRewriter == nil || thumbnail == "" {
+		return thumbnail
+	}
+	return h.thumbnailRewriter(thumbnail)
 }
 
 // SetGeoIPLookup sets the GeoIP lookup service for the API handler.
@@ -114,65 +214,212 @@ func (h *Handler) SetGeoIPLookup(g *geoip.Lookup) {
 
 // RegisterRoutes registers API routes
 func (h *Handler) RegisterRoutes(r chi.Router) {
+	h.apiRoutes = r
 	// Autodiscover - non-versioned per AI.md PART 32 line 38077-38157
-	r.HandleFunc("/api/autodiscover", h.handleAutodiscover)
+	r.Get("/api/autodiscover", h.handleAutodiscover)
 
 	// Health and info - Per AI.md PART 13/14
 	// Canonical API route: /api/v1/server/healthz (JSON default, text via .txt or Accept header)
-	// Alias per PART 14: /api/v1/healthz and /api/healthz mount the same handler
-	r.HandleFunc(APIPrefix+"/server/healthz", h.handleHealthz)
-	r.HandleFunc(APIPrefix+"/server/healthz.txt", h.handleHealthz)
-	r.HandleFunc(APIPrefix+"/healthz", h.handleHealthz)
-	r.HandleFunc(APIPrefix+"/healthz.txt", h.handleHealthz)
-	r.HandleFunc("/api/healthz", h.handleHealthz)
-	r.HandleFunc(APIPrefix+"/info", h.handleInfo)
+	// Unversioned operational alias per PART 14 mounts the same handler.
+	r.Get(APIPrefix+"/server/healthz", h.handleHealthz)
+	r.Get(APIPrefix+"/server/healthz.txt", h.handleHealthz)
+	r.Get("/api/healthz", h.handleHealthz)
+	r.Get(APIPrefix+"/info", h.handleInfo)
 	// Per AI.md PART 14
-	r.HandleFunc(APIPrefix+"/info.txt", h.handleInfo)
+	r.Get(APIPrefix+"/info.txt", h.handleInfo)
 
 	// Search
-	r.HandleFunc(APIPrefix+"/search", h.handleSearch)
-	r.HandleFunc(APIPrefix+"/search/related", h.handleRelatedSearches)
-	r.HandleFunc(APIPrefix+"/autocomplete", h.handleAutocomplete)
+	r.Get(APIPrefix+"/search", h.handleSearch)
+	r.Post(APIPrefix+"/search", h.handleSearch)
+	r.Get(APIPrefix+"/search/related", h.handleRelatedSearches)
+	r.Get(APIPrefix+"/autocomplete", h.handleAutocomplete)
 
 	// Engines
-	r.HandleFunc(APIPrefix+"/engines", h.handleEngines)
-	r.HandleFunc(APIPrefix+"/engines/*", h.handleEngineByID)
+	r.Get(APIPrefix+"/engines", h.handleEngines)
+	r.Get(APIPrefix+"/engines/*", h.handleEngineByID)
 
 	// Categories
-	r.HandleFunc(APIPrefix+"/categories", h.handleCategories)
+	r.Get(APIPrefix+"/categories", h.handleCategories)
 
 	// Bangs
-	r.HandleFunc(APIPrefix+"/bangs", h.handleBangs)
+	r.Get(APIPrefix+"/bangs", h.handleBangs)
 
 	// Widgets
-	r.HandleFunc(APIPrefix+"/widgets", h.handleWidgets)
-	r.HandleFunc(APIPrefix+"/widgets/*", h.handleWidgetData)
+	r.Get(APIPrefix+"/widgets", h.handleWidgets)
+	r.Get(APIPrefix+"/widgets/*", h.handleWidgetData)
 
 	// Instant Answers
-	r.HandleFunc(APIPrefix+"/instant", h.handleInstantAnswer)
+	r.Get(APIPrefix+"/instant", h.handleInstantAnswer)
 
 	// Direct Answers (full-page results per IDEA.md)
-	r.HandleFunc(APIPrefix+"/direct/*", h.handleDirectAnswer)
+	r.Get(APIPrefix+"/direct/*", h.handleDirectAnswer)
 
 	// Server info pages (per AI.md PART 16)
-	r.HandleFunc(APIPrefix+"/server/about", h.handleServerAbout)
-	r.HandleFunc(APIPrefix+"/server/privacy", h.handleServerPrivacy)
-	r.HandleFunc(APIPrefix+"/server/help", h.handleServerHelp)
-	r.HandleFunc(APIPrefix+"/server/terms", h.handleServerTerms)
-	r.HandleFunc(APIPrefix+"/server/contact", h.handleServerContact)
-	r.HandleFunc(APIPrefix+"/server/preferences", h.handlePreferences)
-	r.HandleFunc(APIPrefix+"/server/preferences/export", h.handleServerPreferencesExport)
-	r.HandleFunc(APIPrefix+"/server/preferences/import", h.handleServerPreferencesImport)
+	r.Get(APIPrefix+"/server/about", h.handleServerAbout)
+	r.Get(APIPrefix+"/server/privacy", h.handleServerPrivacy)
+	r.Get(APIPrefix+"/server/help", h.handleServerHelp)
+	r.Get(APIPrefix+"/server/terms", h.handleServerTerms)
+	r.Get(APIPrefix+"/server/contact", h.handleServerContact)
+	r.Post(APIPrefix+"/server/contact", h.handleServerContact)
+	r.Get(APIPrefix+"/server/preferences", h.handlePreferences)
+	r.Post(APIPrefix+"/server/preferences", h.handlePreferences)
+	r.Get(APIPrefix+"/server/preferences/export", h.handleServerPreferencesExport)
+	r.Get(APIPrefix+"/server/preferences/import", h.handleServerPreferencesImport)
+	r.Post(APIPrefix+"/server/mcp", h.handleMCP)
+	r.Post("/api/mcp", h.handleMCP)
+	r.Post("/mcp", h.handleMCP)
+	r.Get(APIPrefix+"/server/preferences/tokens", h.ownerTokensList)
+	r.Post(APIPrefix+"/server/preferences/tokens/primary/reveal", h.ownerPrimaryReveal)
+	r.Post(APIPrefix+"/server/preferences/tokens/primary/rotate", h.ownerPrimaryRotate)
+	r.Post(APIPrefix+"/server/preferences/tokens", h.ownerLinkedCreate)
+	r.Post(APIPrefix+"/server/preferences/tokens/{id}/reveal", h.ownerLinkedReveal)
+	r.Post(APIPrefix+"/server/preferences/tokens/{id}/rotate", h.ownerLinkedRotate)
+	r.Patch(APIPrefix+"/server/preferences/tokens/{id}", h.ownerLinkedUpdate)
+	r.Delete(APIPrefix+"/server/preferences/tokens/{id}", h.ownerLinkedRevoke)
 
 	// Favicon proxy - privacy-preserving favicon fetching
 	// Per AI.md PART 16: NO external requests from client, server proxies content
-	r.HandleFunc(APIPrefix+"/favicon", h.handleFavicon)
-	r.HandleFunc(APIPrefix+"/alerts", h.handleAlerts)
-	r.HandleFunc(APIPrefix+"/alerts/*", h.handleAlertByToken)
+	r.Get(APIPrefix+"/favicon", h.handleFavicon)
+	r.Get(APIPrefix+"/alerts", h.handleAlerts)
+	r.Post(APIPrefix+"/alerts", h.handleAlerts)
+	r.Get(APIPrefix+"/alerts/{token}", h.handleAlertByToken)
+	r.Patch(APIPrefix+"/alerts/{token}", h.handleAlertByToken)
+	r.Delete(APIPrefix+"/alerts/{token}", h.handleAlertByToken)
+	r.Post(APIPrefix+"/alerts/{token}/pause", h.handleAlertByToken)
+	r.Get(APIPrefix+"/alerts/{token}/rss", h.handleAlertByToken)
 
 	// Operator-gated server status and config — per AI.md PART 14
 	r.Get(APIPrefix+"/server/status", h.requireOperator(h.handleServerStatus))
 	r.Get(APIPrefix+"/server/config", h.requireOperator(h.handleServerConfig))
+	r.Post(APIPrefix+"/server/config/contact/webhooks", h.requireOperator(h.handleContactWebhookConfigSave))
+
+	// GeoIP lookup and operator-authored country-list presets — per AI.md PART 19.
+	// Lookup is public (it only exposes the requester's own or an explicitly
+	// supplied address); presets live in server.yml and are operator-gated.
+	r.Get(APIPrefix+"/server/geoip/ips", h.handleGeoIPLookup)
+	r.Get(APIPrefix+"/server/geoip/ips/{ip}", h.handleGeoIPLookup)
+	r.Get(APIPrefix+"/server/geoip/presets", h.requireOperator(h.handleGeoIPPresets))
+	r.Post(APIPrefix+"/server/geoip/presets", h.requireOperator(h.handleGeoIPPresetSave))
+	r.Get(APIPrefix+"/server/geoip/presets/{name}", h.requireOperator(h.handleGeoIPPreset))
+	r.Delete(APIPrefix+"/server/geoip/presets/{name}", h.requireOperator(h.handleGeoIPPresetDelete))
+
+	// Scheduler — per AI.md PART 18: the scheduler is always running, task
+	// visibility and external triggering go through these endpoints (operator
+	// gated; manual runs are audit events per the PART 11 audit table).
+	r.Get(APIPrefix+"/server/scheduler/tasks", h.requireOperator(h.handleSchedulerTasks))
+	r.Get(APIPrefix+"/server/scheduler/tasks/{task}", h.requireOperator(h.handleSchedulerTask))
+	r.Get(APIPrefix+"/server/scheduler/tasks/{task}/history", h.requireOperator(h.handleSchedulerTaskHistory))
+	r.Post(APIPrefix+"/server/scheduler/tasks/{task}/run", h.requireOperator(h.handleSchedulerTaskRun))
+	r.Post(APIPrefix+"/server/scheduler/tasks/{task}/enable", h.requireOperator(h.handleSchedulerTaskEnable))
+	r.Post(APIPrefix+"/server/scheduler/tasks/{task}/disable", h.requireOperator(h.handleSchedulerTaskDisable))
+}
+
+// handleSchedulerTasks handles GET /api/v1/server/scheduler/tasks.
+// Returns all registered tasks with their last/next run status per docs/api.md.
+func (h *Handler) handleSchedulerTasks(w http.ResponseWriter, r *http.Request) {
+	if h.scheduler == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		return
+	}
+	tasks := h.scheduler.GetTasks()
+	if tasks == nil {
+		tasks = []*scheduler.TaskInfo{}
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"tasks": tasks}})
+}
+
+// handleSchedulerTask returns details for one scheduled task.
+func (h *Handler) handleSchedulerTask(w http.ResponseWriter, r *http.Request) {
+	if h.scheduler == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		return
+	}
+	task, err := h.scheduler.GetTask(scheduler.TaskID(chi.URLParam(r, "task")))
+	if err != nil {
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: task})
+}
+
+// handleSchedulerTaskHistory returns recent persisted runs for one task.
+func (h *Handler) handleSchedulerTaskHistory(w http.ResponseWriter, r *http.Request) {
+	if h.scheduler == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		return
+	}
+	taskID := scheduler.TaskID(chi.URLParam(r, "task"))
+	if _, err := h.scheduler.GetTask(taskID); err != nil {
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	history, err := h.scheduler.GetHistory(taskID, 20)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, "HISTORY_UNAVAILABLE", err.Error())
+		return
+	}
+	if history == nil {
+		history = []*scheduler.TaskHistoryEntry{}
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"history": history}})
+}
+
+func (h *Handler) handleSchedulerTaskEnable(w http.ResponseWriter, r *http.Request) {
+	h.setSchedulerTaskEnabled(w, r, true)
+}
+
+func (h *Handler) handleSchedulerTaskDisable(w http.ResponseWriter, r *http.Request) {
+	h.setSchedulerTaskEnabled(w, r, false)
+}
+
+func (h *Handler) setSchedulerTaskEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
+	if h.scheduler == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		return
+	}
+	taskID := scheduler.TaskID(chi.URLParam(r, "task"))
+	var err error
+	if enabled {
+		err = h.scheduler.Enable(taskID)
+	} else {
+		err = h.scheduler.Disable(taskID)
+	}
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "TASK_STATE_REJECTED", err.Error())
+		return
+	}
+	task, err := h.scheduler.GetTask(taskID)
+	if err != nil {
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: task})
+}
+
+// handleSchedulerTaskRun handles POST /api/v1/server/scheduler/tasks/{task}/run.
+// Triggers an immediate run of the named task, per docs/api.md.
+func (h *Handler) handleSchedulerTaskRun(w http.ResponseWriter, r *http.Request) {
+	taskID := chi.URLParam(r, "task")
+	if taskID == "" {
+		h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "missing task id")
+		return
+	}
+	if h.scheduler == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		return
+	}
+	if err := h.scheduler.RunNow(scheduler.TaskID(taskID)); err != nil {
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", fmt.Sprintf("task %q cannot be run: %v", taskID, err))
+		return
+	}
+	// Per AI.md PART 11 audit table: a manual run is audit event
+	// scheduler.task_manual_run. Operator-triggered over loopback/API with a
+	// bearer token, so the actor is the operator token subject ("-": privacy
+	// per PART 11, no client IP is logged).
+	if al := h.auditLogger; al != nil {
+		al.LogSchedulerTaskManualRun("operator", "-", taskID, true)
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"task": taskID, "triggered": true}})
 }
 
 // Response types
@@ -190,6 +437,8 @@ type APIResponse struct {
 	Message string `json:"message,omitempty"`
 	// Optional structured error context (e.g., {"field":"email","rule":"format"}); omitted when empty per AI.md PART 14
 	Details map[string]interface{} `json:"details,omitempty"`
+	// Pagination is a sibling of data (never nested inside it) per AI.md PART 14
+	Pagination *Pagination `json:"pagination,omitempty"`
 	// Optional metadata (request_id, process_time_ms)
 	Meta *APIMeta `json:"meta,omitempty"`
 }
@@ -281,6 +530,8 @@ type ChecksInfo struct {
 	Scheduler string `json:"scheduler"`
 	// PART 31: "ok" or "error" (if enabled)
 	Tor string `json:"tor,omitempty"`
+	// PART 31.2: "ok" or "error" (if enabled)
+	I2P string `json:"i2p,omitempty"`
 }
 
 // FeaturesInfo represents PUBLIC feature status per AI.md PART 13.
@@ -288,6 +539,8 @@ type ChecksInfo struct {
 type FeaturesInfo struct {
 	// PART 32: Tor Hidden Service
 	Tor TorInfo `json:"tor"`
+	// PART 31.2: I2P eepsite
+	I2P I2PInfo `json:"i2p"`
 	// PART 20: GeoIP enabled
 	GeoIP bool `json:"geoip"`
 }
@@ -302,6 +555,20 @@ type TorInfo struct {
 	Status string `json:"status"`
 	// "abc123...xyz.onion" (56 chars, v3)
 	Hostname string `json:"hostname"`
+}
+
+// I2PInfo represents I2P eepsite status per AI.md PART 13 (line 17428-17438)
+type I2PInfo struct {
+	// I2P enabled in config
+	Enabled bool `json:"enabled"`
+	// Eepsite tunnel active
+	Running bool `json:"running"`
+	// "healthy", "disabled", "starting", "error"
+	Status string `json:"status"`
+	// ".b32.i2p" eepsite address
+	Hostname string `json:"hostname"`
+	// "i2pd", "sam", or "none"
+	Provider string `json:"provider"`
 }
 
 // AutodiscoverResponse represents /api/autodiscover response
@@ -362,14 +629,17 @@ type SystemInfo struct {
 
 // SearchRequest represents a search API request
 type SearchRequest struct {
-	Query      string   `json:"query"                  validate:"required,min=1,max=500"`
-	Category   string   `json:"category"               validate:"omitempty,max=50"`
-	Page       int      `json:"page"                   validate:"omitempty,min=1,max=1000"`
-	Limit      int      `json:"limit"                  validate:"omitempty,min=1,max=100"`
-	Engines    []string `json:"engines,omitempty"`
-	SafeSearch string   `json:"safe_search,omitempty"  validate:"omitempty,oneof=0 1 2"`
-	TimeRange  string   `json:"time_range,omitempty"`
-	Language   string   `json:"language,omitempty"     validate:"omitempty,max=10"`
+	Query      string   `json:"query"                    validate:"required,min=1,max=500"`
+	Category   string   `json:"category"                 validate:"omitempty,max=50"`
+	Page       int      `json:"page"                     validate:"omitempty,min=1,max=1000"`
+	Limit      int      `json:"limit"                    validate:"omitempty,min=1,max=100"`
+	Engines    []string `json:"engines,omitempty"        validate:"omitempty,max=50,dive,min=1,max=50"`
+	SafeSearch *int     `json:"safe_search,omitempty"   validate:"omitempty,min=0,max=2"`
+	TimeRange  string   `json:"time_range,omitempty"     validate:"omitempty,oneof=any hour day week month year custom"`
+	TimeFrom   string   `json:"time_from,omitempty"      validate:"omitempty,len=10"`
+	TimeTo     string   `json:"time_to,omitempty"        validate:"omitempty,len=10"`
+	Language   string   `json:"language,omitempty"       validate:"omitempty,max=10"`
+	Region     string   `json:"region,omitempty"         validate:"omitempty,max=10"`
 }
 
 // Pagination represents standard pagination info per AI.md PART 14
@@ -380,12 +650,12 @@ type Pagination struct {
 	Pages int `json:"pages"`
 }
 
-// SearchResponse represents search API response per AI.md PART 14 pagination format
+// SearchResponse represents the search API `data` payload.
+// Pagination is carried as a sibling of `data` on APIResponse per AI.md PART 14.
 type SearchResponse struct {
 	Query      string         `json:"query"`
 	Category   string         `json:"category"`
 	Results    []SearchResult `json:"results"`
-	Pagination Pagination     `json:"pagination"`
 	SearchTime float64        `json:"search_time_ms"`
 	Engines    []string       `json:"engines_used"`
 }
@@ -399,6 +669,15 @@ type SearchResult struct {
 	Score       float64 `json:"score"`
 	Category    string  `json:"category"`
 	Thumbnail   string  `json:"thumbnail,omitempty"`
+	ImageURL    string  `json:"image_url,omitempty"`
+	ImageWidth  int     `json:"image_width,omitempty"`
+	ImageHeight int     `json:"image_height,omitempty"`
+	ImageFormat string  `json:"image_format,omitempty"`
+	FileSize    int64   `json:"file_size,omitempty"`
+	Duration    int     `json:"duration,omitempty"`
+	ViewCount   int64   `json:"view_count,omitempty"`
+	Author      string  `json:"author,omitempty"`
+	EmbedURL    string  `json:"embed_url,omitempty"`
 	Date        string  `json:"date,omitempty"`
 	Domain      string  `json:"domain,omitempty"`
 }
@@ -426,6 +705,55 @@ type CategoryInfo struct {
 // Handler methods
 
 func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	health := h.buildHealthResponse()
+	statusCode := http.StatusOK
+	if health.Status == "unhealthy" || health.Status == "maintenance" || health.Status == "shutting_down" {
+		statusCode = http.StatusServiceUnavailable
+	}
+	// Health probes require the bare canonical health payload in JSON and the
+	// same complete field set in text format; the normal API envelope is an
+	// intentional exception for these routes.
+	if strings.HasSuffix(r.URL.Path, ".txt") ||
+		(strings.Contains(r.Header.Get("Accept"), "text/plain") && !strings.Contains(r.Header.Get("Accept"), "application/json")) ||
+		(r.URL.Query().Get("format") == "text" || r.URL.Query().Get("format") == "txt" || r.URL.Query().Get("format") == "plain") {
+		h.textResponse(w, statusCode, formatHealthText(health))
+		return
+	}
+	h.jsonResponse(w, statusCode, health)
+}
+
+func formatHealthText(health HealthResponse) string {
+	var text strings.Builder
+	fmt.Fprintf(&text, "project.name: %s\nproject.tagline: %s\nproject.description: %s\nstatus: %s\n", health.Project.Name, health.Project.Tagline, health.Project.Description, health.Status)
+	if health.PendingRestart {
+		fmt.Fprintln(&text, "pending_restart: true")
+		for _, reason := range health.RestartReason {
+			fmt.Fprintf(&text, "restart_reason: %s\n", reason)
+		}
+	}
+	fmt.Fprintf(&text, "version: %s\ngo_version: %s\nbuild.commit: %s\nbuild.date: %s\nuptime: %s\nmode: %s\ntimestamp: %s\nfeatures.tor.enabled: %t\nfeatures.tor.running: %t\nfeatures.tor.status: %s\nfeatures.tor.hostname: %s\nfeatures.i2p.enabled: %t\nfeatures.i2p.running: %t\nfeatures.i2p.status: %s\nfeatures.i2p.hostname: %s\nfeatures.i2p.provider: %s\nfeatures.geoip: %t\nchecks.database: %s\nchecks.cache: %s\nchecks.disk: %s\nchecks.scheduler: %s\n",
+		health.Version, health.GoVersion, health.Build.Commit, health.Build.Date, health.Uptime,
+		health.Mode, health.Timestamp, health.Features.Tor.Enabled, health.Features.Tor.Running,
+		health.Features.Tor.Status, health.Features.Tor.Hostname, health.Features.I2P.Enabled,
+		health.Features.I2P.Running, health.Features.I2P.Status, health.Features.I2P.Hostname,
+		health.Features.I2P.Provider, health.Features.GeoIP, health.Checks.Database,
+		health.Checks.Cache, health.Checks.Disk, health.Checks.Scheduler)
+	if health.Checks.Tor != "" {
+		fmt.Fprintf(&text, "checks.tor: %s\n", health.Checks.Tor)
+	}
+	if health.Checks.I2P != "" {
+		fmt.Fprintf(&text, "checks.i2p: %s\n", health.Checks.I2P)
+	}
+	fmt.Fprintf(&text, "stats.requests_total: %d\nstats.requests_24h: %d\nstats.active_connections: %d\n", health.Stats.RequestsTotal, health.Stats.Requests24h, health.Stats.ActiveConns)
+	return text.String()
+}
+
+// HealthForGraphQL returns the same public health payload as the REST endpoint.
+func (h *Handler) HealthForGraphQL() HealthResponse {
+	return h.buildHealthResponse()
+}
+
+func (h *Handler) buildHealthResponse() HealthResponse {
 	// Tor status per AI.md PART 13 and PART 32
 	torEnabled := h.config.Server.Tor.Enabled
 	torRunning := false
@@ -443,6 +771,27 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		} else {
 			torStatus = "unavailable"
 			torCheck = "unavailable"
+		}
+	}
+
+	// I2P status per AI.md PART 13 and PART 31.2
+	i2pInfo := I2PInfo{
+		Enabled:  h.config.Server.I2P.Enabled,
+		Running:  false,
+		Status:   "disabled",
+		Hostname: "",
+		Provider: "none",
+	}
+	i2pCheck := ""
+	if h.config.Server.I2P.Enabled {
+		i2pInfo.Status = "error"
+		i2pCheck = "error"
+		if h.i2pManager != nil && h.i2pManager.IsRunning() {
+			i2pInfo.Running = true
+			i2pInfo.Status = "healthy"
+			i2pInfo.Hostname = h.i2pManager.EepsiteAddress()
+			i2pInfo.Provider = h.i2pManager.ProviderName()
+			i2pCheck = "ok"
 		}
 	}
 
@@ -483,15 +832,17 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 				Status:   torStatus,
 				Hostname: torHostname,
 			},
+			I2P:   i2pInfo,
 			GeoIP: h.config.Server.GeoIP.Enabled,
 		},
 		// 6. Checks per AI.md PART 13
 		Checks: ChecksInfo{
 			Database:  "ok",
-			Cache:     "disabled",
+			Cache:     h.checkCacheHealth(),
 			Disk:      h.checkDiskHealth(),
-			Scheduler: "ok",
+			Scheduler: h.checkSchedulerHealth(),
 			Tor:       torCheck,
+			I2P:       i2pCheck,
 		},
 		// 7. Stats
 		Stats: StatsInfo{
@@ -501,23 +852,19 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	statusCode := http.StatusOK
-	if status == "unhealthy" || status == "maintenance" {
-		statusCode = http.StatusServiceUnavailable
+	if h.healthProvider != nil {
+		snapshot := h.healthProvider.HealthSnapshot()
+		health.Status = snapshot.Status
+		health.PendingRestart = snapshot.PendingRestart
+		health.RestartReason = snapshot.RestartReason
+		health.Checks = snapshot.Checks
+	} else if health.Status != "maintenance" && h.config.PendingRestart() {
+		health.Status = "restart_required"
+		health.PendingRestart = true
+		health.RestartReason = h.config.RestartSettings()
 	}
 
-	// Per AI.md PART 14: Support .txt extension and Accept: text/plain
-	h.respondWithFormat(w, r, statusCode, &APIResponse{
-		OK:   status == "healthy",
-		Data: health,
-		Meta: &APIMeta{Version: APIVersion},
-	}, func() string {
-		// Text format per AI.md PART 14 line 15016: "OK" or "ERROR: ..."
-		if status == "healthy" {
-			return "OK"
-		}
-		return fmt.Sprintf("ERROR: %s", status)
-	})
+	return health
 }
 
 // handleAutodiscover handles /api/autodiscover endpoint
@@ -566,38 +913,31 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) handleInfo(w http.ResponseWriter, r *http.Request) {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	enabled := len(h.registry.GetEnabled())
-
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data: InfoResponse{
-			Name:        h.config.Server.Title,
-			Version:     config.Version,
-			Description: h.config.Server.Description,
-			Uptime:      h.formatDuration(time.Since(h.startTime)),
-			Mode:        h.config.Server.Mode,
-			Engines: EnginesSummary{
-				Total:   h.registry.Count(),
-				Enabled: enabled,
-			},
-			System: SystemInfo{
-				GoVersion:    runtime.Version(),
-				NumCPU:       runtime.NumCPU(),
-				NumGoroutine: runtime.NumGoroutine(),
-				MemAlloc:     h.formatBytes(m.Alloc),
-			},
-			Features: map[string]bool{
-				"ssl":         h.config.Server.SSL.Enabled,
-				"tor":         h.config.Server.Tor.Enabled,
-				"rate_limit":  h.config.Server.RateLimit.Enabled,
-				"image_proxy": h.config.Server.ImageProxy.Enabled,
-			},
+func (h *Handler) Info() InfoResponse {
+	var memory runtime.MemStats
+	runtime.ReadMemStats(&memory)
+	enabled := 0
+	total := 0
+	if h.registry != nil {
+		enabled = len(h.registry.GetEnabled())
+		total = h.registry.Count()
+	}
+	return InfoResponse{
+		Name: h.config.Server.Title, Version: config.Version,
+		Description: h.config.Server.Description,
+		Uptime:      h.formatDuration(time.Since(h.startTime)), Mode: h.config.Server.Mode,
+		Engines: EnginesSummary{Total: total, Enabled: enabled},
+		System:  SystemInfo{GoVersion: runtime.Version(), NumCPU: runtime.NumCPU(), NumGoroutine: runtime.NumGoroutine(), MemAlloc: h.formatBytes(memory.Alloc)},
+		Features: map[string]bool{
+			"ssl": h.config.Server.SSL.Enabled, "tor": h.config.Server.Tor.Enabled,
+			"rate_limit": h.config.Server.RateLimit.Enabled, "image_proxy": h.config.Server.ImageProxy.Enabled,
 		},
-		Meta: &APIMeta{Version: APIVersion},
+	}
+}
+
+func (h *Handler) handleInfo(w http.ResponseWriter, _ *http.Request) {
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true, Data: h.Info(), Meta: &APIMeta{Version: APIVersion},
 	})
 }
 
@@ -608,6 +948,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	var req SearchRequest
 
 	if r.Method == http.MethodPost {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
 			return
@@ -620,12 +961,29 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		req.Category = strings.TrimSpace(r.URL.Query().Get("category"))
 		req.Page, _ = strconv.Atoi(r.URL.Query().Get("page"))
 		req.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
-		req.SafeSearch = strings.TrimSpace(r.URL.Query().Get("safe_search"))
+		if safeSearch := strings.TrimSpace(r.URL.Query().Get("safe_search")); safeSearch != "" {
+			value, err := strconv.Atoi(safeSearch)
+			if err != nil {
+				invalid := -1
+				req.SafeSearch = &invalid
+			} else {
+				req.SafeSearch = &value
+			}
+		}
 		req.Language = strings.TrimSpace(r.URL.Query().Get("lang"))
+		req.Region = strings.TrimSpace(r.URL.Query().Get("region"))
+		req.TimeRange = strings.TrimSpace(r.URL.Query().Get("time_range"))
+		req.TimeFrom = strings.TrimSpace(r.URL.Query().Get("time_from"))
+		req.TimeTo = strings.TrimSpace(r.URL.Query().Get("time_to"))
+		req.Engines = splitSearchEngineFilters(r.URL.Query()["engines"])
 	}
 
 	// Validate all request fields per AI.md PART 3 using go-playground/validator
 	if err := h.validate.Struct(req); err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error())
+		return
+	}
+	if err := validateSearchDateRange(req); err != nil {
 		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error())
 		return
 	}
@@ -644,10 +1002,18 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query.Category = model.ParseCategory(req.Category)
 	query.Page = req.Page
 	query.PerPage = req.Limit
-	if req.SafeSearch != "" {
-		if safeSearch, err := strconv.Atoi(req.SafeSearch); err == nil {
-			query.SafeSearch = safeSearch
-		}
+	if req.SafeSearch != nil {
+		query.SafeSearch = *req.SafeSearch
+	}
+	if req.TimeRange != "" {
+		query.TimeRange = req.TimeRange
+	}
+	query.DateAfter = req.TimeFrom
+	query.DateBefore = req.TimeTo
+	query.Region = req.Region
+	query.Engines = append([]string(nil), req.Engines...)
+	if req.Language != "" {
+		query.Language = req.Language
 	}
 
 	ctx := r.Context()
@@ -672,6 +1038,14 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// Convert results
 	apiResults := make([]SearchResult, 0, len(results.Results))
 	for _, result := range results.GetPage(req.Page) {
+		thumbnail := h.RewriteThumbnail(result.Thumbnail)
+		imageURL := result.ImageURL
+		if imageURL == "" && result.Category == model.CategoryImages {
+			if fullImage, ok := result.Metadata["full_image"].(string); ok {
+				imageURL = fullImage
+			}
+		}
+		imageURL = h.RewriteThumbnail(imageURL)
 		apiResults = append(apiResults, SearchResult{
 			Title:       result.Title,
 			URL:         result.URL,
@@ -679,7 +1053,16 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 			Engine:      result.Engine,
 			Score:       result.Score,
 			Category:    string(result.Category),
-			Thumbnail:   result.Thumbnail,
+			Thumbnail:   thumbnail,
+			ImageURL:    imageURL,
+			ImageWidth:  result.ImageWidth,
+			ImageHeight: result.ImageHeight,
+			ImageFormat: result.ImageFormat,
+			FileSize:    result.FileSize,
+			Duration:    result.Duration,
+			ViewCount:   result.ViewCount,
+			Author:      result.Author,
+			EmbedURL:    result.EmbedURL,
 			Domain:      extractDomain(result.URL),
 		})
 	}
@@ -688,17 +1071,17 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: SearchResponse{
-			Query:    req.Query,
-			Category: req.Category,
-			Results:  apiResults,
-			Pagination: Pagination{
-				Page:  results.Page,
-				Limit: results.PerPage,
-				Total: results.TotalResults,
-				Pages: results.TotalPages,
-			},
+			Query:      req.Query,
+			Category:   req.Category,
+			Results:    apiResults,
 			SearchTime: float64(time.Since(start).Microseconds()) / 1000,
 			Engines:    results.Engines,
+		},
+		Pagination: &Pagination{
+			Page:  results.Page,
+			Limit: results.PerPage,
+			Total: results.TotalResults,
+			Pages: results.TotalPages,
 		},
 		Meta: &APIMeta{
 			Version:     APIVersion,
@@ -707,9 +1090,54 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func splitSearchEngineFilters(values []string) []string {
+	var engines []string
+	for _, value := range values {
+		for _, engine := range strings.Split(value, ",") {
+			if engine = strings.TrimSpace(engine); engine != "" {
+				engines = append(engines, engine)
+			}
+		}
+	}
+	return engines
+}
+
+func validateSearchDateRange(req SearchRequest) error {
+	parseDate := func(name, value string) (time.Time, error) {
+		if value == "" {
+			return time.Time{}, nil
+		}
+		parsed, err := time.Parse("2006-01-02", value)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("%s must use YYYY-MM-DD format", name)
+		}
+		return parsed, nil
+	}
+	from, err := parseDate("time_from", req.TimeFrom)
+	if err != nil {
+		return err
+	}
+	to, err := parseDate("time_to", req.TimeTo)
+	if err != nil {
+		return err
+	}
+	if req.TimeRange == "custom" && (req.TimeFrom == "" || req.TimeTo == "") {
+		return fmt.Errorf("custom time_range requires time_from and time_to")
+	}
+	if !from.IsZero() && !to.IsZero() && from.After(to) {
+		return fmt.Errorf("time_from must not be after time_to")
+	}
+	return nil
+}
+
 // HandleAutocomplete is the public method for autocomplete suggestions
 func (h *Handler) HandleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	h.handleAutocomplete(w, r)
+}
+
+// AutocompleteSuggestions returns provider suggestions for use by non-HTTP APIs.
+func (h *Handler) AutocompleteSuggestions(ctx context.Context, query string) []string {
+	return h.fetchAutocompleteSuggestions(ctx, strings.TrimSpace(query))
 }
 
 func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
@@ -751,7 +1179,7 @@ func (h *Handler) fetchAutocompleteSuggestions(ctx context.Context, query string
 	if err != nil {
 		return []string{}
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return []string{}
@@ -788,33 +1216,29 @@ func (h *Handler) fetchAutocompleteSuggestions(ctx context.Context, query string
 }
 
 func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true, Data: h.EngineInventory(), Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// EngineInventory returns the current engine data used by REST and GraphQL.
+func (h *Handler) EngineInventory() []EngineInfo {
+	if h.registry == nil {
+		return []EngineInfo{}
+	}
 	allEngines := h.registry.GetAll()
 	engineList := make([]EngineInfo, 0, len(allEngines))
-
 	for _, eng := range allEngines {
 		categories := make([]string, 0)
-		cfg := eng.GetConfig()
-		if cfg != nil {
-			for _, cat := range cfg.Categories {
-				categories = append(categories, string(cat))
-			}
+		if cfg := eng.GetConfig(); cfg != nil {
+			categories = append(categories, cfg.Categories...)
 		}
-
 		engineList = append(engineList, EngineInfo{
-			ID:         eng.Name(),
-			Name:       eng.DisplayName(),
-			Enabled:    eng.IsEnabled(),
-			Priority:   eng.GetPriority(),
-			Categories: categories,
-			Health:     engineHealth(eng),
+			ID: eng.Name(), Name: eng.DisplayName(), Enabled: eng.IsEnabled(),
+			Priority: eng.GetPriority(), Categories: categories, Health: engineHealth(eng),
 		})
 	}
-
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK:   true,
-		Data: engineList,
-		Meta: &APIMeta{Version: APIVersion},
-	})
+	return engineList
 }
 
 func (h *Handler) handleEngineByID(w http.ResponseWriter, r *http.Request) {
@@ -867,7 +1291,18 @@ func engineHealth(engine search.Engine) *search.EngineHealth {
 }
 
 func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {
-	categories := []CategoryInfo{
+	categories := AvailableCategories()
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: categories,
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// AvailableCategories returns the public search category catalog shared by REST and GraphQL.
+func AvailableCategories() []CategoryInfo {
+	return []CategoryInfo{
 		{ID: "general", Name: "Web", Description: "General web search", Icon: "🌐"},
 		{ID: "images", Name: "Images", Description: "Image search", Icon: "🖼️"},
 		{ID: "videos", Name: "Videos", Description: "Video search", Icon: "🎥"},
@@ -879,12 +1314,6 @@ func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {
 		{ID: "it", Name: "IT", Description: "Developer, code, and technical search", Icon: "💻"},
 		{ID: "social", Name: "Social", Description: "Social media and community search", Icon: "💬"},
 	}
-
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK:   true,
-		Data: categories,
-		Meta: &APIMeta{Version: APIVersion},
-	})
 }
 
 // Helper methods
@@ -896,7 +1325,9 @@ func (h *Handler) jsonResponse(w http.ResponseWriter, status int, data interface
 	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(data)
+	if err := enc.Encode(data); err != nil {
+		slog.Debug("failed to encode API response", "error", err)
+	}
 }
 
 // textResponse sends plain text response per AI.md PART 14
@@ -907,7 +1338,9 @@ func (h *Handler) textResponse(w http.ResponseWriter, status int, text string) {
 	w.WriteHeader(status)
 	// Per AI.md PART 14: All text responses must end with single newline
 	text = strings.TrimRight(text, "\n") + "\n"
-	w.Write([]byte(text))
+	if _, err := w.Write([]byte(text)); err != nil {
+		slog.Debug("failed to write API text response", "error", err)
+	}
 }
 
 // respondWithFormat sends response based on format (supports .txt extension)
@@ -998,38 +1431,67 @@ func (h *Handler) formatBytes(b uint64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-// checkDiskHealth verifies the data directory is accessible
-func (h *Handler) checkDiskHealth() string {
-	// Data directory health is verified during startup
-	// If we're running, disk is accessible
+// checkCacheHealth verifies the cache backend responds per AI.md PART 13.
+// The aggregator result cache is the active cache; Ping exercises the backend.
+func (h *Handler) checkCacheHealth() string {
+	if h.aggregator == nil {
+		return "error"
+	}
+	rc := h.aggregator.Cache()
+	if rc == nil {
+		return "error"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := rc.Ping(ctx); err != nil {
+		return "error"
+	}
 	return "ok"
 }
 
-// getRequestsTotal returns total requests since startup
-// Returns 0 if metrics are disabled
+// checkDiskHealth verifies the data directory is accessible
+func (h *Handler) checkDiskHealth() string {
+	dataDir := config.GetDataDir()
+	if dataDir == "" {
+		return "error"
+	}
+	if _, err := os.Stat(dataDir); err != nil {
+		return "error"
+	}
+	return "ok"
+}
+
+// checkSchedulerHealth verifies the scheduler is running per AI.md PART 18.
+// The scheduler is always running — nil or stopped is an error.
+func (h *Handler) checkSchedulerHealth() string {
+	if h.scheduler == nil || !h.scheduler.IsRunning() {
+		return "error"
+	}
+	return "ok"
+}
+
+// getRequestsTotal returns total requests since startup.
 func (h *Handler) getRequestsTotal() int64 {
-	// Metrics integration point - returns 0 when metrics disabled
-	if !h.config.Server.Metrics.Enabled {
+	if h.healthMetrics == nil {
 		return 0
 	}
-	return 0
+	return h.healthMetrics.GetTotalRequests()
 }
 
-// getRequests24h returns requests in the last 24 hours
-// Returns 0 if metrics are disabled
+// getRequests24h returns requests in the trailing 24-hour window.
 func (h *Handler) getRequests24h() int64 {
-	// Metrics integration point - returns 0 when metrics disabled
-	if !h.config.Server.Metrics.Enabled {
+	if h.healthMetrics == nil {
 		return 0
 	}
-	return 0
+	return h.healthMetrics.GetRequestsLast24Hours()
 }
 
-// getActiveConnections returns current active connections
-// Returns 0 if metrics are disabled
+// getActiveConnections returns the current number of active connections.
 func (h *Handler) getActiveConnections() int {
-	// Connection tracking integration point
-	return 0
+	if h.healthMetrics == nil {
+		return 0
+	}
+	return int(h.healthMetrics.GetActiveConnections())
 }
 
 func extractDomain(urlStr string) string {
@@ -1105,6 +1567,9 @@ func (h *Handler) handleBangs(w http.ResponseWriter, r *http.Request) {
 }
 
 // getBuiltinBangs returns the list of built-in bangs
+// AvailableBangs returns the same built-in bang catalog exposed by the REST API.
+func AvailableBangs() []BangInfo { return getBuiltinBangs() }
+
 func getBuiltinBangs() []BangInfo {
 	return []BangInfo{
 		// General Search Engines
@@ -1226,6 +1691,19 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 
 	// Inject GeoIP lookup so instant handlers can enrich IP answers with geo data.
 	ctx = instant.WithGeoIPLookup(ctx, h.geoipLookup)
+	units := "imperial"
+	if h.config != nil && (h.config.Search.Widgets.Weather.Units == "metric" || h.config.Search.Widgets.Weather.Units == "imperial") {
+		units = h.config.Search.Widgets.Weather.Units
+	}
+	if c, err := r.Cookie("search_pref_units"); err == nil && (c.Value == "metric" || c.Value == "imperial") {
+		units = c.Value
+	}
+	weatherUnits := "auto"
+	if c, err := r.Cookie("search_widget_weather_units"); err == nil && (c.Value == "auto" || c.Value == "metric" || c.Value == "imperial") {
+		weatherUnits = c.Value
+	}
+	ctx = instant.WithUnits(ctx, units)
+	ctx = instant.WithWeatherUnits(ctx, weatherUnits)
 
 	answer, err := h.instantManager.Process(ctx, query)
 	if err != nil {
@@ -1492,6 +1970,17 @@ func (h *Handler) handleServerAbout(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	// Per AI.md PART 19: the CC BY 4.0 notices for the ip-location-db
+	// databases are a license condition and must appear verbatim on
+	// /server/about whenever the data is in use
+	if h.config.Server.GeoIP.Enabled {
+		sections = append(sections, PageSection{
+			ID:      "geoip-attribution",
+			Title:   "IP Geolocation Data",
+			Content: geoIPAttributionHTML + " " + geoIPAttributionText,
+		})
+	}
+
 	metadata := map[string]string{
 		"version":    config.Version,
 		"build_date": config.BuildDate,
@@ -1621,7 +2110,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 		{
 			ID:      "api_documentation",
 			Title:   "API Documentation",
-			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/widgets, /api/v1/server/help, /api/v1/server/about, /api/v1/server/privacy, /api/v1/server/contact, /api/v1/server/terms, /api/graphql, /server/docs/graphql, /openapi (Swagger UI), and /openapi.json (OpenAPI spec).",
+			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/widgets, /api/v1/server/help, /api/v1/server/about, /api/v1/server/privacy, /api/v1/server/contact, /api/v1/server/terms, /api/graphql, /server/docs/graphql, /server/docs/swagger (Swagger UI), and /api/swagger (OpenAPI spec).",
 		},
 	}
 
@@ -1763,7 +2252,7 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		h.serveFaviconFallback(w)
 		return
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
@@ -1801,7 +2290,9 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	if _, err := w.Write(body); err != nil {
+		slog.Debug("failed to write API binary response", "error", err)
+	}
 }
 
 // serveFaviconFallback serves a 1x1 transparent PNG as fallback
@@ -1812,9 +2303,8 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 	accept := r.Header.Get("Accept")
 	wantsJSON := strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/html")
-
-	// Contact is enabled when any public-facing email is configured per AI.md PART 12
-	contactEnabled := h.config.Server.Contact.General.Email != "" || h.config.Server.Contact.Admin.Email != ""
+	contactEnabled := h.config.Server.Pages.Contact.Enabled &&
+		(h.config.Server.Contact.General.Email != "" || h.config.Server.Contact.Admin.Email != "" || notify.HasConfiguredWebhook(h.config.Server.Contact, "general"))
 
 	if r.Method == http.MethodGet {
 		if !wantsJSON {
@@ -1822,11 +2312,8 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			OK: true,
-			Data: map[string]interface{}{
-				"enabled": contactEnabled,
-				"title":   "Contact",
-			},
+			OK:   true,
+			Data: map[string]interface{}{"enabled": contactEnabled, "title": "Contact"},
 		})
 		return
 	}
@@ -1835,94 +2322,107 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
 		return
 	}
-
 	if !contactEnabled {
 		h.errorResponse(w, http.StatusNotFound, "Contact form is not enabled", "")
 		return
 	}
-
 	var body struct {
 		Name    string `json:"name"`
 		Email   string `json:"email"`
 		Subject string `json:"subject"`
 		Message string `json:"message"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
+		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
-
 	body.Name = strings.TrimSpace(body.Name)
 	body.Email = strings.TrimSpace(body.Email)
 	body.Subject = strings.TrimSpace(body.Subject)
 	body.Message = strings.TrimSpace(body.Message)
-
-	if body.Name == "" || body.Email == "" || body.Subject == "" || body.Message == "" {
-		h.errorResponse(w, http.StatusBadRequest, "All fields are required", "")
+	address, err := mail.ParseAddress(body.Email)
+	if body.Name == "" || err != nil || address.Address != body.Email || body.Subject == "" || body.Message == "" || len(body.Name) > 200 || len(body.Subject) > 300 || len(body.Message) > 10000 {
+		h.writeError(w, "BAD_REQUEST", "Name, valid email, subject, and message are required", http.StatusBadRequest)
 		return
 	}
-
-	slog.Info("contact form submission", "subject", body.Subject)
-
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data: map[string]string{
-			"status": "received",
-		},
-	})
+	if h.contactSubmitter == nil {
+		h.writeError(w, "NOT_AVAILABLE", "Contact delivery is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.contactSubmitter.SubmitContact(r.Context(), ContactMessage{Name: body.Name, Email: address.Address, Subject: body.Subject, Message: body.Message, SourceIP: httputil.GetClientIP(r)}); err != nil {
+		h.writeError(w, "DELIVERY_UNAVAILABLE", "Contact message could not be delivered", http.StatusServiceUnavailable)
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"status": "received"}})
 }
 
 // handlePreferences handles GET|POST /api/v1/server/preferences per AI.md PART 1.
 // Preferences are stored client-side (localStorage/cookies). The API endpoint
 // provides the schema and acknowledges client-submitted preference saves.
+func (h *Handler) PreferenceSchema() map[string]interface{} {
+	return map[string]interface{}{"storage": "client-side", "fields": []string{"theme", "language", "safe_search", "per_page", "default_category", "engines"}}
+}
+
+func (h *Handler) SavePreferences() map[string]string {
+	return map[string]string{"status": "saved"}
+}
+
 func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			OK: true,
-			Data: map[string]interface{}{
-				"storage": "client-side",
-				"fields": []string{
-					"theme", "language", "safe_search", "per_page",
-					"default_category", "engines",
-				},
-			},
-		})
+		manager := h.syncI18nManager()
+		state := prefsync.Current(r, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+		h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: state, Meta: &APIMeta{Version: APIVersion}})
 		return
 	}
 
 	if r.Method == http.MethodPost {
-		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			OK:   true,
-			Data: map[string]string{"status": "saved"},
-		})
+		values := url.Values{}
+		if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+			var input map[string]json.RawMessage
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
+				h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "invalid JSON body")
+				return
+			}
+			for key, raw := range input {
+				var text string
+				if json.Unmarshal(raw, &text) != nil {
+					var scalar interface{}
+					if json.Unmarshal(raw, &scalar) == nil {
+						text = fmt.Sprint(scalar)
+					}
+				}
+				values.Set(key, text)
+			}
+		} else {
+			if err := r.ParseForm(); err != nil {
+				h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "invalid form body")
+				return
+			}
+			values = r.Form
+		}
+		hasCode := values.Has("code")
+		values.Del("code")
+		clone := r.Clone(r.Context())
+		urlCopy := *r.URL
+		urlCopy.RawQuery = values.Encode()
+		clone.URL = &urlCopy
+		manager := h.syncI18nManager()
+		result := prefsync.Import(clone, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+		if hasCode {
+			result.Ignored = append(result.Ignored, "code")
+			sort.Strings(result.Ignored)
+		}
+		if len(result.Applied) == 0 {
+			h.errorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "no valid preferences were supplied")
+			return
+		}
+		prefsync.Apply(w, r, "search", result)
+		h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"theme": result.State.Theme, "lang": result.State.Lang, "prefs": result.State.Prefs, "applied": result.Applied, "ignored": result.Ignored}, Meta: &APIMeta{Version: APIVersion}})
 		return
 	}
 
 	h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
-}
-
-// isValidSyncTheme reports whether theme is one of the three allowed values.
-// Mirrors server.IsValidTheme; duplicated here because the api package must
-// not import the server package.
-func isValidSyncTheme(theme string) bool {
-	switch theme {
-	case "dark", "light", "auto":
-		return true
-	}
-	return false
-}
-
-// normalizeSyncLanguage lowercases and strips any region/script subtag
-// (e.g. "fr-CA" -> "fr") to match i18n.Manager's supported language codes.
-func normalizeSyncLanguage(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	if value == "" {
-		return ""
-	}
-	if idx := strings.IndexAny(value, "-_"); idx != -1 {
-		value = value[:idx]
-	}
-	return value
 }
 
 // syncI18nManager returns an i18n manager sufficient for language-code
@@ -1930,26 +2430,6 @@ func normalizeSyncLanguage(value string) string {
 // language list, which NewManager populates without loading locale files.
 func (h *Handler) syncI18nManager() *i18n.Manager {
 	return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
-}
-
-// currentSyncPrefs reads the theme/lang cookies for the exportable
-// preference state, falling back to defaults per AI.md "Client-Side
-// Preferences".
-func (h *Handler) currentSyncPrefs(r *http.Request) (theme, lang string) {
-	theme = "dark"
-	if c, err := r.Cookie("theme"); err == nil && isValidSyncTheme(c.Value) {
-		theme = c.Value
-	}
-
-	mgr := h.syncI18nManager()
-	lang = mgr.DefaultLanguage()
-	if c, err := r.Cookie("lang"); err == nil {
-		if l := normalizeSyncLanguage(c.Value); l != "" && mgr.IsSupported(l) {
-			lang = l
-		}
-	}
-
-	return theme, lang
 }
 
 // handleServerPreferencesExport handles GET /api/v1/server/preferences/export
@@ -1962,24 +2442,12 @@ func (h *Handler) handleServerPreferencesExport(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	theme, lang := h.currentSyncPrefs(r)
-	query := url.Values{"theme": {theme}, "lang": {lang}}.Encode()
-
-	scheme := "https"
-	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
-		scheme = "http"
-	}
-	fullURL := scheme + "://" + r.Host + "/server/preferences/import?" + query
-	shortCode := base64.RawURLEncoding.EncodeToString([]byte(query))
+	manager := h.syncI18nManager()
+	state, fullURL, shortCode := prefsync.Export(r, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data: map[string]string{
-			"theme":      theme,
-			"lang":       lang,
-			"full_url":   fullURL,
-			"short_code": shortCode,
-		},
+		OK:   true,
+		Data: map[string]interface{}{"theme": state.Theme, "lang": state.Lang, "prefs": state.Prefs, "url": fullURL, "code": shortCode},
 		Meta: &APIMeta{Version: APIVersion},
 	})
 }
@@ -1999,46 +2467,10 @@ func (h *Handler) handleServerPreferencesImport(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	query := r.URL.Query()
-	if code := query.Get("code"); code != "" {
-		if idx := strings.Index(code, "?"); idx != -1 {
-			code = code[idx+1:]
-		}
-		if decoded, err := base64.RawURLEncoding.DecodeString(code); err == nil {
-			// The stripped text decoded as base64 - treat it as the short code form.
-			if decodedQuery, err := url.ParseQuery(string(decoded)); err == nil {
-				query = decodedQuery
-			}
-		} else if decodedQuery, err := url.ParseQuery(code); err == nil {
-			// Not valid base64 (e.g. the caller passed the plain "theme=dark&lang=fr"
-			// query string rather than the short code) - use it directly.
-			query = decodedQuery
-		}
-	}
-
-	applied := map[string]string{}
-
-	if theme := query.Get("theme"); theme != "" && isValidSyncTheme(theme) {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "theme",
-			Value:    theme,
-			Path:     "/",
-			MaxAge:   31536000,
-			SameSite: http.SameSiteLaxMode,
-		})
-		applied["theme"] = theme
-	}
-
-	if lang := normalizeSyncLanguage(query.Get("lang")); lang != "" && h.syncI18nManager().IsSupported(lang) {
-		i18n.SetLanguageCookie(w, lang)
-		applied["lang"] = lang
-	}
-
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK:   true,
-		Data: applied,
-		Meta: &APIMeta{Version: APIVersion},
-	})
+	manager := h.syncI18nManager()
+	result := prefsync.Import(r, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+	prefsync.Apply(w, r, "search", result)
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"theme": result.State.Theme, "lang": result.State.Lang, "prefs": result.State.Prefs, "applied": result.Applied, "ignored": result.Ignored}, Meta: &APIMeta{Version: APIVersion}})
 }
 
 func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
@@ -2050,32 +2482,85 @@ func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		slog.Debug("failed to write API fallback response", "error", err)
+	}
 }
 
 // requireOperator wraps a handler and rejects requests without a valid operator
 // bearer token. Per AI.md PART 14: operator-gated endpoints use Bearer auth.
 // Token comparison is constant-time over SHA-256 digests to prevent timing leaks.
+func (h *Handler) operatorAuthError(r *http.Request) error {
+	expected := h.config.Get().Token
+	if expected == "" {
+		return errors.New("operator token not configured")
+	}
+	hdr := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(hdr) <= len(prefix) || !strings.EqualFold(hdr[:len(prefix)], prefix) {
+		return errors.New("operator token required")
+	}
+	presented := strings.TrimSpace(hdr[len(prefix):])
+	expectedSum := sha256.Sum256([]byte(expected))
+	presentedSum := sha256.Sum256([]byte(presented))
+	if subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
+		return errors.New("invalid operator token")
+	}
+	return nil
+}
+
+// OperatorServerStatus and OperatorServerConfig preserve the REST operator-token requirement for GraphQL fields.
+func (h *Handler) OperatorServerStatus(r *http.Request) (interface{}, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	return h.serverStatusData(), nil
+}
+
+func (h *Handler) serverStatusData() map[string]interface{} {
+	cfg := h.config.Get()
+	status := "healthy"
+	if cfg.MaintenanceMode {
+		status = "maintenance"
+	}
+	return map[string]interface{}{
+		"status": status, "version": APIVersion, "mode": cfg.Mode,
+		"uptime": h.formatDuration(time.Since(h.startTime)), "go_version": runtime.Version(),
+		"tor": map[string]interface{}{"enabled": cfg.Tor.Enabled, "running": h.torService != nil && h.torService.IsRunning()},
+	}
+}
+
+func (h *Handler) OperatorServerConfig(r *http.Request) (interface{}, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	return h.serverConfigData(), nil
+}
+
+func (h *Handler) serverConfigData() map[string]interface{} {
+	cfg := h.config.Get()
+	return map[string]interface{}{
+		"mode": cfg.Mode, "port": cfg.Port, "https_port": cfg.HTTPSPort,
+		"address": cfg.Address, "base_url": cfg.BaseURL, "maintenance": cfg.MaintenanceMode,
+		"branding": map[string]string{"title": cfg.Branding.Title, "tagline": cfg.Branding.Tagline, "description": cfg.Branding.Description},
+		"features": map[string]bool{"tor": cfg.Tor.Enabled, "geoip": cfg.GeoIP.Enabled, "metrics": cfg.Metrics.Enabled},
+	}
+}
+
 func (h *Handler) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		expected := h.config.Get().Token
-		if expected == "" {
-			h.errorResponse(w, http.StatusUnauthorized, "Operator token not configured", "")
-			return
-		}
-		hdr := r.Header.Get("Authorization")
-		const prefix = "Bearer "
-		if len(hdr) <= len(prefix) || !strings.EqualFold(hdr[:len(prefix)], prefix) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
-			h.errorResponse(w, http.StatusUnauthorized, "Operator token required", "")
-			return
-		}
-		presented := strings.TrimSpace(hdr[len(prefix):])
-		expectedSum := sha256.Sum256([]byte(expected))
-		presentedSum := sha256.Sum256([]byte(presented))
-		if subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
-			h.errorResponse(w, http.StatusUnauthorized, "Invalid operator token", "")
+		if err := h.operatorAuthError(r); err != nil {
+			if err.Error() != "operator token not configured" {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
+			}
+			message := "Operator token not configured"
+			if err.Error() == "operator token required" {
+				message = "Operator token required"
+			}
+			if err.Error() == "invalid operator token" {
+				message = "Invalid operator token"
+			}
+			h.errorResponse(w, http.StatusUnauthorized, message, "")
 			return
 		}
 		next(w, r)
@@ -2084,58 +2569,412 @@ func (h *Handler) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 
 // handleServerStatus handles GET /api/v1/server/status (operator token required).
 // Per AI.md PART 14: operator-gated JSON status endpoint mirrors /server/status HTML page.
-func (h *Handler) handleServerStatus(w http.ResponseWriter, r *http.Request) {
-	cfg := h.config.Get()
-	uptime := h.formatDuration(time.Since(h.startTime))
-
-	status := "healthy"
-	if cfg.MaintenanceMode {
-		status = "maintenance"
-	}
-
-	torRunning := h.torService != nil && h.torService.IsRunning()
-
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data: map[string]interface{}{
-			"status":     status,
-			"version":    APIVersion,
-			"mode":       cfg.Mode,
-			"uptime":     uptime,
-			"go_version": runtime.Version(),
-			"tor": map[string]interface{}{
-				"enabled": cfg.Tor.Enabled,
-				"running": torRunning,
-			},
-		},
-	})
+func (h *Handler) handleServerStatus(w http.ResponseWriter, _ *http.Request) {
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.serverStatusData()})
 }
 
 // handleServerConfig handles GET /api/v1/server/config (operator token required).
 // Per AI.md PART 14: returns a redacted view of the current server configuration.
 // Sensitive fields (token, secret_key) are never included in the response.
-func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleServerConfig(w http.ResponseWriter, _ *http.Request) {
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.serverConfigData()})
+}
+
+// GeoIP attribution notices required verbatim by AI.md PART 19. Both are
+// required together: the DB-IP notice does not cover the NRO-sourced country
+// data, and the NRO notice does not cover the DB-IP city data.
+const (
+	geoIPAttributionHTML = `<a href="https://db-ip.com/">IP Geolocation by DB-IP</a>`
+	geoIPAttributionText = "Country and ASN data licensed CC BY 4.0 by the Number Resource Organization (NRO)."
+)
+
+// GeoIPLookupResponse is the payload of a GeoIP IP lookup.
+// Organization data comes from the ASN database's autonomous_system_organization
+// field — BGP/RIR data, never an RDAP/WHOIS registrant record (AI.md PART 19).
+type GeoIPLookupResponse struct {
+	IP          string  `json:"ip"`
+	Found       bool    `json:"found"`
+	Private     bool    `json:"private"`
+	CountryCode string  `json:"country_code,omitempty"`
+	CountryName string  `json:"country_name,omitempty"`
+	Continent   string  `json:"continent,omitempty"`
+	City        string  `json:"city,omitempty"`
+	Region      string  `json:"region,omitempty"`
+	PostalCode  string  `json:"postal_code,omitempty"`
+	Latitude    float64 `json:"latitude,omitempty"`
+	Longitude   float64 `json:"longitude,omitempty"`
+	Timezone    string  `json:"timezone,omitempty"`
+	ASN         uint    `json:"asn,omitempty"`
+	ASNOrg      string  `json:"asn_org,omitempty"`
+	Attribution string  `json:"attribution"`
+}
+
+// GeoIPPresetResponse is a single named country-list preset.
+type GeoIPPresetResponse struct {
+	Name  string   `json:"name"`
+	Codes []string `json:"codes"`
+}
+
+// geoIPPresetRequest is the body accepted when saving a preset.
+// Either codes or from is supplied: from copies the current deny_countries or
+// allow_countries selection, which is the "save the current selection as a
+// named preset" flow required by AI.md PART 19.
+type geoIPPresetRequest struct {
+	Name  string   `json:"name"`
+	Codes []string `json:"codes"`
+	From  string   `json:"from"`
+}
+
+// handleGeoIPLookup handles GET /api/v1/server/geoip/ips and
+// GET /api/v1/server/geoip/ips/{ip}. With no {ip} the requesting client's
+// resolved IP is used. Per AI.md PART 19 private addresses are never
+// looked up and the response always carries the required attribution.
+func (h *Handler) handleGeoIPLookup(w http.ResponseWriter, r *http.Request) {
+	target := strings.TrimSuffix(chi.URLParam(r, "ip"), ".txt")
+	if target == "" {
+		target = httputil.GetClientIP(r)
+	}
+	payload, err := h.LookupGeoIP(target)
+	if err != nil {
+		if h.geoipLookup == nil || !h.geoipLookup.IsLoaded() {
+			h.errorResponse(w, http.StatusServiceUnavailable, "GeoIP database is not available", "")
+			return
+		}
+		h.errorResponse(w, http.StatusBadRequest, "Invalid IP address", "")
+		return
+	}
+
+	h.respondWithFormat(w, r, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: payload,
+		Meta: &APIMeta{Version: APIVersion},
+	}, func() string {
+		var b strings.Builder
+		fmt.Fprintf(&b, "IP: %s\n", payload.IP)
+		if payload.Private {
+			b.WriteString("Private: yes\n")
+		}
+		if payload.CountryCode != "" {
+			fmt.Fprintf(&b, "Country: %s (%s)\n", payload.CountryName, payload.CountryCode)
+		}
+		if payload.City != "" {
+			fmt.Fprintf(&b, "City: %s\n", payload.City)
+		}
+		if payload.Region != "" {
+			fmt.Fprintf(&b, "Region: %s\n", payload.Region)
+		}
+		if payload.Timezone != "" {
+			fmt.Fprintf(&b, "Timezone: %s\n", payload.Timezone)
+		}
+		if payload.ASN != 0 {
+			fmt.Fprintf(&b, "ASN: AS%d %s\n", payload.ASN, payload.ASNOrg)
+		}
+		b.WriteString(geoIPAttributionText)
+		return b.String()
+	})
+}
+
+// LookupGeoIP returns the same attributed payload used by the REST lookup endpoint.
+func (h *Handler) LookupGeoIP(target string) (GeoIPLookupResponse, error) {
+	if h.geoipLookup == nil || !h.geoipLookup.IsLoaded() {
+		return GeoIPLookupResponse{}, errors.New("GeoIP database is not available")
+	}
+	if net.ParseIP(target) == nil {
+		return GeoIPLookupResponse{}, errors.New("invalid IP address")
+	}
+	result := h.geoipLookup.Lookup(target)
+	return GeoIPLookupResponse{
+		IP: result.IP, Found: result.Found, Private: result.Private,
+		CountryCode: result.CountryCode, CountryName: result.CountryName, Continent: result.Continent,
+		City: result.City, Region: result.Region, PostalCode: result.PostalCode,
+		Latitude: result.Latitude, Longitude: result.Longitude, Timezone: result.Timezone,
+		ASN: result.ASN, ASNOrg: result.ASNOrg, Attribution: geoIPAttributionText,
+	}, nil
+}
+
+// handleGeoIPPresets handles GET /api/v1/server/geoip/presets (operator token
+// required) and lists the operator-authored country lists from server.yml.
+func (h *Handler) handleGeoIPPresets(w http.ResponseWriter, r *http.Request) {
 	cfg := h.config.Get()
+	presets := make([]GeoIPPresetResponse, 0, len(cfg.GeoIP.Presets))
+	for _, name := range cfg.GeoIP.PresetNames() {
+		codes, _ := cfg.GeoIP.Preset(name)
+		presets = append(presets, GeoIPPresetResponse{Name: name, Codes: codes})
+	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data: map[string]interface{}{
-			"mode":        cfg.Mode,
-			"port":        cfg.Port,
-			"https_port":  cfg.HTTPSPort,
-			"address":     cfg.Address,
-			"base_url":    cfg.BaseURL,
-			"maintenance": cfg.MaintenanceMode,
-			"branding": map[string]string{
-				"title":       cfg.Branding.Title,
-				"tagline":     cfg.Branding.Tagline,
-				"description": cfg.Branding.Description,
-			},
-			"features": map[string]bool{
-				"tor":     cfg.Tor.Enabled,
-				"geoip":   cfg.GeoIP.Enabled,
-				"metrics": cfg.Metrics.Enabled,
-			},
-		},
+		OK:   true,
+		Data: map[string]interface{}{"presets": presets},
+		Meta: &APIMeta{Version: APIVersion},
 	})
+}
+
+// handleGeoIPPreset handles GET /api/v1/server/geoip/presets/{name} (operator
+// token required). Per AI.md PART 19 resolving a preset only returns the codes
+// for the operator to review — it never applies them to deny_countries or
+// allow_countries.
+func (h *Handler) handleGeoIPPreset(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	cfg := h.config.Get()
+	codes, ok := cfg.GeoIP.Preset(name)
+	if !ok {
+		h.errorResponse(w, http.StatusNotFound, "Preset not found", "")
+		return
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: GeoIPPresetResponse{Name: name, Codes: codes},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// handleGeoIPPresetSave handles POST /api/v1/server/geoip/presets (operator
+// token required) and persists a named country list to server.yml. Saving a
+// preset never changes the enforced deny_countries/allow_countries values.
+func (h *Handler) handleGeoIPPresetSave(w http.ResponseWriter, r *http.Request) {
+	var req geoIPPresetRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64*1024)).Decode(&req); err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
+		return
+	}
+
+	name := strings.ToLower(strings.TrimSpace(req.Name))
+	if !config.IsValidPresetName(name) {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid preset name (a-z, 0-9, hyphen, underscore)", "")
+		return
+	}
+
+	cfg := h.config.Get()
+	codes := req.Codes
+	switch strings.TrimSpace(req.From) {
+	case "deny_countries":
+		codes = cfg.GeoIP.DenyCountries
+	case "allow_countries":
+		codes = cfg.GeoIP.AllowedCountries
+	case "":
+	default:
+		h.errorResponse(w, http.StatusBadRequest, "Invalid from value (deny_countries or allow_countries)", "")
+		return
+	}
+
+	normalized := config.NormalizeCountryCodes(codes)
+	if len(normalized) == 0 {
+		h.errorResponse(w, http.StatusBadRequest, "No valid ISO 3166-1 alpha-2 country codes supplied", "")
+		return
+	}
+
+	h.config.Update(func(s *config.ServerConfig) {
+		s.GeoIP.SetPreset(name, normalized)
+	})
+	if err := h.saveConfig(); err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to persist preset", err.Error())
+		return
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: GeoIPPresetResponse{Name: name, Codes: normalized},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// handleGeoIPPresetDelete handles DELETE /api/v1/server/geoip/presets/{name}
+// (operator token required) and removes a stored preset from server.yml.
+func (h *Handler) handleGeoIPPresetDelete(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	var removed bool
+	h.config.Update(func(s *config.ServerConfig) {
+		removed = s.GeoIP.DeletePreset(name)
+	})
+	if !removed {
+		h.errorResponse(w, http.StatusNotFound, "Preset not found", "")
+		return
+	}
+	if err := h.saveConfig(); err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to persist preset removal", err.Error())
+		return
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: map[string]interface{}{"name": name, "deleted": true},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// saveConfig writes the in-memory configuration back to server.yml.
+func (h *Handler) saveConfig() error {
+	path := h.config.GetPath()
+	if path == "" {
+		return errors.New("config path is not set")
+	}
+	return h.config.Save(path)
+}
+
+// SchedulerTasksForGraphQL returns scheduler tasks after the REST operator check.
+func (h *Handler) SchedulerTasksForGraphQL(r *http.Request) ([]*scheduler.TaskInfo, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	if h.scheduler == nil {
+		return nil, errors.New("scheduler is unavailable")
+	}
+	tasks := h.scheduler.GetTasks()
+	if tasks == nil {
+		tasks = []*scheduler.TaskInfo{}
+	}
+	return tasks, nil
+}
+
+// SchedulerTaskForGraphQL returns one registered task after the REST operator check.
+func (h *Handler) SchedulerTaskForGraphQL(r *http.Request, id string) (*scheduler.TaskInfo, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	if h.scheduler == nil {
+		return nil, errors.New("scheduler is unavailable")
+	}
+	return h.scheduler.GetTask(scheduler.TaskID(id))
+}
+
+// SchedulerHistoryForGraphQL returns the same bounded history as the REST endpoint.
+func (h *Handler) SchedulerHistoryForGraphQL(r *http.Request, id string) ([]*scheduler.TaskHistoryEntry, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	if h.scheduler == nil {
+		return nil, errors.New("scheduler is unavailable")
+	}
+	if _, err := h.scheduler.GetTask(scheduler.TaskID(id)); err != nil {
+		return nil, err
+	}
+	history, err := h.scheduler.GetHistory(scheduler.TaskID(id), 20)
+	if err != nil {
+		return nil, err
+	}
+	if history == nil {
+		history = []*scheduler.TaskHistoryEntry{}
+	}
+	return history, nil
+}
+
+// SetSchedulerTaskEnabledForGraphQL applies the REST enable/disable operation.
+func (h *Handler) SetSchedulerTaskEnabledForGraphQL(r *http.Request, id string, enabled bool) (*scheduler.TaskInfo, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	if h.scheduler == nil {
+		return nil, errors.New("scheduler is unavailable")
+	}
+	taskID := scheduler.TaskID(id)
+	var err error
+	if enabled {
+		err = h.scheduler.Enable(taskID)
+	} else {
+		err = h.scheduler.Disable(taskID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return h.scheduler.GetTask(taskID)
+}
+
+// RunSchedulerTaskForGraphQL triggers and audits the same manual operation as REST.
+func (h *Handler) RunSchedulerTaskForGraphQL(r *http.Request, id string) (map[string]interface{}, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	if h.scheduler == nil {
+		return nil, errors.New("scheduler is unavailable")
+	}
+	if err := h.scheduler.RunNow(scheduler.TaskID(id)); err != nil {
+		return nil, errors.New("task cannot be run")
+	}
+	if h.auditLogger != nil {
+		h.auditLogger.LogSchedulerTaskManualRun("operator", "-", id, true)
+	}
+	return map[string]interface{}{"task": id, "triggered": true}, nil
+}
+
+// GeoIPPresetSaveInput is the JSON input for saving an operator-authored preset.
+type GeoIPPresetSaveInput struct {
+	Name  string   `json:"name"`
+	Codes []string `json:"codes"`
+	From  string   `json:"from"`
+}
+
+// GeoIPPresetsForGraphQL returns the configured presets after operator authorization.
+func (h *Handler) GeoIPPresetsForGraphQL(r *http.Request) ([]GeoIPPresetResponse, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	cfg := h.config.Get()
+	presets := make([]GeoIPPresetResponse, 0, len(cfg.GeoIP.Presets))
+	for _, name := range cfg.GeoIP.PresetNames() {
+		codes, _ := cfg.GeoIP.Preset(name)
+		presets = append(presets, GeoIPPresetResponse{Name: name, Codes: codes})
+	}
+	return presets, nil
+}
+
+// GeoIPPresetForGraphQL returns one configured preset after operator authorization.
+func (h *Handler) GeoIPPresetForGraphQL(r *http.Request, name string) (GeoIPPresetResponse, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return GeoIPPresetResponse{}, err
+	}
+	cfg := h.config.Get()
+	codes, ok := cfg.GeoIP.Preset(name)
+	if !ok {
+		return GeoIPPresetResponse{}, errors.New("preset not found")
+	}
+	return GeoIPPresetResponse{Name: name, Codes: codes}, nil
+}
+
+// SaveGeoIPPresetForGraphQL persists a named country list without applying it to enforcement.
+func (h *Handler) SaveGeoIPPresetForGraphQL(r *http.Request, input GeoIPPresetSaveInput) (GeoIPPresetResponse, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return GeoIPPresetResponse{}, err
+	}
+	name := strings.ToLower(strings.TrimSpace(input.Name))
+	if !config.IsValidPresetName(name) {
+		return GeoIPPresetResponse{}, errors.New("invalid preset name")
+	}
+	cfg := h.config.Get()
+	codes := input.Codes
+	switch strings.TrimSpace(input.From) {
+	case "deny_countries":
+		codes = cfg.GeoIP.DenyCountries
+	case "allow_countries":
+		codes = cfg.GeoIP.AllowedCountries
+	case "":
+	default:
+		return GeoIPPresetResponse{}, errors.New("invalid preset source")
+	}
+	normalized := config.NormalizeCountryCodes(codes)
+	if len(normalized) == 0 {
+		return GeoIPPresetResponse{}, errors.New("preset has no valid country codes")
+	}
+	h.config.Update(func(server *config.ServerConfig) { server.GeoIP.SetPreset(name, normalized) })
+	if err := h.saveConfig(); err != nil {
+		return GeoIPPresetResponse{}, errors.New("preset persistence failed")
+	}
+	return GeoIPPresetResponse{Name: name, Codes: normalized}, nil
+}
+
+// DeleteGeoIPPresetForGraphQL removes and persists a preset after operator authorization.
+func (h *Handler) DeleteGeoIPPresetForGraphQL(r *http.Request, name string) (map[string]interface{}, error) {
+	if err := h.operatorAuthError(r); err != nil {
+		return nil, err
+	}
+	var removed bool
+	h.config.Update(func(server *config.ServerConfig) { removed = server.GeoIP.DeletePreset(name) })
+	if !removed {
+		return nil, errors.New("preset not found")
+	}
+	if err := h.saveConfig(); err != nil {
+		return nil, errors.New("preset persistence failed")
+	}
+	return map[string]interface{}{"name": name, "deleted": true}, nil
 }

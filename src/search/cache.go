@@ -120,6 +120,16 @@ func cacheKey(hash string) string {
 	return "search:" + hash
 }
 
+// Ping verifies the underlying cache backend responds per AI.md PART 13
+// checks.cache. A nil backend (caching disabled) is healthy — it is a
+// valid configured state, not a failure.
+func (c *ResultCache) Ping(ctx context.Context) error {
+	if c.backend == nil {
+		return nil
+	}
+	return c.backend.Ping(ctx)
+}
+
 // GetStale retrieves the longer-lived fallback copy of cached results.
 func (c *ResultCache) GetStale(key string) (*model.SearchResults, time.Duration) {
 	results, savedAt, err := c.get(staleCacheKey(key))

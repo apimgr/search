@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -97,7 +98,7 @@ func appendToFile(path, content string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer closeutil.Close(f)
 	_, err = f.WriteString(content)
 	return err
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/version"
 )
@@ -628,7 +630,7 @@ func (f *SportsFetcher) doRequest(ctx context.Context, apiURL string, target int
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)

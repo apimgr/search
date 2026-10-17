@@ -59,16 +59,16 @@ func (h *RegexHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 
 	// Build explanation
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>Pattern:</strong> <code>%s</code><br><br>", escapeHTML(pattern)))
+	fmt.Fprintf(&content, "<strong>Pattern:</strong> <code>%s</code><br><br>", escapeHTML(pattern))
 
 	if !isValid {
-		content.WriteString(fmt.Sprintf("<span class=\"error\"><strong>Invalid Regex:</strong> %s</span><br>", escapeHTML(err.Error())))
+		fmt.Fprintf(&content, "<span class=\"error\"><strong>Invalid Regex:</strong> %s</span><br>", escapeHTML(err.Error()))
 	} else {
 		content.WriteString("<strong>Status:</strong> <span class=\"success\">Valid</span><br><br>")
 		content.WriteString("<strong>Explanation:</strong><br>")
 		explanation := explainRegex(pattern)
 		for _, line := range explanation {
-			content.WriteString(fmt.Sprintf("&bull; %s<br>", line))
+			fmt.Fprintf(&content, "&bull; %s<br>", line)
 		}
 	}
 

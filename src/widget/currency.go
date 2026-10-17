@@ -4,37 +4,54 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"math"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// CurrencyFetcher fetches currency exchange rates
+const maxCurrencyResponseBytes = 1 << 20
+
+// CurrencyFetcher fetches current and recent daily exchange rates from Frankfurter.
 type CurrencyFetcher struct {
 	httpClient *http.Client
-	apiKey     string
 }
 
-// CurrencyData represents currency conversion result
+// CurrencyHistoryPoint represents a dated exchange rate used by the seven-day chart.
+type CurrencyHistoryPoint struct {
+	Date string  `json:"date"`
+	Rate float64 `json:"rate"`
+}
+
+// CurrencyData represents a currency conversion and its recent rate history.
 type CurrencyData struct {
-	From     string             `json:"from"`
-	To       string             `json:"to"`
-	Amount   float64            `json:"amount"`
-	Result   float64            `json:"result"`
-	Rate     float64            `json:"rate"`
-	RateDate string             `json:"rate_date"`
-	Rates    map[string]float64 `json:"rates,omitempty"`
+	From     string                 `json:"from"`
+	To       string                 `json:"to"`
+	Amount   float64                `json:"amount"`
+	Result   float64                `json:"result"`
+	Rate     float64                `json:"rate"`
+	RateDate string                 `json:"rate_date"`
+	Rates    map[string]float64     `json:"rates,omitempty"`
+	History  []CurrencyHistoryPoint `json:"history,omitempty"`
 }
 
-// NewCurrencyFetcher creates a new currency fetcher
-func NewCurrencyFetcher(apiKey string) *CurrencyFetcher {
+// NewCurrencyFetcher creates a currency fetcher that needs no API credentials.
+func NewCurrencyFetcher() *CurrencyFetcher {
 	return &CurrencyFetcher{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		apiKey:     apiKey,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
-// Fetch fetches currency conversion data
+// Fetch returns a conversion calculated locally so the amount never leaves this server.
 func (f *CurrencyFetcher) Fetch(ctx context.Context, params map[string]string) (*WidgetData, error) {
 	from := strings.ToUpper(params["from"])
 	to := strings.ToUpper(params["to"])
@@ -44,100 +61,152 @@ func (f *CurrencyFetcher) Fetch(ctx context.Context, params map[string]string) (
 	if to == "" {
 		to = "EUR"
 	}
-
+	if !validCurrencyCode(from) || !validCurrencyCode(to) {
+		return nil, fmt.Errorf("currency codes must be three ASCII letters")
+	}
 	amount := 1.0
-	if amtStr, ok := params["amount"]; ok {
-		fmt.Sscanf(amtStr, "%f", &amount)
-	}
-
-	// Use exchangerate.host API. The access_key query param is required by
-	// exchangerate.host for the /convert endpoint; requests without it are
-	// rejected with success=false, so the configured apiKey must be sent.
-	url := fmt.Sprintf("https://api.exchangerate.host/convert?from=%s&to=%s&amount=%.2f", from, to, amount)
-	if f.apiKey != "" {
-		url += "&access_key=" + f.apiKey
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := f.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return &WidgetData{
-			Type:      WidgetCurrency,
-			Error:     fmt.Sprintf("exchangerate.host API returned status %d", resp.StatusCode),
-			UpdatedAt: time.Now(),
-		}, nil
-	}
-
-	var result struct {
-		Success bool `json:"success"`
-		Error   struct {
-			Code int    `json:"code"`
-			Info string `json:"info"`
-		} `json:"error"`
-		Query struct {
-			From   string  `json:"from"`
-			To     string  `json:"to"`
-			Amount float64 `json:"amount"`
-		} `json:"query"`
-		Info struct {
-			Rate float64 `json:"rate"`
-		} `json:"info"`
-		Result float64 `json:"result"`
-		Date   string  `json:"date"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	if !result.Success {
-		errMsg := result.Error.Info
-		if errMsg == "" {
-			errMsg = "exchangerate.host API returned an unsuccessful response"
+	if amountText := strings.TrimSpace(params["amount"]); amountText != "" {
+		parsed, err := strconv.ParseFloat(amountText, 64)
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed < 0 || parsed > 1e12 {
+			return nil, fmt.Errorf("amount must be a finite number between 0 and 1000000000000")
 		}
-		return &WidgetData{
-			Type:      WidgetCurrency,
-			Error:     errMsg,
-			UpdatedAt: time.Now(),
-		}, nil
+		amount = parsed
 	}
 
-	data := &CurrencyData{
-		From:     from,
-		To:       to,
-		Amount:   amount,
-		Result:   result.Result,
-		Rate:     result.Info.Rate,
-		RateDate: result.Date,
+	if from == to {
+		today := time.Now().UTC()
+		history := make([]CurrencyHistoryPoint, 0, 7)
+		for offset := 6; offset >= 0; offset-- {
+			history = append(history, CurrencyHistoryPoint{Date: today.AddDate(0, 0, -offset).Format("2006-01-02"), Rate: 1})
+		}
+		return currencyWidgetData(from, to, amount, 1, today.Format("2006-01-02"), history), nil
 	}
 
-	return &WidgetData{
-		Type:      WidgetCurrency,
-		Data:      data,
-		UpdatedAt: time.Now(),
-	}, nil
+	var current struct {
+		Date  string  `json:"date"`
+		Base  string  `json:"base"`
+		Quote string  `json:"quote"`
+		Rate  float64 `json:"rate"`
+	}
+	currentURL := fmt.Sprintf("https://api.frankfurter.dev/v2/rate/%s/%s", from, to)
+	if err := f.fetchCurrencyJSON(ctx, currentURL, &current); err != nil {
+		return nil, err
+	}
+	if current.Base != from || current.Quote != to || !validISODate(current.Date) || !validRate(current.Rate) {
+		return nil, fmt.Errorf("frankfurter returned an invalid current rate")
+	}
+
+	today := time.Now().UTC()
+	query := url.Values{
+		"base":   {from},
+		"quotes": {to},
+		"from":   {today.AddDate(0, 0, -6).Format("2006-01-02")},
+		"to":     {today.Format("2006-01-02")},
+	}
+	var history []struct {
+		Date  string  `json:"date"`
+		Base  string  `json:"base"`
+		Quote string  `json:"quote"`
+		Rate  float64 `json:"rate"`
+	}
+	if err := f.fetchCurrencyJSON(ctx, "https://api.frankfurter.dev/v2/rates?"+query.Encode(), &history); err != nil {
+		return nil, err
+	}
+	if len(history) > 8 {
+		return nil, fmt.Errorf("frankfurter returned too many historical rates")
+	}
+	startDate := today.AddDate(0, 0, -6).Format("2006-01-02")
+	endDate := today.Format("2006-01-02")
+	points := make([]CurrencyHistoryPoint, 0, len(history)+1)
+	previousDate := ""
+	for _, point := range history {
+		if point.Base != from || point.Quote != to || !validISODate(point.Date) || point.Date < startDate || point.Date > endDate || point.Date <= previousDate || !validRate(point.Rate) {
+			return nil, fmt.Errorf("frankfurter returned an invalid historical rate")
+		}
+		previousDate = point.Date
+		points = append(points, CurrencyHistoryPoint{Date: point.Date, Rate: point.Rate})
+	}
+	if len(points) == 0 || points[len(points)-1].Date != current.Date {
+		points = append(points, CurrencyHistoryPoint{Date: current.Date, Rate: current.Rate})
+	}
+	return currencyWidgetData(from, to, amount, current.Rate, current.Date, points), nil
 }
 
-// CacheDuration returns how long to cache currency data
+func (f *CurrencyFetcher) fetchCurrencyJSON(ctx context.Context, target string, result interface{}) error {
+	if f == nil || f.httpClient == nil {
+		return fmt.Errorf("currency HTTP client is unavailable")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "Search currency widget")
+	response, err := f.httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Printf("failed to close currency response: %v", err)
+		}
+	}()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("frankfurter returned HTTP %d", response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxCurrencyResponseBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(body) > maxCurrencyResponseBytes {
+		return fmt.Errorf("frankfurter response exceeds the size limit")
+	}
+	if err := json.Unmarshal(body, result); err != nil {
+		return fmt.Errorf("decode Frankfurter response: %w", err)
+	}
+	return nil
+}
+
+func currencyWidgetData(from, to string, amount, rate float64, rateDate string, history []CurrencyHistoryPoint) *WidgetData {
+	data := &CurrencyData{
+		From: from, To: to, Amount: amount, Result: amount * rate, Rate: rate, RateDate: rateDate, History: history,
+	}
+	return &WidgetData{Type: WidgetCurrency, Data: data, UpdatedAt: time.Now()}
+}
+
+func validCurrencyCode(code string) bool {
+	if len(code) != 3 {
+		return false
+	}
+	for _, character := range code {
+		if character < 'A' || character > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func validISODate(date string) bool {
+	parsed, err := time.Parse("2006-01-02", date)
+	return err == nil && parsed.Format("2006-01-02") == date
+}
+
+func validRate(rate float64) bool {
+	return rate > 0 && !math.IsNaN(rate) && !math.IsInf(rate, 0)
+}
+
+// CacheDuration returns how long to cache the current and historical rates.
 func (f *CurrencyFetcher) CacheDuration() time.Duration {
 	return 30 * time.Minute
 }
 
-// WidgetType returns the widget type
+// WidgetType returns the currency widget type.
 func (f *CurrencyFetcher) WidgetType() WidgetType {
 	return WidgetCurrency
 }
 
-// Common currency codes for the widget UI
+// CommonCurrencies provides display names and symbols for frequently used currencies.
+// Any valid ISO three-letter code is also accepted and verified by Frankfurter.
 var CommonCurrencies = []struct {
 	Code   string `json:"code"`
 	Name   string `json:"name"`

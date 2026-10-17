@@ -90,6 +90,7 @@ type Result struct {
 
 	// Additional fields
 	Thumbnail   string    `json:"thumbnail,omitempty" xml:"thumbnail,omitempty"`
+	ImageURL    string    `json:"image_url,omitempty" xml:"-"`
 	Author      string    `json:"author,omitempty" xml:"author,omitempty"`
 	PublishedAt time.Time `json:"published_at,omitempty" xml:"pubDate,omitempty"`
 	Domain      string    `json:"domain,omitempty" xml:"domain,omitempty"`
@@ -102,6 +103,8 @@ type Result struct {
 	Duration int `json:"duration,omitempty" xml:"-"`
 	// Video view count
 	ViewCount int64 `json:"view_count,omitempty" xml:"-"`
+	// Privacy-enhanced embed URL for video results when a provider supplies one.
+	EmbedURL string `json:"embed_url,omitempty" xml:"-"`
 	// File size in bytes
 	FileSize int64 `json:"file_size,omitempty" xml:"-"`
 	// File extension
@@ -136,6 +139,7 @@ func (r *Result) Sanitize() {
 	r.URL = SanitizeURL(r.URL)
 	r.Engine = strings.TrimSpace(r.Engine)
 	r.Thumbnail = SanitizeURL(r.Thumbnail)
+	r.ImageURL = SanitizeURL(r.ImageURL)
 	r.Author = strings.TrimSpace(r.Author)
 	r.Domain = strings.TrimSpace(r.Domain)
 	r.ImageFormat = strings.TrimSpace(r.ImageFormat)
@@ -289,7 +293,9 @@ func (sr *SearchResults) ToCSV(w io.Writer) error {
 
 	// Header
 	header := []string{"Title", "URL", "Content", "Engine", "Category", "Domain", "Author", "Published", "Score"}
-	writer.Write(header)
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("write CSV header: %w", err)
+	}
 
 	// Data rows
 	for _, r := range sr.Results {
@@ -309,7 +315,9 @@ func (sr *SearchResults) ToCSV(w io.Writer) error {
 			published,
 			fmt.Sprintf("%.2f", r.Score),
 		}
-		writer.Write(row)
+		if err := writer.Write(row); err != nil {
+			return fmt.Errorf("write CSV result row: %w", err)
+		}
 	}
 
 	// Flush and return any accumulated error
@@ -378,7 +386,9 @@ func (sr *SearchResults) ToRSS(w io.Writer, baseURL string) error {
 		},
 	}
 
-	w.Write([]byte(xml.Header))
+	if _, err := io.WriteString(w, xml.Header); err != nil {
+		return fmt.Errorf("write RSS header: %w", err)
+	}
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
 	return enc.Encode(feed)
@@ -447,7 +457,9 @@ func (sr *SearchResults) ToAtom(w io.Writer, baseURL string) error {
 		Entries: entries,
 	}
 
-	w.Write([]byte(xml.Header))
+	if _, err := io.WriteString(w, xml.Header); err != nil {
+		return fmt.Errorf("write Atom header: %w", err)
+	}
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
 	return enc.Encode(feed)

@@ -1658,6 +1658,7 @@ func TestYouTubeParseJSONSuccess(t *testing.T) {
 			"runs": []map[string]interface{}{{"text": "Rick Astley"}},
 		},
 		"viewCountText":     map[string]interface{}{"simpleText": "1B views"},
+		"lengthText":        map[string]interface{}{"simpleText": "3:33"},
 		"publishedTimeText": map[string]interface{}{"simpleText": "15 years ago"},
 	}
 
@@ -1702,9 +1703,11 @@ func TestYouTubeParseJSONSuccess(t *testing.T) {
 	if results[0].Thumbnail != "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" {
 		t.Errorf("thumbnail = %q", results[0].Thumbnail)
 	}
-	// Author and metadata combined into Content
-	if !strings.Contains(results[0].Content, "Rick Astley") {
-		t.Errorf("content should contain channel name: %q", results[0].Content)
+	if results[0].Author != "Rick Astley" || results[0].ViewCount != 1_000_000_000 || results[0].Duration != 213 || results[0].EmbedURL != "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" {
+		t.Errorf("structured video metadata = author %q, views %d, duration %d, embed %q", results[0].Author, results[0].ViewCount, results[0].Duration, results[0].EmbedURL)
+	}
+	if !strings.Contains(results[0].Content, "15 years ago") || !strings.Contains(results[0].Content, "Official music video") {
+		t.Errorf("content should retain publication time and description: %q", results[0].Content)
 	}
 }
 
@@ -1778,7 +1781,7 @@ func TestYouTubeParseJSONMaxResults(t *testing.T) {
 
 	items := make([]map[string]interface{}, 5)
 	for i := range items {
-		items[i] = map[string]interface{}{"videoRenderer": makeVideoRenderer(fmt.Sprintf("vid%03d", i))}
+		items[i] = map[string]interface{}{"videoRenderer": makeVideoRenderer(fmt.Sprintf("vid%08d", i))}
 	}
 
 	ytData := map[string]interface{}{

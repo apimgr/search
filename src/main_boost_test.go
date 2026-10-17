@@ -11,10 +11,11 @@ import (
 // handleLegacyArgs
 // Covers the --help, --version, --config-info, --status,
 // --service/missing-subcommand, --maintenance/missing-subcommand,
-// --update, --build, --shell, --daemon and default branches.
+// --update, --shell, --daemon and default branches.
 // ============================================================
 
 func TestHandleLegacyArgsHelp(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--help"})
 	out := captureStdout(t, handleLegacyArgs)
 	if !strings.Contains(out, "--version") {
@@ -23,6 +24,7 @@ func TestHandleLegacyArgsHelp(t *testing.T) {
 }
 
 func TestHandleLegacyArgsVersion(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--version"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
@@ -31,6 +33,7 @@ func TestHandleLegacyArgsVersion(t *testing.T) {
 }
 
 func TestHandleLegacyArgsShortVersion(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "-v"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
@@ -39,6 +42,7 @@ func TestHandleLegacyArgsShortVersion(t *testing.T) {
 }
 
 func TestHandleLegacyArgsShortHelp(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "-h"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
@@ -46,15 +50,10 @@ func TestHandleLegacyArgsShortHelp(t *testing.T) {
 	}
 }
 
-func TestHandleLegacyArgsConfigInfo(t *testing.T) {
-	withArgs(t, []string{"search", "--config-info"})
-	out := captureStdout(t, handleLegacyArgs)
-	if strings.TrimSpace(out) == "" {
-		t.Error("handleLegacyArgs(--config-info) produced no output")
-	}
-}
-
 func TestHandleLegacyArgsStatus(t *testing.T) {
+	// showStatus() calls exitFunc(1) when no server is running; without this
+	// the real os.Exit(1) would kill the whole test binary.
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--status"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
@@ -63,6 +62,7 @@ func TestHandleLegacyArgsStatus(t *testing.T) {
 }
 
 func TestHandleLegacyArgsServiceMissingSubcmd(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--service"})
 	// No panic is the contract; the function logs to slog.Error (stderr)
 	handleLegacyArgs()
@@ -78,13 +78,15 @@ func TestHandleLegacyArgsServiceWithSubcmd(t *testing.T) {
 }
 
 func TestHandleLegacyArgsMaintenanceMissingSubcmd(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance"})
 	// No panic is the contract; the function logs to slog.Error (stderr)
 	handleLegacyArgs()
 }
 
 func TestHandleLegacyArgsMaintenanceWithSubcmd(t *testing.T) {
-	withArgs(t, []string{"search", "--maintenance", "help"})
+	withExitFunc(t)
+	withArgs(t, []string{"search", "--maintenance", "--help"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
 		t.Error("handleLegacyArgs(--maintenance help) produced no output")
@@ -103,25 +105,12 @@ func TestHandleLegacyArgsUpdateCheck(t *testing.T) {
 }
 
 func TestHandleLegacyArgsUpdateWithSubcmd(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "help"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
 		t.Error("handleLegacyArgs(--update help) produced no output")
 	}
-}
-
-func TestHandleLegacyArgsBuildDefault(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--build"})
-	// No os.Args[2] → platform = "all" → may call exitFunc if Docker absent; no panic
-	captureStdout(t, handleLegacyArgs)
-}
-
-func TestHandleLegacyArgsBuildWithPlatform(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--build", "all"})
-	// May call exitFunc if Docker absent; no panic
-	captureStdout(t, handleLegacyArgs)
 }
 
 func TestHandleLegacyArgsShellDefault(t *testing.T) {
@@ -135,6 +124,7 @@ func TestHandleLegacyArgsShellDefault(t *testing.T) {
 }
 
 func TestHandleLegacyArgsShellWithSubcmd(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--shell", "--help"})
 	out := captureStdout(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
@@ -149,72 +139,19 @@ func TestHandleLegacyArgsShellWithSubcmd(t *testing.T) {
 // The daemonize() function itself is covered by TestDaemonizeAlreadyChild.
 
 func TestHandleLegacyArgsUnknown(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--completely-unknown-flag-xyz"})
 	// Logs to slog.Error; no panic
 	handleLegacyArgs()
 }
 
 // ============================================================
-// runBuild — platform filtering branches
-// runBuild calls exitFunc if Docker is missing, so we replace it.
-// We only verify the filtering logic by exercising each platform name.
-// ============================================================
-
-func TestRunBuildPlatformBranches(t *testing.T) {
-	tests := []struct {
-		name     string
-		platform string
-	}{
-		{"all", "all"},
-		{"linux", "linux"},
-		{"darwin", "darwin"},
-		{"windows", "windows"},
-		{"freebsd", "freebsd"},
-		{"host", "host"},
-		{"slash notation", "linux/amd64"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			withExitFunc(t)
-			withArgs(t, []string{"search", "--build", tt.platform})
-			// Output goes to stdout; we don't assert content because Docker may
-			// or may not be present; the contract is "no panic".
-			captureStdout(t, func() { runBuild(tt.platform) })
-		})
-	}
-}
-
-func TestRunBuildUnknownPlatform(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--build", "solaris"})
-	out := captureStdout(t, func() { runBuild("solaris") })
-	if !strings.Contains(out, "Unknown platform") && !strings.Contains(out, "unknown") && !strings.Contains(out, "ERROR") {
-		t.Errorf("runBuild(solaris) expected error output, got: %q", out)
-	}
-}
-
-func TestRunBuildMacosPlatform(t *testing.T) {
-	// "macos"/"mac"/"osx" are GOOS aliases and must be rejected — only
-	// "darwin" is accepted per binary-rules.md.
-	for _, platform := range []string{"macos", "mac", "osx"} {
-		t.Run(platform, func(t *testing.T) {
-			withExitFunc(t)
-			withArgs(t, []string{"search", "--build", platform})
-			out := captureStdout(t, func() { runBuild(platform) })
-			if !strings.Contains(out, "Unknown platform") && !strings.Contains(out, "ERROR") {
-				t.Errorf("runBuild(%q) expected rejection output, got: %q", platform, out)
-			}
-		})
-	}
-}
-
-// ============================================================
-// runUpdate — check, rollback, list, help branches
+// runUpdate — check, branch, and help branches
 // These may make network calls; we only verify no panic + some output.
 // ============================================================
 
 func TestRunUpdateHelp(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "help"})
 	out := captureStdout(t, func() { runUpdate("help") })
 	if !strings.Contains(out, "check") {
@@ -223,6 +160,7 @@ func TestRunUpdateHelp(t *testing.T) {
 }
 
 func TestRunUpdateHelpAlias(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "--help"})
 	out := captureStdout(t, func() { runUpdate("--help") })
 	if strings.TrimSpace(out) == "" {
@@ -230,11 +168,21 @@ func TestRunUpdateHelpAlias(t *testing.T) {
 	}
 }
 
-func TestRunUpdateBranchDaily(t *testing.T) {
+func TestRunUpdateRejectsRollbackSubcommand(t *testing.T) {
+	withExitFunc(t)
+	withArgs(t, []string{"search", "--update", "rollback"})
+	out := captureStdout(t, func() { runUpdate("rollback") })
+	if !strings.Contains(out, "Unknown subcommand") {
+		t.Errorf("runUpdate(rollback) output = %q, want unknown subcommand", out)
+	}
+}
+
+func TestRunUpdateBranchDailyAliasStoresCanonicalChannel(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "branch", "daily"})
 	out := captureStdout(t, func() { runUpdate("branch") })
-	if !strings.Contains(out, "daily") {
-		t.Errorf("runUpdate(branch daily) expected 'daily' in output, got: %q", out)
+	if !strings.Contains(out, "devel (nightly build") {
+		t.Errorf("runUpdate(branch daily) expected canonical devel description, got: %q", out)
 	}
 }
 
@@ -243,6 +191,7 @@ func TestRunUpdateBranchDaily(t *testing.T) {
 // ============================================================
 
 func TestRunMaintenancePGPHelp(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "help"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -251,6 +200,7 @@ func TestRunMaintenancePGPHelp(t *testing.T) {
 }
 
 func TestRunMaintenancePGPEmpty(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -259,6 +209,7 @@ func TestRunMaintenancePGPEmpty(t *testing.T) {
 }
 
 func TestRunMaintenancePGPGenerate(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "generate"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -267,6 +218,7 @@ func TestRunMaintenancePGPGenerate(t *testing.T) {
 }
 
 func TestRunMaintenancePGPRotate(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "rotate"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -275,6 +227,7 @@ func TestRunMaintenancePGPRotate(t *testing.T) {
 }
 
 func TestRunMaintenancePGPPublish(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "publish"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -283,6 +236,7 @@ func TestRunMaintenancePGPPublish(t *testing.T) {
 }
 
 func TestRunMaintenancePGPExportPublic(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "export", "public"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -327,6 +281,7 @@ func TestRunMaintenancePGPDelete(t *testing.T) {
 }
 
 func TestRunMaintenancePGPUnknown(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "unknown-action"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -335,6 +290,7 @@ func TestRunMaintenancePGPUnknown(t *testing.T) {
 }
 
 func TestRunMaintenancePGPHelpFlag(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "--help"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -343,6 +299,7 @@ func TestRunMaintenancePGPHelpFlag(t *testing.T) {
 }
 
 func TestRunMaintenanceHelpFlag(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "--help"})
 	out := captureStdout(t, func() { runMaintenance("--help") })
 	if strings.TrimSpace(out) == "" {
@@ -409,19 +366,6 @@ func TestPrintShellInitUnsupported(t *testing.T) {
 }
 
 // ============================================================
-// runUpdate — rollback path (network not required; error expected)
-// ============================================================
-
-func TestRunUpdateRollback(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--update", "rollback"})
-	out := captureStdout(t, func() { runUpdate("rollback") })
-	if strings.TrimSpace(out) == "" {
-		t.Error("runUpdate(rollback) produced no output")
-	}
-}
-
-// ============================================================
 // runMaintenance — update alias (delegates to runUpdate("yes"))
 // ============================================================
 
@@ -448,25 +392,11 @@ func TestRunMaintenanceSetupNotFirstRunNotRoot(t *testing.T) {
 }
 
 // ============================================================
-// findSourceDir — returns valid path or skips
-// ============================================================
-
-func TestFindSourceDirParentCheck(t *testing.T) {
-	// Running from within the project tree, so either "." or the parent should work
-	dir, err := findSourceDir()
-	if err != nil {
-		t.Skipf("findSourceDir() not in source tree: %v", err)
-	}
-	if dir == "" {
-		t.Error("findSourceDir() returned empty string")
-	}
-}
-
-// ============================================================
-// runUpdate — check and list branches (network; ok if error)
+// runUpdate — check branch (network; ok if error)
 // ============================================================
 
 func TestRunUpdateCheck(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "check"})
 	out := captureStdout(t, func() { runUpdate("check") })
 	if strings.TrimSpace(out) == "" {
@@ -474,11 +404,12 @@ func TestRunUpdateCheck(t *testing.T) {
 	}
 }
 
-func TestRunUpdateList(t *testing.T) {
+func TestRunUpdateListIsRejected(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "list"})
 	out := captureStdout(t, func() { runUpdate("list") })
-	if strings.TrimSpace(out) == "" {
-		t.Error("runUpdate(list) produced no output")
+	if !strings.Contains(out, "Unknown subcommand") {
+		t.Fatalf("runUpdate(list) output = %q, want unsupported-subcommand message", out)
 	}
 }
 
@@ -566,6 +497,7 @@ func pidIntToString(pid int) string {
 // ============================================================
 
 func TestRunMaintenanceRestoreNoFileShowsHelp(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "restore"})
 	out := captureStdout(t, func() { runMaintenance("restore") })
 	if strings.TrimSpace(out) == "" {

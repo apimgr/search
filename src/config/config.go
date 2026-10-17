@@ -11,11 +11,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
@@ -74,9 +77,50 @@ type Config struct {
 	reloadHooks   []func(*Config)
 	reloadHooksMu sync.Mutex
 
+	// Pending restart state per AI.md PART 13/PART 12: settings whose changes
+	// survive only a process restart. Reload() records them, healthz reports
+	// them, and ClearPendingRestart() drops them once the operator restarts.
+	pendingRestart  bool
+	restartSettings []string
+
 	Server  ServerConfig            `yaml:"server"`
 	Search  SearchConfig            `yaml:"search"`
 	Engines map[string]EngineConfig `yaml:"engines"`
+	Data    DataConfig              `yaml:"data"`
+
+	// TorOverlay carries the root-level `tor:` block from AI.md PART 12 "Tor
+	// Hidden Service Configuration" (onion_address, contact_email). It is
+	// merged into Server.Tor after decode — see applyTorOverlay.
+	TorOverlay TorOverlayConfig `yaml:"tor"`
+}
+
+// DataConfig controls external security databases per AI.md PART 18.
+type DataConfig struct {
+	SecurityDir string          `yaml:"security_dir"`
+	CVE         CVEDataConfig   `yaml:"cve"`
+	Trivy       TrivyDataConfig `yaml:"trivy"`
+}
+
+type CVEDataConfig struct {
+	Source      string `yaml:"source"`
+	FilterByCPE bool   `yaml:"filter_by_cpe"`
+}
+
+type TrivyDataConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Source  string `yaml:"source"`
+}
+
+// TorOverlayConfig holds the root-level `tor:` hidden-service settings per
+// AI.md PART 12. The operational `server.tor.*` tree (PART 31.1) stays where
+// it is; the overlay only adds the two public hidden-service settings.
+type TorOverlayConfig struct {
+	// .onion hostname for this service (without http:// prefix). When set,
+	// requests with this Host header are treated as Tor requests.
+	OnionAddress string `yaml:"onion_address"`
+	// Contact email for .onion responses. If unset, no email is shown on Tor
+	// responses — never fall back to the clearnet email.
+	ContactEmail string `yaml:"contact_email"`
 }
 
 // OnReload registers a hook that is called after every successful hot-reload.
@@ -92,6 +136,53 @@ func (c *Config) OnReload(hook func(*Config)) {
 // Per AI.md PART 14: First run shows setup token for admin creation
 func (c *Config) IsFirstRun() bool {
 	return c.firstRun
+}
+
+// PendingRestart reports whether a hot-reload saw a setting that requires a
+// process restart to take effect. Per AI.md PART 13: healthz reports
+// restart_required (HTTP 200, pending_restart: true) while this is set.
+func (c *Config) PendingRestart() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.pendingRestart
+}
+
+// RestartSettings returns the names of settings whose changes require a
+// restart, per AI.md PART 13 restart_reason.
+func (c *Config) RestartSettings() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return append([]string(nil), c.restartSettings...)
+}
+
+// ClearPendingRestart drops the pending-restart state (called after the
+// process restarts with the new settings applied).
+func (c *Config) ClearPendingRestart() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pendingRestart = false
+	c.restartSettings = nil
+}
+
+// restartRequiredSettings are settings whose changes never hot-reload. Prefix
+// entries with a trailing dot cover their whole section (ssl.*, database.*).
+// Per AI.md PART 12 "Server Restart Notification".
+var restartRequiredSettings = []string{
+	"server.port",
+	"server.address",
+	"server.daemonize",
+	"ssl.",
+	"database.",
+	"tor.",
+}
+
+func requiresRestart(setting string) bool {
+	for _, prefix := range restartRequiredSettings {
+		if strings.HasPrefix(setting, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // SetDebug explicitly enables or disables debug mode on this Config instance.
@@ -131,7 +222,7 @@ func (c *Config) Reload() error {
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
-	defer file.Close()
+	defer closeutil.Close(file)
 
 	// Warn on unknown fields but never crash — AI.md PART 12: never crash on config
 	var strictCheck Config
@@ -152,6 +243,10 @@ func (c *Config) Reload() error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Fold the root-level `tor:` overlay into Server.Tor (AI.md PART 12) so
+	// hot-reload treats both spellings identically.
+	newCfg.applyTorOverlay()
+
 	// Update all reloadable settings under the write lock, then fire hooks outside it.
 	var hooks []func(*Config)
 	func() {
@@ -161,20 +256,53 @@ func (c *Config) Reload() error {
 		// Preserve path and mutex
 		newCfg.configPath = c.configPath
 
-		// Copy all reloadable settings
-		// Note: Port and Address changes require restart
-		oldPort := c.Server.Port
-		oldAddress := c.Server.Address
+		// Snapshot the restart-required values before overwriting, then copy
+		// all reloadable settings and categorize changes (AI.md PART 12:
+		// prefix match against restartRequiredSettings).
+		oldServer := c.Server
+		portChanged := newCfg.Server.Port != oldServer.Port
+		addressChanged := newCfg.Server.Address != oldServer.Address
+		oldSSL := c.Server.SSL
+		oldDatabase := c.Server.Database
+		oldTor := c.Server.Tor
 
 		c.Server = newCfg.Server
 		c.Search = newCfg.Search
 		c.Engines = newCfg.Engines
+		c.Data = newCfg.Data
+		c.TorOverlay = newCfg.TorOverlay
 
 		// Restore port/address if changed (require restart)
-		if c.Server.Port != oldPort || c.Server.Address != oldAddress {
-			// Log warning that port/address changes require restart
-			c.Server.Port = oldPort
-			c.Server.Address = oldAddress
+		var needsRestart []string
+		if portChanged {
+			if requiresRestart("server.port") {
+				needsRestart = append(needsRestart, "server.port")
+			}
+			c.Server.Port = oldServer.Port
+		}
+		if addressChanged {
+			if requiresRestart("server.address") {
+				needsRestart = append(needsRestart, "server.address")
+			}
+			c.Server.Address = oldServer.Address
+		}
+		if c.Server.Daemonize != oldServer.Daemonize && requiresRestart("server.daemonize") {
+			needsRestart = append(needsRestart, "server.daemonize")
+		}
+		if !reflect.DeepEqual(c.Server.SSL, oldSSL) && requiresRestart("ssl.") {
+			needsRestart = append(needsRestart, "ssl.")
+		}
+		if !reflect.DeepEqual(c.Server.Database, oldDatabase) && requiresRestart("database.") {
+			needsRestart = append(needsRestart, "database.")
+		}
+		if !reflect.DeepEqual(c.Server.Tor, oldTor) && requiresRestart("tor.") {
+			needsRestart = append(needsRestart, "tor.")
+		}
+		if len(needsRestart) > 0 {
+			c.pendingRestart = true
+			c.restartSettings = needsRestart
+			slog.Warn("config_change requires_restart=true settings=\"" +
+				strings.Join(needsRestart, ",") + "\" action=\"restart required\"")
 		}
 
 		// Snapshot hooks while still inside the write lock to keep ordering consistent.
@@ -211,12 +339,12 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 	}
 
 	if err := watcher.Add(path); err != nil {
-		watcher.Close()
+		closeutil.Close(watcher)
 		return fmt.Errorf("failed to watch config file %s: %w", path, err)
 	}
 
 	go func() {
-		defer watcher.Close()
+		defer closeutil.Close(watcher)
 
 		var debounce *time.Timer
 
@@ -289,7 +417,8 @@ type ServerConfig struct {
 	Address   string `yaml:"address"`
 	Mode      string `yaml:"mode"`
 	SecretKey string `yaml:"secret_key"`
-	BaseURL   string `yaml:"base_url"`
+	// URL path prefix for all routes (AI.md PART 12: `server.baseurl`)
+	BaseURL string `yaml:"baseurl"`
 	// Fully qualified domain name — auto-detected from host if empty
 	FQDN string `yaml:"fqdn"`
 	// API version prefix used in /api/{api_version}/ routes
@@ -309,7 +438,9 @@ type ServerConfig struct {
 	// Operator/Server bearer token (Authorization: Bearer tok_...)
 	// Auto-generated on first run if empty. Validated by SHA-256 comparison.
 	// Per AI.md: two-tier auth — server.token + per-resource api_tokens.
-	Token string `yaml:"token"`
+	Token  string            `yaml:"token"`
+	Tokens OwnerTokensConfig `yaml:"tokens"`
+	MCP    MCPConfig         `yaml:"mcp"`
 
 	// Branding
 	Branding BrandingConfig `yaml:"branding"`
@@ -322,6 +453,9 @@ type ServerConfig struct {
 
 	// Tor
 	Tor TorConfig `yaml:"tor"`
+
+	// I2P — per AI.md PART 31.2: opt-in eepsite, disabled by default
+	I2P I2PConfig `yaml:"i2p"`
 
 	// Notifications — per AI.md PART 17: webui toasts (client-side) and email
 	// (SMTP), including per-event email enable/disable switches.
@@ -399,14 +533,54 @@ type ServerConfig struct {
 
 	// Update configuration per AI.md PART 22
 	Update UpdateConfig `yaml:"update"`
+
+	// Debug-specific settings per AI.md PART 6 "Debug Configuration".
+	// Gated by the debug flag (--debug CLI > DEBUG env > MODE=debug default),
+	// NOT by development mode.
+	Debug DebugConfig `yaml:"debug"`
+}
+
+type OwnerTokensConfig struct {
+	MaxLinked     int    `yaml:"max_linked"`
+	CookieMaxAge  string `yaml:"cookie_max_age"`
+	IdlePurgeDays int    `yaml:"idle_purge_days"`
+}
+
+type MCPConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// DebugConfig holds the debug-gated settings from AI.md PART 6
+// "Debug Configuration". Every setting applies only while the debug flag is on.
+type DebugConfig struct {
+	// Pprof enables the pprof endpoints
+	Pprof bool `yaml:"pprof"`
+	// LogQueries logs all SQL queries
+	LogQueries bool `yaml:"log_queries"`
+	// LogCache logs cache operations
+	LogCache bool `yaml:"log_cache"`
+	// LogBodies logs request/response bodies up to MaxBodyLogSize
+	LogBodies bool `yaml:"log_bodies"`
+	// MaxBodyLogSize caps logged bodies (e.g. "10KB")
+	MaxBodyLogSize string `yaml:"max_body_log_size"`
+	// BlockProfileRate sets the block profiling rate (0 = disabled)
+	BlockProfileRate int `yaml:"block_profile_rate"`
+	// MutexProfileFraction sets the mutex profiling fraction (0 = disabled)
+	MutexProfileFraction int `yaml:"mutex_profile_fraction"`
+	// RuntimeEndpoints enables the runtime/debug endpoints
+	RuntimeEndpoints bool `yaml:"runtime_endpoints"`
 }
 
 // SSLConfig represents SSL/TLS configuration
 type SSLConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	AutoTLS     bool   `yaml:"auto_tls"`
-	CertFile    string `yaml:"cert_file"`
-	KeyFile     string `yaml:"key_file"`
+	Enabled bool `yaml:"enabled"`
+	AutoTLS bool `yaml:"auto_tls"`
+	// Manual cert path (optional) — empty means auto-detection
+	CertFile string `yaml:"cert"`
+	// Manual key path (optional) — empty means auto-detection
+	KeyFile string `yaml:"key"`
+	// Minimum TLS version: TLS1.2 or TLS1.3
+	MinVersion  string `yaml:"min_version"`
 	LetsEncrypt struct {
 		Enabled bool     `yaml:"enabled"`
 		Email   string   `yaml:"email"`
@@ -481,6 +655,10 @@ type LogsConfig struct {
 		Custom   string `yaml:"custom"`
 		Rotate   string `yaml:"rotate"`
 		Keep     string `yaml:"keep"`
+		// Log successful health-check requests (failures always log), per
+		// AI.md PART 13; default false so Docker healthchecks do not flood
+		// access.log
+		LogHealthChecks bool `yaml:"log_health_checks"`
 	} `yaml:"access"`
 	Server struct {
 		Filename string `yaml:"filename"`
@@ -520,6 +698,28 @@ type LogsConfig struct {
 	} `yaml:"debug"`
 }
 
+// I2PConfig represents I2P eepsite configuration per AI.md PART 31.2.
+// OPT-IN: the eepsite is created only when Enabled is true; no provider is
+// contacted and no port is allocated while it is false.
+type I2PConfig struct {
+	// OPT-IN: disabled by default. Unlike Tor (auto-enabled when the binary
+	// is found), the eepsite is created only when this is true.
+	Enabled bool `yaml:"enabled"`
+	// Path to the i2pd binary (auto-detected if empty). Model A when found.
+	Binary string `yaml:"binary"`
+	// SAM bridge address for Model B (external I2P router). Used only when no
+	// i2pd binary is available. Default is the I2P SAMv3 default port.
+	SAMAddress string `yaml:"sam_address"`
+	// Virtual port the eepsite listens on (what users connect to)
+	VirtualPort int `yaml:"virtual_port"`
+	// Hops per tunnel (0-7; higher = more anonymity, more latency)
+	InboundLength  int `yaml:"inbound_length"`
+	OutboundLength int `yaml:"outbound_length"`
+	// Parallel tunnels (1-16; higher = more resilient)
+	InboundQuantity  int `yaml:"inbound_quantity"`
+	OutboundQuantity int `yaml:"outbound_quantity"`
+}
+
 // TorConfig represents Tor configuration
 // Per AI.md PART 32: "Auto-enabled if tor binary is installed - no enable flag needed"
 type TorConfig struct {
@@ -528,6 +728,11 @@ type TorConfig struct {
 	Enabled bool `yaml:"-"`
 	// Set at runtime when Tor starts
 	OnionAddress string `yaml:"-"`
+
+	// Contact email for .onion responses (security.txt, contact pages, error pages)
+	// Per AI.md PART 12 Tor Hidden Service Configuration.
+	// If unset, no email is shown on Tor responses — never fall back to the clearnet email
+	ContactEmail string `yaml:"contact_email"`
 
 	// Binary path (empty = auto-detect)
 	Binary string `yaml:"binary"`
@@ -592,9 +797,9 @@ type WebUINotifyConfig struct {
 type EmailConfig struct {
 	// Enabled is auto-set based on SMTP availability (no manual toggle)
 	// Computed, not stored
-	Enabled bool                `yaml:"-"`
-	SMTP    SMTPConfig          `yaml:"smtp"`
-	From    EmailFromConfig     `yaml:"from"`
+	Enabled bool            `yaml:"-"`
+	SMTP    SMTPConfig      `yaml:"smtp"`
+	From    EmailFromConfig `yaml:"from"`
 	// Per-event email settings (override defaults) — AI.md PART 17
 	Events EmailEventsConfig `yaml:"events"`
 }
@@ -694,6 +899,14 @@ type SecurityHeadersConfig struct {
 	ClearSiteData ClearSiteDataConfig `yaml:"clear_site_data"`
 }
 
+// BlocklistSourceConfig describes one operator-configured blocklist feed.
+type BlocklistSourceConfig struct {
+	Name    string `yaml:"name"`
+	URL     string `yaml:"url"`
+	Type    string `yaml:"type"`
+	Enabled bool   `yaml:"enabled"`
+}
+
 // SecurityConfig represents security configuration
 type SecurityConfig struct {
 	// InstallationSecret is a per-install random secret (32 bytes, base64-encoded),
@@ -701,12 +914,28 @@ type SecurityConfig struct {
 	// the rotating {security_id} token and the KDF input for the PGP private-key
 	// encryption at rest. Never logged, never returned in any API response.
 	InstallationSecret string `yaml:"installation_secret"`
+	// InstallationSecretPrevious holds the value replaced by the most recent
+	// `--maintenance secret rotate installation_secret`. Per AI.md PART 11
+	// ("Secret Rotation") the previous secret stays valid for 7 days so
+	// in-flight {security_id} URLs still validate. Empty when never rotated.
+	InstallationSecretPrevious string `yaml:"installation_secret_previous"`
+	// InstallationSecretPreviousExpires is the RFC3339 UTC instant after which
+	// InstallationSecretPrevious is no longer accepted.
+	InstallationSecretPreviousExpires string `yaml:"installation_secret_previous_expires"`
 	// EncryptionKey is a per-install random AES-256-GCM key (32 bytes, base64-encoded),
 	// generated once on first run. Per AI.md PART 11 ("Other Project-Level Secrets") it is
 	// the canonical at-rest encryption key for ALL sensitive server data: API token hashes,
 	// security report bodies (AES fallback when no PGP keypair exists), and any future
 	// at-rest encrypted data. Never logged, never returned in any API response.
 	EncryptionKey string `yaml:"encryption_key"`
+	// EncryptionKeyPrevious holds the value replaced by the most recent
+	// `--maintenance secret rotate encryption_key`. Per AI.md PART 11
+	// ("Secret Rotation") the previous key is kept 30 days so any at-rest data
+	// not yet re-encrypted can still be decrypted. Empty when never rotated.
+	EncryptionKeyPrevious string `yaml:"encryption_key_previous"`
+	// EncryptionKeyPreviousExpires is the RFC3339 UTC instant after which
+	// EncryptionKeyPrevious is no longer used as a decryption fallback.
+	EncryptionKeyPreviousExpires string `yaml:"encryption_key_previous_expires"`
 	// CSRF protection configuration.
 	CSRF CSRFConfig `yaml:"csrf"`
 	// Headers holds the security response headers and Sec-Fetch/Clear-Site-Data controls.
@@ -729,6 +958,8 @@ type SecurityConfig struct {
 	Allowlist []AllowlistEntry `yaml:"allowlist"`
 	// BlockedIPs lists IPs/prefixes that are always rejected (403) before any other check.
 	BlockedIPs []string `yaml:"blocked_ips"`
+	// Blocklists adds or overrides daily IP, CIDR, and domain feeds.
+	Blocklists []BlocklistSourceConfig `yaml:"blocklists"`
 }
 
 // AuthConfig represents external authentication configuration per AI.md PART 31
@@ -781,8 +1012,12 @@ type PagesConfig struct {
 		Content string `yaml:"content"`
 	} `yaml:"privacy"`
 	Contact struct {
-		Enabled bool   `yaml:"enabled"`
-		Email   string `yaml:"email"`
+		Enabled        bool   `yaml:"enabled"`
+		Email          string `yaml:"email"`
+		Captcha        string `yaml:"captcha"`
+		CaptchaSiteKey string `yaml:"captcha_site_key"`
+		CaptchaSecret  string `yaml:"captcha_secret_key"`
+		SuccessMessage string `yaml:"success_message"`
 	} `yaml:"contact"`
 	Help struct {
 		Enabled bool   `yaml:"enabled"`
@@ -880,6 +1115,8 @@ type PrivacyConfig struct {
 	Cookies PrivacyCookies `yaml:"cookies"`
 	// ThirdParty lists third-party services that receive user data (if any).
 	ThirdParty PrivacyThirdParty `yaml:"third_party"`
+	// Content holds the Markdown body of each privacy-page section.
+	Content PrivacyContent `yaml:"content"`
 }
 
 // PrivacyDataPolicy controls data handling and CCPA compliance.
@@ -888,6 +1125,22 @@ type PrivacyDataPolicy struct {
 	// Default false. The MIT license permits downstream operators to set
 	// this true if they sell data — the UI adjusts accordingly.
 	Sold bool `yaml:"sold"`
+	// StoredOnServer reports that all user data lives on this server rather
+	// than in third-party cloud services. Default true.
+	StoredOnServer bool `yaml:"stored_on_server"`
+	// Sharing enumerates the conditions under which data may reach a third party.
+	Sharing []PrivacySharingCondition `yaml:"sharing"`
+}
+
+// PrivacySharingCondition describes one condition under which user data may be
+// shared with a third party, shown on the privacy page.
+type PrivacySharingCondition struct {
+	// Condition is the trigger name: analytics, email, user_initiated.
+	Condition string `yaml:"condition"`
+	// When describes the circumstances in which sharing occurs.
+	When string `yaml:"when"`
+	// Data describes what is shared.
+	Data string `yaml:"data"`
 }
 
 // PrivacyRetention describes how long data is kept and which rights apply.
@@ -905,24 +1158,62 @@ type PrivacyRetention struct {
 // shown in place of Message when Data.Sold is true (dynamic privacy messaging
 // per AI.md PART 12). Empty values fall back to the translated default.
 type PrivacyConsent struct {
+	// ShowUntilAcknowledged keeps the banner on every frontend page until the
+	// visitor accepts or declines.
+	ShowUntilAcknowledged bool `yaml:"show_until_acknowledged"`
+	// DefaultEnabled selects the opt-out model: non-essential cookies start
+	// enabled and the visitor must Decline to disable them.
+	DefaultEnabled bool `yaml:"default_enabled"`
 	// Message is the consent banner text when Data.Sold is false.
 	Message string `yaml:"message"`
 	// MessageIfSold is the consent banner text when Data.Sold is true.
 	MessageIfSold string `yaml:"message_if_sold"`
+	// Policy is the privacy-policy link rendered in the banner.
+	Policy PrivacyConsentPolicy `yaml:"policy"`
+	// Buttons holds the banner button labels.
+	Buttons PrivacyConsentButtons `yaml:"buttons"`
+	// Position places the banner: bottom or top.
+	Position string `yaml:"position"`
+	// ShowPreferences renders the granular "Manage Preferences" link.
+	ShowPreferences bool `yaml:"show_preferences"`
+	// PreferencesText is the label of the "Manage Preferences" link.
+	PreferencesText string `yaml:"preferences_text"`
+}
+
+// PrivacyConsentPolicy is the privacy-policy link shown in the consent banner.
+type PrivacyConsentPolicy struct {
+	Text string `yaml:"text"`
+	URL  string `yaml:"url"`
+}
+
+// PrivacyConsentButtons holds the consent banner button labels.
+type PrivacyConsentButtons struct {
+	Decline string `yaml:"decline"`
+	Accept  string `yaml:"accept"`
 }
 
 // PrivacyCookies controls which cookie categories are advertised on the
 // privacy page. Essential is always shown; Preferences and Analytics are
 // shown only when enabled.
 type PrivacyCookies struct {
-	Essential   PrivacyCookieCategory `yaml:"essential"`
-	Preferences PrivacyCookieCategory `yaml:"preferences"`
-	Analytics   PrivacyCookieCategory `yaml:"analytics"`
+	Essential   PrivacyCookieCategory  `yaml:"essential"`
+	Preferences PrivacyCookieCategory  `yaml:"preferences"`
+	Analytics   PrivacyAnalyticsCookie `yaml:"analytics"`
 }
 
-// PrivacyCookieCategory represents one cookie category's enabled state.
+// PrivacyCookieCategory represents one cookie category's enabled state and the
+// description shown for it on the privacy page.
 type PrivacyCookieCategory struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled     bool   `yaml:"enabled"`
+	Description string `yaml:"description"`
+}
+
+// PrivacyAnalyticsCookie is the analytics cookie category, whose description
+// gains a suffix that depends on whether data may be sold.
+type PrivacyAnalyticsCookie struct {
+	PrivacyCookieCategory    `yaml:",inline"`
+	DescriptionSuffixNotSold string `yaml:"description_suffix_not_sold"`
+	DescriptionSuffixSold    string `yaml:"description_suffix_sold"`
 }
 
 // PrivacyThirdParty lists third-party services that receive user data.
@@ -938,6 +1229,17 @@ type PrivacyThirdPartyService struct {
 	PolicyURL string `yaml:"policy_url"`
 }
 
+// PrivacyContent holds the Markdown body of each privacy-page section, with
+// sold / not-sold variants of the data-usage section.
+type PrivacyContent struct {
+	DataCollection string `yaml:"data_collection"`
+	// DataUsage is used when Data.Sold is false.
+	DataUsage string `yaml:"data_usage"`
+	// DataUsageIfSold is used when Data.Sold is true.
+	DataUsageIfSold string `yaml:"data_usage_if_sold"`
+	DataSecurity    string `yaml:"data_security"`
+}
+
 // ConsentMessage returns the consent banner text for the current data-sold
 // state: MessageIfSold when data may be sold (and set), otherwise Message.
 func (p PrivacyConfig) ConsentMessage() string {
@@ -945,6 +1247,38 @@ func (p PrivacyConfig) ConsentMessage() string {
 		return p.Consent.MessageIfSold
 	}
 	return p.Consent.Message
+}
+
+// AnalyticsDescription returns the analytics cookie description with the
+// suffix that matches the current data-sold state (AI.md PART 12).
+func (p PrivacyConfig) AnalyticsDescription() string {
+	base := p.Cookies.Analytics.Description
+	suffix := p.Cookies.Analytics.DescriptionSuffixNotSold
+	if p.Data.Sold {
+		suffix = p.Cookies.Analytics.DescriptionSuffixSold
+	}
+	if suffix == "" {
+		return base
+	}
+	if base == "" {
+		return suffix
+	}
+	return base + " " + suffix
+}
+
+// DataUsageContent returns the data-usage privacy-page section matching the
+// current data-sold state (AI.md PART 12).
+func (p PrivacyConfig) DataUsageContent() string {
+	if p.Data.Sold && p.Content.DataUsageIfSold != "" {
+		return p.Content.DataUsageIfSold
+	}
+	return p.Content.DataUsage
+}
+
+// IsCCPAApplicable reports whether the CCPA "Do Not Sell My Personal
+// Information" opt-out must be offered (AI.md PART 12).
+func (p PrivacyConfig) IsCCPAApplicable() bool {
+	return p.Data.Sold
 }
 
 // ActiveAnnouncements returns announcements that are currently active
@@ -1040,10 +1374,17 @@ type CacheConfig struct {
 	URL string `yaml:"url"`
 
 	// Individual connection settings (alternative to url)
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+	// ACL username (Redis 6+)
+	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
+
+	// TLS settings (for secure connections)
+	TLS bool `yaml:"tls"`
+	// TLSSkipVerify disables certificate verification (self-signed servers)
+	TLSSkipVerify bool `yaml:"tls_skip_verify"`
 
 	// Connection pool settings
 	PoolSize int `yaml:"pool_size"`
@@ -1059,13 +1400,11 @@ type CacheConfig struct {
 }
 
 // GeoIPConfig represents GeoIP configuration (uses MMDB from sapics/ip-location-db)
-// Per AI.md PART 20: GeoIP configuration
+// Per AI.md PART 19: GeoIP configuration
 type GeoIPConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// Directory for MMDB files
 	Dir string `yaml:"dir"`
-	// never, daily, weekly, monthly
-	Update string `yaml:"update"`
 	// Countries to block (ISO 3166-1 alpha-2)
 	DenyCountries []string `yaml:"deny_countries"`
 	// If set, only these countries allowed
@@ -1074,15 +1413,112 @@ type GeoIPConfig struct {
 	// deny_countries/allow_countries; empty by default, never pre-populated
 	// with a bundled regulatory list per AI.md PART 19 "Country Blocking Presets"
 	Presets map[string][]string `yaml:"presets"`
-	// Database toggles per AI.md PART 20
-	// Enable ASN lookups
+	// Which databases to download and use
+	Databases GeoIPDatabasesConfig `yaml:"databases"`
+}
+
+// GeoIPDatabasesConfig selects which ip-location-db databases are downloaded
+// and consulted. Per AI.md PART 19 there are exactly three; there is no
+// separate WHOIS database and organization data comes from the ASN database's
+// autonomous_system_organization field.
+type GeoIPDatabasesConfig struct {
+	// autonomous_system_number, autonomous_system_organization
 	ASN bool `yaml:"asn"`
-	// Enable country lookups
+	// country_code
 	Country bool `yaml:"country"`
-	// Enable city lookups (larger download)
+	// city, country_code, state1, state2, postcode, lat/lon, timezone
 	City bool `yaml:"city"`
-	// Enable WHOIS lookups
-	WHOIS bool `yaml:"whois"`
+}
+
+// NormalizeCountryCode validates and normalizes an ISO 3166-1 alpha-2 code.
+// Per AI.md PART 19 only two-letter codes are accepted; they are stored
+// uppercase. Returns an empty string when the input is not a valid code.
+func NormalizeCountryCode(code string) string {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if len(code) != 2 {
+		return ""
+	}
+	for i := 0; i < len(code); i++ {
+		if code[i] < 'A' || code[i] > 'Z' {
+			return ""
+		}
+	}
+	return code
+}
+
+// NormalizeCountryCodes normalizes a country list, dropping invalid and
+// duplicate entries. The returned slice is never nil.
+func NormalizeCountryCodes(codes []string) []string {
+	out := make([]string, 0, len(codes))
+	seen := make(map[string]bool, len(codes))
+	for _, raw := range codes {
+		code := NormalizeCountryCode(raw)
+		if code == "" || seen[code] {
+			continue
+		}
+		seen[code] = true
+		out = append(out, code)
+	}
+	return out
+}
+
+// IsValidPresetName reports whether name is usable as a preset key. Names are
+// operator-authored labels: lowercase letters, digits, hyphen, and underscore.
+func IsValidPresetName(name string) bool {
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= '0' && c <= '9':
+		case c == '-' || c == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// PresetNames returns the configured preset names in sorted order.
+func (g *GeoIPConfig) PresetNames() []string {
+	names := make([]string, 0, len(g.Presets))
+	for name := range g.Presets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Preset returns the country codes stored under name.
+// Per AI.md PART 19 a preset is never applied automatically: resolving one
+// only produces the list for the operator to review and save.
+func (g *GeoIPConfig) Preset(name string) ([]string, bool) {
+	codes, ok := g.Presets[name]
+	if !ok {
+		return nil, false
+	}
+	return append([]string(nil), codes...), true
+}
+
+// SetPreset stores codes under name, normalizing the codes first.
+// The caller persists the config afterwards; nothing is applied to
+// deny_countries or allow_countries by this call.
+func (g *GeoIPConfig) SetPreset(name string, codes []string) {
+	if g.Presets == nil {
+		g.Presets = make(map[string][]string)
+	}
+	g.Presets[name] = NormalizeCountryCodes(codes)
+}
+
+// DeletePreset removes a stored preset and reports whether it existed.
+func (g *GeoIPConfig) DeletePreset(name string) bool {
+	if _, ok := g.Presets[name]; !ok {
+		return false
+	}
+	delete(g.Presets, name)
+	return true
 }
 
 // MetricsConfig represents Prometheus-compatible metrics configuration
@@ -1095,12 +1531,44 @@ type MetricsConfig struct {
 	IncludeSystem bool `yaml:"include_system"`
 	// Include Go runtime metrics
 	IncludeRuntime bool `yaml:"include_runtime"`
-	// Bearer token for authentication (empty = no auth)
-	Token string `yaml:"token"`
+	// Root aliases /metrics and /metrics/{service} (default: true)
+	Root MetricsRootConfig `yaml:"root"`
+	// Per-service bearer token authentication
+	Auth MetricsAuthConfig `yaml:"auth"`
+	// Loki service window
+	Loki MetricsLokiConfig `yaml:"loki"`
 	// Histogram buckets for request duration (seconds)
 	DurationBuckets []float64 `yaml:"duration_buckets"`
 	// Histogram buckets for request size (bytes)
 	SizeBuckets []float64 `yaml:"size_buckets"`
+}
+
+// MetricsRootConfig gates the root /metrics alias.
+// Per AI.md PART 20: default true, because Prometheus scrapers expect /metrics.
+type MetricsRootConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// MetricsAuthConfig holds the mandatory per-service bearer tokens.
+// Per AI.md PART 20 "Authentication": there is no unauthenticated default;
+// allow_unauthenticated is a firewalled-internal-network escape hatch only.
+type MetricsAuthConfig struct {
+	AllowUnauthenticated bool                `yaml:"allow_unauthenticated"`
+	Tokens               MetricsTokensConfig `yaml:"tokens"`
+}
+
+// MetricsTokensConfig holds one bearer token per metrics service.
+// An empty token disables that service (403 with an empty body).
+type MetricsTokensConfig struct {
+	Prometheus string `yaml:"prometheus"`
+	Grafana    string `yaml:"grafana"`
+	Loki       string `yaml:"loki"`
+}
+
+// MetricsLokiConfig bounds how much recent log the loki service serves.
+type MetricsLokiConfig struct {
+	MaxEntries int    `yaml:"max_entries"`
+	MaxAge     string `yaml:"max_age"`
 }
 
 // BackupConfig represents backup configuration
@@ -1148,7 +1616,7 @@ type ComplianceConfig struct {
 // UpdateConfig represents the self-update release channel and rollout policy
 // Per AI.md PART 22: Update Configuration
 type UpdateConfig struct {
-	// Release channel: stable | beta | daily (also settable via --update branch)
+	// Release channel: stable | beta | devel (also settable via --update branch)
 	// Default: stable
 	Branch string `yaml:"branch"`
 	// Auto-install updates found by the update_check task
@@ -1223,18 +1691,13 @@ type MaintenanceNotifyConfig struct {
 
 // ImageProxyConfig represents image proxy configuration
 type ImageProxyConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	URL     string `yaml:"url"`
-	Key     string `yaml:"key"`
+	Enabled bool  `yaml:"enabled"`
+	MaxSize int64 `yaml:"max_size"`
+	Timeout int   `yaml:"timeout"`
 }
 
 // WebhookNotifyConfig holds per-transport webhook URLs for a contact role per AI.md PART 12.
-type WebhookNotifyConfig struct {
-	Telegram string `yaml:"telegram"`
-	Discord  string `yaml:"discord"`
-	Slack    string `yaml:"slack"`
-	Generic  string `yaml:"generic"`
-}
+type WebhookNotifyConfig map[string]string
 
 // ContactRoleConfig holds the email and webhooks for one contact role per AI.md PART 12.
 type ContactRoleConfig struct {
@@ -1301,7 +1764,7 @@ type CompressionConfig struct {
 	// Minimum response size to compress (bytes)
 	MinSize int `yaml:"min_size"`
 	// MIME types to compress
-	MimeTypes []string `yaml:"mime_types"`
+	MimeTypes []string `yaml:"types"`
 	// Enable gzip compression
 	Gzip bool `yaml:"gzip"`
 	// Enable Brotli compression
@@ -1345,8 +1808,10 @@ func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
 			size = size[:len(size)-2]
 		}
 	}
-	var n int64
-	fmt.Sscanf(size, "%d", &n)
+	n, err := strconv.ParseInt(size, 10, 64)
+	if err != nil {
+		return 0
+	}
 	return n * multiplier
 }
 
@@ -1385,7 +1850,7 @@ type I18nConfig struct {
 	// BCP 47 language tag (e.g., en, en-US, de)
 	DefaultLanguage string `yaml:"default_language"`
 	// List of supported languages
-	SupportedLanguages []string `yaml:"supported_languages"`
+	SupportedLanguages []string `yaml:"supported"`
 	// Detect from Accept-Language header
 	AutoDetect bool `yaml:"auto_detect"`
 	// Show language selector in UI
@@ -1532,6 +1997,11 @@ type EngineConfig struct {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
+		Data: DataConfig{
+			SecurityDir: filepath.Join(GetDataDir(), "security"),
+			CVE:         CVEDataConfig{Source: "https://services.nvd.nist.gov/rest/json/cves/2.0", FilterByCPE: false},
+			Trivy:       TrivyDataConfig{Enabled: false, Source: "ghcr.io/aquasecurity/trivy-db:2"},
+		},
 		Server: ServerConfig{
 			Title:       "Scour",
 			Description: "Privacy-Respecting Metasearch Engine",
@@ -1552,12 +2022,27 @@ func DefaultConfig() *Config {
 			User:  "search",
 			Group: "search",
 			SSL: SSLConfig{
-				Enabled: false,
-				AutoTLS: false,
+				Enabled:    false,
+				AutoTLS:    false,
+				MinVersion: "TLS1.2",
+			},
+			// Per AI.md PART 6 "Debug Configuration": these apply only while
+			// the debug flag is on, never because the mode is development.
+			Debug: DebugConfig{
+				Pprof:                true,
+				LogQueries:           true,
+				LogCache:             true,
+				LogBodies:            false,
+				MaxBodyLogSize:       "10KB",
+				BlockProfileRate:     1,
+				MutexProfileFraction: 1,
+				RuntimeEndpoints:     true,
 			},
 			// Operator/server bearer token. Treat like a root password.
 			// SHA-256 compared against Authorization: Bearer header.
-			Token: generateSecret(),
+			Token:  generateSecret(),
+			Tokens: OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y", IdlePurgeDays: 0},
+			MCP:    MCPConfig{Enabled: true},
 			Branding: BrandingConfig{
 				Title:        "Scour",
 				Tagline:      "Privacy-respecting metasearch",
@@ -1575,11 +2060,12 @@ func DefaultConfig() *Config {
 			Logs: LogsConfig{
 				Level: "warn",
 				Access: struct {
-					Filename string `yaml:"filename"`
-					Format   string `yaml:"format"`
-					Custom   string `yaml:"custom"`
-					Rotate   string `yaml:"rotate"`
-					Keep     string `yaml:"keep"`
+					Filename        string `yaml:"filename"`
+					Format          string `yaml:"format"`
+					Custom          string `yaml:"custom"`
+					Rotate          string `yaml:"rotate"`
+					Keep            string `yaml:"keep"`
+					LogHealthChecks bool   `yaml:"log_health_checks"`
 				}{
 					Filename: "access.log",
 					Format:   "apache",
@@ -1665,6 +2151,17 @@ func DefaultConfig() *Config {
 				NumIntroPoints:            3,
 				VirtualPort:               80,
 			},
+			// Per AI.md PART 31.2: I2P is OPT-IN and disabled by default
+			I2P: I2PConfig{
+				Enabled:          false,
+				Binary:           "",
+				SAMAddress:       "127.0.0.1:7656",
+				VirtualPort:      80,
+				InboundLength:    3,
+				OutboundLength:   3,
+				InboundQuantity:  5,
+				OutboundQuantity: 5,
+			},
 			Notifications: NotificationsConfig{
 				WebUI: WebUINotifyConfig{
 					Position: "top-right",
@@ -1694,6 +2191,7 @@ func DefaultConfig() *Config {
 			},
 			Security: SecurityConfig{
 				InstallationSecret: generateBase64Secret(),
+				EncryptionKey:      generateBase64Secret(),
 				CSRF: CSRFConfig{
 					Enabled:    true,
 					CookieName: "csrf_token",
@@ -1770,10 +2268,16 @@ func DefaultConfig() *Config {
 					Content: "",
 				},
 				Contact: struct {
-					Enabled bool   `yaml:"enabled"`
-					Email   string `yaml:"email"`
+					Enabled        bool   `yaml:"enabled"`
+					Email          string `yaml:"email"`
+					Captcha        string `yaml:"captcha"`
+					CaptchaSiteKey string `yaml:"captcha_site_key"`
+					CaptchaSecret  string `yaml:"captcha_secret_key"`
+					SuccessMessage string `yaml:"success_message"`
 				}{
-					Enabled: true,
+					Enabled:        true,
+					Captcha:        "simple",
+					SuccessMessage: "Thank you for your message. We'll respond soon.",
 				},
 				Help: struct {
 					Enabled bool   `yaml:"enabled"`
@@ -1819,11 +2323,123 @@ func DefaultConfig() *Config {
 			// categories advertised on the privacy page. Export/deletion rights
 			// default off (no user accounts by default) and the consent
 			// messages / retention period fall back to translated strings.
+			// Per AI.md PART 12 "Privacy Settings": data is never sold by default,
+			// always stored on this server, and the consent banner is opt-out.
 			Privacy: PrivacyConfig{
+				Data: PrivacyDataPolicy{
+					Sold:           false,
+					StoredOnServer: true,
+					Sharing: []PrivacySharingCondition{
+						{
+							Condition: "analytics",
+							When:      "Tracking configured (server.tracking.type set) AND user consents",
+							Data:      "Anonymized: page views, browser type, country",
+						},
+						{
+							Condition: "email",
+							When:      "SMTP configured for sending emails",
+							Data:      "Email address, message content",
+						},
+						{
+							Condition: "user_initiated",
+							When:      "User explicitly shares content (social buttons, exports)",
+							Data:      "Whatever user chooses to share",
+						},
+					},
+				},
+				Retention: PrivacyRetention{
+					Period:            "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months.",
+					ExportAvailable:   true,
+					DeletionAvailable: true,
+				},
+				Consent: PrivacyConsent{
+					ShowUntilAcknowledged: true,
+					DefaultEnabled:        true,
+					Message:               "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data is stored on our servers and is never sold.",
+					MessageIfSold:         "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data may be shared with or sold to third parties as described in our Privacy Policy.",
+					Policy: PrivacyConsentPolicy{
+						Text: "Privacy Policy",
+						URL:  "/server/privacy",
+					},
+					Buttons: PrivacyConsentButtons{
+						Decline: "Decline",
+						Accept:  "I Agree",
+					},
+					Position:        "bottom",
+					ShowPreferences: true,
+					PreferencesText: "Manage Preferences",
+				},
 				Cookies: PrivacyCookies{
-					Essential:   PrivacyCookieCategory{Enabled: true},
-					Preferences: PrivacyCookieCategory{Enabled: true},
-					Analytics:   PrivacyCookieCategory{Enabled: true},
+					Essential: PrivacyCookieCategory{
+						Enabled:     true,
+						Description: "Required for the site to function. Includes security tokens (CSRF) and site preferences. These cookies are strictly necessary and cannot be disabled.",
+					},
+					Preferences: PrivacyCookieCategory{
+						Enabled:     true,
+						Description: "Remember your settings such as theme (dark/light), language, and UI preferences. Disabling will reset to defaults on each visit.",
+					},
+					Analytics: PrivacyAnalyticsCookie{
+						PrivacyCookieCategory: PrivacyCookieCategory{
+							Enabled:     true,
+							Description: "Help us understand how visitors use our site to improve the experience.",
+						},
+						DescriptionSuffixNotSold: "Analytics data is anonymized and never sold.",
+						DescriptionSuffixSold:    "Analytics data may be shared with third parties.",
+					},
+				},
+				ThirdParty: PrivacyThirdParty{
+					Services: []PrivacyThirdPartyService{},
+				},
+				Content: PrivacyContent{
+					DataCollection: `**We collect only what is necessary to provide our service:**
+
+**Usage Information (with consent):**
+- Pages visited and features used
+- Browser type and device information
+- Approximate location (country/region from IP, not precise)
+
+**Technical Information:**
+- IP address (for security and abuse prevention)
+- API token identifiers (hashed, never stored in plain text)
+
+**We do NOT collect:**
+- Payment information (unless explicitly required by the service)
+- Precise location data
+- Data from other websites or apps
+`,
+					DataUsage: `**Your data is used solely to:**
+
+- **Provide the service:** Authentication, core functionality
+- **Improve the experience:** Performance optimization, bug fixes, feature improvements
+- **Ensure security:** Prevent abuse, detect fraud, protect your account
+- **Communicate:** Service updates, security alerts, and (with consent) product news
+
+**Your data is NEVER:**
+- Sold to third parties
+- Used for targeted advertising
+- Shared without your explicit consent (except as required by law)
+`,
+					DataUsageIfSold: `**Your data may be used to:**
+
+- **Provide the service:** Authentication, core functionality
+- **Improve the experience:** Performance optimization, bug fixes, feature improvements
+- **Ensure security:** Prevent abuse, detect fraud, protect your account
+- **Communicate:** Service updates, security alerts, and (with consent) product news
+- **Third-party sharing:** Your data may be shared with or sold to third parties for analytics, advertising, or other purposes as described below
+
+**Your rights:**
+- You can opt out of data sales via your account privacy settings
+- You can request deletion of your data at any time
+- See "Your Rights" section below for details
+`,
+					DataSecurity: `**How we protect your data:**
+
+- All data is stored on our servers (not third-party cloud services unless specified)
+- API tokens are stored as SHA-256 hashes (never in plain text)
+- All connections are encrypted (HTTPS/TLS)
+- Regular security audits and updates
+- Access controls and audit logging for operator actions
+`,
 				},
 			},
 			// Scheduler is ALWAYS RUNNING per AI.md PART 19
@@ -1847,27 +2463,39 @@ func DefaultConfig() *Config {
 				PoolSize: 10,
 				MinIdle:  2,
 				Timeout:  "5s",
-				Prefix:   "apimgr:",
+				Prefix:   "search:",
 				TTL:      3600,
 			},
-			// Per AI.md PART 19: GeoIP enabled by default; dir resolved at runtime; all databases on.
+			// Per AI.md PART 19: GeoIP enabled by default; dir resolved at runtime;
+			// all three databases on; no country blocking and no bundled presets.
 			GeoIP: GeoIPConfig{
-				Enabled: true,
-				Dir:     "",
-				Update:  "weekly",
-				ASN:     true,
-				Country: true,
-				City:    true,
-				WHOIS:   true,
+				Enabled:          true,
+				Dir:              "",
+				DenyCountries:    []string{},
+				AllowedCountries: []string{},
+				Presets:          map[string][]string{},
+				Databases: GeoIPDatabasesConfig{
+					ASN:     true,
+					Country: true,
+					City:    true,
+				},
 			},
+			// Per AI.md PART 20: metrics are always built in; the root /metrics
+			// alias defaults to true because Prometheus scrapers expect it, and
+			// every service token starts empty (= that service is disabled).
 			Metrics: MetricsConfig{
-				Enabled:       false,
-				Endpoint:      "/server/metrics",
-				IncludeSystem: true,
-				Token:         "",
+				Enabled:        true,
+				Endpoint:       "/server/metrics",
+				IncludeSystem:  true,
+				IncludeRuntime: true,
+				Root:           MetricsRootConfig{Enabled: true},
+				Auth:           MetricsAuthConfig{AllowUnauthenticated: false},
+				Loki:           MetricsLokiConfig{MaxEntries: 1000, MaxAge: "1h"},
 			},
 			ImageProxy: ImageProxyConfig{
-				Enabled: false,
+				Enabled: true,
+				MaxSize: 10 << 20,
+				Timeout: 30,
 			},
 			Contact: ContactConfig{},
 			SEO: SEOConfig{
@@ -1893,7 +2521,8 @@ func DefaultConfig() *Config {
 			},
 			Compression: CompressionConfig{
 				Enabled: true,
-				Level:   6,
+				// AI.md PART 12 "Response Compression": default level 5
+				Level: 5,
 				// Only compress responses > 1KB
 				MinSize: 1024,
 				MimeTypes: []string{
@@ -2120,12 +2749,27 @@ func DefaultConfig() *Config {
 }
 
 // Load loads configuration from file
+// NormalizeUpdateBranch returns the canonical update channel. Unknown and
+// empty values fall back to stable, matching the update manager default.
+func NormalizeUpdateBranch(branch string) string {
+	switch strings.ToLower(strings.TrimSpace(branch)) {
+	case "stable", "":
+		return "stable"
+	case "beta":
+		return "beta"
+	case "devel", "daily", "rolling", "dev", "development":
+		return "devel"
+	default:
+		return "stable"
+	}
+}
+
 func Load(path string) (*Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer closeutil.Close(file)
 
 	// Warn on unknown fields but never crash — AI.md PART 12: never crash on config
 	var strictCheck Config
@@ -2146,10 +2790,30 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	cfg.Server.Update.Branch = NormalizeUpdateBranch(cfg.Server.Update.Branch)
+
+	// Merge the root-level `tor:` block (AI.md PART 12) into Server.Tor so
+	// consumers keep reading cfg.Server.Tor regardless of where the operator
+	// wrote the hidden-service settings.
+	cfg.applyTorOverlay()
+
 	// Store path for reload
 	cfg.configPath = path
 
 	return &cfg, nil
+}
+
+// applyTorOverlay folds the root-level `tor:` overlay (AI.md PART 12 "Tor
+// Hidden Service Configuration") into Server.Tor. Overlay values win only
+// when set — an empty onion_address or contact_email never clears an
+// operator-provided server.tor value.
+func (c *Config) applyTorOverlay() {
+	if c.TorOverlay.OnionAddress != "" {
+		c.Server.Tor.OnionAddress = c.TorOverlay.OnionAddress
+	}
+	if c.TorOverlay.ContactEmail != "" {
+		c.Server.Tor.ContactEmail = c.TorOverlay.ContactEmail
+	}
 }
 
 // Save saves configuration to file with comments per AI.md config-rules.md
@@ -2174,7 +2838,9 @@ func (c *Config) Save(path string) error {
 	if err := enc.Encode(&node); err != nil {
 		return err
 	}
-	enc.Close()
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("finish YAML encoding: %w", err)
+	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(path)
@@ -2202,6 +2868,7 @@ func addConfigComments(node *yaml.Node) {
 		"server":  "Server configuration",
 		"search":  "Search settings and behavior",
 		"engines": "Search engine configurations",
+		"data":    "External security database sources",
 	}
 
 	// Subsection comments under server
@@ -2211,9 +2878,9 @@ func addConfigComments(node *yaml.Node) {
 		"port":             "HTTP port (default: 64580)",
 		"https_port":       "HTTPS port for dual-port mode (optional)",
 		"address":          "Listen address ([::]  for all interfaces)",
-		"mode":             "Application mode: production or development",
+		"mode":             "Application mode: production, development, or debug",
 		"secret_key":       "Secret key for session encryption (auto-generated)",
-		"base_url":         "Public URL for this instance",
+		"baseurl":          "URL path prefix for all routes (default: / )",
 		"ssl":              "SSL/TLS configuration",
 		"token":            "Operator bearer token (server.token). Auto-generated on first run.",
 		"branding":         "Branding and appearance",
@@ -2248,6 +2915,8 @@ func addConfigComments(node *yaml.Node) {
 		"group":            "System group the binary runs as after privilege drop",
 		"database":         "Database driver and connection settings",
 		"maintenance":      "Maintenance mode self-healing configuration",
+		"privacy":          "Privacy policy, cookie consent banner, and privacy page content",
+		"debug":            "Debug-gated settings (active only with --debug, DEBUG env, or mode: debug)",
 	}
 
 	// Subsection comments under security
@@ -2368,9 +3037,10 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 
 	// PORT — server port
 	if env.Port != "" {
-		var port int
-		fmt.Sscanf(env.Port, "%d", &port)
-		if port > 0 {
+		port, err := strconv.Atoi(env.Port)
+		if err != nil {
+			slog.Warn("invalid PORT environment override; keeping configured port", "error", err)
+		} else if port > 0 {
 			c.Server.Port = port
 		}
 	}
@@ -2470,6 +3140,14 @@ func generateBase64Secret() string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
+// GenerateBase64Secret returns a fresh 32-byte crypto/rand secret,
+// base64-encoded — the same material generateBase64Secret produces on first
+// run. Exported for `--maintenance secret rotate` (AI.md PART 11 "Secret
+// Rotation"), which must produce keys in the identical format.
+func GenerateBase64Secret() string {
+	return generateBase64Secret()
+}
+
 // GetRandomPort returns a random port in the 64xxx range (64000-64999)
 // Per spec, port 0 means random port in 64xxx range to avoid conflicts
 func GetRandomPort() int {
@@ -2558,18 +3236,20 @@ func Initialize() (*Config, error) {
 			cfg.Server.Port = GetRandomPort()
 		}
 
-		// Save config with first-run overrides and resolved port applied
-		if err := cfg.Save(configPath); err != nil {
-			// Non-fatal for first-run flow, but the operator must know the
-			// resolved config (including the chosen port) was not persisted.
-			slog.Warn("Failed to save config with first-run overrides", "path", configPath, "error", err)
-		}
-
 		// Mark as first run - banner will show setup token
 		// Per AI.md PART 14: Admin credentials NOT auto-generated
 		// User creates admin via setup wizard with setup token
 		cfg.firstRun = true
 	}
+	warnings := cfg.ValidateAndApplyDefaults()
+	LogValidationWarnings(warnings)
+	if created || len(warnings) > 0 {
+		if err := cfg.Save(configPath); err != nil {
+			return nil, fmt.Errorf("failed to persist initialized configuration: %w", err)
+		}
+	}
+
+	normalizeHTTPSMode(cfg)
 
 	// Apply --debug CLI flag state recorded before config was loaded
 	if debugOverride {
@@ -2579,12 +3259,24 @@ func Initialize() (*Config, error) {
 	return cfg, nil
 }
 
+// normalizeHTTPSMode enforces AI.md PART 15's HTTPS rules for dual ports and
+// the single-port 443 exception.
+func normalizeHTTPSMode(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	if cfg.Server.IsDualPortMode() || (cfg.Server.Port == 443 && cfg.Server.HTTPSPort == 0) {
+		cfg.Server.SSL.Enabled = true
+	}
+}
+
 // IsDevelopment returns true if in development mode
 func (c *Config) IsDevelopment() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	mode := c.Server.Mode
-	return mode == "development" || mode == "dev"
+	// Per AI.md PART 6 mode shortcuts: dev, devel, development
+	mode := strings.ToLower(strings.TrimSpace(c.Server.Mode))
+	return mode == "development" || mode == "devel" || mode == "dev"
 }
 
 // IsProduction returns true if in production mode
@@ -2593,12 +3285,21 @@ func (c *Config) IsProduction() bool {
 }
 
 // IsDebug returns true if debug mode is enabled.
-// Per AI.md PART 6: Priority is --debug CLI flag > DEBUG env var > default false.
-// c.debugEnabled is set by the --debug flag; the env var is the fallback.
+// Per AI.md PART 6: Priority is --debug CLI flag > DEBUG env var (explicitly
+// set, truthy OR falsy) > MODE=debug default > off. c.debugEnabled is set by
+// the --debug flag, so it wins over both of the lower-priority sources.
 func (c *Config) IsDebug() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.debugEnabled || IsTruthy(os.Getenv("DEBUG"))
+	if c.debugEnabled {
+		return true
+	}
+	// LookupEnv distinguishes "explicitly set" from "unset": an explicit
+	// DEBUG=false turns debug off even under MODE=debug
+	if v, set := os.LookupEnv("DEBUG"); set {
+		return IsTruthy(v)
+	}
+	return strings.EqualFold(strings.TrimSpace(c.Server.Mode), "debug")
 }
 
 // Sanitized returns a copy of the config with all sensitive values redacted.
@@ -2707,8 +3408,12 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 	}
 
 	// Mode validation
+	// Per AI.md PART 6: accepted values are the mode shortcuts
+	// dev/devel/development, prod/production, and debug
 	mode := strings.ToLower(c.Server.Mode)
-	if mode != "production" && mode != "development" && mode != "dev" && mode != "" {
+	switch mode {
+	case "production", "prod", "development", "devel", "dev", "debug", "":
+	default:
 		warnings = append(warnings, ValidationWarning{
 			Field:   "server.mode",
 			Message: fmt.Sprintf("Unknown mode '%s', using production", c.Server.Mode),
@@ -2787,9 +3492,45 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		}
 	}
 
-	// GeoIP configuration - just ensure dir is set
+	// GeoIP configuration - ensure dir is set and country lists are canonical
 	if c.Server.GeoIP.Enabled && c.Server.GeoIP.Dir == "" {
 		c.Server.GeoIP.Dir = GetGeoIPDir()
+	}
+	// Per AI.md PART 19: ISO 3166-1 alpha-2 codes only; invalid entries are
+	// dropped with a warning so a typo never silently blocks or unblocks traffic
+	if dropped := len(c.Server.GeoIP.DenyCountries); dropped > 0 {
+		c.Server.GeoIP.DenyCountries = NormalizeCountryCodes(c.Server.GeoIP.DenyCountries)
+		if len(c.Server.GeoIP.DenyCountries) != dropped {
+			warnings = append(warnings, ValidationWarning{
+				Field:   "server.geoip.deny_countries",
+				Message: "Invalid or duplicate country codes removed (ISO 3166-1 alpha-2 only)",
+				Default: c.Server.GeoIP.DenyCountries,
+			})
+		}
+	}
+	if dropped := len(c.Server.GeoIP.AllowedCountries); dropped > 0 {
+		c.Server.GeoIP.AllowedCountries = NormalizeCountryCodes(c.Server.GeoIP.AllowedCountries)
+		if len(c.Server.GeoIP.AllowedCountries) != dropped {
+			warnings = append(warnings, ValidationWarning{
+				Field:   "server.geoip.allow_countries",
+				Message: "Invalid or duplicate country codes removed (ISO 3166-1 alpha-2 only)",
+				Default: c.Server.GeoIP.AllowedCountries,
+			})
+		}
+	}
+	// Presets are operator-authored name -> []code lists; normalize their codes
+	// and drop entries whose name is not a usable config key
+	for name, codes := range c.Server.GeoIP.Presets {
+		if !IsValidPresetName(name) {
+			delete(c.Server.GeoIP.Presets, name)
+			warnings = append(warnings, ValidationWarning{
+				Field:   "server.geoip.presets",
+				Message: fmt.Sprintf("Preset name %q is invalid (a-z, 0-9, hyphen, underscore); entry removed", name),
+				Default: nil,
+			})
+			continue
+		}
+		c.Server.GeoIP.Presets[name] = NormalizeCountryCodes(codes)
 	}
 
 	// Tor: Per AI.md PART 32, auto-enabled at runtime if binary found
@@ -2806,10 +3547,10 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 			warnings = append(warnings, ValidationWarning{
 				Field:   "server.compression.level",
 				Message: fmt.Sprintf("Invalid compression level %d, using default", c.Server.Compression.Level),
-				Default: 6,
+				Default: 5,
 			})
 		}
-		c.Server.Compression.Level = 6
+		c.Server.Compression.Level = 5
 	}
 
 	// Engines validation

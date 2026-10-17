@@ -230,35 +230,6 @@ func (r *mmdbReader) LookupCity(ip net.IP) (city, region, postal string, lat, lo
 	return
 }
 
-// LookupWHOIS returns registrant org and network range for an IP.
-// Per AI.md PART 19: WHOIS database support via ip-location-db
-// geo-whois-asn-country dataset (ASN org often represents the registrant).
-func (r *mmdbReader) LookupWHOIS(ip net.IP) (registrantOrg, registrantNet string) {
-	m := r.lookupRecord(ip)
-	if m == nil {
-		return
-	}
-	for _, k := range []string{
-		"autonomous_system_organization",
-		"as_org",
-		"organization",
-		"org",
-		"name",
-	} {
-		if v := asString(m, k); v != "" {
-			registrantOrg = v
-			break
-		}
-	}
-	for _, k := range []string{"network", "range", "prefix"} {
-		if v := asString(m, k); v != "" {
-			registrantNet = v
-			break
-		}
-	}
-	return
-}
-
 // Close releases the underlying reader.
 func (r *mmdbReader) Close() {
 	r.mu.Lock()

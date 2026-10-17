@@ -124,6 +124,7 @@ func TestPathsEnsureDirs(t *testing.T) {
 	p := &Paths{
 		ConfigDir:   "/tmp/paths-test-config",
 		DataDir:     "/tmp/paths-test-data",
+		CacheDir:    "/tmp/paths-test-cache",
 		LogDir:      "/tmp/paths-test-logs",
 		BackupDir:   "/tmp/paths-test-backup",
 		PIDFile:     "/tmp/paths-test-search.pid",
@@ -144,6 +145,7 @@ func TestEnsureDirsError(t *testing.T) {
 	p := &Paths{
 		ConfigDir:   "/dev/null/invalid-path",
 		DataDir:     "/tmp/paths-test-data",
+		CacheDir:    "/tmp/paths-test-cache",
 		LogDir:      "/tmp/paths-test-logs",
 		BackupDir:   "/tmp/paths-test-backup",
 		PIDFile:     "/tmp/paths-test.pid",
@@ -180,6 +182,9 @@ func TestGetAllFields(t *testing.T) {
 			}
 			if p.DataDir == "" {
 				t.Error("DataDir should not be empty")
+			}
+			if p.CacheDir == "" {
+				t.Error("CacheDir should not be empty")
 			}
 			if p.LogDir == "" {
 				t.Error("LogDir should not be empty")

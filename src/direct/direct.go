@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/geoip"
 )
 
 // AnswerType represents the type of direct answer
@@ -186,6 +187,32 @@ type Answer struct {
 	Timestamp   time.Time              `json:"timestamp"`
 }
 
+// QROptions contains validated presentation settings for a full-page QR answer.
+type QROptions struct {
+	Size       int
+	Level      string
+	Foreground string
+	Background string
+	Logo       []byte
+	CSRFToken  string
+	FormAction string
+	ShortURL   string
+}
+
+type qrOptionsKeyType struct{}
+
+var qrOptionsKey = qrOptionsKeyType{}
+
+// WithQROptions adds QR presentation settings to a direct-answer context.
+func WithQROptions(ctx context.Context, options QROptions) context.Context {
+	return context.WithValue(ctx, qrOptionsKey, options)
+}
+
+func qrOptionsFromContext(ctx context.Context) QROptions {
+	options, _ := ctx.Value(qrOptionsKey).(QROptions)
+	return options
+}
+
 // langKeyType is an unexported type for the language context key.
 type langKeyType struct{}
 
@@ -243,12 +270,29 @@ type Manager struct {
 	pattern  *regexp.Regexp
 }
 
+type geoIPLookupKeyType struct{}
+
+var geoIPLookupKey = geoIPLookupKeyType{}
+
+// WithGeoIPLookup adds the server's local GeoIP database to a direct-answer request.
+func WithGeoIPLookup(ctx context.Context, lookup *geoip.Lookup) context.Context {
+	return context.WithValue(ctx, geoIPLookupKey, lookup)
+}
+
+func geoIPLookupFromContext(ctx context.Context) *geoip.Lookup {
+	lookup, _ := ctx.Value(geoIPLookupKey).(*geoip.Lookup)
+	if lookup == nil || !lookup.IsLoaded() {
+		return nil
+	}
+	return lookup
+}
+
 // NewManager creates a new direct answer manager
 func NewManager() *Manager {
 	m := &Manager{
 		handlers: make(map[AnswerType]Handler),
 		// Pattern to match type:term or type: term (space after colon allowed)
-		pattern: regexp.MustCompile(`^([a-z]+):\s*(.+)$`),
+		pattern: regexp.MustCompile(`(?i)^([a-z]+):\s*(.+)$`),
 	}
 
 	// Register all handlers
@@ -314,6 +358,15 @@ func (m *Manager) Register(h Handler) {
 	}
 }
 
+func (m *Manager) SetDirectorySearcher(searcher DirectorySearcher) {
+	if directorySearcherOverride != nil {
+		searcher = directorySearcherOverride
+	}
+	if handler, ok := m.handlers[AnswerTypeDirectory].(*DirectoryHandler); ok {
+		handler.SetSearcher(searcher)
+	}
+}
+
 // Parse checks if query matches direct answer syntax and returns type and term
 // Returns empty strings if not a direct answer query
 func (m *Manager) Parse(query string) (AnswerType, string) {
@@ -332,6 +385,9 @@ func (m *Manager) Parse(query string) (AnswerType, string) {
 	}
 	if strings.HasPrefix(lowerQuery, "rules:") && strings.TrimSpace(query[len("rules:"):]) == "" {
 		return AnswerTypeRules, ""
+	}
+	if strings.HasPrefix(lowerQuery, "slang:") && strings.TrimSpace(query[len("slang:"):]) == "" {
+		return AnswerTypeSlang, ""
 	}
 
 	matches := m.pattern.FindStringSubmatch(query)

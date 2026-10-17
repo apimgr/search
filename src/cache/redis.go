@@ -50,7 +50,7 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 			PoolSize: 10,
 			MinIdle:  2,
 			Timeout:  5 * time.Second,
-			Prefix:   "apimgr:",
+			Prefix:   "search:",
 		}
 	}
 
@@ -195,8 +195,7 @@ func (c *RedisCache) Stats(ctx context.Context) (*Stats, error) {
 		// Parse used_memory from INFO output
 		// Format: "used_memory:12345\r\n"
 		var memUsed int64
-		fmt.Sscanf(info, "# Memory\r\nused_memory:%d", &memUsed)
-		if memUsed > 0 {
+		if _, err := fmt.Sscanf(info, "# Memory\r\nused_memory:%d", &memUsed); err == nil && memUsed > 0 {
 			stats.MemoryUsed = memUsed
 		}
 	}

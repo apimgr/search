@@ -83,7 +83,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "gm", Name: "Google Maps", URL: "https://www.google.com/maps/search/{query}", Category: "maps", Aliases: []string{"gmaps", "googlemaps"}},
 	{Shortcut: "osm", Name: "OpenStreetMap", URL: "https://www.openstreetmap.org/search?query={query}", Category: "maps", Aliases: []string{"openstreetmap"}},
 	{Shortcut: "bm", Name: "Bing Maps", URL: "https://www.bing.com/maps?q={query}", Category: "maps", Aliases: []string{"bingmaps"}},
-	{Shortcut: "apple", Name: "Apple Maps", URL: "https://maps.apple.com/?q={query}", Category: "maps", Aliases: []string{"applemaps"}},
+	{Shortcut: "applemaps", Name: "Apple Maps", URL: "https://maps.apple.com/?q={query}", Category: "maps", Aliases: []string{"apple"}},
 	{Shortcut: "here", Name: "HERE WeGo", URL: "https://wego.here.com/search/{query}", Category: "maps", Aliases: []string{"herewego"}},
 	{Shortcut: "waze", Name: "Waze", URL: "https://www.waze.com/live-map/directions?q={query}", Category: "maps"},
 	{Shortcut: "mapquest", Name: "MapQuest", URL: "https://www.mapquest.com/search/{query}", Category: "maps"},
@@ -122,7 +122,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "wsj", Name: "Wall Street Journal", URL: "https://www.wsj.com/search?query={query}", Category: "news"},
 	{Shortcut: "economist", Name: "The Economist", URL: "https://www.economist.com/search?q={query}", Category: "news"},
 	{Shortcut: "forbes", Name: "Forbes", URL: "https://www.forbes.com/search/?q={query}", Category: "news"},
-	{Shortcut: "businessinsider", Name: "Business Insider", URL: "https://www.businessinsider.com/s?q={query}", Category: "news", Aliases: []string{"bi"}},
+	{Shortcut: "businessinsider", Name: "Business Insider", URL: "https://www.businessinsider.com/s?q={query}", Category: "news"},
 
 	// ============================================================================
 	// KNOWLEDGE & ENCYCLOPEDIA
@@ -151,7 +151,7 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	{Shortcut: "tw", Name: "Twitter/X", URL: "https://twitter.com/search?q={query}", Category: "social", Aliases: []string{"twitter", "x"}},
 	{Shortcut: "mast", Name: "Mastodon", URL: "https://mastodon.social/search?q={query}", Category: "social", Aliases: []string{"mastodon"}},
-	{Shortcut: "rd", Name: "Reddit", URL: "https://www.reddit.com/search/?q={query}", Category: "social", Aliases: []string{"reddit"}},
+	{Shortcut: "r", Name: "Reddit", URL: "https://www.reddit.com/search/?q={query}", Category: "social", Aliases: []string{"reddit", "rd"}},
 	{Shortcut: "hn", Name: "Hacker News", URL: "https://hn.algolia.com/?q={query}", Category: "social", Aliases: []string{"hackernews"}},
 	{Shortcut: "lb", Name: "Lobsters", URL: "https://lobste.rs/search?q={query}", Category: "social", Aliases: []string{"lobsters"}},
 	{Shortcut: "fb", Name: "Facebook", URL: "https://www.facebook.com/search/top/?q={query}", Category: "social", Aliases: []string{"facebook"}},
@@ -205,7 +205,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "maven", Name: "Maven Central", URL: "https://search.maven.org/search?q={query}", Category: "code", Aliases: []string{"java"}},
 	{Shortcut: "packagist", Name: "Packagist", URL: "https://packagist.org/search/?q={query}", Category: "code", Aliases: []string{"php", "composer"}},
 	{Shortcut: "cpan", Name: "CPAN", URL: "https://metacpan.org/search?q={query}", Category: "code", Aliases: []string{"perl"}},
-	{Shortcut: "cran", Name: "CRAN", URL: "https://cran.r-project.org/web/packages/available_packages_by_name.html#{query}", Category: "code", Aliases: []string{"r"}},
+	{Shortcut: "cran", Name: "CRAN", URL: "https://cran.r-project.org/web/packages/available_packages_by_name.html#{query}", Category: "code"},
 	{Shortcut: "cocoapods", Name: "CocoaPods", URL: "https://cocoapods.org/search?q={query}", Category: "code", Aliases: []string{"swift", "ios"}},
 	{Shortcut: "pub", Name: "pub.dev", URL: "https://pub.dev/packages?q={query}", Category: "code", Aliases: []string{"dart", "flutter"}},
 	{Shortcut: "haskell", Name: "Hackage", URL: "https://hackage.haskell.org/packages/search?terms={query}", Category: "code", Aliases: []string{"hackage"}},
@@ -238,7 +238,7 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// SHOPPING
 	// ============================================================================
-	{Shortcut: "az", Name: "Amazon", URL: "https://www.amazon.com/s?k={query}", Category: "shopping", Aliases: []string{"amazon"}},
+	{Shortcut: "amz", Name: "Amazon", URL: "https://www.amazon.com/s?k={query}", Category: "shopping", Aliases: []string{"amazon", "az"}},
 	{Shortcut: "azuk", Name: "Amazon UK", URL: "https://www.amazon.co.uk/s?k={query}", Category: "shopping"},
 	{Shortcut: "azde", Name: "Amazon Germany", URL: "https://www.amazon.de/s?k={query}", Category: "shopping"},
 	{Shortcut: "azjp", Name: "Amazon Japan", URL: "https://www.amazon.co.jp/s?k={query}", Category: "shopping"},
@@ -247,7 +247,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "alibaba", Name: "Alibaba", URL: "https://www.alibaba.com/trade/search?SearchText={query}", Category: "shopping"},
 	{Shortcut: "walmart", Name: "Walmart", URL: "https://www.walmart.com/search?q={query}", Category: "shopping"},
 	{Shortcut: "target", Name: "Target", URL: "https://www.target.com/s?searchTerm={query}", Category: "shopping"},
-	{Shortcut: "bestbuy", Name: "Best Buy", URL: "https://www.bestbuy.com/site/searchpage.jsp?st={query}", Category: "shopping", Aliases: []string{"bb"}},
+	{Shortcut: "bestbuy", Name: "Best Buy", URL: "https://www.bestbuy.com/site/searchpage.jsp?st={query}", Category: "shopping"},
 	{Shortcut: "newegg", Name: "Newegg", URL: "https://www.newegg.com/p/pl?d={query}", Category: "shopping"},
 	{Shortcut: "etsy", Name: "Etsy", URL: "https://www.etsy.com/search?q={query}", Category: "shopping"},
 	{Shortcut: "wish", Name: "Wish", URL: "https://www.wish.com/search/{query}", Category: "shopping"},
@@ -283,7 +283,7 @@ var defaultBangs = []*Bang{
 	// MUSIC
 	// ============================================================================
 	{Shortcut: "spot", Name: "Spotify", URL: "https://open.spotify.com/search/{query}", Category: "music", Aliases: []string{"spotify"}},
-	{Shortcut: "apple", Name: "Apple Music", URL: "https://music.apple.com/search?term={query}", Category: "music", Aliases: []string{"applemusic"}},
+	{Shortcut: "applemusic", Name: "Apple Music", URL: "https://music.apple.com/search?term={query}", Category: "music"},
 	{Shortcut: "ytm", Name: "YouTube Music", URL: "https://music.youtube.com/search?q={query}", Category: "music", Aliases: []string{"youtubemusic"}},
 	{Shortcut: "sc", Name: "SoundCloud", URL: "https://soundcloud.com/search?q={query}", Category: "music", Aliases: []string{"soundcloud"}},
 	{Shortcut: "bc", Name: "Bandcamp", URL: "https://bandcamp.com/search?q={query}", Category: "music", Aliases: []string{"bandcamp"}},
@@ -342,7 +342,7 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	{Shortcut: "gt", Name: "Google Translate", URL: "https://translate.google.com/?sl=auto&tl=en&text={query}", Category: "translate", Aliases: []string{"translate", "googletranslate"}},
 	{Shortcut: "deepl", Name: "DeepL", URL: "https://www.deepl.com/translator#auto/en/{query}", Category: "translate"},
-	{Shortcut: "bing", Name: "Bing Translator", URL: "https://www.bing.com/translator/?text={query}", Category: "translate", Aliases: []string{"bingtranslate"}},
+	{Shortcut: "btrans", Name: "Bing Translator", URL: "https://www.bing.com/translator/?text={query}", Category: "translate", Aliases: []string{"bingtranslate"}},
 	{Shortcut: "reverso", Name: "Reverso", URL: "https://www.reverso.net/text-translation#sl=auto&tl=en&text={query}", Category: "translate"},
 	{Shortcut: "linguee", Name: "Linguee", URL: "https://www.linguee.com/english-german/search?source=auto&query={query}", Category: "translate"},
 	{Shortcut: "dict", Name: "Dictionary.com", URL: "https://www.dictionary.com/browse/{query}", Category: "translate", Aliases: []string{"dictionary"}},
@@ -362,7 +362,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "pons", Name: "PONS", URL: "https://en.pons.com/translate?q={query}", Category: "translate"},
 	{Shortcut: "jisho", Name: "Jisho", URL: "https://jisho.org/search/{query}", Category: "translate", Aliases: []string{"japanese"}},
 	{Shortcut: "tangorin", Name: "Tangorin", URL: "https://tangorin.com/words?search={query}", Category: "translate"},
-	{Shortcut: "naver", Name: "Naver Dictionary", URL: "https://dict.naver.com/search.nhn?query={query}", Category: "translate", Aliases: []string{"korean"}},
+	{Shortcut: "navdict", Name: "Naver Dictionary", URL: "https://dict.naver.com/search.nhn?query={query}", Category: "translate", Aliases: []string{"korean"}},
 	{Shortcut: "pleco", Name: "Pleco", URL: "https://www.pleco.com/search/?q={query}", Category: "translate", Aliases: []string{"chinese"}},
 	{Shortcut: "mdbg", Name: "MDBG Chinese", URL: "https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={query}", Category: "translate"},
 
@@ -449,7 +449,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "audible", Name: "Audible", URL: "https://www.audible.com/search?keywords={query}", Category: "books"},
 	{Shortcut: "kindle", Name: "Kindle Store", URL: "https://www.amazon.com/s?i=digital-text&k={query}", Category: "books"},
 	{Shortcut: "kobo", Name: "Kobo", URL: "https://www.kobo.com/search?query={query}", Category: "books"},
-	{Shortcut: "barnesandnoble", Name: "Barnes & Noble", URL: "https://www.barnesandnoble.com/s/{query}", Category: "books", Aliases: []string{"bn"}},
+	{Shortcut: "barnesandnoble", Name: "Barnes & Noble", URL: "https://www.barnesandnoble.com/s/{query}", Category: "books"},
 	{Shortcut: "bookshop", Name: "Bookshop.org", URL: "https://bookshop.org/search?keywords={query}", Category: "books"},
 	{Shortcut: "isfdb", Name: "ISFDB", URL: "https://www.isfdb.org/cgi-bin/se.cgi?arg={query}", Category: "books"},
 	{Shortcut: "fantasticfiction", Name: "Fantastic Fiction", URL: "https://www.fantasticfiction.com/search/?searchfor=author&keywords={query}", Category: "books"},
@@ -497,7 +497,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "espn", Name: "ESPN", URL: "https://www.espn.com/search/_/q/{query}", Category: "sports"},
 	{Shortcut: "cbssports", Name: "CBS Sports", URL: "https://www.cbssports.com/search/{query}/", Category: "sports"},
 	{Shortcut: "foxsports", Name: "Fox Sports", URL: "https://www.foxsports.com/search?q={query}", Category: "sports"},
-	{Shortcut: "bleacherreport", Name: "Bleacher Report", URL: "https://bleacherreport.com/search?q={query}", Category: "sports", Aliases: []string{"br"}},
+	{Shortcut: "bleacherreport", Name: "Bleacher Report", URL: "https://bleacherreport.com/search?q={query}", Category: "sports"},
 	{Shortcut: "theathletic", Name: "The Athletic", URL: "https://theathletic.com/search/?q={query}", Category: "sports"},
 	{Shortcut: "nba", Name: "NBA", URL: "https://www.nba.com/search?q={query}", Category: "sports"},
 	{Shortcut: "nfl", Name: "NFL", URL: "https://www.nfl.com/search?q={query}", Category: "sports"},
@@ -514,7 +514,6 @@ var defaultBangs = []*Bang{
 	{Shortcut: "booking", Name: "Booking.com", URL: "https://www.booking.com/searchresults.html?ss={query}", Category: "travel"},
 	{Shortcut: "airbnb", Name: "Airbnb", URL: "https://www.airbnb.com/s/{query}/homes", Category: "travel"},
 	{Shortcut: "expedia", Name: "Expedia", URL: "https://www.expedia.com/Hotel-Search?destination={query}", Category: "travel"},
-	{Shortcut: "tripadvisor", Name: "TripAdvisor", URL: "https://www.tripadvisor.com/Search?q={query}", Category: "travel", Aliases: []string{"ta"}},
 	{Shortcut: "kayak", Name: "Kayak", URL: "https://www.kayak.com/explore/{query}", Category: "travel"},
 	{Shortcut: "skyscanner", Name: "Skyscanner", URL: "https://www.skyscanner.com/transport/flights/search?query={query}", Category: "travel"},
 	{Shortcut: "googleflights", Name: "Google Flights", URL: "https://www.google.com/travel/flights?q={query}", Category: "travel", Aliases: []string{"gflights"}},
@@ -530,7 +529,7 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// FINANCE & CRYPTO
 	// ============================================================================
-	{Shortcut: "yahoo", Name: "Yahoo Finance", URL: "https://finance.yahoo.com/quote/{query}", Category: "finance", Aliases: []string{"yf"}},
+	{Shortcut: "yfin", Name: "Yahoo Finance", URL: "https://finance.yahoo.com/quote/{query}", Category: "finance", Aliases: []string{"yf"}},
 	{Shortcut: "gfinance", Name: "Google Finance", URL: "https://www.google.com/finance/quote/{query}", Category: "finance", Aliases: []string{"gf", "googlefinance"}},
 	{Shortcut: "tradingview", Name: "TradingView", URL: "https://www.tradingview.com/symbols/{query}/", Category: "finance", Aliases: []string{"tv"}},
 	{Shortcut: "marketwatch", Name: "MarketWatch", URL: "https://www.marketwatch.com/search?q={query}", Category: "finance"},
@@ -581,7 +580,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "khanacademy", Name: "Khan Academy", URL: "https://www.khanacademy.org/search?page_search_query={query}", Category: "education", Aliases: []string{"khan"}},
 	{Shortcut: "udacity", Name: "Udacity", URL: "https://www.udacity.com/courses?search={query}", Category: "education"},
 	{Shortcut: "skillshare", Name: "Skillshare", URL: "https://www.skillshare.com/search?query={query}", Category: "education"},
-	{Shortcut: "linkedin", Name: "LinkedIn Learning", URL: "https://www.linkedin.com/learning/search?keywords={query}", Category: "education", Aliases: []string{"lil"}},
+	{Shortcut: "lilearn", Name: "LinkedIn Learning", URL: "https://www.linkedin.com/learning/search?keywords={query}", Category: "education", Aliases: []string{"lil"}},
 	{Shortcut: "pluralsight", Name: "Pluralsight", URL: "https://www.pluralsight.com/search?q={query}", Category: "education"},
 	{Shortcut: "freecodecamp", Name: "freeCodeCamp", URL: "https://www.freecodecamp.org/news/search?query={query}", Category: "education", Aliases: []string{"fcc"}},
 	{Shortcut: "codecademy", Name: "Codecademy", URL: "https://www.codecademy.com/search?query={query}", Category: "education"},
@@ -619,13 +618,11 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// MISC / OTHER
 	// ============================================================================
-	{Shortcut: "reddit", Name: "Reddit Search", URL: "https://www.reddit.com/search/?q={query}", Category: "misc"},
 	{Shortcut: "producthunt", Name: "Product Hunt", URL: "https://www.producthunt.com/search?q={query}", Category: "misc", Aliases: []string{"ph"}},
 	{Shortcut: "alternativeto", Name: "AlternativeTo", URL: "https://alternativeto.net/browse/search/?q={query}", Category: "misc"},
 	{Shortcut: "similarweb", Name: "SimilarWeb", URL: "https://www.similarweb.com/website/{query}", Category: "misc"},
-	{Shortcut: "archive", Name: "Internet Archive", URL: "https://archive.org/search.php?query={query}", Category: "misc", Aliases: []string{"ia"}},
 	{Shortcut: "pastebin", Name: "Pastebin", URL: "https://pastebin.com/search?q={query}", Category: "misc"},
-	{Shortcut: "wolfram", Name: "Wolfram", URL: "https://www.wolfram.com/search/?query={query}", Category: "misc"},
+	{Shortcut: "wolframcom", Name: "Wolfram", URL: "https://www.wolfram.com/search/?query={query}", Category: "misc"},
 	{Shortcut: "symbolab", Name: "Symbolab", URL: "https://www.symbolab.com/solver?or={query}", Category: "misc"},
 	{Shortcut: "desmos", Name: "Desmos", URL: "https://www.desmos.com/calculator?lang=en", Category: "misc", Description: "Opens the Desmos calculator; Desmos has no public search/query endpoint, so search terms are ignored"},
 	{Shortcut: "geogebra", Name: "GeoGebra", URL: "https://www.geogebra.org/search/{query}", Category: "misc"},

@@ -1,0 +1,191 @@
+name: Beta Build
+
+on:
+  push:
+    branches:
+      - beta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-${{ forgejo.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECTNAME: search
+  PROJECTORG: apimgr
+
+jobs:
+  # Compute VERSION once — matrix legs must never each compute their own value.
+  # Beta identity is release.txt when present, otherwise a UTC timestamp.
+  version:
+    name: Compute version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Compute version
+        id: set
+        run: |
+          if [ -f release.txt ]; then
+            echo "version=$(cat release.txt)" >> "$FORGEJO_OUTPUT"
+          else
+            echo "version=$(date -u +%Y%m%d%H%M%S)-beta" >> "$FORGEJO_OUTPUT"
+          fi
+
+  build:
+    name: Beta build (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: [version]
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Generate API specifications
+        run: |
+          go mod download
+          go run ./src/cmd/apigen
+
+      - name: Set build info
+        run: |
+          echo "VERSION=${{ needs.version.outputs.version }}" >> "$FORGEJO_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$FORGEJO_ENV"
+          echo "BUILD_EPOCH=$(date -u +%s)" >> "$FORGEJO_ENV"
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> "$FORGEJO_ENV"
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$FORGEJO_ENV"
+          fi
+          echo "OUTPUT=${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$FORGEJO_ENV"
+          echo "CLI_OUTPUT=${PROJECTNAME}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$FORGEJO_ENV"
+
+      - name: Build server
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go mod download
+          LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
+          go build -buildvcs=false -trimpath -ldflags "$LDFLAGS" -o "${OUTPUT}" ./src
+
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go mod download
+          CLI_LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+          go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.OUTPUT }}
+          retention-days: 7
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.CLI_OUTPUT }}
+          retention-days: 7
+  release:
+    name: Publish beta release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: binaries
+          merge-multiple: true
+
+      - name: Set version
+        run: echo "VERSION=${{ needs.version.outputs.version }}" >> "$FORGEJO_ENV"
+
+      - name: Create version.txt
+        run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Create source archive
+        run: |
+          tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+            --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
+            --exclude='*.tar.gz' \
+            -czf "binaries/${PROJECTNAME}-${VERSION}-source.tar.gz" .
+
+      # SBOM tooling lives in the build image — never install it on the runner
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          docker run --rm -v "$PWD":/app -w /app -e GOFLAGS=-buildvcs=false casjaysdev/go:latest \
+            cyclonedx-gomod mod -json -output "binaries/${PROJECTNAME}-${VERSION}-sbom.cdx.json"
+
+      - name: Generate checksums
+        run: |
+          cd "$FORGEJO_WORKSPACE/binaries"
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
+
+      - name: Publish release
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          tea release delete beta --yes 2>/dev/null || true
+          tea release create beta \
+            --title "Beta Build ${VERSION}" \
+            --note "Beta build: ${VERSION}" \
+            --prerelease \
+            --asset binaries/
+          echo "Beta release published: ${VERSION}"

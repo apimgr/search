@@ -159,8 +159,8 @@ func (h *RulesHandler) allRules(lang string) (*Answer, error) {
 	html.WriteString("<ol class=\"rules-list\">")
 
 	for _, rule := range rulesOfTheInternet {
-		html.WriteString(fmt.Sprintf("<li value=\"%d\"><span class=\"rule-number\">Rule %d:</span> %s</li>",
-			rule.Number, rule.Number, escapeHTML(rule.Text)))
+		fmt.Fprintf(&html, "<li value=\"%d\"><span class=\"rule-number\">Rule %d:</span> %s</li>",
+			rule.Number, rule.Number, escapeHTML(rule.Text))
 	}
 
 	html.WriteString("</ol>")
@@ -187,21 +187,21 @@ func (h *RulesHandler) ruleByNumber(num int, lang string) (*Answer, error) {
 		if rule.Number == num {
 			var html strings.Builder
 			html.WriteString("<div class=\"rules-content\">")
-			html.WriteString(fmt.Sprintf("<h1>Rule %d</h1>", rule.Number))
-			html.WriteString(fmt.Sprintf("<p class=\"rule-text\">%s</p>", escapeHTML(rule.Text)))
+			fmt.Fprintf(&html, "<h1>Rule %d</h1>", rule.Number)
+			fmt.Fprintf(&html, "<p class=\"rule-text\">%s</p>", escapeHTML(rule.Text))
 
 			// Add context for famous rules
 			if context := getRuleContext(num); context != "" {
-				html.WriteString(fmt.Sprintf("<p class=\"rule-context\"><em>%s</em></p>", escapeHTML(context)))
+				fmt.Fprintf(&html, "<p class=\"rule-context\"><em>%s</em></p>", escapeHTML(context))
 			}
 
 			html.WriteString("<p class=\"rules-nav\">")
 			if num > 1 {
-				html.WriteString(fmt.Sprintf("<a href=\"/search?q=rule:%d\">← Rule %d</a> | ", num-1, num-1))
+				fmt.Fprintf(&html, "<a href=\"/search?q=rule:%d\">← Rule %d</a> | ", num-1, num-1)
 			}
 			html.WriteString("<a href=\"/search?q=rule:all\">All Rules</a>")
 			if num < 100 {
-				html.WriteString(fmt.Sprintf(" | <a href=\"/search?q=rule:%d\">Rule %d →</a>", num+1, num+1))
+				fmt.Fprintf(&html, " | <a href=\"/search?q=rule:%d\">Rule %d →</a>", num+1, num+1)
 			}
 			html.WriteString("</p>")
 			html.WriteString("</div>")
@@ -239,7 +239,7 @@ func (h *RulesHandler) searchRules(term, lang string) (*Answer, error) {
 	if len(matches) == 0 {
 		var html strings.Builder
 		html.WriteString("<div class=\"rules-content\">")
-		html.WriteString(fmt.Sprintf("<h1>Search: \"%s\"</h1>", escapeHTML(term)))
+		fmt.Fprintf(&html, "<h1>Search: \"%s\"</h1>", escapeHTML(term))
 		html.WriteString("<p>No rules found matching your search.</p>")
 		html.WriteString("<p><a href=\"/search?q=rule:all\">View all rules</a></p>")
 		html.WriteString("</div>")
@@ -261,15 +261,15 @@ func (h *RulesHandler) searchRules(term, lang string) (*Answer, error) {
 
 	var html strings.Builder
 	html.WriteString("<div class=\"rules-content\">")
-	html.WriteString(fmt.Sprintf("<h1>Rules containing \"%s\"</h1>", escapeHTML(term)))
-	html.WriteString(fmt.Sprintf("<p>Found %d matching rule(s):</p>", len(matches)))
+	fmt.Fprintf(&html, "<h1>Rules containing \"%s\"</h1>", escapeHTML(term))
+	fmt.Fprintf(&html, "<p>Found %d matching rule(s):</p>", len(matches))
 	html.WriteString("<ol class=\"rules-list\">")
 
 	for _, rule := range matches {
 		// Highlight the search term
 		highlighted := highlightTerm(rule.Text, term)
-		html.WriteString(fmt.Sprintf("<li value=\"%d\"><span class=\"rule-number\">Rule %d:</span> %s</li>",
-			rule.Number, rule.Number, highlighted))
+		fmt.Fprintf(&html, "<li value=\"%d\"><span class=\"rule-number\">Rule %d:</span> %s</li>",
+			rule.Number, rule.Number, highlighted)
 	}
 
 	html.WriteString("</ol>")

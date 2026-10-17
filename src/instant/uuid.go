@@ -20,6 +20,8 @@ func NewUUIDHandler() *UUIDHandler {
 			regexp.MustCompile(`(?i)^uuid\s*$`),
 			regexp.MustCompile(`(?i)^generate\s+uuid\s*$`),
 			regexp.MustCompile(`(?i)^new\s+uuid\s*$`),
+			regexp.MustCompile(`(?i)^random\s+uuid\s*$`),
+			regexp.MustCompile(`(?i)^uuid\s+v4\s*$`),
 			regexp.MustCompile(`(?i)^guid\s*$`),
 		},
 	}
@@ -45,13 +47,14 @@ func (h *UUIDHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		Query: query,
 		Title: "UUID Generator",
 		Content: fmt.Sprintf(`<div class="uuid-result">
-<strong>UUID v4:</strong> <code>%s</code><br>
-<strong>Uppercase:</strong> <code>%s</code><br>
-<strong>No dashes:</strong> <code>%s</code>
+<strong>UUID v4:</strong> <code data-uuid-format="standard">%s</code> <button class="copy-btn" data-copy="%s">Copy</button><br>
+<strong>Uppercase:</strong> <code data-uuid-format="uppercase">%s</code> <button class="copy-btn" data-copy="%s">Copy</button><br>
+<strong>No dashes:</strong> <code data-uuid-format="compact">%s</code> <button class="copy-btn" data-copy="%s">Copy</button><br>
+<button type="button" data-action="uuid-regenerate">Generate another</button>
 </div>`,
-			id.String(),
-			strings.ToUpper(id.String()),
-			strings.ReplaceAll(id.String(), "-", "")),
+			id.String(), id.String(),
+			strings.ToUpper(id.String()), strings.ToUpper(id.String()),
+			strings.ReplaceAll(id.String(), "-", ""), strings.ReplaceAll(id.String(), "-", "")),
 		Data: map[string]interface{}{
 			"uuid": id.String(),
 		},

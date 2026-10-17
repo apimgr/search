@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // AnswerTypeCheat is the answer type for cheatsheet lookups
@@ -76,7 +78,7 @@ func (h *CheatHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	if err != nil {
 		return h.errorAnswer(query, topic, "Failed to connect to cheat.sh"), nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return h.errorAnswer(query, topic, fmt.Sprintf("Cheatsheet for '%s' not found", topic)), nil
@@ -112,15 +114,15 @@ func (h *CheatHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	webURL := fmt.Sprintf("https://cheat.sh/%s", url.PathEscape(topic))
 
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>%s</strong><br><br>", escapeHTML(topic)))
+	fmt.Fprintf(&content, "<strong>%s</strong><br><br>", escapeHTML(topic))
 	content.WriteString(formattedContent)
 	content.WriteString("<br><strong>Links:</strong><br>")
-	content.WriteString(fmt.Sprintf("&bull; <a href=\"%s\" target=\"_blank\">View on cheat.sh</a><br>", webURL))
+	fmt.Fprintf(&content, "&bull; <a href=\"%s\" target=\"_blank\">View on cheat.sh</a><br>", webURL)
 
 	// Add related topics if it's a command
 	if !strings.Contains(topic, "/") {
-		content.WriteString(fmt.Sprintf("&bull; <a href=\"https://cheat.sh/%s/:learn\" target=\"_blank\">Learn more</a><br>", url.PathEscape(topic)))
-		content.WriteString(fmt.Sprintf("&bull; <a href=\"https://cheat.sh/%s/:list\" target=\"_blank\">List all topics</a><br>", url.PathEscape(topic)))
+		fmt.Fprintf(&content, "&bull; <a href=\"https://cheat.sh/%s/:learn\" target=\"_blank\">Learn more</a><br>", url.PathEscape(topic))
+		fmt.Fprintf(&content, "&bull; <a href=\"https://cheat.sh/%s/:list\" target=\"_blank\">List all topics</a><br>", url.PathEscape(topic))
 	}
 
 	return &Answer{
@@ -174,7 +176,7 @@ func (h *CheatHandler) formatCheatsheet(content, topic string) string {
 			comment := strings.TrimPrefix(strings.TrimSpace(line), "#")
 			comment = strings.TrimSpace(comment)
 			if comment != "" {
-				result.WriteString(fmt.Sprintf("<strong>%s</strong><br>", escapeHTML(comment)))
+				fmt.Fprintf(&result, "<strong>%s</strong><br>", escapeHTML(comment))
 			}
 		} else if strings.TrimSpace(line) != "" {
 			// Code line
@@ -204,7 +206,7 @@ func (h *CheatHandler) formatCheatsheet(content, topic string) string {
 
 func (h *CheatHandler) errorAnswer(query, topic, message string) *Answer {
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<span class=\"error\">%s</span><br><br>", message))
+	fmt.Fprintf(&content, "<span class=\"error\">%s</span><br><br>", message)
 	content.WriteString("<strong>Suggestions:</strong><br>")
 	content.WriteString("&bull; Check the spelling of the command/topic<br>")
 	content.WriteString("&bull; Try a more general topic (e.g., 'git' instead of 'git-specific-command')<br>")

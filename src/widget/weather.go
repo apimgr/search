@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/config"
 )
 
@@ -73,15 +75,25 @@ type WeatherFetcher struct {
 
 // WeatherData represents weather widget data
 type WeatherData struct {
-	Location    string  `json:"location"`
-	Temperature float64 `json:"temperature"`
-	FeelsLike   float64 `json:"feels_like"`
-	Humidity    int     `json:"humidity"`
+	Location    string               `json:"location"`
+	Temperature float64              `json:"temperature"`
+	FeelsLike   float64              `json:"feels_like"`
+	Humidity    int                  `json:"humidity"`
+	Description string               `json:"description"`
+	Condition   string               `json:"condition"`
+	WindSpeed   float64              `json:"wind_speed"`
+	Icon        string               `json:"icon"`
+	Units       string               `json:"units"`
+	Forecast    []WeatherForecastDay `json:"forecast,omitempty"`
+}
+
+// WeatherForecastDay contains one day's high, low, and expected conditions.
+type WeatherForecastDay struct {
+	Date        string  `json:"date"`
+	High        float64 `json:"high"`
+	Low         float64 `json:"low"`
 	Description string  `json:"description"`
 	Condition   string  `json:"condition"`
-	WindSpeed   float64 `json:"wind_speed"`
-	Icon        string  `json:"icon"`
-	Units       string  `json:"units"`
 }
 
 // GeocodingResponse represents Open-Meteo geocoding API response
@@ -109,9 +121,16 @@ type OpenMeteoResponse struct {
 		Time          string  `json:"time"`
 	} `json:"current_weather"`
 	Hourly struct {
+		Time                []string  `json:"time"`
 		RelativeHumidity2m  []int     `json:"relativehumidity_2m"`
 		ApparentTemperature []float64 `json:"apparent_temperature"`
 	} `json:"hourly"`
+	Daily struct {
+		Time           []string  `json:"time"`
+		TemperatureMax []float64 `json:"temperature_2m_max"`
+		TemperatureMin []float64 `json:"temperature_2m_min"`
+		WeatherCode    []int     `json:"weather_code"`
+	} `json:"daily"`
 }
 
 // NewWeatherFetcher creates a new weather fetcher
@@ -246,7 +265,7 @@ func (f *WeatherFetcher) reverseGeocode(ctx context.Context, lat, lon float64) (
 	if err != nil {
 		return fmt.Sprintf("%.2f, %.2f", lat, lon), err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// If reverse geocoding fails, return coordinates as string
 	if resp.StatusCode != http.StatusOK {
@@ -328,7 +347,7 @@ func (f *WeatherFetcher) geocodeCity(ctx context.Context, city string) (float64,
 	if err != nil {
 		return 0, 0, "", err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, 0, "", fmt.Errorf("geocoding API returned status %d", resp.StatusCode)
@@ -385,7 +404,7 @@ func (f *WeatherFetcher) fetchWeather(ctx context.Context, lat, lon float64, uni
 		windUnit = "mph"
 	}
 
-	apiURL := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&current_weather=true&hourly=relativehumidity_2m,apparent_temperature&temperature_unit=%s&windspeed_unit=%s&timezone=auto&forecast_days=1",
+	apiURL := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&current_weather=true&hourly=relativehumidity_2m,apparent_temperature&daily=weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=%s&windspeed_unit=%s&timezone=auto&forecast_days=5",
 		lat, lon, tempUnit, windUnit)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -397,7 +416,7 @@ func (f *WeatherFetcher) fetchWeather(ctx context.Context, lat, lon float64, uni
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("weather API returned status %d", resp.StatusCode)
@@ -414,11 +433,25 @@ func (f *WeatherFetcher) fetchWeather(ctx context.Context, lat, lon float64, uni
 	// Get current hour's humidity and apparent temperature
 	humidity := 0
 	feelsLike := weatherResp.CurrentWeather.Temperature
-	if len(weatherResp.Hourly.RelativeHumidity2m) > 0 {
-		humidity = weatherResp.Hourly.RelativeHumidity2m[0]
+	hourIndex := currentWeatherHourIndex(weatherResp.Hourly.Time, weatherResp.CurrentWeather.Time)
+	if hourIndex >= 0 && hourIndex < len(weatherResp.Hourly.RelativeHumidity2m) {
+		humidity = weatherResp.Hourly.RelativeHumidity2m[hourIndex]
 	}
-	if len(weatherResp.Hourly.ApparentTemperature) > 0 {
-		feelsLike = weatherResp.Hourly.ApparentTemperature[0]
+	if hourIndex >= 0 && hourIndex < len(weatherResp.Hourly.ApparentTemperature) {
+		feelsLike = weatherResp.Hourly.ApparentTemperature[hourIndex]
+	}
+
+	forecast := make([]WeatherForecastDay, 0, 5)
+	for index, date := range weatherResp.Daily.Time {
+		if index >= len(weatherResp.Daily.TemperatureMax) || index >= len(weatherResp.Daily.TemperatureMin) || index >= len(weatherResp.Daily.WeatherCode) {
+			break
+		}
+		dayDescription, dayCondition := weatherCodeToDescription(weatherResp.Daily.WeatherCode[index])
+		forecast = append(forecast, WeatherForecastDay{Date: date, High: weatherResp.Daily.TemperatureMax[index], Low: weatherResp.Daily.TemperatureMin[index], Description: dayDescription, Condition: dayCondition})
+	}
+
+	if len(forecast) != 5 {
+		return nil, fmt.Errorf("weather API returned an incomplete five-day forecast")
 	}
 
 	return &WeatherData{
@@ -428,7 +461,24 @@ func (f *WeatherFetcher) fetchWeather(ctx context.Context, lat, lon float64, uni
 		Description: description,
 		Condition:   condition,
 		WindSpeed:   weatherResp.CurrentWeather.WindSpeed,
+		Forecast:    forecast,
 	}, nil
+}
+
+func currentWeatherHourIndex(hourlyTimes []string, currentTime string) int {
+	if len(hourlyTimes) == 0 {
+		return -1
+	}
+	currentHour := currentTime
+	if len(currentHour) >= 13 {
+		currentHour = currentHour[:13]
+	}
+	for index, hour := range hourlyTimes {
+		if len(hour) >= 13 && hour[:13] == currentHour {
+			return index
+		}
+	}
+	return 0
 }
 
 // weatherCodeToDescription maps WMO weather codes to descriptions

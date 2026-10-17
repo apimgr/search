@@ -54,15 +54,18 @@ func printWithSize(cfg Config, mode terminal.SizeMode) {
 
 // printFull prints full boxed banner per AI.md PART 14
 func printFull(cfg Config) {
-	// Box characters
-	topLeft := "╔"
-	topRight := "╗"
-	bottomLeft := "╚"
-	bottomRight := "╝"
-	horizontal := "═"
-	vertical := "║"
-	midLeft := "╠"
-	midRight := "╣"
+	// Box characters come from the shared symbol set so terminals without
+	// Unicode support (TERM=dumb, non-UTF-8 locale) get the ASCII fallback
+	// per AI.md PART 7 and PART 32.
+	sym := terminal.GetSymbols()
+	topLeft := sym.BoxTopLeft
+	topRight := sym.BoxTopRight
+	bottomLeft := sym.BoxBottomLeft
+	bottomRight := sym.BoxBottomRight
+	horizontal := sym.BoxHorizontal
+	vertical := sym.BoxVertical
+	midLeft := sym.BoxTopLeft
+	midRight := sym.BoxTopRight
 
 	hLine := strings.Repeat(horizontal, boxWidth-2)
 

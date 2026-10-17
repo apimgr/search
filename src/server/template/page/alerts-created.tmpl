@@ -3,10 +3,13 @@
     <div class="page-header">
         <h1>{{t "alerts.created_title"}}</h1>
     </div>
-    {{if .VerificationSent}}
-    <p>{{t "alerts.check_email_confirm"}}</p>
-    {{else}}
     <p>{{t "alerts.alert_active"}}</p>
+    {{if .OwnerToken}}
+    <div class="owner-token-issued" role="status">
+        <h2>Primary owner token</h2>
+        <p>Save this token to manage resources from another browser or API client. It is also available from your preferences page.</p>
+        <code class="token-value">{{.OwnerToken}}</code>
+    </div>
     {{end}}
     {{if .ManageURL}}
     <p><strong>{{t "alerts.manage_link_label"}}</strong> <a href="{{.ManageURL}}">{{.ManageURL}}</a></p>

@@ -1,22 +1,25 @@
 package update
 
 import (
-	"archive/tar"
 	"bufio"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/service"
 )
@@ -24,12 +27,36 @@ import (
 // ReleasesURL is the URL to check for releases
 const ReleasesURL = "https://api.github.com/repos/apimgr/search/releases"
 
+// Release channels per AI.md PART 22 "Update Branches".
+// Channels are cumulative: a less-stable channel also accepts every release
+// from all more-stable channels, so a beta or devel user is never left older
+// than the newest stable release.
+const (
+	// BranchStable considers full releases only (v*, *.*.*)
+	BranchStable = "stable"
+	// BranchBeta considers beta pre-releases (*-beta) plus all stable releases
+	BranchBeta = "beta"
+	// BranchDevel considers the rolling "devel" pre-release plus beta and stable.
+	BranchDevel = "devel"
+	// BranchDaily is a legacy name for BranchDevel.
+	BranchDaily = BranchDevel
+)
+
+// DevelTag is the rolling pre-release tag that is deleted and recreated nightly.
+const DevelTag = "devel"
+
+// DailyTag is a legacy name for DevelTag.
+const DailyTag = DevelTag
+
 // Manager handles update operations
 type Manager struct {
 	currentVersion string
-	binaryPath     string
-	backupDir      string
-	tempDir        string
+	// buildEpoch is the embedded build timestamp, needed to tell whether the
+	// rolling "devel" release is newer than this binary (AI.md PART 22)
+	buildEpoch int64
+	binaryPath string
+	backupDir  string
+	tempDir    string
 }
 
 // Release represents a GitHub release
@@ -59,8 +86,13 @@ type UpdateInfo struct {
 	LatestVersion  string `json:"latest_version"`
 	ReleaseNotes   string `json:"release_notes"`
 	DownloadURL    string `json:"download_url"`
-	// Per AI.md PART 22: URL to checksums.txt for SHA-256 verification
-	ChecksumURL  string    `json:"checksum_url,omitempty"`
+	// Per AI.md PART 22: URL to sha256.txt for SHA-256 verification
+	ChecksumURL string `json:"checksum_url,omitempty"`
+	// AssetName is the release asset filename; sha256.txt keys its entries by
+	// this name, so it is required to look the expected hash up
+	AssetName string `json:"asset_name,omitempty"`
+	// Branch is the release channel this result was resolved against
+	Branch       string    `json:"branch"`
 	AssetSize    int64     `json:"asset_size"`
 	PublishedAt  time.Time `json:"published_at"`
 	IsPrerelease bool      `json:"is_prerelease"`
@@ -69,82 +101,175 @@ type UpdateInfo struct {
 // NewManager creates a new update manager
 func NewManager() *Manager {
 	binaryPath, _ := os.Executable()
+	epoch, err := strconv.ParseInt(config.BuildEpoch, 10, 64)
+	if err != nil {
+		epoch = 0
+	}
 	return &Manager{
 		currentVersion: config.Version,
+		buildEpoch:     epoch,
 		binaryPath:     binaryPath,
 		backupDir:      config.GetBackupDir(),
 		tempDir:        os.TempDir(),
 	}
 }
 
-// CheckForUpdates checks if a new version is available
-func (m *Manager) CheckForUpdates(includePrerelease bool) (*UpdateInfo, error) {
+// NormalizeBranch maps a configured or CLI-supplied channel name onto a known
+// release channel. Anything unrecognised falls back to the stable channel,
+// which is the PART 22 default.
+func NormalizeBranch(branch string) string {
+	return config.NormalizeUpdateBranch(branch)
+}
+
+// IsValidBranch reports whether branch names a known release channel
+func IsValidBranch(branch string) bool {
+	switch strings.ToLower(strings.TrimSpace(branch)) {
+	case BranchStable, BranchBeta, BranchDevel, "daily", "rolling", "dev", "development":
+		return true
+	default:
+		return false
+	}
+}
+
+// CheckForUpdates checks whether a newer release exists on the given channel.
+// Per AI.md PART 22 the channels are cumulative, so the newest release across
+// the requested channel and every more-stable channel wins.
+func (m *Manager) CheckForUpdates(branch string) (*UpdateInfo, error) {
+	return m.check(branch, time.Time{})
+}
+
+// CheckForUpdatesDeferred behaves like CheckForUpdates but only considers
+// releases that have already been public for deferDays days, per the
+// defer_days semantics in AI.md PART 22. Eligibility is per release: the
+// NEWEST eligible release wins, so a brand-new release never resets the clock
+// for an older release that has already aged past the window.
+func (m *Manager) CheckForUpdatesDeferred(branch string, deferDays int) (*UpdateInfo, error) {
+	branch = NormalizeBranch(branch)
+	if branch == BranchDevel {
+		return m.check(branch, time.Time{})
+	}
+	if deferDays <= 0 {
+		return m.check(branch, time.Time{})
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(deferDays) * 24 * time.Hour)
+	return m.check(branch, cutoff)
+}
+
+// check resolves the newest release on branch that is newer than the running
+// build. When cutoff is non-zero, releases published after it are ineligible.
+func (m *Manager) check(branch string, cutoff time.Time) (*UpdateInfo, error) {
+	branch = NormalizeBranch(branch)
+
 	releases, err := m.fetchReleases()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch releases: %w", err)
 	}
 
-	if len(releases) == 0 {
-		return &UpdateInfo{
-			Available:      false,
-			CurrentVersion: m.currentVersion,
-		}, nil
+	info := &UpdateInfo{
+		Available:      false,
+		CurrentVersion: m.currentVersion,
+		Branch:         branch,
 	}
 
-	// Find the latest applicable release
-	var latest *Release
+	// Consider candidates newest-first; the first release that both belongs to
+	// the channel and is newer than the running build is the one to install
+	candidates := make([]*Release, 0, len(releases))
 	for i := range releases {
 		r := &releases[i]
-		if r.Draft {
+		if r.Draft || !matchesBranch(*r, branch) {
 			continue
 		}
-		if r.Prerelease && !includePrerelease {
+		if !cutoff.IsZero() && r.PublishedAt.After(cutoff) {
 			continue
 		}
-		if latest == nil || r.PublishedAt.After(latest.PublishedAt) {
+		candidates = append(candidates, r)
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].PublishedAt.After(candidates[j].PublishedAt)
+	})
+
+	var latest *Release
+	for _, r := range candidates {
+		if m.isNewerRelease(*r) {
 			latest = r
+			break
 		}
 	}
 
 	if latest == nil {
-		return &UpdateInfo{
-			Available:      false,
-			CurrentVersion: m.currentVersion,
-		}, nil
+		return info, nil
 	}
 
-	// Check if newer than current
-	latestVersion := strings.TrimPrefix(latest.TagName, "v")
-	currentVersion := strings.TrimPrefix(m.currentVersion, "v")
-
-	// Simple version comparison (for semver)
-	isNewer := compareVersions(latestVersion, currentVersion) > 0
+	info.Available = true
+	info.LatestVersion = latest.TagName
+	info.ReleaseNotes = latest.Body
+	info.PublishedAt = latest.PublishedAt
+	info.IsPrerelease = latest.Prerelease
 
 	// Find the appropriate asset for this platform
-	asset := m.findAsset(latest.Assets)
-
-	info := &UpdateInfo{
-		Available:      isNewer,
-		CurrentVersion: m.currentVersion,
-		LatestVersion:  latest.TagName,
-		ReleaseNotes:   latest.Body,
-		PublishedAt:    latest.PublishedAt,
-		IsPrerelease:   latest.Prerelease,
-	}
-
-	if asset != nil {
+	if asset := m.findAsset(latest.Assets); asset != nil {
 		info.DownloadURL = asset.DownloadURL
+		info.AssetName = asset.Name
 		info.AssetSize = asset.Size
-		// Look for checksums.txt in the same release for SHA-256 verification
+		// Look for sha256.txt in the same release for SHA-256 verification
 		info.ChecksumURL = m.findChecksumURL(latest.Assets)
 	}
 
 	return info, nil
 }
 
+// matchesBranch implements the cumulative channel rule from AI.md PART 22:
+// each channel also accepts every release from all more-stable channels.
+func matchesBranch(r Release, branch string) bool {
+	// Stable releases match every channel
+	if !r.Prerelease {
+		return true
+	}
+	isBeta := strings.HasSuffix(r.TagName, "-beta")
+	// The devel channel is a single rolling release: tag "devel", rebuilt nightly.
+	isDevel := r.TagName == DevelTag
+	switch branch {
+	case BranchBeta:
+		return isBeta
+	case BranchDevel:
+		return isBeta || isDevel
+	default:
+		return false
+	}
+}
+
+// isNewerRelease reports whether r is newer than the running build.
+// Semver tags are compared numerically. The rolling "devel" tag and any other
+// non-semver tag (timestamped beta builds) carry no comparable version, so
+// they are compared against the embedded build epoch instead.
+func (m *Manager) isNewerRelease(r Release) bool {
+	if strings.EqualFold(r.TagName, m.currentVersion) ||
+		strings.EqualFold(strings.TrimPrefix(r.TagName, "v"), strings.TrimPrefix(m.currentVersion, "v")) {
+		return false
+	}
+	if isSemverTag(r.TagName) && isSemverTag(m.currentVersion) {
+		return compareVersions(strings.TrimPrefix(r.TagName, "v"), strings.TrimPrefix(m.currentVersion, "v")) > 0
+	}
+	// A rolling or timestamped build is newer when it was published after this
+	// binary was compiled; without a build epoch nothing can be proven newer
+	if m.buildEpoch <= 0 {
+		return false
+	}
+	return r.PublishedAt.Unix() > m.buildEpoch
+}
+
+// isSemverTag reports whether tag looks like MAJOR.MINOR.PATCH with an
+// optional leading "v"
+func isSemverTag(tag string) bool {
+	return semverPattern.MatchString(strings.TrimSpace(tag))
+}
+
+// semverPattern matches a MAJOR.MINOR.PATCH tag with an optional "v" prefix
+var semverPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+`)
+
 // findChecksumURL returns the download URL of a checksums file in the release assets.
 func (m *Manager) findChecksumURL(assets []Asset) string {
-	names := []string{"checksums.txt", "sha256sums.txt", "SHA256SUMS", "checksums"}
+	names := []string{"sha256.txt", "checksums.txt", "sha256sums.txt", "SHA256SUMS", "checksums"}
 	for _, asset := range assets {
 		for _, name := range names {
 			if strings.EqualFold(asset.Name, name) {
@@ -170,7 +295,11 @@ func (m *Manager) fetchReleases() ([]Release, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Warn("failed to close update download response", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
@@ -184,35 +313,27 @@ func (m *Manager) fetchReleases() ([]Release, error) {
 	return releases, nil
 }
 
-// findAsset finds the appropriate asset for the current platform
+// GetBinaryName returns the release asset name for the running platform.
+// Per AI.md PART 22 the release publishes raw, unarchived binaries named
+// "{project_name}-{GOOS}-{GOARCH}" with a ".exe" suffix on Windows, which is
+// exactly what the Makefile release target and .github/workflows/release.yml
+// upload.
+func GetBinaryName() string {
+	name := config.ProjectName + "-" + runtime.GOOS + "-" + runtime.GOARCH
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// findAsset finds the release asset holding the binary for this platform
 func (m *Manager) findAsset(assets []Asset) *Asset {
-	// Build expected filename pattern
-	os := runtime.GOOS
-	arch := runtime.GOARCH
-
-	// Map architecture names
-	if arch == "amd64" {
-		arch = "amd64"
-	} else if arch == "arm64" {
-		arch = "arm64"
-	}
-
-	// Look for matching asset
-	patterns := []string{
-		fmt.Sprintf("search_%s_%s.tar.gz", os, arch),
-		fmt.Sprintf("search-%s-%s.tar.gz", os, arch),
-		fmt.Sprintf("search_%s_%s.zip", os, arch),
-	}
-
-	for _, asset := range assets {
-		for _, pattern := range patterns {
-			if strings.Contains(strings.ToLower(asset.Name), strings.ToLower(pattern)) ||
-				asset.Name == pattern {
-				return &asset
-			}
+	want := GetBinaryName()
+	for i := range assets {
+		if assets[i].Name == want {
+			return &assets[i]
 		}
 	}
-
 	return nil
 }
 
@@ -224,18 +345,22 @@ func (m *Manager) DownloadUpdate(downloadURL string, progressFn func(downloaded,
 	if err != nil {
 		return "", fmt.Errorf("failed to download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
 	// Create temp file
-	tempFile, err := os.CreateTemp(m.tempDir, "search-update-*.tar.gz")
+	tempFile, err := os.CreateTemp(m.tempDir, config.ProjectName+"-update-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer tempFile.Close()
+	defer func() {
+		if err := tempFile.Close(); err != nil {
+			slog.Warn("failed to close update temp file", "error", err)
+		}
+	}()
 
 	// Download with progress
 	total := resp.ContentLength
@@ -266,11 +391,17 @@ func (m *Manager) DownloadUpdate(downloadURL string, progressFn func(downloaded,
 
 // VerifyChecksum verifies the SHA-256 checksum of a downloaded file.
 // Per AI.md PART 22: "download binary → verify SHA-256 → atomic replace".
-// checksumURL points to a checksums.txt-format file where each line is:
-// "<hex-sha256>  <filename>". If checksumURL is empty the check is skipped.
-func (m *Manager) VerifyChecksum(filePath, checksumURL string) error {
+// checksumURL points to a sha256.txt-format file where each line is
+// "<hex-sha256>  <filename>", keyed by the RELEASE ASSET name rather than the
+// local temp filename, so assetName must be supplied. Verification is
+// MANDATORY: an empty checksumURL means the release published no sha256.txt
+// asset and the update is rejected.
+func (m *Manager) VerifyChecksum(filePath, assetName, checksumURL string) error {
 	if checksumURL == "" {
-		return nil
+		return fmt.Errorf("release has no sha256.txt asset: refusing to install unverified binary")
+	}
+	if assetName == "" {
+		assetName = filepath.Base(filePath)
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -278,14 +409,14 @@ func (m *Manager) VerifyChecksum(filePath, checksumURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch checksums: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("checksums endpoint returned %d", resp.StatusCode)
 	}
 
-	// Find the expected hash for this file
-	filename := filepath.Base(filePath)
+	// Find the expected hash for the published asset name
+	filename := assetName
 	var expected string
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
@@ -311,7 +442,11 @@ func (m *Manager) VerifyChecksum(filePath, checksumURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file for checksum: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Warn("failed to close update checksum file", "error", err)
+		}
+	}()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -321,16 +456,18 @@ func (m *Manager) VerifyChecksum(filePath, checksumURL string) error {
 
 	if got != expected {
 		// Delete the corrupt download immediately — never install a bad binary
-		os.Remove(filePath)
-		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", filename, expected, got)
+		removeErr := os.Remove(filePath)
+		return errors.Join(fmt.Errorf("checksum mismatch for %s: expected %s, got %s", filename, expected, got), removeErr)
 	}
 	return nil
 }
 
-// InstallUpdate installs an update from a downloaded archive.
-// checksumURL, if non-empty, points to a checksums.txt file used to verify
-// the archive SHA-256 before extraction per AI.md PART 22.
-func (m *Manager) InstallUpdate(archivePath, checksumURL string) error {
+// InstallUpdate installs a downloaded release binary in place.
+// downloadPath is the raw binary fetched from the release; assetName is the
+// published asset name used to look its hash up in sha256.txt; checksumURL
+// points at that sha256.txt. Per AI.md PART 22 the flow is
+// "verify SHA-256 -> back up current binary -> replace running binary".
+func (m *Manager) InstallUpdate(downloadPath, assetName, checksumURL string) error {
 	// Per AI.md PART 22: check binary path is writable before proceeding;
 	// escalate privileges if not, then return so the elevated process continues.
 	// ErrNotExist is skipped — the backup step will fail with a clearer message.
@@ -345,11 +482,13 @@ func (m *Manager) InstallUpdate(archivePath, checksumURL string) error {
 		return fmt.Errorf("failed to check binary path writability: %w", err)
 	}
 	if err == nil {
-		f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			return fmt.Errorf("failed to close binary writability check: %w", closeErr)
+		}
 	}
 
 	// Per AI.md PART 22: verify SHA-256 before installing
-	if err := m.VerifyChecksum(archivePath, checksumURL); err != nil {
+	if err := m.VerifyChecksum(downloadPath, assetName, checksumURL); err != nil {
 		return fmt.Errorf("checksum verification failed: %w", err)
 	}
 
@@ -358,21 +497,23 @@ func (m *Manager) InstallUpdate(archivePath, checksumURL string) error {
 		return fmt.Errorf("failed to backup current binary: %w", err)
 	}
 
-	// Extract new binary from archive
-	newBinaryPath, err := m.extractBinary(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to extract binary: %w", err)
+	// The release asset is the binary itself; make it executable before it
+	// takes the place of the running one
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(downloadPath, 0755); err != nil {
+			return fmt.Errorf("failed to set permissions: %w", err)
+		}
 	}
 
 	// Replace current binary
-	if err := m.replaceBinary(newBinaryPath); err != nil {
+	if err := m.replaceBinary(downloadPath); err != nil {
 		return fmt.Errorf("failed to replace binary: %w", err)
 	}
 
-	// Clean up
-	os.Remove(archivePath)
-	os.Remove(newBinaryPath)
-
+	// Clean up any leftover download
+	if err := os.Remove(downloadPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("update installed but failed to remove download: %w", err)
+	}
 	return nil
 }
 
@@ -388,13 +529,21 @@ func (m *Manager) backupCurrentBinary() error {
 	if err != nil {
 		return err
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil {
+			slog.Warn("failed to close current binary source", "error", err)
+		}
+	}()
 
 	dst, err := os.Create(backupPath)
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
+	defer func() {
+		if err := dst.Close(); err != nil {
+			slog.Warn("failed to close current binary backup", "error", err)
+		}
+	}()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		return err
@@ -403,128 +552,10 @@ func (m *Manager) backupCurrentBinary() error {
 	return nil
 }
 
-// extractBinary extracts the binary from a tar.gz archive
-func (m *Manager) extractBinary(archivePath string) (string, error) {
-	file, err := os.Open(archivePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	gzReader, err := gzip.NewReader(file)
-	if err != nil {
-		return "", err
-	}
-	defer gzReader.Close()
-
-	tarReader := tar.NewReader(gzReader)
-
-	// Look for the binary
-	binaryName := "search"
-	if runtime.GOOS == "windows" {
-		binaryName = "search.exe"
-	}
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-
-		// Check if this is the binary
-		if filepath.Base(header.Name) == binaryName && header.Typeflag == tar.TypeReg {
-			// Extract to temp location
-			extractPath := filepath.Join(m.tempDir, binaryName+".new")
-			outFile, err := os.OpenFile(extractPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-			if err != nil {
-				return "", err
-			}
-
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
-				return "", err
-			}
-			outFile.Close()
-
-			return extractPath, nil
-		}
-	}
-
-	return "", fmt.Errorf("binary not found in archive")
-}
-
-// replaceBinary replaces the current binary with the new one
+// replaceBinary swaps the new binary in for the currently installed one using
+// the platform-specific strategy from AI.md PART 22
 func (m *Manager) replaceBinary(newBinaryPath string) error {
-	// On Windows, we can't replace a running binary directly
-	if runtime.GOOS == "windows" {
-		// Rename current to .old
-		oldPath := m.binaryPath + ".old"
-		os.Remove(oldPath)
-		if err := os.Rename(m.binaryPath, oldPath); err != nil {
-			return err
-		}
-	}
-
-	// Move new binary to target location
-	if err := os.Rename(newBinaryPath, m.binaryPath); err != nil {
-		// Try copy instead
-		src, err := os.Open(newBinaryPath)
-		if err != nil {
-			return err
-		}
-		defer src.Close()
-
-		dst, err := os.OpenFile(m.binaryPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-		if err != nil {
-			return err
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, src); err != nil {
-			return err
-		}
-	}
-
-	// Ensure executable permission
-	return os.Chmod(m.binaryPath, 0755)
-}
-
-// Rollback rolls back to the previous version
-func (m *Manager) Rollback() error {
-	// Find the most recent backup
-	entries, err := os.ReadDir(m.backupDir)
-	if err != nil {
-		return fmt.Errorf("failed to read backup directory: %w", err)
-	}
-
-	var latestBackup string
-	var latestTime time.Time
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(entry.Name(), ".backup") {
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			if latestBackup == "" || info.ModTime().After(latestTime) {
-				latestBackup = entry.Name()
-				latestTime = info.ModTime()
-			}
-		}
-	}
-
-	if latestBackup == "" {
-		return fmt.Errorf("no backup found to rollback to")
-	}
-
-	backupPath := filepath.Join(m.backupDir, latestBackup)
-	return m.replaceBinary(backupPath)
+	return replaceBinary(m.binaryPath, newBinaryPath)
 }
 
 // ListAvailableVersions returns a list of available versions
@@ -584,8 +615,10 @@ func parseVersion(v string) []int {
 
 	var nums []int
 	for _, p := range parts {
-		var n int
-		fmt.Sscanf(p, "%d", &n)
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			n = 0
+		}
 		nums = append(nums, n)
 	}
 

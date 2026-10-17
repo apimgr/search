@@ -4,6 +4,7 @@
 <meta name="description" content="{{if .Description}}{{.Description}}{{else}}{{.Config.Server.Description}}{{end}}">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
+<meta name="csrf-token" content="{{.CSRFToken}}">
 
 {{/* OpenGraph */}}
 <meta property="og:title" content="{{if .Title}}{{.Title}} - {{end}}{{.Config.Server.Title}}">

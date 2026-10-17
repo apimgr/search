@@ -363,7 +363,7 @@ func TestRelatedSearchesGenerateVariationsTwoWords(t *testing.T) {
 	// Two word queries should not include word removal variations (needs > 2)
 	for _, v := range variations {
 		if v == "tutorial" || v == "golang" {
-			// This is fine - word removal only happens for > 2 words
+			t.Errorf("two-word query produced a standalone word-removal variation %q", v)
 		}
 	}
 	if len(variations) == 0 {

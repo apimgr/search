@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -64,9 +65,11 @@ func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (
 	var r rune
 	codePointPattern := regexp.MustCompile(`(?i)^U?\+?([0-9a-fA-F]{4,6})$`)
 	if matches := codePointPattern.FindStringSubmatch(input); len(matches) > 1 {
-		var codePoint int
-		fmt.Sscanf(matches[1], "%x", &codePoint)
-		r = rune(codePoint)
+		parsed, err := strconv.ParseUint(matches[1], 16, 32)
+		if err != nil {
+			return nil, fmt.Errorf("parse Unicode code point: %w", err)
+		}
+		r = rune(parsed)
 	} else {
 		// Use the first character of input
 		r, _ = utf8.DecodeRuneInString(input)
@@ -99,7 +102,7 @@ func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (
 	charName := getCharacterName(r)
 
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf(`<div class="unicode-result">
+	fmt.Fprintf(&content, `<div class="unicode-result">
 <div class="char-display" style="font-size: 48px; text-align: center; padding: 20px;">%s</div>
 <table class="unicode-table">
 <tr><td><strong>Character:</strong></td><td>%s</td></tr>
@@ -118,7 +121,7 @@ func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (
 		getUTF16Encoding(r),
 		charName,
 		blockName,
-		category))
+		category)
 
 	return &Answer{
 		Type:    AnswerTypeUnicode,

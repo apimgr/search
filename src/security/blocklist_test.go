@@ -35,6 +35,70 @@ func TestBlocklistManager_IsBlocked(t *testing.T) {
 	}
 }
 
+func TestParseDomainBlocklist(t *testing.T) {
+	domains, err := parseDomainBlocklist(strings.NewReader("" +
+		"# source comment\nexample.com\n0.0.0.0 ads.example\n" +
+		"BÜCHER.example.\nnot-a-domain\nhttps://invalid.example/path\n"))
+	if err != nil {
+		t.Fatalf("parseDomainBlocklist() error = %v", err)
+	}
+	for _, domain := range []string{"example.com", "ads.example", "xn--bcher-kva.example"} {
+		if !domains[domain] {
+			t.Errorf("parsed domains missing %q: %#v", domain, domains)
+		}
+	}
+	if domains["not-a-domain"] || domains["invalid.example"] {
+		t.Errorf("parser accepted a malformed or URL entry: %#v", domains)
+	}
+}
+
+func TestBlocklistManager_IsBlockedDomain(t *testing.T) {
+	m := NewBlocklistManager("", nil)
+	m.blockedDomains["blocked.example"] = true
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{"exact host", "blocked.example", true},
+		{"subdomain", "WWW.BLOCKED.EXAMPLE.:443", true},
+		{"suffix boundary", "notblocked.example", false},
+		{"IP literal", "192.0.2.1", false},
+		{"malformed host", "blocked.example/path", false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := m.IsBlockedDomain(test.host); got != test.want {
+				t.Errorf("IsBlockedDomain(%q) = %v, want %v", test.host, got, test.want)
+			}
+		})
+	}
+}
+
+func TestBlocklistManager_NeedsInitialUpdate(t *testing.T) {
+	tests := []struct {
+		name    string
+		sources []BlocklistSource
+		seed    bool
+		want    bool
+	}{
+		{name: "enabled feed without data", sources: []BlocklistSource{{Name: "feed", Enabled: true}}, want: true},
+		{name: "no enabled feeds", sources: []BlocklistSource{{Name: "feed", Enabled: false}}, want: false},
+		{name: "loaded data", sources: []BlocklistSource{{Name: "feed", Enabled: true}}, seed: true, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manager := NewBlocklistManager("", test.sources)
+			if test.seed {
+				manager.blockedDomains["blocked.example"] = true
+			}
+			if got := manager.NeedsInitialUpdate(); got != test.want {
+				t.Fatalf("NeedsInitialUpdate() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestBlocklistManager_ParseBlocklist(t *testing.T) {
 	m := NewBlocklistManager("", nil)
 

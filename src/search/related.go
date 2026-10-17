@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -143,7 +144,11 @@ func (rs *RelatedSearches) fetchDuckDuckGo(ctx context.Context, query string) []
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("failed to close DuckDuckGo autocomplete response: %v", err)
+		}
+	}()
 
 	var result []struct {
 		Phrase string `json:"phrase"`
@@ -176,7 +181,11 @@ func (rs *RelatedSearches) fetchGoogle(ctx context.Context, query string) []stri
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("failed to close Google autocomplete response: %v", err)
+		}
+	}()
 
 	// Google returns [query, [suggestions]]
 	var result []interface{}

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/version"
 )
 
@@ -123,9 +125,9 @@ func (h *SafeHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		statusClass = "unsafe"
 	}
 
-	content.WriteString(fmt.Sprintf("<div class=\"safety-result %s\">", statusClass))
-	content.WriteString(fmt.Sprintf("<strong>%s</strong> - Safety Score: %d/100<br><br>", statusIcon, result.Score))
-	content.WriteString(fmt.Sprintf("<strong>URL:</strong> %s<br><br>", result.URL))
+	fmt.Fprintf(&content, "<div class=\"safety-result %s\">", statusClass)
+	fmt.Fprintf(&content, "<strong>%s</strong> - Safety Score: %d/100<br><br>", statusIcon, result.Score)
+	fmt.Fprintf(&content, "<strong>URL:</strong> %s<br><br>", result.URL)
 
 	// Individual checks
 	content.WriteString("<strong>Security Checks:</strong><br>")
@@ -141,17 +143,17 @@ func (h *SafeHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		case "info":
 			icon = "[i]"
 		}
-		content.WriteString(fmt.Sprintf("%s %s: %s<br>", icon, check.Name, check.Message))
+		fmt.Fprintf(&content, "%s %s: %s<br>", icon, check.Name, check.Message)
 	}
 
 	// Certificate info
 	if result.Certificate != nil {
 		content.WriteString("<br><strong>SSL Certificate:</strong><br>")
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Subject: %s<br>", result.Certificate.Subject))
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Issuer: %s<br>", result.Certificate.Issuer))
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Valid Until: %s (%d days left)<br>",
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Subject: %s<br>", result.Certificate.Subject)
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Issuer: %s<br>", result.Certificate.Issuer)
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Valid Until: %s (%d days left)<br>",
 			result.Certificate.ValidUntil.Format("2006-01-02"),
-			result.Certificate.DaysLeft))
+			result.Certificate.DaysLeft)
 	}
 
 	content.WriteString("</div>")
@@ -341,7 +343,7 @@ func (h *SafeHandler) checkSafety(ctx context.Context, urlStr string) *SafetyRes
 			})
 			result.Score -= 10
 		} else {
-			defer resp.Body.Close()
+			defer closeutil.Close(resp.Body)
 
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 				result.Checks = append(result.Checks, SafetyCheck{
@@ -389,7 +391,7 @@ func (h *SafeHandler) checkSSLCertificate(ctx context.Context, host string) (*Ce
 		if err != nil {
 			return nil, err
 		}
-		defer conn.Close()
+		defer closeutil.Close(conn)
 
 		certs := conn.ConnectionState().PeerCertificates
 		if len(certs) == 0 {
@@ -410,7 +412,7 @@ func (h *SafeHandler) checkSSLCertificate(ctx context.Context, host string) (*Ce
 			IsValid: false,
 		}, nil
 	}
-	defer conn.Close()
+	defer closeutil.Close(conn)
 
 	certs := conn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {

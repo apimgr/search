@@ -1,8 +1,6 @@
 package update
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -52,39 +50,6 @@ func patchDefaultTransport(t *testing.T, server *httptest.Server) func() {
 	return func() { http.DefaultTransport = orig }
 }
 
-// makeTarGz creates a .tar.gz file at archivePath containing a single regular
-// file named entryName with the given content.
-func makeTarGz(t *testing.T, archivePath, entryName string, content []byte) {
-	t.Helper()
-	f, err := os.Create(archivePath)
-	if err != nil {
-		t.Fatalf("makeTarGz: Create %q: %v", archivePath, err)
-	}
-	defer f.Close()
-
-	gw := gzip.NewWriter(f)
-	tw := tar.NewWriter(gw)
-
-	hdr := &tar.Header{
-		Name:     entryName,
-		Mode:     0755,
-		Size:     int64(len(content)),
-		Typeflag: tar.TypeReg,
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		t.Fatalf("makeTarGz: WriteHeader: %v", err)
-	}
-	if _, err := tw.Write(content); err != nil {
-		t.Fatalf("makeTarGz: Write content: %v", err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("makeTarGz: tar Close: %v", err)
-	}
-	if err := gw.Close(); err != nil {
-		t.Fatalf("makeTarGz: gzip Close: %v", err)
-	}
-}
-
 // sha256HexFile returns the hex-encoded SHA-256 hash of the named file.
 func sha256HexFile(t *testing.T, path string) string {
 	t.Helper()
@@ -97,6 +62,34 @@ func sha256HexFile(t *testing.T, path string) string {
 }
 
 // TestFetchReleasesSuccess tests successful release retrieval via a mock server.
+func TestCheckForUpdatesDeferredDevelIgnoresDeferral(t *testing.T) {
+	now := time.Now().UTC()
+	releases := []Release{{
+		TagName:     DevelTag,
+		Name:        "Devel Build abc1234",
+		Prerelease:  true,
+		PublishedAt: now.Add(-time.Hour),
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(releases); err != nil {
+			t.Errorf("encode releases: %v", err)
+		}
+	}))
+	defer server.Close()
+	restore := patchDefaultTransport(t, server)
+	defer restore()
+
+	manager := &Manager{currentVersion: "oldcommit", buildEpoch: now.Add(-2 * time.Hour).Unix()}
+	info, err := manager.CheckForUpdatesDeferred("daily", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Available || info.Branch != BranchDevel || info.LatestVersion != DevelTag {
+		t.Fatalf("deferred devel result = %#v, want available devel release", info)
+	}
+}
+
 func TestFetchReleasesSuccess(t *testing.T) {
 	now := time.Now().UTC()
 	releases := []Release{
@@ -231,7 +224,10 @@ func TestCheckForUpdatesUpdateAvailable(t *testing.T) {
 			PublishedAt: now,
 			Assets: []Asset{
 				{
-					Name:        fmt.Sprintf("search_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH),
+					// AI.md PART 22: the platform asset is named
+					// {project_name}-{GOOS}-{GOARCH} (plus .exe on Windows) —
+					// that is what GetBinaryName builds.
+					Name:        GetBinaryName(),
 					Size:        9999,
 					DownloadURL: "https://example.com/download",
 				},
@@ -249,7 +245,7 @@ func TestCheckForUpdatesUpdateAvailable(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(false)
+	info, err := m.CheckForUpdates("stable")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}
@@ -289,7 +285,7 @@ func TestCheckForUpdatesAlreadyLatest(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(false)
+	info, err := m.CheckForUpdates("stable")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}
@@ -309,7 +305,7 @@ func TestCheckForUpdatesEmptyReleases(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(false)
+	info, err := m.CheckForUpdates("stable")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}
@@ -338,7 +334,7 @@ func TestCheckForUpdatesSkipsDraftsAndPrerelease(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(false)
+	info, err := m.CheckForUpdates("stable")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}
@@ -369,12 +365,12 @@ func TestCheckForUpdatesPrereleaseIncluded(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(true)
+	info, err := m.CheckForUpdates("beta")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}
 	if !info.Available {
-		t.Error("Available = false with includePrerelease=true, want true")
+		t.Error("Available = false with branch=beta, want true")
 	}
 	if !info.IsPrerelease {
 		t.Error("IsPrerelease = false, want true")
@@ -391,7 +387,7 @@ func TestCheckForUpdatesNetworkError(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	_, err := m.CheckForUpdates(false)
+	_, err := m.CheckForUpdates("stable")
 	if err == nil {
 		t.Error("CheckForUpdates() expected error for server 500, got nil")
 	}
@@ -424,7 +420,7 @@ func TestCheckForUpdatesNoMatchingAsset(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(false)
+	info, err := m.CheckForUpdates("stable")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}
@@ -503,8 +499,9 @@ func TestListAvailableVersionsNetworkError(t *testing.T) {
 	}
 }
 
-// TestVerifyChecksumSkippedForEmpty verifies that an empty checksumURL is a no-op.
-func TestVerifyChecksumSkippedForEmpty(t *testing.T) {
+// TestVerifyChecksumRejectsEmptyURL verifies that a release without a sha256.txt
+// asset is rejected outright — checksum verification is mandatory per AI.md PART 22.
+func TestVerifyChecksumRejectsEmptyURL(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "verify-")
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
@@ -515,8 +512,12 @@ func TestVerifyChecksumSkippedForEmpty(t *testing.T) {
 	os.WriteFile(filePath, []byte("content"), 0644)
 
 	m := &Manager{}
-	if err := m.VerifyChecksum(filePath, ""); err != nil {
-		t.Errorf("VerifyChecksum() with empty URL = %v, want nil", err)
+	err = m.VerifyChecksum(filePath, "", "")
+	if err == nil {
+		t.Fatal("VerifyChecksum() with empty URL = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "sha256.txt") {
+		t.Errorf("VerifyChecksum() error = %q, want it to mention sha256.txt", err.Error())
 	}
 }
 
@@ -543,7 +544,7 @@ func TestVerifyChecksumSuccess(t *testing.T) {
 	defer server.Close()
 
 	m := &Manager{}
-	if err := m.VerifyChecksum(filePath, server.URL+"/checksums.txt"); err != nil {
+	if err := m.VerifyChecksum(filePath, "", server.URL+"/checksums.txt"); err != nil {
 		t.Errorf("VerifyChecksum() error = %v, want nil", err)
 	}
 }
@@ -570,7 +571,7 @@ func TestVerifyChecksumMismatch(t *testing.T) {
 	defer server.Close()
 
 	m := &Manager{}
-	err = m.VerifyChecksum(filePath, server.URL+"/checksums.txt")
+	err = m.VerifyChecksum(filePath, "", server.URL+"/checksums.txt")
 	if err == nil {
 		t.Error("VerifyChecksum() expected error for hash mismatch, got nil")
 	}
@@ -602,7 +603,7 @@ func TestVerifyChecksumFilenameNotInChecksumFile(t *testing.T) {
 	defer server.Close()
 
 	m := &Manager{}
-	err = m.VerifyChecksum(filePath, server.URL+"/checksums.txt")
+	err = m.VerifyChecksum(filePath, "", server.URL+"/checksums.txt")
 	if err == nil {
 		t.Error("VerifyChecksum() expected error when filename not in checksum file, got nil")
 	}
@@ -628,7 +629,7 @@ func TestVerifyChecksumServerNonOK(t *testing.T) {
 	defer server.Close()
 
 	m := &Manager{}
-	err = m.VerifyChecksum(filePath, server.URL+"/checksums.txt")
+	err = m.VerifyChecksum(filePath, "", server.URL+"/checksums.txt")
 	if err == nil {
 		t.Error("VerifyChecksum() expected error for server 500, got nil")
 	}
@@ -649,7 +650,7 @@ func TestVerifyChecksumFetchFailed(t *testing.T) {
 	os.WriteFile(filePath, []byte("content"), 0644)
 
 	m := &Manager{}
-	err = m.VerifyChecksum(filePath, "http://127.0.0.1:1/checksums.txt")
+	err = m.VerifyChecksum(filePath, "", "http://127.0.0.1:1/checksums.txt")
 	if err == nil {
 		t.Error("VerifyChecksum() expected error for unreachable server, got nil")
 	}
@@ -670,7 +671,7 @@ func TestVerifyChecksumFileCannotOpen(t *testing.T) {
 	defer server.Close()
 
 	m := &Manager{}
-	err := m.VerifyChecksum("/nonexistent/missing.tar.gz", server.URL+"/checksums.txt")
+	err := m.VerifyChecksum("/nonexistent/missing.tar.gz", "", server.URL+"/checksums.txt")
 	if err == nil {
 		t.Error("VerifyChecksum() expected error for missing file, got nil")
 	}
@@ -706,7 +707,7 @@ func TestVerifyChecksumWithCommentsAndBlanks(t *testing.T) {
 	defer server.Close()
 
 	m := &Manager{}
-	if err := m.VerifyChecksum(filePath, server.URL+"/checksums.txt"); err != nil {
+	if err := m.VerifyChecksum(filePath, "", server.URL+"/checksums.txt"); err != nil {
 		t.Errorf("VerifyChecksum() with comment/blank lines error = %v, want nil", err)
 	}
 }
@@ -786,12 +787,16 @@ func TestInstallUpdateWithChecksumSuccess(t *testing.T) {
 	currentBinary := filepath.Join(tempDir, binaryName)
 	os.WriteFile(currentBinary, []byte("old binary"), 0755)
 
-	archivePath := filepath.Join(tempDir, "update.tar.gz")
+	// AI.md PART 22: the release asset is the raw binary, not an archive, so
+	// InstallUpdate is handed the downloaded binary itself.
+	newBinaryPath := filepath.Join(tempDir, "downloaded-binary")
 	newBinaryContent := []byte("new binary content for checksum install")
-	makeTarGz(t, archivePath, binaryName, newBinaryContent)
+	if err := os.WriteFile(newBinaryPath, newBinaryContent, 0755); err != nil {
+		t.Fatalf("WriteFile new binary: %v", err)
+	}
 
-	archiveHash := sha256HexFile(t, archivePath)
-	checksumBody := fmt.Sprintf("%s  %s\n", archiveHash, filepath.Base(archivePath))
+	binaryHash := sha256HexFile(t, newBinaryPath)
+	checksumBody := fmt.Sprintf("%s  %s\n", binaryHash, filepath.Base(newBinaryPath))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -806,7 +811,7 @@ func TestInstallUpdateWithChecksumSuccess(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	if err := m.InstallUpdate(archivePath, server.URL+"/checksums.txt"); err != nil {
+	if err := m.InstallUpdate(newBinaryPath, filepath.Base(newBinaryPath), server.URL+"/checksums.txt"); err != nil {
 		t.Fatalf("InstallUpdate() with valid checksum error = %v", err)
 	}
 
@@ -835,11 +840,14 @@ func TestInstallUpdateWithChecksumMismatch(t *testing.T) {
 	originalContent := []byte("original binary")
 	os.WriteFile(currentBinary, originalContent, 0755)
 
-	archivePath := filepath.Join(tempDir, "update.tar.gz")
-	makeTarGz(t, archivePath, binaryName, []byte("new binary"))
+	// AI.md PART 22: the release asset is the raw binary, not an archive.
+	newBinaryPath := filepath.Join(tempDir, "downloaded-binary")
+	if err := os.WriteFile(newBinaryPath, []byte("new binary"), 0755); err != nil {
+		t.Fatalf("WriteFile new binary: %v", err)
+	}
 
 	wrongHash := strings.Repeat("f", 64)
-	checksumBody := fmt.Sprintf("%s  %s\n", wrongHash, filepath.Base(archivePath))
+	checksumBody := fmt.Sprintf("%s  %s\n", wrongHash, filepath.Base(newBinaryPath))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -854,7 +862,7 @@ func TestInstallUpdateWithChecksumMismatch(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	err = m.InstallUpdate(archivePath, server.URL+"/checksums.txt")
+	err = m.InstallUpdate(newBinaryPath, filepath.Base(newBinaryPath), server.URL+"/checksums.txt")
 	if err == nil {
 		t.Error("InstallUpdate() expected error for checksum mismatch, got nil")
 	}
@@ -905,7 +913,7 @@ func TestCheckForUpdatesSelectsLatestByDate(t *testing.T) {
 	defer restore()
 
 	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
-	info, err := m.CheckForUpdates(false)
+	info, err := m.CheckForUpdates("stable")
 	if err != nil {
 		t.Fatalf("CheckForUpdates() error = %v", err)
 	}

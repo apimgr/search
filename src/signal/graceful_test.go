@@ -435,13 +435,14 @@ func TestServerShutdownError(t *testing.T) {
 
 	// This should return context deadline exceeded
 	err := server.Shutdown(ctx)
-	if err != context.DeadlineExceeded {
-		// This is OK, the server might not have even started accepting yet
-		// Just verify we don't panic
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Shutdown() error = %v, want nil or context deadline exceeded", err)
 	}
 
 	// Clean up
-	server.Close()
+	if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		t.Errorf("Close() error = %v", err)
+	}
 }
 
 // TestGracefulShutdownPIDFileRemovalError tests PID file removal error path

@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // NutritionFetcher fetches nutrition facts from USDA FoodData Central and Open Food Facts
@@ -190,7 +192,7 @@ func (f *NutritionFetcher) fetchFromUSDA(ctx context.Context, foodItem string) (
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("USDA API returned status %d", resp.StatusCode)
@@ -344,7 +346,7 @@ func (f *NutritionFetcher) fetchFromOpenFoodFacts(ctx context.Context, foodItem 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var result struct {
 		Products []struct {

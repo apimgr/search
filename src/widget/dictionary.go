@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // DictionaryFetcher fetches word definitions
@@ -69,7 +71,7 @@ func (f *DictionaryFetcher) Fetch(ctx context.Context, params map[string]string)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == 404 {
 		return &WidgetData{

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -219,7 +220,11 @@ func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	certsDir := tempDir + "/certs"
+	// AI.md PART 15 storage layout: app-managed certificates live in
+	// {config_dir}/ssl/letsencrypt/{fqdn}/{fullchain.pem,privkey.pem}, which is
+	// exactly what appCertPaths builds from sslDir + fqdn.
+	sslDir := filepath.Join(tempDir, "ssl")
+	certsDir := filepath.Join(sslDir, "letsencrypt", "localhost")
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -231,11 +236,10 @@ func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 		t.Fatalf("generateTestCertWithExpiry: %v", err)
 	}
 
-	// obtainCertificateDNS01 looks for these exact filenames.
-	if err := os.Rename(certFile, certsDir+"/certificate.pem"); err != nil {
+	if err := os.Rename(certFile, filepath.Join(certsDir, "fullchain.pem")); err != nil {
 		t.Fatalf("rename cert: %v", err)
 	}
-	if err := os.Rename(keyFile, certsDir+"/private.key"); err != nil {
+	if err := os.Rename(keyFile, filepath.Join(certsDir, "privkey.pem")); err != nil {
 		t.Fatalf("rename key: %v", err)
 	}
 
@@ -248,6 +252,8 @@ func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 	m := &Manager{
 		config:     cfg,
 		dataDir:    tempDir,
+		sslDir:     sslDir,
+		fqdn:       "localhost",
 		legoClient: legoClient,
 	}
 
@@ -265,7 +271,9 @@ func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 // so Obtain fails, but the code path through the cert-load check is covered.
 func TestObtainCertificateDNS01ExpiredCertOnDisk(t *testing.T) {
 	tempDir := t.TempDir()
-	certsDir := tempDir + "/certs"
+	// AI.md PART 15 layout: {config_dir}/ssl/letsencrypt/{fqdn}/.
+	sslDir := filepath.Join(tempDir, "ssl")
+	certsDir := filepath.Join(sslDir, "letsencrypt", "example.com")
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -275,10 +283,10 @@ func TestObtainCertificateDNS01ExpiredCertOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generateTestCertWithExpiry: %v", err)
 	}
-	if err := os.Rename(certFile, certsDir+"/certificate.pem"); err != nil {
+	if err := os.Rename(certFile, filepath.Join(certsDir, "fullchain.pem")); err != nil {
 		t.Fatalf("rename cert: %v", err)
 	}
-	if err := os.Rename(keyFile, certsDir+"/private.key"); err != nil {
+	if err := os.Rename(keyFile, filepath.Join(certsDir, "privkey.pem")); err != nil {
 		t.Fatalf("rename key: %v", err)
 	}
 
@@ -291,6 +299,8 @@ func TestObtainCertificateDNS01ExpiredCertOnDisk(t *testing.T) {
 	m := &Manager{
 		config:     cfg,
 		dataDir:    tempDir,
+		sslDir:     sslDir,
+		fqdn:       "example.com",
 		legoClient: legoClient,
 	}
 
@@ -971,9 +981,8 @@ func TestLoadOrCreateAccountKeyCreatesKey(t *testing.T) {
 	}
 }
 
-// TestLoadOrCreateAccountKeyCorruptedFile exercises the ParseECPrivateKey failure
-// branch in loadOrCreateAccountKey — file exists but contains invalid key data,
-// so the function falls through to generating a new key.
+// TestLoadOrCreateAccountKeyCorruptedFile verifies that a corrupt persisted
+// account key is rejected without silently replacing it.
 func TestLoadOrCreateAccountKeyCorruptedFile(t *testing.T) {
 	tempDir := t.TempDir()
 	certDir := tempDir + "/certs"
@@ -992,20 +1001,14 @@ func TestLoadOrCreateAccountKeyCorruptedFile(t *testing.T) {
 		dataDir: tempDir,
 	}
 
-	// Should ignore the corrupt file and generate a fresh key.
-	key, err := m.loadOrCreateAccountKey()
-	if err != nil {
-		t.Fatalf("loadOrCreateAccountKey() error = %v; want new key generated", err)
-	}
-	if key == nil {
-		t.Error("loadOrCreateAccountKey() returned nil key after corrupt file")
+	if _, err := m.loadOrCreateAccountKey(); err == nil {
+		t.Fatal("loadOrCreateAccountKey() should reject a corrupt existing account key")
 	}
 }
 
-// TestNewManagerWithSecretDNS01FallsBack verifies that when dns-01 config is
-// invalid (missing provider), NewManagerWithSecret logs the failure and falls
-// back to HTTP-01 (autocert), leaving certManager non-nil.
-func TestNewManagerWithSecretDNS01FallsBack(t *testing.T) {
+// TestNewManagerWithSecretDNS01DoesNotFallback verifies that invalid dns-01
+// configuration remains selected instead of changing challenge type.
+func TestNewManagerWithSecretDNS01DoesNotFallback(t *testing.T) {
 	cfg := &config.SSLConfig{Enabled: true}
 	cfg.LetsEncrypt.Enabled = true
 	cfg.LetsEncrypt.Challenge = "dns-01"
@@ -1015,9 +1018,8 @@ func TestNewManagerWithSecretDNS01FallsBack(t *testing.T) {
 	if m == nil {
 		t.Fatal("NewManagerWithSecret returned nil")
 	}
-	// DNS-01 fails (missing provider) → falls back to HTTP-01 → certManager should be set.
-	if m.certManager == nil {
-		t.Error("certManager should be non-nil after DNS-01 fallback to HTTP-01")
+	if m.certManager != nil {
+		t.Error("DNS-01 initialization failure must not silently initialize HTTP-01")
 	}
 }
 

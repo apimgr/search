@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -129,7 +130,7 @@ func (h *TLDRHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 
 		if resp.StatusCode == http.StatusOK {
 			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			resp.Body.Close()
+			closeutil.Close(resp.Body)
 			if readErr != nil {
 				continue
 			}
@@ -137,7 +138,7 @@ func (h *TLDRHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 			found = true
 			break
 		}
-		resp.Body.Close()
+		closeutil.Close(resp.Body)
 	}
 
 	if !found {
@@ -170,7 +171,7 @@ func parseTLDRMarkdown(md, command string) string {
 	lines := strings.Split(md, "\n")
 	var result strings.Builder
 
-	result.WriteString(fmt.Sprintf("<strong>%s</strong><br><br>", command))
+	fmt.Fprintf(&result, "<strong>%s</strong><br><br>", command)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -184,15 +185,15 @@ func parseTLDRMarkdown(md, command string) string {
 		if strings.HasPrefix(line, "> ") {
 			// Description
 			desc := strings.TrimPrefix(line, "> ")
-			result.WriteString(fmt.Sprintf("<em>%s</em><br><br>", desc))
+			fmt.Fprintf(&result, "<em>%s</em><br><br>", desc)
 		} else if strings.HasPrefix(line, "- ") {
 			// Example description
 			desc := strings.TrimPrefix(line, "- ")
-			result.WriteString(fmt.Sprintf("&#8226; %s<br>", desc))
+			fmt.Fprintf(&result, "&#8226; %s<br>", desc)
 		} else if strings.HasPrefix(line, "`") && strings.HasSuffix(line, "`") {
 			// Code example
 			code := strings.Trim(line, "`")
-			result.WriteString(fmt.Sprintf("<code>%s</code><br><br>", code))
+			fmt.Fprintf(&result, "<code>%s</code><br><br>", code)
 		}
 	}
 
@@ -637,13 +638,13 @@ func explainCron(expr string) (string, error) {
 	fieldRanges := []string{"0-59", "0-23", "1-31", "1-12", "0-6 (Sun-Sat)"}
 
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("<strong>Expression:</strong> <code>%s</code><br><br>", expr))
+	fmt.Fprintf(&result, "<strong>Expression:</strong> <code>%s</code><br><br>", expr)
 	result.WriteString("<strong>Field Breakdown:</strong><br>")
 
 	for i, part := range parts {
 		explanation := explainCronField(part, i)
-		result.WriteString(fmt.Sprintf("&#8226; <strong>%s</strong> (%s): %s = %s<br>",
-			fieldNames[i], fieldRanges[i], part, explanation))
+		fmt.Fprintf(&result, "&#8226; <strong>%s</strong> (%s): %s = %s<br>",
+			fieldNames[i], fieldRanges[i], part, explanation)
 	}
 
 	result.WriteString("<br><strong>Human Readable:</strong><br>")
@@ -715,19 +716,19 @@ func humanReadableCron(parts []string) string {
 		desc.WriteString("At midnight")
 	} else if strings.HasPrefix(minute, "*/") {
 		step := strings.TrimPrefix(minute, "*/")
-		desc.WriteString(fmt.Sprintf("Every %s minutes", step))
+		fmt.Fprintf(&desc, "Every %s minutes", step)
 	} else if hour != "*" && minute != "*" {
-		desc.WriteString(fmt.Sprintf("At %s:%s", hour, fmt.Sprintf("%02s", minute)))
+		fmt.Fprintf(&desc, "At %s:%s", hour, fmt.Sprintf("%02s", minute))
 	} else {
-		desc.WriteString(fmt.Sprintf("At minute %s", minute))
+		fmt.Fprintf(&desc, "At minute %s", minute)
 		if hour != "*" {
-			desc.WriteString(fmt.Sprintf(" past hour %s", hour))
+			fmt.Fprintf(&desc, " past hour %s", hour)
 		}
 	}
 
 	// Day of month
 	if dayOfMonth != "*" {
-		desc.WriteString(fmt.Sprintf(" on day %s of the month", dayOfMonth))
+		fmt.Fprintf(&desc, " on day %s of the month", dayOfMonth)
 	}
 
 	// Month
@@ -735,9 +736,9 @@ func humanReadableCron(parts []string) string {
 		months := []string{"", "January", "February", "March", "April", "May", "June",
 			"July", "August", "September", "October", "November", "December"}
 		if m, err := strconv.Atoi(month); err == nil && m >= 1 && m <= 12 {
-			desc.WriteString(fmt.Sprintf(" in %s", months[m]))
+			fmt.Fprintf(&desc, " in %s", months[m])
 		} else {
-			desc.WriteString(fmt.Sprintf(" in month %s", month))
+			fmt.Fprintf(&desc, " in month %s", month)
 		}
 	}
 
@@ -745,9 +746,9 @@ func humanReadableCron(parts []string) string {
 	if dayOfWeek != "*" {
 		days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 		if d, err := strconv.Atoi(dayOfWeek); err == nil && d >= 0 && d <= 6 {
-			desc.WriteString(fmt.Sprintf(" on %s", days[d]))
+			fmt.Fprintf(&desc, " on %s", days[d])
 		} else {
-			desc.WriteString(fmt.Sprintf(" on day %s of the week", dayOfWeek))
+			fmt.Fprintf(&desc, " on day %s of the week", dayOfWeek)
 		}
 	}
 
@@ -1346,17 +1347,17 @@ func (h *JWTHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		if time.Now().After(expTime) {
 			claimsInfo.WriteString("<span style=\"color: red;\">&#9888; Token is EXPIRED</span><br>")
 		}
-		claimsInfo.WriteString(fmt.Sprintf("<strong>Expires:</strong> %s<br>", expTime.Format(time.RFC3339)))
+		fmt.Fprintf(&claimsInfo, "<strong>Expires:</strong> %s<br>", expTime.Format(time.RFC3339))
 	}
 	if iat, ok := payload["iat"].(float64); ok {
 		iatTime := time.Unix(int64(iat), 0)
-		claimsInfo.WriteString(fmt.Sprintf("<strong>Issued At:</strong> %s<br>", iatTime.Format(time.RFC3339)))
+		fmt.Fprintf(&claimsInfo, "<strong>Issued At:</strong> %s<br>", iatTime.Format(time.RFC3339))
 	}
 	if sub, ok := payload["sub"].(string); ok {
-		claimsInfo.WriteString(fmt.Sprintf("<strong>Subject:</strong> %s<br>", sub))
+		fmt.Fprintf(&claimsInfo, "<strong>Subject:</strong> %s<br>", sub)
 	}
 	if iss, ok := payload["iss"].(string); ok {
-		claimsInfo.WriteString(fmt.Sprintf("<strong>Issuer:</strong> %s<br>", iss))
+		fmt.Fprintf(&claimsInfo, "<strong>Issuer:</strong> %s<br>", iss)
 	}
 
 	content := fmt.Sprintf(`<div class="jwt-result">

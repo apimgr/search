@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // AnswerTypeCert is the answer type for certificate information
@@ -107,7 +109,7 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	}
 	conn, ok := netConn.(*tls.Conn)
 	if !ok {
-		netConn.Close()
+		closeutil.Close(netConn)
 		return &Answer{
 			Type:    AnswerTypeCert,
 			Query:   query,
@@ -115,7 +117,7 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 			Content: fmt.Sprintf("<strong>Error:</strong> Unexpected connection type for %s", domain),
 		}, nil
 	}
-	defer conn.Close()
+	defer closeutil.Close(conn)
 
 	// Get certificate chain
 	certs := conn.ConnectionState().PeerCertificates
@@ -143,9 +145,9 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	// Status indicator
 	if isValid {
 		if daysRemaining < 30 {
-			content.WriteString(fmt.Sprintf("<strong>Status:</strong> <span style=\"color: orange;\">Valid (expires in %d days)</span><br><br>", daysRemaining))
+			fmt.Fprintf(&content, "<strong>Status:</strong> <span style=\"color: orange;\">Valid (expires in %d days)</span><br><br>", daysRemaining)
 		} else {
-			content.WriteString(fmt.Sprintf("<strong>Status:</strong> <span style=\"color: green;\">Valid (%d days remaining)</span><br><br>", daysRemaining))
+			fmt.Fprintf(&content, "<strong>Status:</strong> <span style=\"color: green;\">Valid (%d days remaining)</span><br><br>", daysRemaining)
 		}
 	} else if now.Before(cert.NotBefore) {
 		content.WriteString("<strong>Status:</strong> <span style=\"color: red;\">Not yet valid</span><br><br>")
@@ -156,51 +158,51 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	// Subject information
 	content.WriteString("<strong>Subject:</strong><br>")
 	if cert.Subject.CommonName != "" {
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Common Name: %s<br>", escapeHTML(cert.Subject.CommonName)))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Common Name: %s<br>", escapeHTML(cert.Subject.CommonName))
 	}
 	if len(cert.Subject.Organization) > 0 {
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Organization: %s<br>", escapeHTML(strings.Join(cert.Subject.Organization, ", "))))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Organization: %s<br>", escapeHTML(strings.Join(cert.Subject.Organization, ", ")))
 	}
 	if len(cert.Subject.Country) > 0 {
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Country: %s<br>", escapeHTML(strings.Join(cert.Subject.Country, ", "))))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Country: %s<br>", escapeHTML(strings.Join(cert.Subject.Country, ", ")))
 	}
 	content.WriteString("<br>")
 
 	// Issuer information
 	content.WriteString("<strong>Issuer:</strong><br>")
 	if cert.Issuer.CommonName != "" {
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Common Name: %s<br>", escapeHTML(cert.Issuer.CommonName)))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Common Name: %s<br>", escapeHTML(cert.Issuer.CommonName))
 	}
 	if len(cert.Issuer.Organization) > 0 {
-		content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Organization: %s<br>", escapeHTML(strings.Join(cert.Issuer.Organization, ", "))))
+		fmt.Fprintf(&content, "&nbsp;&nbsp;Organization: %s<br>", escapeHTML(strings.Join(cert.Issuer.Organization, ", ")))
 	}
 	content.WriteString("<br>")
 
 	// Validity period
 	content.WriteString("<strong>Validity:</strong><br>")
-	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Not Before: %s<br>", cert.NotBefore.Format("2006-01-02 15:04:05 MST")))
-	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Not After: %s<br><br>", cert.NotAfter.Format("2006-01-02 15:04:05 MST")))
+	fmt.Fprintf(&content, "&nbsp;&nbsp;Not Before: %s<br>", cert.NotBefore.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(&content, "&nbsp;&nbsp;Not After: %s<br><br>", cert.NotAfter.Format("2006-01-02 15:04:05 MST"))
 
 	// SANs (Subject Alternative Names)
 	if len(cert.DNSNames) > 0 {
 		content.WriteString("<strong>Subject Alternative Names:</strong><br>")
 		for _, name := range cert.DNSNames {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s<br>", escapeHTML(name)))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;%s<br>", escapeHTML(name))
 		}
 		content.WriteString("<br>")
 	}
 
 	// Signature algorithm
-	content.WriteString(fmt.Sprintf("<strong>Signature Algorithm:</strong> %s<br>", cert.SignatureAlgorithm.String()))
+	fmt.Fprintf(&content, "<strong>Signature Algorithm:</strong> %s<br>", cert.SignatureAlgorithm.String())
 
 	// Public key info
-	content.WriteString(fmt.Sprintf("<strong>Public Key Algorithm:</strong> %s<br>", cert.PublicKeyAlgorithm.String()))
+	fmt.Fprintf(&content, "<strong>Public Key Algorithm:</strong> %s<br>", cert.PublicKeyAlgorithm.String())
 
 	// Serial number
-	content.WriteString(fmt.Sprintf("<strong>Serial Number:</strong> %s<br>", formatSerialNumber(cert.SerialNumber.Bytes())))
+	fmt.Fprintf(&content, "<strong>Serial Number:</strong> %s<br>", formatSerialNumber(cert.SerialNumber.Bytes()))
 
 	// Certificate chain length
-	content.WriteString(fmt.Sprintf("<strong>Certificate Chain:</strong> %d certificate(s)<br>", len(certs)))
+	fmt.Fprintf(&content, "<strong>Certificate Chain:</strong> %d certificate(s)<br>", len(certs))
 
 	content.WriteString("</div>")
 

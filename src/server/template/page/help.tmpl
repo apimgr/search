@@ -322,11 +322,11 @@
             <h2>{{t "help.api.heading"}}</h2>
             <p>{{t "help.api.intro"}}</p>
             <div class="api-links">
-                <a href="/openapi" class="api-link-card">
+                <a href="/server/docs/swagger" class="api-link-card">
                     <h3>{{t "help.api.openapi_heading"}}</h3>
                     <p>{{t "help.api.openapi_desc"}}</p>
                 </a>
-                <a href="/graphql" class="api-link-card">
+                <a href="/server/docs/graphql" class="api-link-card">
                     <h3>{{t "help.api.graphql_heading"}}</h3>
                     <p>{{t "help.api.graphql_desc"}}</p>
                 </a>
@@ -347,8 +347,10 @@
                     <tr><td><code>GET</code></td><td><code>/api/v1/categories</code></td><td>{{t "help.api.ep_categories"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/api/v1/bangs</code></td><td>{{t "help.api.ep_bangs"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/api/v1/server/help</code></td><td>{{t "help.api.ep_help_json"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/openapi</code> / <code>/openapi.json</code></td><td>{{t "help.api.ep_openapi"}}</td></tr>
-                    <tr><td><code>GET</code> / <code>POST</code></td><td><code>/graphql</code></td><td>{{t "help.api.ep_graphql"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/server/docs/swagger</code></td><td>{{t "help.api.openapi_heading"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/server/swagger</code> / <code>/api/swagger</code></td><td>{{t "help.api.ep_openapi"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/server/docs/graphql</code></td><td>{{t "help.api.graphql_heading"}}</td></tr>
+                    <tr><td><code>POST</code></td><td><code>/api/v1/server/graphql</code> / <code>/api/graphql</code></td><td>{{t "help.api.ep_graphql"}}</td></tr>
                     {{if .Config.Search.OpenSearch.Enabled}}
                     <tr><td><code>GET</code></td><td><code>/opensearch.xml</code></td><td>{{t "help.api.ep_opensearch"}}</td></tr>
                     {{end}}

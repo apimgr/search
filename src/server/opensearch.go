@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,8 +12,10 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/prefsync"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -124,7 +127,10 @@ func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/opensearchdescription+xml; charset=utf-8")
 
 	// Write XML header
-	w.Write([]byte(xml.Header))
+	if _, err := w.Write([]byte(xml.Header)); err != nil {
+		slog.Debug("failed to write OpenSearch XML header", "error", err)
+		return
+	}
 
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
@@ -199,7 +205,7 @@ func (s *Server) handleBangProxy(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, targetURL, http.StatusFound)
 		return
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Copy response headers (selective)
 	for _, header := range []string{"Content-Type", "Content-Disposition", "Cache-Control"} {
@@ -215,16 +221,22 @@ func (s *Server) handleBangProxy(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 
 	// Copy body
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		slog.Debug("failed to stream OpenSearch response", "error", err)
+	}
 }
 
 // handlePreferences handles the user preferences page
 func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		s.handlePreferencesSave(w, r)
+		s.handleGeneralPreferencesSave(w, r)
 		return
 	}
 
+	s.renderPreferences(w, r, nil)
+}
+
+func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra map[string]interface{}) {
 	data := s.newPageData(w, r, "Preferences", "preferences")
 	data.Prefs = resolveGeneralPrefs(r)
 
@@ -246,10 +258,39 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		"categories": s.bangManager.GetCategories(),
 		"builtins":   s.bangManager.GetBuiltins(),
 	}
+	pageValues := data.Data.(map[string]interface{})
+	for key, value := range extra {
+		pageValues[key] = value
+	}
+	if identity, ok := s.ownerWebIdentity(w, r, false); ok && identity.Kind == "primary" {
+		if tokens, err := s.ownerManager.List(r.Context(), identity); err == nil {
+			views := make([]map[string]interface{}, 0, len(tokens))
+			for _, token := range tokens {
+				masked, _ := s.ownerManager.Mask(r.Context(), identity, token.ID)
+				status := "active"
+				if token.RevokedAt != nil {
+					status = "revoked"
+				} else if token.ExpiresAt != nil && !token.ExpiresAt.After(time.Now()) {
+					status = "expired"
+				}
+				views = append(views, map[string]interface{}{"ID": token.ID, "Kind": token.Kind, "Name": token.Name, "Masked": masked, "CreatedAt": token.CreatedAt.Format(time.RFC3339), "LastUsedAt": formatOwnerTime(token.LastUsedAt), "ExpiresAt": formatOwnerTime(token.ExpiresAt), "Status": status})
+			}
+			pageValues["ownerTokens"] = views
+			pageValues["ownerPrimaryID"] = identity.TokenID
+			pageValues["ownerPrimaryMasked"], _ = s.ownerManager.Mask(r.Context(), identity, identity.TokenID)
+		}
+	}
 
 	if err := s.renderer.Render(w, "preferences", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
 	}
+}
+
+func formatOwnerTime(value *time.Time) string {
+	if value == nil {
+		return "Never"
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 // handlePreferencesSave handles saving non-widget user preferences (acknowledged client-side).
@@ -284,14 +325,17 @@ var validResultsPerPage = map[string]bool{
 // cookie is missing or holds an invalid value.
 func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 	prefs := GeneralPrefs{
-		Theme:             "auto",
+		Theme:             "dark",
 		DefaultCategory:   "general",
 		SafeSearch:        "1",
 		Units:             "imperial",
+		WeatherUnits:      "auto",
 		ResultsPerPage:    "100",
 		NewTab:            true,
 		InfiniteScroll:    true,
 		KeyboardShortcuts: true,
+		SaveHistory:       true,
+		VideoPreviews:     true,
 	}
 
 	if c, err := r.Cookie("theme"); err == nil {
@@ -300,31 +344,47 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 			prefs.Theme = c.Value
 		}
 	}
-	if c, err := r.Cookie("units"); err == nil {
+	if c, err := r.Cookie("search_pref_units"); err == nil {
 		if c.Value == "metric" || c.Value == "imperial" {
 			prefs.Units = c.Value
 		}
 	}
-	if c, err := r.Cookie("default_category"); err == nil && validDefaultCategories[c.Value] {
+	if c, err := r.Cookie("search_widget_weather_units"); err == nil {
+		if c.Value == "auto" || c.Value == "metric" || c.Value == "imperial" {
+			prefs.WeatherUnits = c.Value
+		}
+	}
+	if c, err := r.Cookie("search_pref_category"); err == nil && validDefaultCategories[c.Value] {
 		prefs.DefaultCategory = c.Value
 	}
-	if c, err := r.Cookie("safe_search"); err == nil {
+	if c, err := r.Cookie("search_pref_safe_search"); err == nil {
 		switch c.Value {
 		case "0", "1", "2":
 			prefs.SafeSearch = c.Value
 		}
 	}
-	if c, err := r.Cookie("results_per_page"); err == nil && validResultsPerPage[c.Value] {
+	if c, err := r.Cookie("search_pref_results_per_page"); err == nil && validResultsPerPage[c.Value] {
 		prefs.ResultsPerPage = c.Value
 	}
-	if c, err := r.Cookie("new_tab"); err == nil {
+	if c, err := r.Cookie("search_pref_new_tab"); err == nil {
 		prefs.NewTab = c.Value == "1"
 	}
-	if c, err := r.Cookie("infinite_scroll"); err == nil {
+	if c, err := r.Cookie("search_pref_infinite_scroll"); err == nil {
 		prefs.InfiniteScroll = c.Value == "1"
 	}
-	if c, err := r.Cookie("keyboard_shortcuts"); err == nil {
+	if c, err := r.Cookie("search_pref_keyboard_shortcuts"); err == nil {
 		prefs.KeyboardShortcuts = c.Value == "1"
+	}
+	if c, err := r.Cookie("search_pref_save_history"); err == nil {
+		prefs.SaveHistory = c.Value == "1"
+	}
+	if c, err := r.Cookie("search_pref_video_previews"); err == nil {
+		switch c.Value {
+		case "0":
+			prefs.VideoPreviews = false
+		case "1":
+			prefs.VideoPreviews = true
+		}
 	}
 
 	return prefs
@@ -347,68 +407,40 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
-
-	theme := r.FormValue("theme")
-	if theme != "dark" && theme != "light" && theme != "auto" {
-		theme = "auto"
+	values := r.Form
+	weatherUnits := values.Get("search_widget_weather_units")
+	if weatherUnits != "auto" && weatherUnits != "metric" && weatherUnits != "imperial" {
+		weatherUnits = "auto"
 	}
-
-	units := "imperial"
-	if r.FormValue("units") == "metric" {
-		units = "metric"
-	}
-
-	defaultCategory := r.FormValue("default_category")
-	if !validDefaultCategories[defaultCategory] {
-		defaultCategory = "general"
-	}
-
-	safeSearch := r.FormValue("safe_search")
-	if safeSearch != "0" && safeSearch != "1" && safeSearch != "2" {
-		safeSearch = "1"
-	}
-
-	resultsPerPage := r.FormValue("results_per_page")
-	if !validResultsPerPage[resultsPerPage] {
-		resultsPerPage = "100"
-	}
-
-	// Checkboxes are only present in the posted form when checked.
-	newTab := r.FormValue("new_tab") != ""
-	infiniteScroll := r.FormValue("infinite_scroll") != ""
-	keyboardShortcuts := r.FormValue("keyboard_shortcuts") != ""
-
-	setPrefCookie := func(name, value string) {
-		http.SetCookie(w, &http.Cookie{
-			Name:     name,
-			Value:    value,
-			Path:     "/",
-			MaxAge:   generalPrefCookieMaxAge,
-			SameSite: http.SameSiteLaxMode,
-			HttpOnly: false,
-		})
-	}
-	boolCookie := func(v bool) string {
-		if v {
-			return "1"
+	http.SetCookie(w, &http.Cookie{
+		Name: "search_widget_weather_units", Value: weatherUnits, Path: "/",
+		MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode,
+	})
+	for _, key := range []string{"new_tab", "infinite_scroll", "keyboard_shortcuts", "save_history", "video_previews"} {
+		name := "search_pref_" + key
+		if values.Has(name + "_present") {
+			if values.Get(name) == "1" {
+				values.Set(name, "1")
+			} else {
+				values.Set(name, "0")
+			}
+			values.Del(name + "_present")
 		}
-		return "0"
 	}
-
-	setPrefCookie("theme", theme)
-	setPrefCookie("units", units)
-	setPrefCookie("default_category", defaultCategory)
-	setPrefCookie("safe_search", safeSearch)
-	setPrefCookie("results_per_page", resultsPerPage)
-	setPrefCookie("new_tab", boolCookie(newTab))
-	setPrefCookie("infinite_scroll", boolCookie(infiniteScroll))
-	setPrefCookie("keyboard_shortcuts", boolCookie(keyboardShortcuts))
+	clone := r.Clone(r.Context())
+	urlCopy := *r.URL
+	urlCopy.RawQuery = values.Encode()
+	clone.URL = &urlCopy
+	mgr := s.getI18nManager()
+	result := prefsync.Import(clone, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
+	prefsync.Apply(w, r, "search", result)
 
 	// Widget checkboxes use form="general-settings" so they submit in this
 	// same request instead of needing their own form/button/route.
 	setWidgetCookie(w, r.Form["widget"])
-
-	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Location", preferenceRedirect(r))
+	w.WriteHeader(http.StatusSeeOther)
 }
 
 // setWidgetCookie validates a list of submitted widget type strings against
@@ -459,8 +491,7 @@ func (s *Server) handleWidgetOrderSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setWidgetCookie(w, r.Form["widget"])
-
-	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // getBaseURL returns the base URL for the server.
@@ -475,6 +506,11 @@ func (s *Server) getBaseURL(r *http.Request) string {
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
+// lookupProxyHostIP resolves a hostname for the SSRF guard. It is a variable so
+// tests can drive the DNS-failure branch deterministically instead of depending
+// on whether the surrounding resolver honors RFC 2606 reserved names.
+var lookupProxyHostIP = net.LookupIP
+
 // validateNotPrivateProxy rejects hostnames that resolve to private, loopback,
 // or link-local addresses, preventing SSRF attacks via the bang proxy endpoint.
 func validateNotPrivateProxy(hostname string) error {
@@ -485,7 +521,7 @@ func validateNotPrivateProxy(hostname string) error {
 	if strings.HasSuffix(lower, ".local") || strings.HasSuffix(lower, ".internal") || strings.HasSuffix(lower, ".localhost") {
 		return fmt.Errorf("internal hostname not allowed")
 	}
-	ips, err := net.LookupIP(hostname)
+	ips, err := lookupProxyHostIP(hostname)
 	if err != nil {
 		return fmt.Errorf("DNS lookup failed: %w", err)
 	}

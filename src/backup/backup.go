@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -109,38 +110,118 @@ func NewManager() *Manager {
 	}
 }
 
+// normalizeBackupFilename resolves the on-disk archive name for a requested
+// backup filename. An empty name becomes the PART 21 timestamped manual format
+// (search_backup_YYYY-MM-DD_HHMMSS.tar.gz); a caller-supplied ".enc" suffix is
+// dropped because encryption appends it, and ".tar.gz" is always ensured so
+// names like "search-daily.tar.gz.enc" never become
+// "search-daily.tar.gz.enc.tar.gz.enc".
+func normalizeBackupFilename(filename string) string {
+	if filename == "" {
+		return fmt.Sprintf("search_backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
+	}
+
+	filename = strings.TrimSuffix(filename, ".enc")
+	if !strings.HasSuffix(filename, ".tar.gz") {
+		filename += ".tar.gz"
+	}
+	return filename
+}
+
+// complianceRequiresEncryption reports whether compliance mode is enabled for
+// this server. Per AI.md PART 21 an unencrypted backup is refused in that mode.
+func (m *Manager) complianceRequiresEncryption() bool {
+	cfg, err := config.Load(filepath.Join(m.configDir, "server.yml"))
+	if err != nil || cfg == nil {
+		return false
+	}
+	return cfg.Server.Compliance.Enabled
+}
+
+// writeFileAtomic writes data to path crash-safely: the bytes land in a temp
+// file in the same directory, are flushed to stable storage, and only then
+// replace path with a rename. A partially written file is never visible at path.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	cleanup := func() {
+		if err := tmp.Close(); err != nil {
+			slog.Warn("failed to close backup temp file", "error", err)
+		}
+		if err := os.Remove(tmpPath); err != nil && !os.IsNotExist(err) {
+			slog.Warn("failed to remove backup temp file", "error", err)
+		}
+	}
+
+	if err := tmp.Chmod(perm); err != nil {
+		cleanup()
+		return fmt.Errorf("failed to set permissions: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		cleanup()
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return fmt.Errorf("failed to flush file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		if removeErr := os.Remove(tmpPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			slog.Warn("failed to remove backup temp file", "error", removeErr)
+		}
+		return fmt.Errorf("failed to close file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		if removeErr := os.Remove(tmpPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			slog.Warn("failed to remove backup temp file", "error", removeErr)
+		}
+		return fmt.Errorf("failed to finalize file: %w", err)
+	}
+
+	return nil
+}
+
 // Create creates a new backup archive
+// Per AI.md PART 21: the archive is built in memory and written crash-safely;
+// under compliance mode an unencrypted backup is refused outright.
 func (m *Manager) Create(filename string) (string, error) {
+	if m.password == "" && m.complianceRequiresEncryption() {
+		return "", fmt.Errorf("compliance mode requires encrypted backups: set a backup password before creating a backup")
+	}
+
 	// Ensure backup directory exists
 	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	// Generate filename if not specified
-	// Per AI.md PART 21: Format is search_backup_YYYY-MM-DD_HHMMSS.tar.gz
-	if filename == "" {
-		filename = fmt.Sprintf("search_backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
-	}
-
-	// Ensure .tar.gz extension
-	if !strings.HasSuffix(filename, ".tar.gz") {
-		filename += ".tar.gz"
-	}
-
+	filename = normalizeBackupFilename(filename)
 	backupPath := filepath.Join(m.backupDir, filename)
 
-	// Create the archive file
-	file, err := os.Create(backupPath)
+	archive, err := m.buildArchive()
 	if err != nil {
-		return "", fmt.Errorf("failed to create backup file: %w", err)
+		return "", err
 	}
-	defer file.Close()
 
-	gzWriter := gzip.NewWriter(file)
-	defer gzWriter.Close()
+	if err := writeFileAtomic(backupPath, archive, 0600); err != nil {
+		return "", fmt.Errorf("failed to write backup file: %w", err)
+	}
 
+	return backupPath, nil
+}
+
+// buildArchive builds the complete .tar.gz backup archive in memory.
+// Per AI.md PART 21: "Unencrypted archive never touches disk" — the caller
+// decides whether the bytes are written as-is or encrypted first.
+func (m *Manager) buildArchive() ([]byte, error) {
+	var buf bytes.Buffer
+
+	gzWriter := gzip.NewWriter(&buf)
 	tarWriter := tar.NewWriter(gzWriter)
-	defer tarWriter.Close()
 
 	var totalSize int64
 	var files []string
@@ -149,7 +230,7 @@ func (m *Manager) Create(filename string) (string, error) {
 	// Backup config directory
 	configFiles, configSize, configChecksums, err := m.addDirectoryToTar(tarWriter, m.configDir, "config")
 	if err != nil {
-		return "", fmt.Errorf("failed to backup config: %w", err)
+		return nil, fmt.Errorf("failed to backup config: %w", err)
 	}
 	files = append(files, configFiles...)
 	totalSize += configSize
@@ -160,7 +241,7 @@ func (m *Manager) Create(filename string) (string, error) {
 	// Backup data directory (excluding logs and cache)
 	dataFiles, dataSize, dataChecksums, err := m.addDirectoryToTar(tarWriter, m.dataDir, "data")
 	if err != nil {
-		return "", fmt.Errorf("failed to backup data: %w", err)
+		return nil, fmt.Errorf("failed to backup data: %w", err)
 	}
 	files = append(files, dataFiles...)
 	totalSize += dataSize
@@ -209,7 +290,10 @@ func (m *Manager) Create(filename string) (string, error) {
 	}
 
 	// Add metadata to archive as manifest.json
-	metaJSON, _ := json.MarshalIndent(metadata, "", "  ")
+	metaJSON, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode manifest: %w", err)
+	}
 	metaHeader := &tar.Header{
 		Name:    "manifest.json",
 		Size:    int64(len(metaJSON)),
@@ -217,13 +301,22 @@ func (m *Manager) Create(filename string) (string, error) {
 		ModTime: time.Now(),
 	}
 	if err := tarWriter.WriteHeader(metaHeader); err != nil {
-		return "", fmt.Errorf("failed to write metadata header: %w", err)
+		return nil, fmt.Errorf("failed to write metadata header: %w", err)
 	}
 	if _, err := tarWriter.Write(metaJSON); err != nil {
-		return "", fmt.Errorf("failed to write metadata: %w", err)
+		return nil, fmt.Errorf("failed to write metadata: %w", err)
 	}
 
-	return backupPath, nil
+	// Close writers explicitly so flush errors surface instead of producing a
+	// silently truncated archive
+	if err := tarWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize tar archive: %w", err)
+	}
+	if err := gzWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize gzip stream: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // addDirectoryToTar adds a directory to the tar archive with SHA256 checksums
@@ -235,6 +328,13 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 
 	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			// Skip transient files that vanish mid-walk (e.g. a GeoIP
+			// download .tmp renamed away between lstat and open); a
+			// missing root directory still errors.
+			if os.IsNotExist(err) && path != srcDir {
+				slog.Warn("skipping vanished path in backup", "path", path, "err", err)
+				return nil
+			}
 			return err
 		}
 
@@ -246,6 +346,14 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 			}
 			return nil
 		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			slog.Warn("skipping symbolic link in backup", "path", path)
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			slog.Warn("skipping non-regular file in backup", "path", path, "mode", info.Mode().String())
+			return nil
+		}
 
 		// Get relative path
 		relPath, err := filepath.Rel(srcDir, path)
@@ -253,8 +361,11 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 			return err
 		}
 
-		// Skip large files (>100MB)
+		// Skip large files (>100MB) so a single oversized artifact cannot
+		// exhaust memory while the archive is assembled; the omission is
+		// logged so the operator can see what is not covered
 		if info.Size() > 100*1024*1024 {
+			slog.Warn("skipping oversized file in backup", "path", path, "size", info.Size())
 			return nil
 		}
 
@@ -274,15 +385,27 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 		if err != nil {
 			return err
 		}
-		defer file.Close()
+		closed := false
+		defer func() {
+			if !closed {
+				if err := file.Close(); err != nil {
+					slog.Warn("failed to close backup file", "error", err)
+				}
+			}
+		}()
 
 		// Create a hash writer to compute SHA256 while copying
 		hash := sha256.New()
 		multiWriter := io.MultiWriter(tw, hash)
 
-		written, err := io.Copy(multiWriter, file)
+		written, err := io.CopyN(multiWriter, file, header.Size)
+		closeErr := file.Close()
+		closed = true
 		if err != nil {
-			return err
+			return errors.Join(err, closeErr)
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 
 		files = append(files, header.Name)
@@ -314,36 +437,171 @@ func computeOverallChecksum(checksums map[string]string) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-// Restore restores from a backup archive
+// Restore restores from a backup archive.
+// Per AI.md PART 21 the backup is fully verified first and the restore itself
+// is atomic: everything is staged beside the live directories and swapped in
+// with renames, so a failure at any point leaves the previous state intact.
 func (m *Manager) Restore(backupPath string) error {
 	// Verify backup file exists
 	if _, err := os.Stat(backupPath); err != nil {
 		return fmt.Errorf("backup file not found: %w", err)
 	}
 
-	// Open the archive
-	file, err := os.Open(backupPath)
+	// Per AI.md PART 21 "Restore Verification": only proceed when every check
+	// passes (format, decrypt, checksum, manifest, extraction, database)
+	result, err := m.VerifyBackup(backupPath)
 	if err != nil {
-		return fmt.Errorf("failed to open backup file: %w", err)
+		return fmt.Errorf("backup verification failed: %w", err)
 	}
-	defer file.Close()
+	if !result.AllPassed {
+		return fmt.Errorf("backup verification failed: %v", result.Errors)
+	}
 
-	gzReader, err := gzip.NewReader(file)
+	data, err := m.readArchive(backupPath)
+	if err != nil {
+		return err
+	}
+
+	return m.restoreFromData(data)
+}
+
+// readArchive loads a backup archive into memory, decrypting it first when the
+// file carries the encrypted .enc extension. The decrypted archive is never
+// written to disk.
+func (m *Manager) readArchive(backupPath string) ([]byte, error) {
+	raw, err := os.ReadFile(backupPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read backup file: %w", err)
+	}
+
+	if !IsEncrypted(backupPath) {
+		return raw, nil
+	}
+
+	if m.password == "" {
+		return nil, fmt.Errorf("encrypted backup requires a password")
+	}
+
+	decrypted, err := DecryptBackup(raw, m.password)
+	if err != nil {
+		return nil, fmt.Errorf("decryption failed: %w", err)
+	}
+	return decrypted, nil
+}
+
+// restoreTargetPath maps an archive entry to its destination inside targetRoot,
+// rejecting any entry that would escape the destination directory (tar slip).
+func restoreTargetPath(targetRoot, relPath string) (string, error) {
+	cleaned := filepath.Clean("/" + filepath.FromSlash(relPath))
+	cleaned = strings.TrimPrefix(cleaned, string(os.PathSeparator))
+	if cleaned == "" || cleaned == "." {
+		return "", fmt.Errorf("empty path in archive")
+	}
+
+	target := filepath.Join(targetRoot, cleaned)
+	rel, err := filepath.Rel(targetRoot, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("unsafe path in archive: %s", relPath)
+	}
+	return target, nil
+}
+
+// restoreFromData performs the atomic restore of an in-memory archive.
+// The current config and data directories are copied into staging directories,
+// the archive contents are applied on top of the copies, and only once every
+// entry has been written are the staging directories renamed into place. Any
+// failure aborts before the first rename, and a failure between renames rolls
+// the already-swapped directory back.
+func (m *Manager) restoreFromData(data []byte) error {
+	// Create backup of current state before restoring
+	preRestoreName := fmt.Sprintf("pre-restore-%s.tar.gz", time.Now().Format("20060102-150405"))
+	var preRestoreErr error
+	if m.password != "" {
+		_, preRestoreErr = m.CreateEncrypted(preRestoreName)
+	} else {
+		_, preRestoreErr = m.Create(preRestoreName)
+	}
+	if preRestoreErr != nil {
+		// Non-fatal, just warn
+		slog.Warn("could not create pre-restore backup", "err", preRestoreErr)
+	}
+
+	stamp := time.Now().Format("20060102-150405.000000000")
+	targets := map[string]string{
+		"config": m.configDir,
+		"data":   m.dataDir,
+	}
+	staging := make(map[string]string, len(targets))
+
+	// Stage a copy of the live directories so files absent from the archive
+	// survive the swap
+	for prefix, dir := range targets {
+		stage := fmt.Sprintf("%s.restore-%s", dir, stamp)
+		if err := copyTree(dir, stage); err != nil {
+			removeAll(staging)
+			return fmt.Errorf("failed to stage %s directory: %w", prefix, err)
+		}
+		staging[prefix] = stage
+	}
+
+	if err := m.applyArchiveToStaging(data, staging); err != nil {
+		removeAll(staging)
+		return err
+	}
+
+	// Swap staged directories into place, rolling back on failure
+	var swapped []string
+	replaced := make(map[string]string, len(targets))
+	for prefix, dir := range targets {
+		previous := fmt.Sprintf("%s.prerestore-%s", dir, stamp)
+		if _, err := os.Stat(dir); err == nil {
+			if err := os.Rename(dir, previous); err != nil {
+				rollbackSwap(swapped, targets, replaced)
+				removeAll(staging)
+				return fmt.Errorf("failed to move current %s directory aside: %w", prefix, err)
+			}
+			replaced[prefix] = previous
+		}
+		if err := os.Rename(staging[prefix], dir); err != nil {
+			if prev, ok := replaced[prefix]; ok {
+				if rollbackErr := os.Rename(prev, dir); rollbackErr != nil {
+					slog.Error("failed to roll back backup restore", "error", rollbackErr)
+				}
+				delete(replaced, prefix)
+			}
+			rollbackSwap(swapped, targets, replaced)
+			removeAll(staging)
+			return fmt.Errorf("failed to activate restored %s directory: %w", prefix, err)
+		}
+		swapped = append(swapped, prefix)
+	}
+
+	// Restore succeeded: drop the superseded directories
+	for _, previous := range replaced {
+		if err := os.RemoveAll(previous); err != nil {
+			slog.Warn("failed to remove pre-restore directory", "path", previous, "err", err)
+		}
+	}
+
+	return nil
+}
+
+// applyArchiveToStaging writes every archive entry into the matching staging
+// directory. Manifest entries and entries outside the known prefixes are
+// skipped, and unsafe paths abort the restore before anything is swapped in.
+func (m *Manager) applyArchiveToStaging(data []byte, staging map[string]string) error {
+	gzReader, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzReader.Close()
+	defer func() {
+		if err := gzReader.Close(); err != nil {
+			slog.Warn("failed to close backup restore gzip reader", "error", err)
+		}
+	}()
 
 	tarReader := tar.NewReader(gzReader)
 
-	// Create backup of current config before restoring
-	currentBackup := filepath.Join(m.backupDir, fmt.Sprintf("pre-restore-%s.tar.gz", time.Now().Format("20060102-150405")))
-	if _, err := m.Create(filepath.Base(currentBackup)); err != nil {
-		// Non-fatal, just warn
-		slog.Warn("could not create pre-restore backup", "err", err)
-	}
-
-	// Extract files
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -358,17 +616,22 @@ func (m *Manager) Restore(backupPath string) error {
 			continue
 		}
 
-		// Determine target path
-		var targetPath string
-		if strings.HasPrefix(header.Name, "config/") {
-			relPath := strings.TrimPrefix(header.Name, "config/")
-			targetPath = filepath.Join(m.configDir, relPath)
-		} else if strings.HasPrefix(header.Name, "data/") {
-			relPath := strings.TrimPrefix(header.Name, "data/")
-			targetPath = filepath.Join(m.dataDir, relPath)
-		} else {
+		var stageRoot, relPath string
+		switch {
+		case strings.HasPrefix(header.Name, "config/"):
+			stageRoot = staging["config"]
+			relPath = strings.TrimPrefix(header.Name, "config/")
+		case strings.HasPrefix(header.Name, "data/"):
+			stageRoot = staging["data"]
+			relPath = strings.TrimPrefix(header.Name, "data/")
+		default:
 			// Skip unknown paths
 			continue
+		}
+
+		targetPath, err := restoreTargetPath(stageRoot, relPath)
+		if err != nil {
+			return fmt.Errorf("refusing to restore backup: %w", err)
 		}
 
 		// Create parent directories
@@ -388,14 +651,119 @@ func (m *Manager) Restore(backupPath string) error {
 				return fmt.Errorf("failed to create file %s: %w", targetPath, err)
 			}
 			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
+				return fmt.Errorf("failed to write file %s: %w", targetPath, errors.Join(err, outFile.Close()))
+			}
+			if err := outFile.Close(); err != nil {
 				return fmt.Errorf("failed to write file %s: %w", targetPath, err)
 			}
-			outFile.Close()
 		}
 	}
 
 	return nil
+}
+
+// rollbackSwap undoes directory swaps already performed by a failed restore,
+// putting the previous directories back where they were.
+func rollbackSwap(swapped []string, targets map[string]string, replaced map[string]string) {
+	for _, prefix := range swapped {
+		dir := targets[prefix]
+		previous, ok := replaced[prefix]
+		if !ok {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			slog.Error("restore rollback failed to remove partial directory", "path", dir, "err", err)
+			continue
+		}
+		if err := os.Rename(previous, dir); err != nil {
+			slog.Error("restore rollback failed to restore directory", "path", dir, "err", err)
+		}
+	}
+}
+
+// removeAll deletes leftover staging directories, logging any failure.
+func removeAll(paths map[string]string) {
+	for _, path := range paths {
+		if err := os.RemoveAll(path); err != nil {
+			slog.Warn("failed to remove staging directory", "path", path, "err", err)
+		}
+	}
+}
+
+// copyTree copies the directory tree at src into dst, creating dst even when
+// src does not exist yet (first-run restore into an empty install).
+func copyTree(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.MkdirAll(dst, 0755)
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", src)
+	}
+
+	if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+		return err
+	}
+
+	return filepath.Walk(src, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		target := filepath.Join(dst, rel)
+
+		switch {
+		case fi.IsDir():
+			return os.MkdirAll(target, fi.Mode().Perm())
+		case fi.Mode()&os.ModeSymlink != 0:
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		case fi.Mode().IsRegular():
+			return copyFile(path, target, fi.Mode().Perm())
+		default:
+			// Sockets, devices and pipes are runtime artifacts, not state
+			return nil
+		}
+	})
+}
+
+// copyFile copies a single regular file, preserving its permission bits.
+func copyFile(src, dst string, perm os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := in.Close(); err != nil {
+			slog.Warn("failed to close backup source file", "error", err)
+		}
+	}()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(out, in); err != nil {
+		if closeErr := out.Close(); closeErr != nil {
+			slog.Warn("failed to close backup destination file", "error", closeErr)
+		}
+		return err
+	}
+	return out.Close()
 }
 
 // List returns all available backups
@@ -413,7 +781,7 @@ func (m *Manager) List() ([]BackupInfo, error) {
 
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !(strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.gz.enc")) {
+		if entry.IsDir() || (!strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.gz.enc")) {
 			continue
 		}
 
@@ -451,13 +819,21 @@ func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Warn("failed to close backup metadata file", "error", err)
+		}
+	}()
 
 	gzReader, err := gzip.NewReader(file)
 	if err != nil {
 		return nil, err
 	}
-	defer gzReader.Close()
+	defer func() {
+		if err := gzReader.Close(); err != nil {
+			slog.Warn("failed to close backup gzip reader", "error", err)
+		}
+	}()
 
 	tarReader := tar.NewReader(gzReader)
 
@@ -485,8 +861,11 @@ func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
 func (m *Manager) Delete(filename string) error {
 	backupPath := filepath.Join(m.backupDir, filename)
 
-	// Verify it's in the backup directory (security check)
-	if !strings.HasPrefix(backupPath, m.backupDir) {
+	// Verify it's in the backup directory (security check): the resolved path
+	// must stay inside the backup dir, so a traversing filename can never
+	// delete anything outside it
+	rel, err := filepath.Rel(m.backupDir, backupPath)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return fmt.Errorf("invalid backup path")
 	}
 
@@ -518,7 +897,9 @@ func (bi BackupInfo) FormatSize() string {
 	return fmt.Sprintf("%.1f %cB", float64(bi.Size)/float64(div), "KMGTPE"[exp])
 }
 
-// ScheduledBackup performs a scheduled backup with cleanup of old backups
+// ScheduledBackup performs a scheduled backup with cleanup of old backups.
+// Per AI.md PART 21 pruning goes through the retention buckets, which sort by
+// date, delete oldest first, and never count the fixed-name incrementals.
 func (m *Manager) ScheduledBackup(keepCount int) error {
 	// Create new backup
 	_, err := m.Create("")
@@ -526,25 +907,21 @@ func (m *Manager) ScheduledBackup(keepCount int) error {
 		return err
 	}
 
-	// List all backups
-	backups, err := m.List()
-	if err != nil {
-		return err
-	}
+	return m.ApplyRetention(countOnlyRetention(keepCount))
+}
 
-	// Delete old backups if we have more than keepCount
-	if len(backups) > keepCount {
-		// Sort by creation time (newest first)
-		// Note: backups are already sorted by filename which includes timestamp
-		for i := keepCount; i < len(backups); i++ {
-			if err := m.Delete(backups[i].Filename); err != nil {
-				// Log but don't fail
-				slog.Warn("failed to delete old backup", "file", backups[i].Filename, "err", err)
-			}
-		}
+// countOnlyRetention builds a retention policy from a bare keep-count, as used
+// by the scheduled-backup helpers. Per AI.md PART 21 max_backups is at least 1;
+// no weekly/monthly/yearly bucket and no size cap is implied by a count alone.
+func countOnlyRetention(keepCount int) RetentionPolicy {
+	if keepCount < 1 {
+		keepCount = 1
 	}
-
-	return nil
+	return RetentionPolicy{
+		Count: keepCount,
+		// A bare keep-count carries no size cap
+		MaxTotalSize: "0",
+	}
 }
 
 // RetentionPolicy defines backup retention rules per AI.md PART 21
@@ -836,35 +1213,28 @@ func (m *Manager) CreateEncrypted(filename string) (string, error) {
 		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
 	}
 
-	// Create unencrypted backup first
-	backupPath, err := m.Create(filename)
+	// Ensure backup directory exists
+	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	// Per AI.md PART 21: the plaintext archive is built in memory and encrypted
+	// before anything is written — the unencrypted archive never touches disk
+	archive, err := m.buildArchive()
 	if err != nil {
 		return "", err
 	}
 
-	// Read backup data
-	data, err := os.ReadFile(backupPath)
+	encrypted, err := EncryptBackup(archive, m.password)
 	if err != nil {
-		os.Remove(backupPath)
-		return "", fmt.Errorf("failed to read backup: %w", err)
-	}
-
-	// Encrypt the data
-	encrypted, err := EncryptBackup(data, m.password)
-	if err != nil {
-		os.Remove(backupPath)
 		return "", fmt.Errorf("failed to encrypt backup: %w", err)
 	}
 
 	// Create encrypted file with .enc extension per AI.md PART 21
-	encryptedPath := backupPath + ".enc"
-	if err := os.WriteFile(encryptedPath, encrypted, 0600); err != nil {
-		os.Remove(backupPath)
+	encryptedPath := filepath.Join(m.backupDir, normalizeBackupFilename(filename)) + ".enc"
+	if err := writeFileAtomic(encryptedPath, encrypted, 0600); err != nil {
 		return "", fmt.Errorf("failed to write encrypted backup: %w", err)
 	}
-
-	// Remove unencrypted backup
-	os.Remove(backupPath)
 
 	return encryptedPath, nil
 }
@@ -881,33 +1251,10 @@ func (m *Manager) RestoreEncrypted(backupPath string) error {
 		return fmt.Errorf("backup file not found: %w", err)
 	}
 
-	// Check if file has .enc extension
-	if !strings.HasSuffix(backupPath, ".enc") {
-		// Not encrypted, use regular restore
-		return m.Restore(backupPath)
-	}
-
-	// Read encrypted data
-	encrypted, err := os.ReadFile(backupPath)
-	if err != nil {
-		return fmt.Errorf("failed to read encrypted backup: %w", err)
-	}
-
-	// Decrypt the data
-	decrypted, err := DecryptBackup(encrypted, m.password)
-	if err != nil {
-		return fmt.Errorf("decryption failed: %w", err)
-	}
-
-	// Write to temporary file
-	tempPath := backupPath + ".temp"
-	if err := os.WriteFile(tempPath, decrypted, 0600); err != nil {
-		return fmt.Errorf("failed to write decrypted backup: %w", err)
-	}
-	defer os.Remove(tempPath)
-
-	// Restore from temporary file
-	return m.Restore(tempPath)
+	// Restore handles both encrypted and unencrypted archives: it verifies the
+	// backup, decrypts it in memory when needed, and swaps the restored state
+	// in atomically
+	return m.Restore(backupPath)
 }
 
 // IsEncrypted checks if a backup file is encrypted (has .enc extension)
@@ -1046,14 +1393,22 @@ func (m *Manager) verifyContentAndDatabase(data []byte) (contentValid bool, data
 	if err != nil {
 		return false, true, []string{fmt.Sprintf("content extraction failed: %v", err)}
 	}
-	defer os.RemoveAll(extractDir)
+	defer func() {
+		if err := os.RemoveAll(extractDir); err != nil {
+			slog.Warn("failed to remove backup verification directory", "error", err)
+		}
+	}()
 
 	reader := bytes.NewReader(data)
 	gzReader, err := gzip.NewReader(reader)
 	if err != nil {
 		return false, true, []string{fmt.Sprintf("content extraction failed: invalid gzip format: %v", err)}
 	}
-	defer gzReader.Close()
+	defer func() {
+		if err := gzReader.Close(); err != nil {
+			slog.Warn("failed to close backup verification gzip reader", "error", err)
+		}
+	}()
 
 	tarReader := tar.NewReader(gzReader)
 
@@ -1098,7 +1453,10 @@ func (m *Manager) verifyContentAndDatabase(data []byte) (contentValid bool, data
 				contentValid = false
 				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
 			}
-			out.Close()
+			if closeErr := out.Close(); closeErr != nil {
+				contentValid = false
+				errs = append(errs, fmt.Sprintf("content extraction failed: %v", closeErr))
+			}
 
 			if filepath.Base(cleanName) == "server.db" {
 				if !isValidSQLiteFile(targetPath) {
@@ -1119,7 +1477,11 @@ func isValidSQLiteFile(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Warn("failed to close SQLite verification file", "error", err)
+		}
+	}()
 
 	header := make([]byte, 16)
 	n, err := f.Read(header)
@@ -1136,7 +1498,11 @@ func (m *Manager) verifyManifestFromData(data []byte) (*BackupMetadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid gzip format: %w", err)
 	}
-	defer gzReader.Close()
+	defer func() {
+		if err := gzReader.Close(); err != nil {
+			slog.Warn("failed to close backup manifest gzip reader", "error", err)
+		}
+	}()
 
 	tarReader := tar.NewReader(gzReader)
 
@@ -1172,14 +1538,14 @@ func (m *Manager) CreateAndVerify(filename string) (string, *VerificationResult,
 	result, err := m.VerifyBackup(backupPath)
 	if err != nil {
 		// Verification process failed - delete the backup
-		os.Remove(backupPath)
-		return "", nil, fmt.Errorf("backup verification process failed: %w", err)
+		removeErr := os.Remove(backupPath)
+		return "", nil, fmt.Errorf("backup verification process failed: %w", errors.Join(err, removeErr))
 	}
 
 	if !result.AllPassed {
 		// Verification failed - delete the failed backup per AI.md PART 21
-		os.Remove(backupPath)
-		return "", result, fmt.Errorf("backup verification failed: %v", result.Errors)
+		removeErr := os.Remove(backupPath)
+		return "", result, fmt.Errorf("backup verification failed: %v", errors.Join(errors.New(strings.Join(result.Errors, "; ")), removeErr))
 	}
 
 	return backupPath, result, nil
@@ -1197,13 +1563,13 @@ func (m *Manager) CreateEncryptedAndVerify(filename string) (string, *Verificati
 	// Verify immediately (includes decrypt test)
 	result, err := m.VerifyBackup(backupPath)
 	if err != nil {
-		os.Remove(backupPath)
-		return "", nil, fmt.Errorf("backup verification process failed: %w", err)
+		removeErr := os.Remove(backupPath)
+		return "", nil, fmt.Errorf("backup verification process failed: %w", errors.Join(err, removeErr))
 	}
 
 	if !result.AllPassed {
-		os.Remove(backupPath)
-		return "", result, fmt.Errorf("backup verification failed: %v", result.Errors)
+		removeErr := os.Remove(backupPath)
+		return "", result, fmt.Errorf("backup verification failed: %v", errors.Join(errors.New(strings.Join(result.Errors, "; ")), removeErr))
 	}
 
 	return backupPath, result, nil
@@ -1224,24 +1590,10 @@ func (m *Manager) ScheduledBackupWithVerification(keepCount int) error {
 		return fmt.Errorf("backup verification failed (existing backups preserved): %v", result.Errors)
 	}
 
-	// Only now that verification passed, apply retention
-	backups, err := m.List()
-	if err != nil {
-		return fmt.Errorf("failed to list backups: %w", err)
-	}
+	// Only now that verification passed, apply retention. The bucket algorithm
+	// keeps the newest max_backups entries, so the backup just written at
+	// backupPath is always among the survivors.
+	slog.Info("scheduled backup verified", "path", backupPath)
 
-	// Delete old backups if we have more than keepCount
-	if len(backups) > keepCount {
-		for i := keepCount; i < len(backups); i++ {
-			// Never delete the backup we just created
-			if backups[i].Path == backupPath {
-				continue
-			}
-			if err := m.Delete(backups[i].Filename); err != nil {
-				slog.Warn("failed to delete old backup", "file", backups[i].Filename, "err", err)
-			}
-		}
-	}
-
-	return nil
+	return m.ApplyRetention(countOnlyRetention(keepCount))
 }

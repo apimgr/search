@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -180,7 +182,7 @@ func (e *PubMed) searchIDs(ctx context.Context, query *model.Query) ([]string, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("PubMed esearch returned status %d", resp.StatusCode)
@@ -234,7 +236,7 @@ func (e *PubMed) fetchArticles(ctx context.Context, ids []string) ([]pubmedArtic
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("PubMed efetch returned status %d", resp.StatusCode)

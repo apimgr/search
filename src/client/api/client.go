@@ -8,11 +8,14 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	searchapi "github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/closeutil"
+	"github.com/apimgr/search/src/scheduler"
 )
 
 // Sentinel errors used by callers (see cmd.ExitCodeForError) to select the
@@ -94,18 +97,18 @@ type apiResponse struct {
 
 // HealthResponse represents health check response
 type HealthResponse struct {
-	Status         string            `json:"status"`
-	Version        string            `json:"version,omitempty"`
-	GoVersion      string            `json:"go_version,omitempty"`
-	Mode           string            `json:"mode,omitempty"`
-	Uptime         string            `json:"uptime,omitempty"`
-	Timestamp      string            `json:"timestamp,omitempty"`
-	Build          *BuildInfo        `json:"build,omitempty"`
-	Features       map[string]bool   `json:"features,omitempty"`
-	Checks         map[string]string `json:"checks,omitempty"`
-	Stats          *HealthStats      `json:"stats,omitempty"`
-	PendingRestart bool              `json:"pending_restart,omitempty"`
-	RestartReason  []string          `json:"restart_reason,omitempty"`
+	Status         string                 `json:"status"`
+	Version        string                 `json:"version,omitempty"`
+	GoVersion      string                 `json:"go_version,omitempty"`
+	Mode           string                 `json:"mode,omitempty"`
+	Uptime         string                 `json:"uptime,omitempty"`
+	Timestamp      string                 `json:"timestamp,omitempty"`
+	Build          *BuildInfo             `json:"build,omitempty"`
+	Features       map[string]interface{} `json:"features,omitempty"`
+	Checks         map[string]interface{} `json:"checks,omitempty"`
+	Stats          *HealthStats           `json:"stats,omitempty"`
+	PendingRestart bool                   `json:"pending_restart,omitempty"`
+	RestartReason  []string               `json:"restart_reason,omitempty"`
 }
 
 // BuildInfo represents build information
@@ -283,7 +286,7 @@ func (c *Client) Search(query string, page, perPage int) (*SearchResponse, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// API returns {"ok": true, "data": {...}} - unwrap the data field
 	var apiResp apiResponse
@@ -304,11 +307,11 @@ func (c *Client) Search(query string, page, perPage int) (*SearchResponse, error
 
 // Health checks server health using the canonical /server/healthz endpoint per AI.md PART 13
 func (c *Client) Health() (*HealthResponse, error) {
-	resp, err := c.get("/server/healthz")
+	resp, err := c.get(searchapi.APIPrefix + "/server/healthz")
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// API returns {"ok": true, "data": {...}} - unwrap the data field
 	var apiResp apiResponse
@@ -338,7 +341,7 @@ func (c *Client) GetInfo() (*InfoResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -361,7 +364,7 @@ func (c *Client) GetRelatedSearches(query string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -386,7 +389,7 @@ func (c *Client) GetAutocomplete(query string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -406,7 +409,7 @@ func (c *Client) GetEngines() ([]EngineStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -426,7 +429,7 @@ func (c *Client) GetEngineByID(id string) (*EngineStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -446,7 +449,7 @@ func (c *Client) GetCategories() ([]Category, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -466,7 +469,7 @@ func (c *Client) GetBangs() ([]Bang, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -488,7 +491,7 @@ func (c *Client) GetWidgets() ([]Widget, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -515,7 +518,7 @@ func (c *Client) GetWidgetData(name string, params url.Values) (*WidgetData, err
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -538,7 +541,7 @@ func (c *Client) GetInstantAnswer(query string) (*InstantAnswer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -558,7 +561,7 @@ func (c *Client) GetDirectAnswer(slug string) (*DirectAnswer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -578,7 +581,7 @@ func (c *Client) GetPreferences() (*Preferences, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -598,7 +601,7 @@ func (c *Client) SetPreferences(prefs *Preferences) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 	return nil
 }
 
@@ -608,7 +611,7 @@ func (c *Client) CreateAlert(req *CreateAlertRequest) (*Alert, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -628,7 +631,7 @@ func (c *Client) GetAlert(manageToken string) (*Alert, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -648,7 +651,7 @@ func (c *Client) UpdateAlert(manageToken string, req *UpdateAlertRequest) (*Aler
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -668,7 +671,88 @@ func (c *Client) DeleteAlert(manageToken string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
+	return nil
+}
+
+// GetSchedulerTasks returns all scheduler tasks. Requires the operator token.
+func (c *Client) GetSchedulerTasks() ([]*scheduler.TaskInfo, error) {
+	resp, err := c.get(searchapi.APIPrefix + "/server/scheduler/tasks")
+	if err != nil {
+		return nil, err
+	}
+	defer closeutil.Close(resp.Body)
+	var envelope apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("failed to decode scheduler response: %w", err)
+	}
+	var data struct {
+		Tasks []*scheduler.TaskInfo `json:"tasks"`
+	}
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		return nil, fmt.Errorf("failed to decode scheduler tasks: %w", err)
+	}
+	return data.Tasks, nil
+}
+
+// GetSchedulerTask returns the details for one task.
+func (c *Client) GetSchedulerTask(taskID string) (*scheduler.TaskInfo, error) {
+	resp, err := c.get(searchapi.APIPrefix + "/server/scheduler/tasks/" + url.PathEscape(taskID))
+	if err != nil {
+		return nil, err
+	}
+	defer closeutil.Close(resp.Body)
+	var envelope apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("failed to decode scheduler task: %w", err)
+	}
+	var task scheduler.TaskInfo
+	if err := json.Unmarshal(envelope.Data, &task); err != nil {
+		return nil, fmt.Errorf("failed to decode scheduler task data: %w", err)
+	}
+	return &task, nil
+}
+
+// GetSchedulerHistory returns recent task execution history.
+func (c *Client) GetSchedulerHistory(taskID string) ([]*scheduler.TaskHistoryEntry, error) {
+	resp, err := c.get(searchapi.APIPrefix + "/server/scheduler/tasks/" + url.PathEscape(taskID) + "/history")
+	if err != nil {
+		return nil, err
+	}
+	defer closeutil.Close(resp.Body)
+	var envelope apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("failed to decode scheduler history: %w", err)
+	}
+	var data struct {
+		History []*scheduler.TaskHistoryEntry `json:"history"`
+	}
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		return nil, fmt.Errorf("failed to decode scheduler history data: %w", err)
+	}
+	return data.History, nil
+}
+
+// RunSchedulerTask triggers one task immediately.
+func (c *Client) RunSchedulerTask(taskID string) error {
+	return c.schedulerAction(taskID, "run")
+}
+
+// SetSchedulerTaskEnabled enables or disables a skippable task.
+func (c *Client) SetSchedulerTaskEnabled(taskID string, enabled bool) error {
+	action := "disable"
+	if enabled {
+		action = "enable"
+	}
+	return c.schedulerAction(taskID, action)
+}
+
+func (c *Client) schedulerAction(taskID, action string) error {
+	resp, err := c.doRequest(http.MethodPost, searchapi.APIPrefix+"/server/scheduler/tasks/"+url.PathEscape(taskID)+"/"+action, nil)
+	if err != nil {
+		return err
+	}
+	defer closeutil.Close(resp.Body)
 	return nil
 }
 
@@ -678,7 +762,7 @@ func (c *Client) GetStatus() (*StatusResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -698,7 +782,7 @@ func (c *Client) GetServerConfig() (*ServerConfigResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
@@ -718,7 +802,7 @@ func (c *Client) GetMetrics() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -778,7 +862,7 @@ func (c *Client) Autodiscover() (*AutodiscoverResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var result AutodiscoverResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -800,6 +884,30 @@ func (c *Client) get(path string) (*http.Response, error) {
 	return c.doRequest("GET", path, nil)
 }
 
+// acceptLanguage resolves the Accept-Language header value from the --lang flag
+// (exported as SEARCH_LANG by cmd.initConfig) or the POSIX locale environment.
+// It normalizes locale strings such as "en_US.UTF-8" to the BCP 47 form "en-US"
+// and returns "" when no usable language is set.
+func acceptLanguage() string {
+	for _, key := range []string{"SEARCH_LANG", "LC_ALL", "LANG"} {
+		v := strings.TrimSpace(os.Getenv(key))
+		if v == "" || v == "C" || v == "POSIX" {
+			continue
+		}
+		if i := strings.IndexByte(v, '.'); i >= 0 {
+			v = v[:i]
+		}
+		if i := strings.IndexByte(v, '@'); i >= 0 {
+			v = v[:i]
+		}
+		if v == "" {
+			continue
+		}
+		return strings.ReplaceAll(v, "_", "-")
+	}
+	return ""
+}
+
 // doRequest performs an HTTP request to the primary server (BaseURL).
 func (c *Client) doRequest(method, path string, body interface{}) (*http.Response, error) {
 	var bodyReader io.Reader
@@ -819,6 +927,11 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	// Fixed User-Agent per AI.md PART 32
 	req.Header.Set("User-Agent", fmt.Sprintf("%s-cli/%s", ProjectName, Version))
 	req.Header.Set("Accept", "application/json")
+	// Per AI.md PART 32 / PART 30: forward the caller's language preference so
+	// the server localizes responses to the same language the CLI renders in.
+	if lang := acceptLanguage(); lang != "" {
+		req.Header.Set("Accept-Language", lang)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -846,7 +959,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 
 	if resp.StatusCode >= 400 {
 		bodyData, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		closeutil.Close(resp.Body)
 
 		// Map specific HTTP statuses to sentinel errors so callers can
 		// derive the correct process exit code per AI.md PART 32.

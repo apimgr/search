@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -44,7 +46,7 @@ func NewBaidu() *Baidu {
 	config := model.NewEngineConfig("baidu")
 	config.DisplayName = "Baidu"
 	config.Priority = 60
-	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
+	config.Categories = []string{"general", "images", "news", "videos"}
 	// Baidu blocks Tor exit nodes
 	config.SupportsTor = false
 
@@ -98,7 +100,7 @@ func (e *Baidu) Search(ctx context.Context, query *model.Query) ([]model.Result,
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		closeutil.Close(resp.Body)
 		return nil, fmt.Errorf("baidu returned status %d", resp.StatusCode)
 	}
 

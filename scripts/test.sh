@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test script for Search metasearch engine
-set -e
+set -eo pipefail
 
 # Colors for output
 TEST_RED='\033[0;31m'

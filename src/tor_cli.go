@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -62,7 +63,7 @@ func torInternalRequest(method, path string, body io.Reader) (map[string]any, in
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var out map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

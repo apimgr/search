@@ -1,6 +1,7 @@
 package geoip
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,23 +13,38 @@ import (
 	"time"
 )
 
-// Database URLs from sapics/ip-location-db (NON-NEGOTIABLE per AI.md)
+// Database URLs from sapics/ip-location-db (NON-NEGOTIABLE per AI.md PART 19).
+// ASN and Country ship on the jsDelivr CDN; the DB-IP city databases are
+// published as GitHub release assets, one per IP version.
 const (
-	ASNURL     = "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
-	CountryURL = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
-	CityURL    = "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb"
-	// WHOIS database per AI.md PART 20
-	WhoisURL = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
+	ASNURL      = "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
+	CountryURL  = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
+	CityIPv4URL = "https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv4.mmdb"
+	CityIPv6URL = "https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv6.mmdb"
 )
+
+// On-disk file names for the downloaded databases.
+const (
+	asnFile      = "asn.mmdb"
+	countryFile  = "country.mmdb"
+	cityIPv4File = "city-ipv4.mmdb"
+	cityIPv6File = "city-ipv6.mmdb"
+)
+
+// legacyFiles are database files written by earlier revisions of this package.
+// They are removed on load so the data directory never keeps a stale database
+// around, notably the retired "whois" pseudo-database that AI.md PART 19
+// forbids: no such dataset exists in ip-location-db.
+var legacyFiles = []string{"whois.mmdb", "city.mmdb"}
 
 // Lookup represents a GeoIP lookup service using MMDB format
 type Lookup struct {
 	mu        sync.RWMutex
 	countryDB *mmdbReader
 	asnDB     *mmdbReader
-	cityDB    *mmdbReader
-	// WHOIS registrant database (per AI.md PART 20)
-	whoisDB    *mmdbReader
+	// City data is split by IP version upstream, so one reader per version
+	cityDB4    *mmdbReader
+	cityDB6    *mmdbReader
 	loaded     bool
 	dbDir      string
 	countries  map[string]*Country
@@ -56,43 +72,40 @@ type Result struct {
 	Longitude   float64 `json:"longitude,omitempty"`
 	Timezone    string  `json:"timezone,omitempty"`
 	ASN         uint    `json:"asn,omitempty"`
-	ASNOrg      string  `json:"asn_org,omitempty"`
-	// WHOIS registrant data (per AI.md PART 20)
-	RegistrantOrg string `json:"registrant_org,omitempty"`
-	RegistrantNet string `json:"registrant_net,omitempty"`
-	Found         bool   `json:"found"`
+	// Autonomous system holder name from the ASN database. This is BGP/RIR
+	// data, never an RDAP/WHOIS registrant record (AI.md PART 19).
+	ASNOrg string `json:"asn_org,omitempty"`
+	// Private reports an RFC 1918 / RFC 4193 / loopback address, which is
+	// never geo-located per AI.md PART 19
+	Private bool `json:"private"`
+	Found   bool `json:"found"`
 }
 
-// Config holds GeoIP configuration
+// Config holds the runtime GeoIP settings the lookup service needs.
+// The operator-facing schema lives in config.GeoIPConfig (server.yml).
 type Config struct {
-	Enabled bool   `yaml:"enabled"`
-	Dir     string `yaml:"dir"`
-	// never, daily, weekly, monthly
-	Update           string   `yaml:"update"`
+	Enabled          bool     `yaml:"enabled"`
+	Dir              string   `yaml:"dir"`
 	DenyCountries    []string `yaml:"deny_countries"`
 	AllowedCountries []string `yaml:"allow_countries"`
-	// Database toggles
+	// Database toggles per AI.md PART 19 (server.geoip.databases.*)
 	ASN     bool `yaml:"asn"`
 	Country bool `yaml:"country"`
 	City    bool `yaml:"city"`
-	// Enable WHOIS registrant data (per AI.md PART 20)
-	WHOIS bool `yaml:"whois"`
 }
 
 // DefaultConfig returns default GeoIP configuration.
 // Per AI.md PART 19: GeoIP enabled by default; dir resolved at runtime from {data_dir}/security/geoip.
-// All four databases enabled by default (asn, country, city, whois).
+// All three databases enabled by default (asn, country, city).
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:          true,
 		Dir:              "",
-		Update:           "weekly",
 		DenyCountries:    []string{},
 		AllowedCountries: []string{},
 		ASN:              true,
 		Country:          true,
 		City:             true,
-		WHOIS:            true,
 	}
 }
 
@@ -128,66 +141,42 @@ func (l *Lookup) LoadDatabases() error {
 		return fmt.Errorf("failed to create geoip directory: %w", err)
 	}
 
+	if err := l.removeLegacyFiles(); err != nil {
+		return err
+	}
+
 	var loadErrors []string
 
-	// Load country database
-	if l.config.Country {
-		countryPath := filepath.Join(l.dbDir, "country.mmdb")
-		if _, err := os.Stat(countryPath); os.IsNotExist(err) {
-			if err := l.downloadDatabase(CountryURL, countryPath); err != nil {
-				loadErrors = append(loadErrors, fmt.Sprintf("country: %v", err))
-			}
-		}
-		if db, err := openMMDB(countryPath); err == nil {
-			l.countryDB = db
-		} else {
-			loadErrors = append(loadErrors, fmt.Sprintf("country load: %v", err))
-		}
+	// Databases enabled in config, in load order
+	databases := []struct {
+		enabled bool
+		name    string
+		url     string
+		file    string
+		target  **mmdbReader
+	}{
+		{l.config.Country, "country", CountryURL, countryFile, &l.countryDB},
+		{l.config.ASN, "asn", ASNURL, asnFile, &l.asnDB},
+		{l.config.City, "city ipv4", CityIPv4URL, cityIPv4File, &l.cityDB4},
+		{l.config.City, "city ipv6", CityIPv6URL, cityIPv6File, &l.cityDB6},
 	}
 
-	// Load ASN database
-	if l.config.ASN {
-		asnPath := filepath.Join(l.dbDir, "asn.mmdb")
-		if _, err := os.Stat(asnPath); os.IsNotExist(err) {
-			if err := l.downloadDatabase(ASNURL, asnPath); err != nil {
-				loadErrors = append(loadErrors, fmt.Sprintf("asn: %v", err))
+	for _, db := range databases {
+		if !db.enabled {
+			continue
+		}
+		path := filepath.Join(l.dbDir, db.file)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := l.downloadDatabase(db.url, path); err != nil {
+				loadErrors = append(loadErrors, fmt.Sprintf("%s: %v", db.name, err))
 			}
 		}
-		if db, err := openMMDB(asnPath); err == nil {
-			l.asnDB = db
-		} else {
-			loadErrors = append(loadErrors, fmt.Sprintf("asn load: %v", err))
+		reader, err := openMMDB(path)
+		if err != nil {
+			loadErrors = append(loadErrors, fmt.Sprintf("%s load: %v", db.name, err))
+			continue
 		}
-	}
-
-	// Load city database
-	if l.config.City {
-		cityPath := filepath.Join(l.dbDir, "city.mmdb")
-		if _, err := os.Stat(cityPath); os.IsNotExist(err) {
-			if err := l.downloadDatabase(CityURL, cityPath); err != nil {
-				loadErrors = append(loadErrors, fmt.Sprintf("city: %v", err))
-			}
-		}
-		if db, err := openMMDB(cityPath); err == nil {
-			l.cityDB = db
-		} else {
-			loadErrors = append(loadErrors, fmt.Sprintf("city load: %v", err))
-		}
-	}
-
-	// Load WHOIS database (per AI.md PART 20)
-	if l.config.WHOIS {
-		whoisPath := filepath.Join(l.dbDir, "whois.mmdb")
-		if _, err := os.Stat(whoisPath); os.IsNotExist(err) {
-			if err := l.downloadDatabase(WhoisURL, whoisPath); err != nil {
-				loadErrors = append(loadErrors, fmt.Sprintf("whois: %v", err))
-			}
-		}
-		if db, err := openMMDB(whoisPath); err == nil {
-			l.whoisDB = db
-		} else {
-			loadErrors = append(loadErrors, fmt.Sprintf("whois load: %v", err))
-		}
+		*db.target = reader
 	}
 
 	// Mark as loaded if at least country database is available
@@ -201,8 +190,21 @@ func (l *Lookup) LoadDatabases() error {
 	return nil
 }
 
+// removeLegacyFiles deletes database files written by earlier revisions so a
+// retired dataset is never left behind in the GeoIP directory.
+func (l *Lookup) removeLegacyFiles() error {
+	var removeErrors []error
+	for _, name := range legacyFiles {
+		path := filepath.Join(l.dbDir, name)
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			removeErrors = append(removeErrors, fmt.Errorf("remove legacy GeoIP database %s: %w", name, err))
+		}
+	}
+	return errors.Join(removeErrors...)
+}
+
 // downloadDatabase downloads an MMDB database from URL
-func (l *Lookup) downloadDatabase(url, destPath string) error {
+func (l *Lookup) downloadDatabase(url, destPath string) (err error) {
 	client := &http.Client{
 		Timeout: 5 * time.Minute,
 	}
@@ -211,7 +213,11 @@ func (l *Lookup) downloadDatabase(url, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close GeoIP download response: %w", closeErr))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: status %d", resp.StatusCode)
@@ -224,17 +230,22 @@ func (l *Lookup) downloadDatabase(url, destPath string) error {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
 
-	_, err = io.Copy(out, resp.Body)
-	out.Close()
-	if err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("failed to write file: %w", err)
+	_, copyErr := io.Copy(out, resp.Body)
+	closeErr := out.Close()
+	if copyErr != nil || closeErr != nil {
+		writeErr := errors.Join(copyErr, closeErr)
+		if removeErr := os.Remove(tmpPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			writeErr = errors.Join(writeErr, fmt.Errorf("remove incomplete GeoIP download: %w", removeErr))
+		}
+		return fmt.Errorf("failed to write GeoIP database: %w", writeErr)
 	}
 
 	// Rename to final path
 	if err := os.Rename(tmpPath, destPath); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("failed to rename file: %w", err)
+		if removeErr := os.Remove(tmpPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			err = errors.Join(err, fmt.Errorf("remove failed GeoIP download: %w", removeErr))
+		}
+		return fmt.Errorf("failed to rename GeoIP database: %w", err)
 	}
 
 	return nil
@@ -250,56 +261,44 @@ func (l *Lookup) UpdateDatabases() error {
 	}
 
 	var updateErrors []string
-
-	if l.config.Country {
-		countryPath := filepath.Join(l.dbDir, "country.mmdb")
-		if err := l.downloadDatabase(CountryURL, countryPath); err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("country: %v", err))
-		} else if db, err := openMMDB(countryPath); err == nil {
-			if l.countryDB != nil {
-				l.countryDB.Close()
-			}
-			l.countryDB = db
-		}
+	if err := l.removeLegacyFiles(); err != nil {
+		updateErrors = append(updateErrors, err.Error())
 	}
 
-	if l.config.ASN {
-		asnPath := filepath.Join(l.dbDir, "asn.mmdb")
-		if err := l.downloadDatabase(ASNURL, asnPath); err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("asn: %v", err))
-		} else if db, err := openMMDB(asnPath); err == nil {
-			if l.asnDB != nil {
-				l.asnDB.Close()
-			}
-			l.asnDB = db
-		}
+	databases := []struct {
+		enabled bool
+		name    string
+		url     string
+		file    string
+		target  **mmdbReader
+	}{
+		{l.config.Country, "country", CountryURL, countryFile, &l.countryDB},
+		{l.config.ASN, "asn", ASNURL, asnFile, &l.asnDB},
+		{l.config.City, "city ipv4", CityIPv4URL, cityIPv4File, &l.cityDB4},
+		{l.config.City, "city ipv6", CityIPv6URL, cityIPv6File, &l.cityDB6},
 	}
 
-	if l.config.City {
-		cityPath := filepath.Join(l.dbDir, "city.mmdb")
-		if err := l.downloadDatabase(CityURL, cityPath); err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("city: %v", err))
-		} else if db, err := openMMDB(cityPath); err == nil {
-			if l.cityDB != nil {
-				l.cityDB.Close()
-			}
-			l.cityDB = db
+	for _, db := range databases {
+		if !db.enabled {
+			continue
 		}
+		path := filepath.Join(l.dbDir, db.file)
+		if err := l.downloadDatabase(db.url, path); err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("%s: %v", db.name, err))
+			continue
+		}
+		reader, err := openMMDB(path)
+		if err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("%s load: %v", db.name, err))
+			continue
+		}
+		if *db.target != nil {
+			(*db.target).Close()
+		}
+		*db.target = reader
 	}
 
-	// Update WHOIS database (per AI.md PART 20)
-	if l.config.WHOIS {
-		whoisPath := filepath.Join(l.dbDir, "whois.mmdb")
-		if err := l.downloadDatabase(WhoisURL, whoisPath); err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("whois: %v", err))
-		} else if db, err := openMMDB(whoisPath); err == nil {
-			if l.whoisDB != nil {
-				l.whoisDB.Close()
-			}
-			l.whoisDB = db
-		}
-	}
-
+	l.loaded = l.countryDB != nil
 	l.lastUpdate = time.Now()
 
 	if len(updateErrors) > 0 {
@@ -307,6 +306,13 @@ func (l *Lookup) UpdateDatabases() error {
 	}
 
 	return nil
+}
+
+// isPrivateIP reports whether ip is a private, loopback, link-local, or
+// unspecified address. Per AI.md PART 19 these are never geo-located.
+func isPrivateIP(ip net.IP) bool {
+	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
 // Lookup looks up an IP address
@@ -318,6 +324,13 @@ func (l *Lookup) Lookup(ipStr string) *Result {
 
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
+		return result
+	}
+
+	// Per AI.md PART 19: private/internal IPs (RFC 1918, RFC 4193, loopback,
+	// link-local, unspecified) are NEVER looked up or country-blocked.
+	if isPrivateIP(ip) {
+		result.Private = true
 		return result
 	}
 
@@ -347,9 +360,9 @@ func (l *Lookup) Lookup(ipStr string) *Result {
 		result.ASNOrg = org
 	}
 
-	// City lookup
-	if l.cityDB != nil {
-		city, region, postal, lat, lon, tz := l.cityDB.LookupCity(ip)
+	// City lookup — DB-IP publishes one database per IP version
+	if cityDB := l.cityReader(ip); cityDB != nil {
+		city, region, postal, lat, lon, tz := cityDB.LookupCity(ip)
 		result.City = city
 		result.Region = region
 		result.PostalCode = postal
@@ -358,14 +371,16 @@ func (l *Lookup) Lookup(ipStr string) *Result {
 		result.Timezone = tz
 	}
 
-	// WHOIS registrant lookup (per AI.md PART 20)
-	if l.whoisDB != nil {
-		registrantOrg, registrantNet := l.whoisDB.LookupWHOIS(ip)
-		result.RegistrantOrg = registrantOrg
-		result.RegistrantNet = registrantNet
-	}
-
 	return result
+}
+
+// cityReader returns the city database matching the address family of ip.
+// Callers must hold at least a read lock.
+func (l *Lookup) cityReader(ip net.IP) *mmdbReader {
+	if ip.To4() != nil {
+		return l.cityDB4
+	}
+	return l.cityDB6
 }
 
 // IsLoaded returns true if database is loaded
@@ -443,14 +458,13 @@ func (l *Lookup) Close() {
 		l.asnDB.Close()
 		l.asnDB = nil
 	}
-	if l.cityDB != nil {
-		l.cityDB.Close()
-		l.cityDB = nil
+	if l.cityDB4 != nil {
+		l.cityDB4.Close()
+		l.cityDB4 = nil
 	}
-	// Close WHOIS database (per AI.md PART 20)
-	if l.whoisDB != nil {
-		l.whoisDB.Close()
-		l.whoisDB = nil
+	if l.cityDB6 != nil {
+		l.cityDB6.Close()
+		l.cityDB6 = nil
 	}
 	l.loaded = false
 }

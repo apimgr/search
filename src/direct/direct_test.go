@@ -42,6 +42,7 @@ func TestParse(t *testing.T) {
 		expectedTerm string
 	}{
 		{"tldr:git", AnswerTypeTLDR, "git"},
+		{"TLDR:git", AnswerTypeTLDR, "git"},
 		{"dns:example.com", AnswerTypeDNS, "example.com"},
 		{"wiki: Python programming", AnswerTypeWiki, "Python programming"},
 		{"http:404", AnswerTypeHTTP, "404"},
@@ -250,6 +251,7 @@ func TestChmodHandler(t *testing.T) {
 		{"400"},
 		{"rwxr-xr-x"},
 		{"rw-r--r--"},
+		{"u+x,g+r"},
 	}
 
 	for _, tt := range tests {
@@ -915,6 +917,12 @@ func TestEmojiHandlerDirect(t *testing.T) {
 			if answer == nil {
 				t.Fatal("nil answer for non-empty term")
 			}
+			if strings.Contains(answer.Content, "onclick=") {
+				t.Errorf("emoji output contains an inline event handler: %s", answer.Content)
+			}
+			if !strings.Contains(answer.Content, "data-copy=") {
+				t.Errorf("emoji output is missing its delegated copy data")
+			}
 		})
 	}
 }
@@ -1207,6 +1215,22 @@ func TestASCIIHandlerDirect(t *testing.T) {
 
 // --- QRHandler ---
 
+func TestQRHandlerDirectAppliesPresentationOptions(t *testing.T) {
+	ctx := WithQROptions(context.Background(), QROptions{Size: 512, Level: "H", Foreground: "#123456", Background: "#ABCDEF", CSRFToken: "test-csrf-token"})
+	answer, err := NewQRHandler().HandleDirectQuery(ctx, "customized QR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Data["size"] != 512 || answer.Data["level"] != "H" || answer.Data["foreground"] != "#123456" || answer.Data["background"] != "#ABCDEF" {
+		t.Fatalf("QR data did not preserve options: %#v", answer.Data)
+	}
+	for _, marker := range []string{`name="size"`, `value="L" selected`, `name="level"`, `value="H" selected`, `name="foreground" value="#123456"`, `name="background" value="#ABCDEF"`, `name="logo"`, `name="csrf_token" value="test-csrf-token"`, `enctype="multipart/form-data"`, `width="512" height="512"`} {
+		if !strings.Contains(answer.Content, marker) {
+			t.Errorf("QR controls missing %q", marker)
+		}
+	}
+}
+
 func TestQRHandlerDirect(t *testing.T) {
 	h := NewQRHandler()
 	ctx := context.Background()
@@ -1234,6 +1258,15 @@ func TestQRHandlerDirect(t *testing.T) {
 			}
 			if answer.Content == "" {
 				t.Error("Content must not be empty")
+			}
+			if !strings.Contains(answer.Content, `data:image/png;base64,`) || !strings.Contains(answer.Content, `download="qr-1024.png"`) || !strings.Contains(answer.Content, `data:image/svg+xml;base64,`) {
+				t.Errorf("QR result is missing local image downloads: %s", answer.Content)
+			}
+			if strings.Contains(answer.Content, "api.qrserver.com") {
+				t.Fatal("QR content should not disclose encoded text to a third-party service")
+			}
+			if answer.Data["svg_b64"] == nil || answer.Data["error_correction_svg_b64"] == nil {
+				t.Errorf("QR response is missing vector or error-correction output: %#v", answer.Data)
 			}
 		})
 	}
@@ -1440,7 +1473,10 @@ func TestCronHandlerEdgeCases(t *testing.T) {
 		{"too_few_fields", "* * *", false, "invalid_cron"},
 		// empty input returns (nil, error) — not an Answer with an error field
 		{"empty", "", true, ""},
-		{"at_style_invalid", "@daily", false, "invalid_cron"},
+		// The @-macros are valid per AI.md (every hour/daily/weekly/monthly);
+		// only an unrecognised one is an error.
+		{"at_style_valid", "@daily", false, ""},
+		{"at_style_invalid", "@fortnightly", false, "invalid_cron"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1990,10 +2026,34 @@ func TestBeautifyCodeHelpers(t *testing.T) {
 			t.Error("beautifyCSS should add newlines")
 		}
 	})
+	t.Run("beautifyCSS_preserves_strings_comments_and_function_values", func(t *testing.T) {
+		source := `a{content:"text; } { and";background:url(data:image/svg+xml;base64,abc;def);/* } ; */color:red;value:#{$part};}`
+		got := beautifyCSS(source)
+		for _, protected := range []string{`content:"text; } { and"`, "url(data:image/svg+xml;base64,abc;def)", "/* } ; */", "value:#{$part}"} {
+			if !strings.Contains(got, protected) {
+				t.Errorf("beautifyCSS changed protected content %q: %s", protected, got)
+			}
+		}
+		if !strings.Contains(got, "\n  background:") {
+			t.Errorf("beautifyCSS did not format a declaration: %s", got)
+		}
+	})
 	t.Run("beautifySQL_keywords", func(t *testing.T) {
 		got := beautifySQL(`select * from users`)
 		if !strings.Contains(got, "SELECT") {
 			t.Error("beautifySQL should uppercase SELECT")
+		}
+	})
+	t.Run("beautifySQL_preserves_quoted_text_and_comments", func(t *testing.T) {
+		source := "select 'where from; and ''like''' as note, \"order by\" from users /* where and join */ -- select from\nwhere active = 1, $$delete from users$$, $body$update set x=1$body$ # insert into log"
+		got := beautifySQL(source)
+		for _, literal := range []string{"'where from; and ''like'''", `"order by"`, "/* where and join */", "-- select from", "$$delete from users$$", "$body$update set x=1$body$", "# insert into log"} {
+			if !strings.Contains(got, literal) {
+				t.Errorf("beautifySQL changed or removed protected SQL text %q: %s", literal, got)
+			}
+		}
+		if !strings.Contains(got, "SELECT") || !strings.Contains(got, "\nFROM") || !strings.Contains(got, "\nWHERE") {
+			t.Errorf("beautifySQL did not format SQL keywords: %s", got)
 		}
 	})
 	t.Run("detectLanguage_json", func(t *testing.T) {

@@ -177,7 +177,7 @@ func (h *CalendarHandler) handleDaysUntil(query, dateStr string) (*Answer, error
 		Type:    AnswerTypeDate,
 		Query:   query,
 		Title:   "Days Until",
-		Content: fmt.Sprintf(`<div class="calendar-result">%s</div>`, message),
+		Content: calendarAnswerContent(message, target),
 		Data: map[string]interface{}{
 			"days":       days,
 			"targetDate": target.Format("2006-01-02"),
@@ -215,7 +215,7 @@ func (h *CalendarHandler) handleDaysSince(query, dateStr string) (*Answer, error
 		Type:    AnswerTypeDate,
 		Query:   query,
 		Title:   "Days Since",
-		Content: fmt.Sprintf(`<div class="calendar-result">%s</div>`, message),
+		Content: calendarAnswerContent(message, target),
 		Data: map[string]interface{}{
 			"days":       days,
 			"targetDate": target.Format("2006-01-02"),
@@ -254,15 +254,10 @@ func (h *CalendarHandler) handleDaysBetween(query, dateStr1, dateStr2 string) (*
 	}
 
 	return &Answer{
-		Type:  AnswerTypeDate,
-		Query: query,
-		Title: "Days Between",
-		Content: fmt.Sprintf(`<div class="calendar-result">
-There are <strong>%d days</strong> between %s and %s
-</div>`,
-			absDays,
-			d1.Format("Monday, January 2, 2006"),
-			d2.Format("Monday, January 2, 2006")),
+		Type:    AnswerTypeDate,
+		Query:   query,
+		Title:   "Days Between",
+		Content: calendarAnswerContent(fmt.Sprintf("There are <strong>%d days</strong> between %s and %s", absDays, d1.Format("Monday, January 2, 2006"), d2.Format("Monday, January 2, 2006")), d1, d2),
 		Data: map[string]interface{}{
 			"days":  absDays,
 			"date1": d1.Format("2006-01-02"),
@@ -290,16 +285,10 @@ func (h *CalendarHandler) handleDateArithmetic(query, dateStr, operator, daysStr
 	resultDate := baseDate.AddDate(0, 0, days)
 
 	return &Answer{
-		Type:  AnswerTypeDate,
-		Query: query,
-		Title: "Date Arithmetic",
-		Content: fmt.Sprintf(`<div class="calendar-result">
-%s %s %s days = <strong>%s</strong>
-</div>`,
-			baseDate.Format("January 2, 2006"),
-			operator,
-			daysStr,
-			resultDate.Format("Monday, January 2, 2006")),
+		Type:    AnswerTypeDate,
+		Query:   query,
+		Title:   "Date Arithmetic",
+		Content: calendarAnswerContent(fmt.Sprintf("%s %s %s days = <strong>%s</strong>", baseDate.Format("January 2, 2006"), operator, daysStr, resultDate.Format("Monday, January 2, 2006")), resultDate),
 		Data: map[string]interface{}{
 			"baseDate":   baseDate.Format("2006-01-02"),
 			"days":       days,
@@ -323,17 +312,10 @@ func (h *CalendarHandler) handleWhatDay(query, dateStr string) (*Answer, error) 
 	_, week := targetDate.ISOWeek()
 
 	return &Answer{
-		Type:  AnswerTypeDate,
-		Query: query,
-		Title: "Weekday Lookup",
-		Content: fmt.Sprintf(`<div class="calendar-result">
-%s is a <strong>%s</strong><br>
-<small>Week %d of %d</small>
-</div>`,
-			targetDate.Format("January 2, 2006"),
-			weekday,
-			week,
-			targetDate.Year()),
+		Type:    AnswerTypeDate,
+		Query:   query,
+		Title:   "Weekday Lookup",
+		Content: calendarAnswerContent(fmt.Sprintf("%s is a <strong>%s</strong><br><small>Week %d of %d</small>", targetDate.Format("January 2, 2006"), weekday, week, targetDate.Year()), targetDate),
 		Data: map[string]interface{}{
 			"date":       targetDate.Format("2006-01-02"),
 			"weekday":    weekday,
@@ -354,14 +336,10 @@ func (h *CalendarHandler) handleRelativeDate(query string, days int, unit string
 	}
 
 	return &Answer{
-		Type:  AnswerTypeDate,
-		Query: query,
-		Title: "Date Calculator",
-		Content: fmt.Sprintf(`<div class="calendar-result">
-<strong>%s</strong> is <strong>%s</strong>
-</div>`,
-			description,
-			resultDate.Format("Monday, January 2, 2006")),
+		Type:    AnswerTypeDate,
+		Query:   query,
+		Title:   "Date Calculator",
+		Content: calendarAnswerContent(fmt.Sprintf("<strong>%s</strong> is <strong>%s</strong>", description, resultDate.Format("Monday, January 2, 2006")), resultDate),
 		Data: map[string]interface{}{
 			"days":       days,
 			"resultDate": resultDate.Format("2006-01-02"),
@@ -385,19 +363,63 @@ func (h *CalendarHandler) handleRelativeDateMonths(query string, months int) (*A
 	}
 
 	return &Answer{
-		Type:  AnswerTypeDate,
-		Query: query,
-		Title: "Date Calculator",
-		Content: fmt.Sprintf(`<div class="calendar-result">
-<strong>%s</strong> is <strong>%s</strong>
-</div>`,
-			description,
-			resultDate.Format("Monday, January 2, 2006")),
+		Type:    AnswerTypeDate,
+		Query:   query,
+		Title:   "Date Calculator",
+		Content: calendarAnswerContent(fmt.Sprintf("<strong>%s</strong> is <strong>%s</strong>", description, resultDate.Format("Monday, January 2, 2006")), resultDate),
 		Data: map[string]interface{}{
 			"months":     months,
 			"resultDate": resultDate.Format("2006-01-02"),
 		},
 	}, nil
+}
+
+func calendarAnswerContent(message string, dates ...time.Time) string {
+	var content strings.Builder
+	content.WriteString(`<div class="calendar-result"><p>`)
+	content.WriteString(message)
+	content.WriteString(`</p><div class="calendar-previews">`)
+	seen := make(map[string]struct{}, len(dates))
+	for _, date := range dates {
+		key := date.Format("2006-01")
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		content.WriteString(renderCalendarMonth(date))
+	}
+	content.WriteString(`</div></div>`)
+	return content.String()
+}
+
+func renderCalendarMonth(date time.Time) string {
+	first := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+	dayCount := time.Date(date.Year(), date.Month()+1, 0, 0, 0, 0, 0, date.Location()).Day()
+	var content strings.Builder
+	fmt.Fprintf(&content, `<table class="calendar-preview" aria-label="%s"><caption>%s</caption><thead><tr>`, date.Format("January 2006"), date.Format("January 2006"))
+	for _, day := range []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"} {
+		fmt.Fprintf(&content, `<th scope="col">%s</th>`, day)
+	}
+	content.WriteString(`</tr></thead><tbody><tr>`)
+	for blank := 0; blank < int(first.Weekday()); blank++ {
+		content.WriteString(`<td aria-hidden="true"></td>`)
+	}
+	for day := 1; day <= dayCount; day++ {
+		if day == date.Day() {
+			fmt.Fprintf(&content, `<td aria-current="date"><strong>%d</strong></td>`, day)
+		} else {
+			fmt.Fprintf(&content, `<td>%d</td>`, day)
+		}
+		if (int(first.Weekday())+day)%7 == 0 && day != dayCount {
+			content.WriteString(`</tr><tr>`)
+		}
+	}
+	remaining := (7 - (int(first.Weekday())+dayCount)%7) % 7
+	for blank := 0; blank < remaining; blank++ {
+		content.WriteString(`<td aria-hidden="true"></td>`)
+	}
+	content.WriteString(`</tr></tbody></table>`)
+	return content.String()
 }
 
 // dateParser handles parsing various date formats

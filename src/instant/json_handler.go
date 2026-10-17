@@ -107,14 +107,18 @@ func (h *JSONHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	prettyEncoder := json.NewEncoder(&prettyBuf)
 	prettyEncoder.SetIndent("", "  ")
 	prettyEncoder.SetEscapeHTML(false)
-	prettyEncoder.Encode(parsed)
+	if err := prettyEncoder.Encode(parsed); err != nil {
+		return nil, fmt.Errorf("encode formatted JSON: %w", err)
+	}
 	pretty := strings.TrimSpace(prettyBuf.String())
 
 	// Minify the JSON
 	var miniBuf bytes.Buffer
 	miniEncoder := json.NewEncoder(&miniBuf)
 	miniEncoder.SetEscapeHTML(false)
-	miniEncoder.Encode(parsed)
+	if err := miniEncoder.Encode(parsed); err != nil {
+		return nil, fmt.Errorf("encode compact JSON: %w", err)
+	}
 	minified := strings.TrimSpace(miniBuf.String())
 
 	// Get statistics and tree structure info
@@ -370,7 +374,7 @@ func addJSONLineNumbers(s string) string {
 	lines := strings.Split(s, "\n")
 	var result strings.Builder
 	for i, line := range lines {
-		result.WriteString(fmt.Sprintf("%3d | %s\n", i+1, line))
+		fmt.Fprintf(&result, "%3d | %s\n", i+1, line)
 	}
 	return result.String()
 }

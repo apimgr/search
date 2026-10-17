@@ -60,6 +60,7 @@ func setupAlertTestDB(t *testing.T) *sql.DB {
 	schema := `
 		CREATE TABLE search_alerts (
 			id TEXT PRIMARY KEY,
+			owner_id TEXT,
 			email TEXT NOT NULL,
 			query TEXT NOT NULL,
 			category TEXT NOT NULL,

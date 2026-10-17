@@ -1,0 +1,5980 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Search API",
+    "description": "Privacy-respecting metasearch engine API",
+    "version": "dev",
+    "contact": {
+      "name": "apimgr",
+      "url": "https://github.com/apimgr/search",
+      "email": "noreply@generated.invalid"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://generated.invalid",
+      "description": "Search API Server"
+    }
+  ],
+  "paths": {
+    "/api/autodiscover": {
+      "get": {
+        "summary": "Autodiscover server settings",
+        "description": "Returns server settings, config schema, and options for the CLI client",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graphql": {
+      "post": {
+        "summary": "GraphQL query",
+        "description": "Execute a GraphQL query or mutation",
+        "tags": [
+          "Docs"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operationName": {
+                    "type": "string"
+                  },
+                  "query": {
+                    "type": "string",
+                    "example": "{ search(q: \"golang\") { title url } }"
+                  },
+                  "variables": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "GraphQL result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed GraphQL request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/healthz": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns server health status. Canonical route: /server/healthz",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is unhealthy, in maintenance, or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp": {
+      "post": {
+        "summary": "MCP Streamable HTTP endpoint",
+        "description": "JSON-RPC 2.0 tools over Streamable HTTP using the same API bearer authentication",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP JSON-RPC response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid MCP request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/swagger": {
+      "get": {
+        "summary": "OpenAPI specification",
+        "description": "Return this OpenAPI 3.0 document as JSON",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAPI document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "operationId": "getApiV1Alerts",
+        "summary": "List search alerts",
+        "description": "Return the alert inventory to an operator",
+        "tags": [
+          "Alerts",
+          "Operator"
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert inventory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postApiV1Alerts",
+        "summary": "Create search alert",
+        "description": "Create an accountless search alert with email, private RSS, and/or webhook delivery",
+        "tags": [
+          "Alerts"
+        ],
+        "requestBody": {
+          "description": "Alert creation payload",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string"
+                  },
+                  "deliver_email": {
+                    "type": "boolean"
+                  },
+                  "deliver_rss": {
+                    "type": "boolean"
+                  },
+                  "deliver_webhook": {
+                    "type": "boolean"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "engines": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "frequency": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "query": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "safe_search": {
+                    "type": "integer"
+                  },
+                  "webhook_url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Alert created"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{token}": {
+      "get": {
+        "operationId": "getApiV1AlertsToken",
+        "summary": "Get alert details",
+        "description": "Get alert details for a manage token",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Alert manage token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert details"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteApiV1AlertsToken",
+        "summary": "Delete alert",
+        "description": "Delete an alert using its manage token",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Alert manage token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert deleted"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchApiV1AlertsToken",
+        "summary": "Update alert",
+        "description": "Update an alert using its manage token",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Alert manage token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Alert update payload",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string"
+                  },
+                  "deliver_email": {
+                    "type": "boolean"
+                  },
+                  "deliver_rss": {
+                    "type": "boolean"
+                  },
+                  "deliver_webhook": {
+                    "type": "boolean"
+                  },
+                  "engines": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "frequency": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "query": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "safe_search": {
+                    "type": "integer"
+                  },
+                  "webhook_url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Alert updated"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{token}/pause": {
+      "post": {
+        "operationId": "postApiV1AlertsTokenPause",
+        "summary": "Pause or resume alert",
+        "description": "Pause or resume an alert using its manage token",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Alert manage token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Pause state payload",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paused": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Alert pause state updated"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{token}/rss": {
+      "get": {
+        "operationId": "getApiV1AlertsTokenRss",
+        "summary": "Get alert RSS feed",
+        "description": "Return the private RSS feed for an alert",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Alert RSS token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "RSS feed payload"
+          }
+        }
+      }
+    },
+    "/api/v1/autocomplete": {
+      "get": {
+        "operationId": "getApiV1Autocomplete",
+        "summary": "Autocomplete suggestions",
+        "description": "Get search query suggestions",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Partial query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autocomplete suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bangs": {
+      "get": {
+        "operationId": "getApiV1Bangs",
+        "summary": "List bang shortcuts",
+        "description": "Return the available bang shortcuts",
+        "tags": [
+          "Bangs"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum items to return (default 250)",
+            "schema": {
+              "type": "integer",
+              "example": 250
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of items to skip",
+            "schema": {
+              "type": "integer",
+              "example": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Field to sort by",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "Sort direction: asc or desc",
+            "schema": {
+              "type": "string",
+              "example": "asc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bang list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "operationId": "getApiV1Categories",
+        "summary": "List categories",
+        "description": "Return every search category",
+        "tags": [
+          "Engines"
+        ],
+        "responses": {
+          "200": {
+            "description": "Category list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/direct/{type}/{term}": {
+      "get": {
+        "operationId": "getApiV1DirectTypeTerm",
+        "summary": "Direct answer lookup",
+        "description": "Get a direct answer for a specific type and term (e.g., tldr:git, dns:example.com, http:404)",
+        "tags": [
+          "Direct Answers"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "description": "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "term",
+            "in": "path",
+            "description": "Term to look up",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Direct answer result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "cache_ttl_seconds": {
+                          "type": "integer"
+                        },
+                        "content": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "found": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "source_url": {
+                          "type": "string"
+                        },
+                        "term": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines": {
+      "get": {
+        "operationId": "getApiV1Engines",
+        "summary": "List search engines",
+        "description": "Return every configured search engine",
+        "tags": [
+          "Engines"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum items to return (default 250)",
+            "schema": {
+              "type": "integer",
+              "example": 250
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of items to skip",
+            "schema": {
+              "type": "integer",
+              "example": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Field to sort by",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "Sort direction: asc or desc",
+            "schema": {
+              "type": "string",
+              "example": "asc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines/{engine_id}": {
+      "get": {
+        "operationId": "getApiV1EnginesEngineId",
+        "summary": "Get search engine",
+        "description": "Return a single search engine by identifier",
+        "tags": [
+          "Engines"
+        ],
+        "parameters": [
+          {
+            "name": "engine_id",
+            "in": "path",
+            "description": "Engine identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "duckduckgo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Engine not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/favicon": {
+      "get": {
+        "operationId": "getApiV1Favicon",
+        "summary": "Favicon proxy",
+        "description": "Proxy a site favicon so the browser never contacts a third party",
+        "tags": [
+          "System"
+        ],
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "Target site URL",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "https://example.com"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Favicon image bytes"
+          },
+          "400": {
+            "description": "Missing or invalid url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/info": {
+      "get": {
+        "operationId": "getApiV1Info",
+        "summary": "Server information",
+        "description": "Returns public server information (name, version, capabilities)",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/info.txt": {
+      "get": {
+        "operationId": "getApiV1InfoTxt",
+        "summary": "Server information",
+        "description": "Returns public server information (name, version, capabilities)",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/instant": {
+      "get": {
+        "operationId": "getApiV1Instant",
+        "summary": "Instant answer",
+        "description": "Get an instant answer widget for a query (calculator, converter, dictionary, etc.)",
+        "tags": [
+          "Instant Answers"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Query to process for instant answer",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instant answer result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "found": {
+                          "type": "boolean"
+                        },
+                        "query": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "operationId": "getApiV1Search",
+        "summary": "Search",
+        "description": "Perform a metasearch query across multiple engines",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Search category (general, images, videos, news, files)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (default: 1)",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Results per page (default: 20, maximum: 100)",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "safe_search",
+            "in": "query",
+            "description": "Safe search level: 0 off, 1 moderate, 2 strict",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "description": "Time range: any, hour, day, week, month, year, or custom",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "time_from",
+            "in": "query",
+            "description": "Start date for custom range (YYYY-MM-DD)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "time_to",
+            "in": "query",
+            "description": "End date for custom range (YYYY-MM-DD)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "description": "ISO country or region code",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "engines",
+            "in": "query",
+            "description": "Comma-separated or repeated engine names",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Language code (e.g., en, es, fr)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "engines": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "author": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "duration": {
+                            "type": "integer"
+                          },
+                          "embed_url": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "file_size": {
+                            "type": "integer"
+                          },
+                          "image_format": {
+                            "type": "string"
+                          },
+                          "image_height": {
+                            "type": "integer"
+                          },
+                          "image_url": {
+                            "type": "string"
+                          },
+                          "image_width": {
+                            "type": "integer"
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "thumbnail": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "view_count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "search_time": {
+                      "type": "number"
+                    },
+                    "total_results": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiV1Search",
+        "summary": "Search with a JSON request body",
+        "description": "Perform a metasearch query without placing search terms in the request URL",
+        "tags": [
+          "Search"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string"
+                  },
+                  "engines": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  },
+                  "page": {
+                    "type": "integer"
+                  },
+                  "query": {
+                    "type": "string",
+                    "example": "golang"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "safe_search": {
+                    "type": "integer"
+                  },
+                  "time_from": {
+                    "type": "string"
+                  },
+                  "time_range": {
+                    "type": "string"
+                  },
+                  "time_to": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid search request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/related": {
+      "get": {
+        "operationId": "getApiV1SearchRelated",
+        "summary": "Related searches",
+        "description": "Return related search suggestions for a query",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "golang"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Related searches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/about": {
+      "get": {
+        "operationId": "getApiV1ServerAbout",
+        "summary": "About page content",
+        "description": "About page content as structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "About page content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/config": {
+      "get": {
+        "operationId": "getApiV1ServerConfig",
+        "summary": "Operator server config",
+        "description": "Effective server configuration with secrets redacted. Requires the operator bearer token (AI.md PART 11)",
+        "tags": [
+          "Operator"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/config/contact/webhooks": {
+      "post": {
+        "operationId": "postApiV1ServerConfigContactWebhooks",
+        "summary": "Configure a contact notification webhook",
+        "description": "Operator bearer token required. A newly generated signing secret is returned once when a URL is first configured or changed.",
+        "tags": [
+          "Configuration",
+          "Notifications"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "example": "admin|security|abuse|general"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "example": "telegram|discord|slack|mattermost|pushover|gotify|generic"
+                  },
+                  "url": {
+                    "type": "string",
+                    "example": "https://example.com/webhook"
+                  }
+                },
+                "example": {
+                  "role": "general",
+                  "transport": "generic",
+                  "url": "https://example.com/webhook"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook configuration updated; a new signing secret may be included once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "configured": {
+                          "type": "boolean"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "secret": {
+                          "type": "string"
+                        },
+                        "transport": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid webhook configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator bearer token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Webhook configuration could not be persisted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/contact": {
+      "get": {
+        "operationId": "getApiV1ServerContact",
+        "summary": "Contact information",
+        "description": "Return the contact form definition and operator contact details",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiV1ServerContact",
+        "summary": "Submit contact message",
+        "description": "Submit a message to the server operator",
+        "tags": [
+          "Server"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "ada@example.com"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "Great service"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Ada Lovelace"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "example": "Feedback"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/geoip/ips": {
+      "get": {
+        "operationId": "getApiV1ServerGeoipIps",
+        "summary": "GeoIP lookup",
+        "description": "Look up the requester address or an explicit public IP address",
+        "tags": [
+          "GeoIP"
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoIP result with data-source attribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IP address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "GeoIP database unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/geoip/ips/{ip}": {
+      "get": {
+        "operationId": "getApiV1ServerGeoipIpsIp",
+        "summary": "GeoIP lookup",
+        "description": "Look up the requester address or an explicit public IP address",
+        "tags": [
+          "GeoIP"
+        ],
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "path",
+            "description": "IP address to look up",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoIP result with data-source attribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IP address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "GeoIP database unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/geoip/presets": {
+      "get": {
+        "operationId": "getApiV1ServerGeoipPresets",
+        "summary": "List GeoIP presets",
+        "description": "List saved country-list presets; operator bearer token required",
+        "tags": [
+          "GeoIP",
+          "Operator"
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved presets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postApiV1ServerGeoipPresets",
+        "summary": "Save GeoIP preset",
+        "description": "Save a named country list without applying it; operator bearer token required",
+        "tags": [
+          "GeoIP",
+          "Operator"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "codes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "from": {
+                    "type": "string",
+                    "example": "deny_countries"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved preset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid preset input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/geoip/presets/{name}": {
+      "get": {
+        "operationId": "getApiV1ServerGeoipPresetsName",
+        "summary": "Get GeoIP preset",
+        "description": "Read a saved country-list preset without applying it; operator bearer token required",
+        "tags": [
+          "GeoIP",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved preset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Preset not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteApiV1ServerGeoipPresetsName",
+        "summary": "Delete GeoIP preset",
+        "description": "Delete a saved country-list preset; operator bearer token required",
+        "tags": [
+          "GeoIP",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted preset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Preset not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/graphql": {
+      "post": {
+        "operationId": "postApiV1ServerGraphql",
+        "summary": "GraphQL query",
+        "description": "Execute a GraphQL query or mutation",
+        "tags": [
+          "Docs"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operationName": {
+                    "type": "string"
+                  },
+                  "query": {
+                    "type": "string",
+                    "example": "{ search(q: \"golang\") { title url } }"
+                  },
+                  "variables": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "GraphQL result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed GraphQL request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/healthz": {
+      "get": {
+        "operationId": "getApiV1ServerHealthz",
+        "summary": "Health check",
+        "description": "Returns server health status. Canonical route: /server/healthz",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is unhealthy, in maintenance, or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/healthz.txt": {
+      "get": {
+        "operationId": "getApiV1ServerHealthzTxt",
+        "summary": "Health check",
+        "description": "Returns server health status. Canonical route: /server/healthz",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is unhealthy, in maintenance, or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/help": {
+      "get": {
+        "operationId": "getApiV1ServerHelp",
+        "summary": "Help page content",
+        "description": "Help page content as structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Help page content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/mcp": {
+      "post": {
+        "summary": "MCP Streamable HTTP endpoint",
+        "description": "JSON-RPC 2.0 tools over Streamable HTTP using the same API bearer authentication",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP JSON-RPC response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid MCP request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/preferences": {
+      "get": {
+        "operationId": "getApiV1ServerPreferences",
+        "summary": "Get preferences",
+        "description": "Return the current client preferences",
+        "tags": [
+          "Preferences"
+        ],
+        "responses": {
+          "200": {
+            "description": "Preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiV1ServerPreferences",
+        "summary": "Update preferences",
+        "description": "Replace the current client preferences",
+        "tags": [
+          "Preferences"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "example": {
+                  "theme": "dark"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/preferences/export": {
+      "get": {
+        "operationId": "getApiV1ServerPreferencesExport",
+        "summary": "Export preferences",
+        "description": "Return the current preferences as a portable document",
+        "tags": [
+          "Preferences"
+        ],
+        "responses": {
+          "200": {
+            "description": "Exported preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/preferences/import": {
+      "get": {
+        "operationId": "getApiV1ServerPreferencesImport",
+        "summary": "Import preferences",
+        "description": "Apply validated preferences from query values or a portable short code",
+        "tags": [
+          "Preferences"
+        ],
+        "parameters": [
+          {
+            "name": "theme",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "dark"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "en"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Base64url portable preference code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imported preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/preferences/tokens": {
+      "get": {
+        "summary": "List owner tokens",
+        "description": "Primary owner bearer token required; token values are masked",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Primary owner token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create linked owner token",
+        "description": "Primary owner bearer token required",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expires_at": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created linked token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Primary owner token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/preferences/tokens/primary/reveal": {
+      "post": {
+        "summary": "Reveal primary owner token",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Primary owner token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/preferences/tokens/primary/rotate": {
+      "post": {
+        "summary": "Rotate primary owner token",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Primary owner token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/preferences/tokens/{id}": {
+      "delete": {
+        "summary": "Revoke linked owner token",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Update linked owner token",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expires_at": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/preferences/tokens/{id}/reveal": {
+      "post": {
+        "summary": "Reveal linked owner token",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/preferences/tokens/{id}/rotate": {
+      "post": {
+        "summary": "Rotate linked owner token",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/privacy": {
+      "get": {
+        "operationId": "getApiV1ServerPrivacy",
+        "summary": "Privacy policy content",
+        "description": "Privacy policy content as structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Privacy policy content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/scheduler/tasks": {
+      "get": {
+        "operationId": "getApiV1ServerSchedulerTasks",
+        "summary": "List scheduler tasks",
+        "description": "Operator bearer token required",
+        "tags": [
+          "Scheduler",
+          "Operator"
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduler tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scheduler unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/scheduler/tasks/{task}": {
+      "get": {
+        "operationId": "getApiV1ServerSchedulerTasksTask",
+        "summary": "Get scheduler task",
+        "tags": [
+          "Scheduler",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduler task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/scheduler/tasks/{task}/disable": {
+      "post": {
+        "operationId": "postApiV1ServerSchedulerTasksTaskDisable",
+        "summary": "Disable scheduler task",
+        "description": "Operator bearer token required",
+        "tags": [
+          "Scheduler",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduler task action result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scheduler unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/scheduler/tasks/{task}/enable": {
+      "post": {
+        "operationId": "postApiV1ServerSchedulerTasksTaskEnable",
+        "summary": "Enable scheduler task",
+        "description": "Operator bearer token required",
+        "tags": [
+          "Scheduler",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduler task action result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scheduler unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/scheduler/tasks/{task}/history": {
+      "get": {
+        "operationId": "getApiV1ServerSchedulerTasksTaskHistory",
+        "summary": "Get scheduler task history",
+        "tags": [
+          "Scheduler",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent task history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/scheduler/tasks/{task}/run": {
+      "post": {
+        "operationId": "postApiV1ServerSchedulerTasksTaskRun",
+        "summary": "Run scheduler task",
+        "description": "Operator bearer token required",
+        "tags": [
+          "Scheduler",
+          "Operator"
+        ],
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduler task action result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scheduler unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/status": {
+      "get": {
+        "operationId": "getApiV1ServerStatus",
+        "summary": "Operator server status",
+        "description": "Detailed server status. Requires the operator bearer token (AI.md PART 11)",
+        "tags": [
+          "Operator"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/swagger": {
+      "get": {
+        "operationId": "getApiV1ServerSwagger",
+        "summary": "OpenAPI specification",
+        "description": "Return this OpenAPI 3.0 document as JSON",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAPI document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/terms": {
+      "get": {
+        "operationId": "getApiV1ServerTerms",
+        "summary": "Terms of service content",
+        "description": "Terms of service content as structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Terms of service content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widgets": {
+      "get": {
+        "operationId": "getApiV1Widgets",
+        "summary": "List widgets",
+        "description": "Return every available widget",
+        "tags": [
+          "Widgets"
+        ],
+        "responses": {
+          "200": {
+            "description": "Widget list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widgets/{widget_id}": {
+      "get": {
+        "operationId": "getApiV1WidgetsWidgetId",
+        "summary": "Get widget data",
+        "description": "Return the rendered data for a single widget",
+        "tags": [
+          "Widgets"
+        ],
+        "parameters": [
+          {
+            "name": "widget_id",
+            "in": "path",
+            "description": "Widget identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "weather"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Widget data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Widget not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/healthz": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns server health status. Canonical route: /server/healthz",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is unhealthy, in maintenance, or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "cache": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "disk": {
+                          "type": "string"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "scheduler": {
+                          "type": "string"
+                        },
+                        "tor": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "geoip": {
+                          "type": "boolean"
+                        },
+                        "i2p": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "tor": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "running": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "go_version": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "tagline": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "restart_reason": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "active_connections": {
+                          "type": "integer"
+                        },
+                        "requests_24h": {
+                          "type": "integer"
+                        },
+                        "requests_total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "uptime": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "build": {
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              }
+            }
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "cache": {
+                "type": "string"
+              },
+              "database": {
+                "type": "string"
+              },
+              "disk": {
+                "type": "string"
+              },
+              "i2p": {
+                "type": "string"
+              },
+              "scheduler": {
+                "type": "string"
+              },
+              "tor": {
+                "type": "string"
+              }
+            }
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "geoip": {
+                "type": "boolean"
+              },
+              "i2p": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "hostname": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "running": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              },
+              "tor": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "hostname": {
+                    "type": "string"
+                  },
+                  "running": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "go_version": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "pending_restart": {
+            "type": "boolean"
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "tagline": {
+                "type": "string"
+              }
+            }
+          },
+          "restart_reason": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "active_connections": {
+                "type": "integer"
+              },
+              "requests_24h": {
+                "type": "integer"
+              },
+              "requests_total": {
+                "type": "integer"
+              }
+            }
+          },
+          "status": {
+            "type": "string",
+            "example": "healthy"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uptime": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string",
+            "example": "1.0.0"
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "published": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "operatorToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Operator bearer token (AI.md PART 11)"
+      },
+      "ownerBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Primary anonymous owner bearer token"
+      }
+    }
+  }
+}

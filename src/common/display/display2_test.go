@@ -21,15 +21,23 @@ func setEnv(t *testing.T, key, value string) {
 	t.Helper()
 	prev, hadPrev := os.LookupEnv(key)
 	if value == "" {
-		os.Unsetenv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
 	} else {
-		os.Setenv(key, value)
+		if err := os.Setenv(key, value); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Cleanup(func() {
 		if hadPrev {
-			os.Setenv(key, prev)
+			if err := os.Setenv(key, prev); err != nil {
+				t.Errorf("restore %s: %v", key, err)
+			}
 		} else {
-			os.Unsetenv(key)
+			if err := os.Unsetenv(key); err != nil {
+				t.Errorf("unset %s: %v", key, err)
+			}
 		}
 	})
 }

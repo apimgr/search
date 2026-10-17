@@ -3,10 +3,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"sort"
 	"time"
 )
 
@@ -40,6 +39,58 @@ func init() {
 	rootCmd.addCommand("status", statusCmd)
 }
 
+// statusView converts the status payload into the format-agnostic view used by
+// every output format. Nested check maps are flattened into "check.NAME" rows
+// so the table and csv formats stay one value per row.
+func statusView(data map[string]interface{}) view {
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		if k != "checks" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+
+	rows := make([][]string, 0, len(data))
+	for _, k := range keys {
+		rows = append(rows, []string{k, fmt.Sprintf("%v", data[k])})
+	}
+	if checks, ok := data["checks"].(map[string]interface{}); ok {
+		flattenHealthFields(&rows, "check", checks)
+	}
+
+	plain := make([]string, 0, len(rows))
+	for _, r := range rows {
+		plain = append(plain, r[0]+"="+r[1])
+	}
+	return view{
+		Data:    data,
+		Headers: []string{"FIELD", "VALUE"},
+		Rows:    rows,
+		Plain:   plain,
+	}
+}
+
+func flattenHealthFields(rows *[][]string, prefix string, values map[string]interface{}) {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		key := prefix + "." + name
+		if nested, ok := values[name].(map[string]interface{}); ok {
+			flattenHealthFields(rows, key, nested)
+			continue
+		}
+		value := values[name]
+		if enabled, ok := value.(bool); ok {
+			value = boolCell(enabled)
+		}
+		*rows = append(*rows, []string{key, fmt.Sprintf("%v", value)})
+	}
+}
+
 func runStatus() error {
 	// Initialize client if not already done
 	if apiClient == nil {
@@ -54,53 +105,26 @@ func runStatus() error {
 	elapsed := time.Since(start)
 
 	if err != nil {
-		// Output error in requested format
-		switch getOutputFormat() {
-		case "json":
-			resp := map[string]interface{}{
-				"status":        "error",
-				"error":         err.Error(),
-				"response_time": elapsed.Milliseconds(),
-			}
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-			enc.Encode(resp)
-		default:
-			fmt.Printf("Status: ERROR\n")
-			fmt.Printf("Error: %v\n", err)
-			fmt.Printf("Response time: %dms\n", elapsed.Milliseconds())
+		renderErr := render(getOutputFormat(), statusView(map[string]interface{}{
+			"status":        "error",
+			"error":         err.Error(),
+			"response_time": elapsed.Milliseconds(),
+		}))
+		if renderErr != nil {
+			return renderErr
 		}
 		return ErrUnhealthy
 	}
 
-	// Output health in requested format
-	switch getOutputFormat() {
-	case "json":
-		resp := map[string]interface{}{
-			"status":        health.Status,
-			"version":       health.Version,
-			"uptime":        health.Uptime,
-			"response_time": elapsed.Milliseconds(),
-			"checks":        health.Checks,
-		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(resp)
-	default:
-		fmt.Printf("Status: %s\n", health.Status)
-		if health.Version != "" {
-			fmt.Printf("Version: %s\n", health.Version)
-		}
-		if health.Uptime != "" {
-			fmt.Printf("Uptime: %s\n", health.Uptime)
-		}
-		fmt.Printf("Response time: %dms\n", elapsed.Milliseconds())
-		if len(health.Checks) > 0 {
-			fmt.Println("\nHealth checks:")
-			for name, status := range health.Checks {
-				fmt.Printf("  %s: %s\n", name, status)
-			}
-		}
+	data := map[string]interface{}{
+		"status":        health.Status,
+		"version":       health.Version,
+		"uptime":        health.Uptime,
+		"response_time": elapsed.Milliseconds(),
+		"checks":        health.Checks,
+	}
+	if err := render(getOutputFormat(), statusView(data)); err != nil {
+		return err
 	}
 
 	// Return ErrUnhealthy when status is not ok/healthy so main() can call os.Exit(1)

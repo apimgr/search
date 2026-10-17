@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/apimgr/search/src/common/i18n"
-	"github.com/skip2/go-qrcode"
+	"github.com/apimgr/search/src/common/qr"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 // QRHandler handles QR code generation
@@ -61,41 +63,51 @@ func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 
 	lang := LangFromContext(ctx)
 
-	// Generate QR code as PNG
-	png, err := qrcode.Encode(text, qrcode.Medium, 256)
+	imageSizes := []int{128, 256, 512, 1024}
+	pngImages := make(map[int]string, len(imageSizes))
+	for _, size := range imageSizes {
+		png, err := qr.PNG(text, "M", size)
+		if err != nil {
+			return &Answer{
+				Type: AnswerTypeQR, Query: query, Title: i18n.T(lang, "instant.qr_generator_title"),
+				Content: i18n.T(lang, "instant.qr_generate_error", err),
+			}, nil
+		}
+		pngImages[size] = base64.StdEncoding.EncodeToString(png)
+	}
+	vector, err := qr.SVG(text, "M", "#000000", "#FFFFFF")
 	if err != nil {
-		return &Answer{
-			Type:    AnswerTypeQR,
-			Query:   query,
-			Title:   i18n.T(lang, "instant.qr_generator_title"),
-			Content: i18n.T(lang, "instant.qr_generate_error", err),
-		}, nil
+		return nil, err
 	}
 
-	// Encode as base64 for display
-	b64 := base64.StdEncoding.EncodeToString(png)
-
-	// Generate ASCII representation
+	mainPNG := pngImages[256]
 	ascii := generateQRASCII(text)
-
-	content := fmt.Sprintf(`<div class="qr-result">
-<strong>Text:</strong> %s<br><br>
-<img src="data:image/png;base64,%s" alt="%s" style="image-rendering: pixelated;"><br><br>
-<details>
-<summary>%s</summary>
-<pre style="font-family: monospace; line-height: 1; font-size: 8px;">%s</pre>
-</details>
-</div>`, escapeHTML(text), b64, i18n.T(lang, "instant.qr_generator_title"), i18n.T(lang, "instant.qr_ascii_version"), ascii)
+	label := i18n.T(lang, "instant.qr_generator_title")
+	var content strings.Builder
+	fmt.Fprintf(&content, `<div class="qr-result"><strong>Text:</strong> %s<br><br>`, escapeHTML(text))
+	if parsed, err := url.ParseRequestURI(text); err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" && parsed.User == nil {
+		fmt.Fprintf(&content, `<p><a href="%s" rel="nofollow noopener noreferrer">%s</a></p>`, escapeHTML(parsed.String()), escapeHTML(parsed.String()))
+	}
+	fmt.Fprintf(&content, `<img src="data:image/png;base64,%s" alt="%s" class="qr-code-preview" width="256" height="256"><br>`, mainPNG, escapeHTML(label))
+	fmt.Fprintf(&content, `<div class="qr-download-options"><strong>%s</strong> `, escapeHTML(i18n.T(lang, "direct.qr_download_png")))
+	for _, size := range imageSizes {
+		fmt.Fprintf(&content, `<a href="data:image/png;base64,%s" download="qr-%d.png">%s</a> `, pngImages[size], size, escapeHTML(i18n.T(lang, "direct.qr_size_pixels", size)))
+	}
+	fmt.Fprintf(&content, `<br><a href="data:image/svg+xml;base64,%s" download="qr.svg">%s</a></div>`, base64.StdEncoding.EncodeToString(vector), escapeHTML(i18n.T(lang, "direct.qr_download_svg")))
+	fmt.Fprintf(&content, `<details><summary>%s</summary><pre class="qr-ascii">%s</pre></details></div>`, i18n.T(lang, "instant.qr_ascii_version"), escapeHTML(ascii))
+	contentHTML := content.String()
 
 	return &Answer{
 		Type:    AnswerTypeQR,
 		Query:   query,
 		Title:   i18n.T(lang, "instant.qr_generator_title"),
-		Content: content,
+		Content: contentHTML,
 		Data: map[string]interface{}{
 			"text":       text,
-			"image_b64":  b64,
+			"image_b64":  mainPNG,
 			"image_type": "png",
+			"png_sizes":  pngImages,
+			"svg_b64":    base64.StdEncoding.EncodeToString(vector),
 		},
 	}, nil
 }

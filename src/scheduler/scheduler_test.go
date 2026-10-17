@@ -152,6 +152,10 @@ func TestNew(t *testing.T) {
 func TestSchedulerSetTimezone(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
+	if _, err := time.LoadLocation(defaultTimezone); err != nil {
+		t.Fatalf("embedded default timezone %q is unavailable: %v", defaultTimezone, err)
+	}
+
 	err := s.SetTimezone("UTC")
 	if err != nil {
 		t.Fatalf("SetTimezone(UTC) error = %v", err)
@@ -1764,7 +1768,6 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:        "future.test",
@@ -1777,14 +1780,15 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 
 	s.Register(task)
 
-	// Save state with future next_run
+	// Save state with future next_run.
+	// The scheduler is deliberately left stopped: StopTaskScheduler persists
+	// in-memory state over every row, so seeding the row out-of-band while it
+	// runs would be clobbered on shutdown (AI.md PART 18 "Shutdown Behavior").
 	futureTime := time.Now().Add(2 * time.Hour)
 	_, err = db.Exec("UPDATE scheduler_tasks SET next_run = ? WHERE task_id = ?", futureTime, "future.test")
 	if err != nil {
 		t.Fatalf("Failed to update next_run: %v", err)
 	}
-
-	s.StopTaskScheduler()
 
 	// New scheduler should load the future next_run
 	s2 := NewScheduler(db, "node1")
@@ -1865,7 +1869,6 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:        "allfields.test",
@@ -1878,7 +1881,10 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 
 	s.Register(task)
 
-	// Update all fields
+	// Update all fields. The scheduler is deliberately left stopped:
+	// StopTaskScheduler persists in-memory state over every row, so seeding
+	// the row out-of-band while it runs would be clobbered on shutdown
+	// (AI.md PART 18 "Shutdown Behavior").
 	now := time.Now()
 	futureRetry := now.Add(10 * time.Minute)
 	_, err = db.Exec(`UPDATE scheduler_tasks SET
@@ -1889,8 +1895,6 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to update fields: %v", err)
 	}
-
-	s.StopTaskScheduler()
 
 	// New scheduler should load all fields
 	s2 := NewScheduler(db, "node1")

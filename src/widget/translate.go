@@ -4,14 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // TranslateFetcher fetches translations
+const maxTranslationResponseBytes = 2 << 20
+
 type TranslateFetcher struct {
 	httpClient *http.Client
 }
@@ -162,7 +167,12 @@ func normalizeLanguage(lang string) string {
 // NewTranslateFetcher creates a new translate fetcher
 func NewTranslateFetcher() *TranslateFetcher {
 	return &TranslateFetcher{
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		httpClient: &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -239,6 +249,20 @@ func (f *TranslateFetcher) Fetch(ctx context.Context, params map[string]string) 
 	return f.fetchFromMyMemory(ctx, text, sourceLang, targetLang)
 }
 
+func decodeTranslationResponse(body io.Reader, target interface{}) error {
+	data, err := io.ReadAll(io.LimitReader(body, maxTranslationResponseBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxTranslationResponseBytes {
+		return fmt.Errorf("translation provider response exceeds %d bytes", maxTranslationResponseBytes)
+	}
+	if err := json.Unmarshal(data, target); err != nil {
+		return fmt.Errorf("invalid translation provider response: %w", err)
+	}
+	return nil
+}
+
 // fetchFromLingva uses Lingva Translate API (free, open source)
 func (f *TranslateFetcher) fetchFromLingva(ctx context.Context, text, sourceLang, targetLang string) (*WidgetData, error) {
 	// Lingva uses "auto" for auto-detection
@@ -262,7 +286,7 @@ func (f *TranslateFetcher) fetchFromLingva(ctx context.Context, text, sourceLang
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return &WidgetData{
@@ -279,7 +303,7 @@ func (f *TranslateFetcher) fetchFromLingva(ctx context.Context, text, sourceLang
 		} `json:"info"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeTranslationResponse(resp.Body, &result); err != nil {
 		return nil, err
 	}
 
@@ -324,7 +348,7 @@ func (f *TranslateFetcher) fetchFromLibreTranslate(ctx context.Context, text, so
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return &WidgetData{
@@ -342,7 +366,7 @@ func (f *TranslateFetcher) fetchFromLibreTranslate(ctx context.Context, text, so
 		} `json:"detectedLanguage"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeTranslationResponse(resp.Body, &result); err != nil {
 		return nil, err
 	}
 
@@ -384,7 +408,7 @@ func (f *TranslateFetcher) fetchFromMyMemory(ctx context.Context, text, sourceLa
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var result struct {
 		ResponseStatus int `json:"responseStatus"`
@@ -395,7 +419,7 @@ func (f *TranslateFetcher) fetchFromMyMemory(ctx context.Context, text, sourceLa
 		DetectedLanguage string `json:"detectedLanguage,omitempty"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeTranslationResponse(resp.Body, &result); err != nil {
 		return nil, err
 	}
 

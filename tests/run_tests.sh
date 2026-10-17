@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Per AI.md PART 9: Auto-detect runtime and run tests
-set -euo pipefail
+# @@License : WTFPL
+# Per AI.md PART 28: Auto-detect runtime and run tests
+set -eo pipefail
 
 cd "$(dirname "$0")/.."
 

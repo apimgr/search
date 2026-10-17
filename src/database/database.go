@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,6 +65,9 @@ type Config struct {
 	MaxIdle int `yaml:"max_idle"`
 	// connection max lifetime in seconds
 	Lifetime int `yaml:"lifetime"`
+	// max idle time in seconds before an idle connection is closed
+	// (AI.md PART 10 "Connection Pool Configuration": server.database.pool.max_idle_time)
+	IdleTime int `yaml:"max_idle_time"`
 }
 
 // DefaultConfig returns default database configuration
@@ -74,6 +78,7 @@ func DefaultConfig() *Config {
 		MaxOpen:  10,
 		MaxIdle:  5,
 		Lifetime: 300,
+		IdleTime: 60,
 	}
 }
 
@@ -102,8 +107,7 @@ func NewDatabaseManager(cfg *Config) (*DatabaseManager, error) {
 	// Create users database
 	usersDB, err := dm.connectDatabase(cfg, "user.db")
 	if err != nil {
-		serverDB.Close()
-		return nil, fmt.Errorf("failed to connect users database: %w", err)
+		return nil, fmt.Errorf("failed to connect users database: %w", errors.Join(err, serverDB.Close()))
 	}
 	dm.usersDB = usersDB
 
@@ -156,20 +160,39 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 	// PRAGMA, embedded in the DSN above) rather than by capping the Go pool
 	// at a single connection, which previously forced every read to queue
 	// behind unrelated in-flight queries.
-	db.db.SetMaxOpenConns(cfg.MaxOpen)
-	db.db.SetMaxIdleConns(cfg.MaxIdle)
-	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
+	db.applyPoolSettings(cfg)
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := db.db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		// Close the handle the failed Ping left open; sql.Open succeeds
+		// lazily, so returning here without Close leaks the pool.
+		closeErr := db.db.Close()
+		db.db = nil
+		return nil, fmt.Errorf("failed to ping database: %w", errors.Join(err, closeErr))
 	}
 
 	db.ready = true
 	return db, nil
+}
+
+// applyPoolSettings configures the connection pool per AI.md PART 10
+// "Connection Pooling": max_open, max_idle, max_lifetime and max_idle_time
+// are all mandatory. SQLite allows 1 writer + concurrent WAL readers, so
+// cfg.MaxOpen/MaxIdle apply to sqlite the same as to libsql — write
+// conflicts are serialized by SQLite itself via the busy_timeout PRAGMA
+// embedded in the DSN rather than by capping the Go pool at one connection.
+func (db *DB) applyPoolSettings(cfg *Config) {
+	db.db.SetMaxOpenConns(cfg.MaxOpen)
+	db.db.SetMaxIdleConns(cfg.MaxIdle)
+	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
+	idleTime := cfg.IdleTime
+	if idleTime <= 0 {
+		idleTime = 60
+	}
+	db.db.SetConnMaxIdleTime(time.Duration(idleTime) * time.Second)
 }
 
 // sqliteDSNWithPragmas appends modernc.org/sqlite's shorthand _pragma query
@@ -280,17 +303,12 @@ func (db *DB) connect(cfg *Config) error {
 	case "libsql":
 		// libSQL/Turso remote database
 		db.db, err = sql.Open("libsql", cfg.DSN)
-	case "pgx":
-		// PostgreSQL
-		db.db, err = sql.Open("pgx", cfg.DSN)
-	case "mysql":
-		// MySQL/MariaDB
-		db.db, err = sql.Open("mysql", cfg.DSN)
-	case "sqlserver":
-		// MSSQL
-		db.db, err = sql.Open("sqlserver", cfg.DSN)
 	default:
-		return fmt.Errorf("unsupported database driver: %s (supported: sqlite, libsql, postgres, mysql, mssql)", cfg.Driver)
+		// AI.md PART 10 lines 13482-13487 define exactly two backends: local
+		// SQLite and remote libsql/Turso. No other driver is imported, so any
+		// other name could only ever fail at sql.Open with a confusing
+		// "unknown driver" - reject it here with the supported list instead.
+		return fmt.Errorf("unsupported database driver: %s (supported: sqlite, libsql)", cfg.Driver)
 	}
 
 	if err != nil {
@@ -304,16 +322,18 @@ func (db *DB) connect(cfg *Config) error {
 	// PRAGMA, embedded in the DSN above) rather than by capping the Go pool
 	// at a single connection, which previously forced every read to queue
 	// behind unrelated in-flight queries.
-	db.db.SetMaxOpenConns(cfg.MaxOpen)
-	db.db.SetMaxIdleConns(cfg.MaxIdle)
-	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
+	db.applyPoolSettings(cfg)
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := db.db.PingContext(ctx); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
+		// Close the handle the failed Ping left open; sql.Open succeeds
+		// lazily, so returning here without Close leaks the pool.
+		closeErr := db.db.Close()
+		db.db = nil
+		return fmt.Errorf("failed to ping database: %w", errors.Join(err, closeErr))
 	}
 
 	db.ready = true
@@ -344,7 +364,7 @@ func (db *DB) IsReady() bool {
 func (db *DB) IsRemote() bool {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	// sqlite is local, all others (libsql, pgx, mysql, sqlserver) are remote
+	// AI.md PART 10 defines exactly two backends: sqlite is local, libsql/Turso is remote
 	return db.driver != "" && db.driver != "sqlite"
 }
 
@@ -406,6 +426,20 @@ func (db *DB) SQL() *sql.DB {
 }
 
 // Ping checks database connectivity
+// CleanupExpiredAPITokens deletes expired API tokens from the server database.
+func (db *DB) CleanupExpiredAPITokens(ctx context.Context) (int64, error) {
+	query := "DELETE FROM " + serverTablePrefix(db) + "api_tokens WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP"
+	result, err := db.Exec(ctx, query)
+	if err != nil {
+		return 0, fmt.Errorf("delete expired API tokens: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read expired API token cleanup count: %w", err)
+	}
+	return count, nil
+}
+
 func (db *DB) Ping(ctx context.Context) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()

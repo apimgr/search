@@ -33,8 +33,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.MaxSize != 10000 {
 		t.Errorf("MaxSize = %d, want %d", cfg.MaxSize, 10000)
 	}
-	if cfg.Prefix != "apimgr:" {
-		t.Errorf("Prefix = %q, want %q", cfg.Prefix, "apimgr:")
+	if cfg.Prefix != "search:" {
+		t.Errorf("Prefix = %q, want %q", cfg.Prefix, "search:")
 	}
 	if cfg.MinIdle != 2 {
 		t.Errorf("MinIdle = %d, want %d", cfg.MinIdle, 2)

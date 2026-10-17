@@ -102,7 +102,7 @@ type SearchOperators struct {
 
 // Operator patterns
 var (
-	sitePattern        = regexp.MustCompile(`(?i)site:(\S+)`)
+	sitePattern        = regexp.MustCompile(`(?i)(^|\s)site:(\S+)`)
 	excludeSitePattern = regexp.MustCompile(`(?i)-site:(\S+)`)
 	fileTypePattern    = regexp.MustCompile(`(?i)(?:filetype|ext):(\S+)`)
 	inURLPattern       = regexp.MustCompile(`(?i)inurl:(\S+)`)
@@ -158,11 +158,11 @@ func ParseOperators(query string) *SearchOperators {
 	if matches := sitePattern.FindAllStringSubmatch(query, -1); matches != nil {
 		for _, m := range matches {
 			if ops.Site == "" {
-				ops.Site = m[1]
+				ops.Site = m[2]
 			}
-			ops.Sites = append(ops.Sites, m[1])
+			ops.Sites = append(ops.Sites, m[2])
 		}
-		ops.CleanedQuery = sitePattern.ReplaceAllString(ops.CleanedQuery, "")
+		ops.CleanedQuery = sitePattern.ReplaceAllString(ops.CleanedQuery, "$1")
 	}
 
 	// File type
@@ -335,14 +335,13 @@ func (ops *SearchOperators) HasOperators() bool {
 		ops.HasAND
 }
 
-// ToGoogleQuery converts operators to Google-compatible query string
+// ToGoogleQuery preserves the legacy explicit-operator query builder for callers outside the search adapters.
+// Production adapters forward the raw query so each provider retains its native operator behavior.
 func (ops *SearchOperators) ToGoogleQuery() string {
 	parts := []string{}
-
 	if ops.CleanedQuery != "" {
 		parts = append(parts, ops.CleanedQuery)
 	}
-
 	if ops.Site != "" {
 		parts = append(parts, "site:"+ops.Site)
 	}
@@ -373,19 +372,15 @@ func (ops *SearchOperators) ToGoogleQuery() string {
 	if ops.After != "" {
 		parts = append(parts, "after:"+ops.After)
 	}
-
 	return strings.Join(parts, " ")
 }
 
-// ToDuckDuckGoQuery converts operators to DuckDuckGo-compatible query string
+// ToDuckDuckGoQuery preserves the legacy explicit-operator query builder for callers outside the search adapters.
 func (ops *SearchOperators) ToDuckDuckGoQuery() string {
 	parts := []string{}
-
 	if ops.CleanedQuery != "" {
 		parts = append(parts, ops.CleanedQuery)
 	}
-
-	// DuckDuckGo supports: site:, filetype:, intitle:, -term, "exact"
 	if ops.Site != "" {
 		parts = append(parts, "site:"+ops.Site)
 	}
@@ -404,19 +399,15 @@ func (ops *SearchOperators) ToDuckDuckGoQuery() string {
 	for _, term := range ops.ExcludeTerms {
 		parts = append(parts, "-"+term)
 	}
-
 	return strings.Join(parts, " ")
 }
 
-// ToBingQuery converts operators to Bing-compatible query string
+// ToBingQuery preserves the legacy explicit-operator query builder for callers outside the search adapters.
 func (ops *SearchOperators) ToBingQuery() string {
 	parts := []string{}
-
 	if ops.CleanedQuery != "" {
 		parts = append(parts, ops.CleanedQuery)
 	}
-
-	// Bing supports: site:, filetype:, intitle:, inurl:, -term, "exact"
 	if ops.Site != "" {
 		parts = append(parts, "site:"+ops.Site)
 	}
@@ -435,7 +426,6 @@ func (ops *SearchOperators) ToBingQuery() string {
 	for _, term := range ops.ExcludeTerms {
 		parts = append(parts, "-"+term)
 	}
-
 	return strings.Join(parts, " ")
 }
 

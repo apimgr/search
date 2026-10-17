@@ -137,7 +137,7 @@ func (h *StopwatchHandler) handlePomodoro(query, lang string) (*Answer, error) {
 		Type:  AnswerTypeTime,
 		Query: query,
 		Title: i18n.T(lang, "instant.pomodoro_timer_title"),
-		Content: `<div class="timer-widget pomodoro-widget" data-type="pomodoro">
+		Content: `<div class="timer-widget pomodoro-widget" data-type="pomodoro" data-duration="1500">
 <div class="pomodoro-phase">Work Session</div>
 <div class="timer-display">25:00</div>
 <div class="timer-controls">

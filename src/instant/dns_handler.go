@@ -100,7 +100,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"dns-result\">")
-	content.WriteString(fmt.Sprintf("<strong>DNS Records for:</strong> %s<br><br>", domain))
+	fmt.Fprintf(&content, "<strong>DNS Records for:</strong> %s<br><br>", domain)
 
 	hasRecords := false
 
@@ -112,7 +112,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 			hasRecords = true
 			content.WriteString("<strong>A Records (IPv4):</strong><br>")
 			for _, ip := range records.A {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br>", ip))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br>", ip)
 			}
 			content.WriteString("<br>")
 		}
@@ -123,7 +123,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 			hasRecords = true
 			content.WriteString("<strong>AAAA Records (IPv6):</strong><br>")
 			for _, ip := range records.AAAA {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br>", ip))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br>", ip)
 			}
 			content.WriteString("<br>")
 		}
@@ -133,7 +133,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		if records.CNAME != "" {
 			hasRecords = true
 			content.WriteString("<strong>CNAME Record:</strong><br>")
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br><br>", records.CNAME))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br><br>", records.CNAME)
 		}
 	}
 
@@ -142,7 +142,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 			hasRecords = true
 			content.WriteString("<strong>MX Records (Mail):</strong><br>")
 			for _, mx := range records.MX {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%d %s</code><br>", mx.Priority, mx.Host))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%d %s</code><br>", mx.Priority, mx.Host)
 			}
 			content.WriteString("<br>")
 		}
@@ -153,7 +153,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 			hasRecords = true
 			content.WriteString("<strong>NS Records (Name Servers):</strong><br>")
 			for _, ns := range records.NS {
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br>", ns))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br>", ns)
 			}
 			content.WriteString("<br>")
 		}
@@ -171,7 +171,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 				if len(escaped) > 200 {
 					escaped = escaped[:200] + "..."
 				}
-				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br>", escaped))
+				fmt.Fprintf(&content, "&nbsp;&nbsp;<code>%s</code><br>", escaped)
 			}
 			content.WriteString("<br>")
 		}
@@ -179,7 +179,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	if !hasRecords {
 		if recordType != "" && recordType != "ALL" {
-			content.WriteString(fmt.Sprintf("<em>No %s records found for this domain.</em><br>", recordType))
+			fmt.Fprintf(&content, "<em>No %s records found for this domain.</em><br>", recordType)
 		} else {
 			content.WriteString("<em>No DNS records found for this domain.</em><br>")
 		}

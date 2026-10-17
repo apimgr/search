@@ -10,8 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -25,6 +28,8 @@ import (
 // query that legitimately returned zero videos (which still yields this
 // envelope, just with empty/non-video section contents).
 var errYouTubeSchemaDrift = errors.New("youtube: ytInitialData schema drift detected")
+
+var youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 // YouTube implements YouTube Search engine
 type YouTube struct {
@@ -54,7 +59,11 @@ func (e *YouTube) Search(ctx context.Context, query *model.Query) ([]model.Resul
 	searchURL := "https://www.youtube.com/results"
 
 	params := url.Values{}
-	params.Set("search_query", query.Text)
+	searchText := query.Text
+	if query.Category == model.CategoryMusic {
+		searchText += " music"
+	}
+	params.Set("search_query", searchText)
 
 	reqURL := fmt.Sprintf("%s?%s", searchURL, params.Encode())
 
@@ -71,7 +80,7 @@ func (e *YouTube) Search(ctx context.Context, query *model.Query) ([]model.Resul
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("youtube returned status %d", resp.StatusCode)
@@ -207,7 +216,7 @@ func (e *YouTube) parseJSON(jsonStr string, query *model.Query, maxResults int) 
 func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.Query, position int) *model.Result {
 	// Extract video ID
 	videoID, ok := video["videoId"].(string)
-	if !ok || videoID == "" {
+	if !ok || !youtubeVideoIDPattern.MatchString(videoID) {
 		return nil
 	}
 
@@ -260,6 +269,30 @@ func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.
 	if viewObj, ok := video["viewCountText"].(map[string]interface{}); ok {
 		viewCount, _ = viewObj["simpleText"].(string)
 	}
+	views := parseYouTubeViewCount(viewCount)
+	duration := ""
+	if durationObj, ok := video["lengthText"].(map[string]interface{}); ok {
+		duration, _ = durationObj["simpleText"].(string)
+	}
+	if duration == "" {
+		if overlays, ok := video["thumbnailOverlays"].([]interface{}); ok {
+			for _, overlay := range overlays {
+				container, ok := overlay.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				status, ok := container["thumbnailOverlayTimeStatusRenderer"].(map[string]interface{})
+				if !ok {
+					continue
+				}
+				text, _ := status["text"].(map[string]interface{})
+				duration, _ = text["simpleText"].(string)
+				if duration != "" {
+					break
+				}
+			}
+		}
+	}
 
 	// Extract published time
 	published := ""
@@ -271,21 +304,11 @@ func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.
 	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 
 	// Combine metadata into description
-	if channel != "" || viewCount != "" || published != "" {
-		meta := []string{}
-		if channel != "" {
-			meta = append(meta, channel)
-		}
-		if viewCount != "" {
-			meta = append(meta, viewCount)
-		}
-		if published != "" {
-			meta = append(meta, published)
-		}
+	if published != "" {
 		if description != "" {
-			description = strings.Join(meta, " - ") + " | " + description
+			description = published + " | " + description
 		} else {
-			description = strings.Join(meta, " - ")
+			description = published
 		}
 	}
 
@@ -294,10 +317,61 @@ func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.
 		URL:       videoURL,
 		Content:   description,
 		Thumbnail: thumbnail,
+		Author:    channel,
+		ViewCount: views,
+		Duration:  parseYouTubeDuration(duration),
+		EmbedURL:  "https://www.youtube-nocookie.com/embed/" + videoID,
 		Engine:    e.Name(),
 		Category:  query.Category,
 		Score:     calculateScore(e.GetPriority(), position, 1),
 	}
+}
+
+func parseYouTubeDuration(value string) int {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return 0
+	}
+	values := make([]int, len(parts))
+	for i, part := range parts {
+		parsed, err := strconv.Atoi(part)
+		if err != nil || parsed < 0 {
+			return 0
+		}
+		values[i] = parsed
+	}
+	if values[len(values)-1] >= 60 || (len(values) == 3 && values[1] >= 60) {
+		return 0
+	}
+	if len(values) == 2 {
+		return values[0]*60 + values[1]
+	}
+	return values[0]*3600 + values[1]*60 + values[2]
+}
+
+func parseYouTubeViewCount(value string) int64 {
+	fields := strings.Fields(strings.TrimSpace(value))
+	if len(fields) == 0 {
+		return 0
+	}
+	count := strings.ReplaceAll(fields[0], ",", "")
+	multiplier := float64(1)
+	if len(count) > 0 {
+		suffix := strings.ToLower(count[len(count)-1:])
+		switch suffix {
+		case "k":
+			multiplier, count = 1_000, count[:len(count)-1]
+		case "m":
+			multiplier, count = 1_000_000, count[:len(count)-1]
+		case "b":
+			multiplier, count = 1_000_000_000, count[:len(count)-1]
+		}
+	}
+	numeric, err := strconv.ParseFloat(count, 64)
+	if err != nil || numeric < 0 || numeric*multiplier > float64(^uint64(0)>>1) {
+		return 0
+	}
+	return int64(numeric * multiplier)
 }
 
 func (e *YouTube) parseHTML(html string, query *model.Query, maxResults int) ([]model.Result, error) {

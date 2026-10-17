@@ -26,3 +26,8 @@ func FindAvailableSystemID() (int, error) {
 func CreateSystemUser(name string) (*SystemUser, error) {
 	return nil, fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 }
+
+// DeleteSystemUser is not supported on this platform.
+func DeleteSystemUser(name string) error {
+	return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+}

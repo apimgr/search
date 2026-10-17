@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -107,7 +108,9 @@ func InitCache() error {
 // Cache returns the CLI cache instance
 func Cache() *CLICache {
 	if cliCache == nil {
-		InitCache()
+		if err := InitCache(); err != nil {
+			slog.Error("failed to initialize CLI cache", "error", err)
+		}
 	}
 	return cliCache
 }
@@ -195,8 +198,12 @@ func (c *CLICache) Clear() {
 	c.totalSize = 0
 
 	// Clear file cache
-	os.RemoveAll(c.cacheDir)
-	os.MkdirAll(c.cacheDir, 0700)
+	if err := os.RemoveAll(c.cacheDir); err != nil {
+		slog.Warn("failed to clear CLI cache directory", "error", err)
+	}
+	if err := os.MkdirAll(c.cacheDir, 0700); err != nil {
+		slog.Warn("failed to recreate CLI cache directory", "error", err)
+	}
 }
 
 // Cleanup removes expired entries
@@ -257,7 +264,9 @@ func (c *CLICache) getFromFile(key string) ([]byte, bool) {
 	}
 
 	if time.Now().After(entry.ExpiresAt) {
-		os.Remove(filePath)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			slog.Warn("failed to remove expired CLI cache entry", "error", err)
+		}
 		return nil, false
 	}
 
@@ -271,12 +280,16 @@ func (c *CLICache) saveToFile(key string, entry CacheEntry) {
 	if err != nil {
 		return
 	}
-	os.WriteFile(filePath, data, 0600)
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
+		slog.Warn("failed to persist CLI cache entry", "error", err)
+	}
 }
 
 // deleteFile removes a cache file
 func (c *CLICache) deleteFile(key string) {
-	os.Remove(c.cacheFilePath(key))
+	if err := os.Remove(c.cacheFilePath(key)); err != nil && !os.IsNotExist(err) {
+		slog.Warn("failed to remove CLI cache entry", "error", err)
+	}
 }
 
 // cacheFilePath returns the file path for a cache key

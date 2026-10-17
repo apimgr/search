@@ -30,6 +30,8 @@ const (
 	ErrCodeForbidden = "FORBIDDEN"
 	// Account temporarily locked
 	ErrCodeAccountLocked = "ACCOUNT_LOCKED"
+	// CSRF token validation failed
+	ErrCodeCSRFFailed = "CSRF_FAILED"
 
 	// 404 Not Found
 	// Resource not found
@@ -79,6 +81,7 @@ var ErrorCodeToHTTP = map[string]int{
 	ErrCode2FAInvalid:       401,
 	ErrCodeForbidden:        403,
 	ErrCodeAccountLocked:    403,
+	ErrCodeCSRFFailed:       403,
 	ErrCodeNotFound:         404,
 	ErrCodeMethodNotAllowed: 405,
 	ErrCodeConflict:         409,

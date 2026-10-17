@@ -1913,6 +1913,29 @@ func TestAddDirectoryToTarSkipsDirs(t *testing.T) {
 	}
 }
 
+func TestAddDirectoryToTarSkipsSymlinks(t *testing.T) {
+	source := t.TempDir()
+	target := filepath.Join(source, "target.txt")
+	if err := os.WriteFile(target, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(source, "link.txt")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var archive bytes.Buffer
+	tarWriter := tar.NewWriter(&archive)
+	files, _, _, err := NewManager().addDirectoryToTar(tarWriter, source, "data")
+	if err != nil {
+		t.Fatalf("addDirectoryToTar() error = %v", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("tar close error = %v", err)
+	}
+	if len(files) != 1 || !strings.HasSuffix(files[0], "target.txt") {
+		t.Fatalf("backup files = %v, want only target.txt", files)
+	}
+}
+
 // Tests for addDirectoryToTar - large file skip
 
 func TestAddDirectoryToTarSkipsLargeFiles(t *testing.T) {
@@ -3099,10 +3122,15 @@ func TestManagerRestoreEmptyArchive(t *testing.T) {
 	os.MkdirAll(m.configDir, 0755)
 	os.MkdirAll(m.dataDir, 0755)
 
-	// Should not error on empty archive
+	// Per AI.md PART 21 "Restore Verification": an archive with no
+	// manifest.json fails the "Manifest valid" check, so Restore must
+	// refuse it rather than silently extracting nothing.
 	err := m.Restore(backupPath)
-	if err != nil {
-		t.Fatalf("Restore() error on empty archive = %v", err)
+	if err == nil {
+		t.Fatal("Restore() on empty archive: want error (no manifest.json), got nil")
+	}
+	if !strings.Contains(err.Error(), "manifest") {
+		t.Errorf("Restore() error = %v, want it to mention the missing manifest", err)
 	}
 }
 

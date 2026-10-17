@@ -11,16 +11,21 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/mail"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/email"
+	"github.com/apimgr/search/src/i2p"
+	"github.com/apimgr/search/src/notify"
 	"github.com/apimgr/search/src/security"
 	"github.com/apimgr/search/src/version"
 )
@@ -114,37 +119,69 @@ func (s *Server) validateSecurityIDOrLog(r *http.Request, securityID string) boo
 	if security.ValidateSecurityID(s.config.Server.Security.InstallationSecret, securityID, time.Now().Unix()) {
 		return true
 	}
+	// Per AI.md PART 11 "Secret Rotation": the previous installation_secret
+	// stays valid for 7 days after rotation so in-flight {security_id} URLs
+	// still validate.
+	if prev := s.previousInstallationSecret(); prev != "" &&
+		security.ValidateSecurityID(prev, securityID, time.Now().Unix()) {
+		return true
+	}
 	if s.logManager != nil {
 		s.logManager.Security().LogSecurityIDInvalid(getClientIPSimple(r), r.UserAgent(), securityID)
 	}
 	return false
 }
 
+// previousInstallationSecret returns the pre-rotation installation_secret when
+// it is still inside its 7-day grace window (AI.md PART 11 "Secret Rotation"),
+// or "" when the secret has never been rotated or the window has closed.
+func (s *Server) previousInstallationSecret() string {
+	sec := s.config.Server.Security
+	if sec.InstallationSecretPrevious == "" || sec.InstallationSecretPreviousExpires == "" {
+		return ""
+	}
+	expires, err := time.Parse(time.RFC3339, sec.InstallationSecretPreviousExpires)
+	if err != nil || time.Now().UTC().After(expires) {
+		return ""
+	}
+	return sec.InstallationSecretPrevious
+}
+
 // renderContactForm renders the contact page in standard or security mode.
 func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, securityID string, securityMode bool, contactError string) {
-	// Generate captcha values
-	captchaA, _ := rand.Int(rand.Reader, big.NewInt(10))
-	captchaB, _ := rand.Int(rand.Reader, big.NewInt(10))
-
-	a := int(captchaA.Int64()) + 1
-	b := int(captchaB.Int64()) + 1
-	answer := a + b
-
-	// Generate signed captcha ID containing the expected answer
-	captchaID := s.signCaptcha(answer)
-
+	captchaRequired := s.contactCaptchaRequired(r)
+	var a, b int
+	var captchaID string
+	mode, siteKey, secretKey := s.configuredContactCaptcha()
+	onionRequest := isOnionRequest(s.config, r)
+	externalCaptcha := captchaRequired && !onionRequest && (mode == "recaptcha" || mode == "hcaptcha") && siteKey != "" && secretKey != ""
+	if captchaRequired && (mode == "simple" || onionRequest) {
+		captchaA, _ := rand.Int(rand.Reader, big.NewInt(10))
+		captchaB, _ := rand.Int(rand.Reader, big.NewInt(10))
+		a = int(captchaA.Int64()) + 1
+		b = int(captchaB.Int64()) + 1
+		captchaID = s.signCaptcha(a + b)
+	}
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, "", "contact")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "contact.page_title")
+	if captchaRequired && !externalCaptcha && mode != "simple" && !onionRequest && contactError == "" {
+		contactError = s.getI18nManager().T(baseData.Lang, "errors.server_error_message")
+	}
 
 	data := &ContactPageData{
-		PageData:     *baseData,
-		ContactError: contactError,
-		CaptchaA:     a,
-		CaptchaB:     b,
-		CaptchaID:    captchaID,
-		SecurityMode: securityMode,
-		SecurityID:   securityID,
+		PageData:        *baseData,
+		ContactError:    contactError,
+		CaptchaA:        a,
+		CaptchaB:        b,
+		CaptchaID:       captchaID,
+		CaptchaRequired: captchaRequired,
+		CaptchaExternal: externalCaptcha,
+		CaptchaLocal:    captchaRequired && (mode == "simple" || onionRequest),
+		CaptchaProvider: mode,
+		CaptchaSiteKey:  siteKey,
+		SecurityMode:    securityMode,
+		SecurityID:      securityID,
 	}
 
 	if securityMode {
@@ -176,14 +213,146 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	securityID := strings.TrimSpace(r.PostFormValue("security_id"))
-
-	// Step 1: re-validate security_id server-side — the form value can be tampered with.
-	if !s.validateSecurityIDOrLog(r, securityID) {
-		s.renderContactForm(w, r, "", false, "")
+	securityMode := securityID != "" && s.validateSecurityIDOrLog(r, securityID)
+	lang := s.newPageData(w, r, "", "contact").Lang
+	if s.contactCaptchaRequired(r) && !s.verifyConfiguredContactCaptcha(r) {
+		s.markContactCaptchaRequired(w, r)
+		s.renderContactForm(w, r, securityID, securityMode, s.getI18nManager().T(lang, "errors.bad_request"))
+		return
+	}
+	if strings.TrimSpace(r.PostFormValue("website")) != "" {
+		s.clearContactCaptchaRequirement(w, r)
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "received"}})
+		} else {
+			http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
+		}
+		return
+	}
+	if securityMode {
+		s.handleSecurityReportSubmit(w, r, securityID)
 		return
 	}
 
-	s.handleSecurityReportSubmit(w, r, securityID)
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	address, addressErr := mail.ParseAddress(strings.TrimSpace(r.PostFormValue("email")))
+	subject := strings.TrimSpace(r.PostFormValue("subject"))
+	message := strings.TrimSpace(r.PostFormValue("message"))
+	if name == "" || addressErr != nil || address.Address != strings.TrimSpace(r.PostFormValue("email")) || subject == "" || message == "" || len(name) > 200 || len(subject) > 300 || len(message) > 10000 {
+		s.markContactCaptchaRequired(w, r)
+		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
+		return
+	}
+	if err := s.SubmitContact(r.Context(), api.ContactMessage{Name: name, Email: address.Address, Subject: subject, Message: message, SourceIP: getClientIPSimple(r)}); err != nil {
+		slog.Error("contact message delivery failed")
+		s.markContactCaptchaRequired(w, r)
+		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.server_error_message"))
+		return
+	}
+	s.clearContactCaptchaRequirement(w, r)
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "received"}})
+		return
+	}
+	http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
+}
+
+func (s *Server) validCaptcha(id, answerText string) bool {
+	parts := strings.SplitN(id, ".", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	answer, err := strconv.Atoi(answerText)
+	if err != nil || answer < 2 || answer > 20 {
+		return false
+	}
+	expectedAnswer, err := strconv.Atoi(parts[0])
+	if err != nil || expectedAnswer < 2 || expectedAnswer > 20 || answer != expectedAnswer {
+		return false
+	}
+	mac := hmac.New(sha256.New, s.contactCaptchaSigningKey())
+	_, _ = mac.Write([]byte(parts[0]))
+	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(parts[1]), []byte(expectedSignature))
+}
+
+func (s *Server) contactCaptchaRequired(r *http.Request) bool {
+	cookie, err := r.Cookie("contact_captcha_required")
+	if err != nil {
+		return false
+	}
+	parts := strings.SplitN(cookie.Value, ".", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	timestamp, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || timestamp > time.Now().Unix() || time.Since(time.Unix(timestamp, 0)) > time.Hour {
+		return false
+	}
+	mac := hmac.New(sha256.New, s.contactCaptchaSigningKey())
+	_, _ = mac.Write([]byte(parts[0]))
+	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(parts[1]), []byte(expected))
+}
+
+func (s *Server) markContactCaptchaRequired(w http.ResponseWriter, r *http.Request) {
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, s.contactCaptchaSigningKey())
+	_, _ = mac.Write([]byte(timestamp))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	cookie := &http.Cookie{Name: "contact_captcha_required", Value: timestamp + "." + sig, Path: "/server/contact", MaxAge: 3600, HttpOnly: true, Secure: s.cookieSecure(r), SameSite: http.SameSiteStrictMode}
+	http.SetCookie(w, cookie)
+	r.AddCookie(cookie)
+}
+
+func (s *Server) clearContactCaptchaRequirement(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: "contact_captcha_required", Value: "", Path: "/server/contact", MaxAge: -1, HttpOnly: true, Secure: s.cookieSecure(r), SameSite: http.SameSiteStrictMode})
+}
+
+// SubmitContact sends the contact message through the configured queued mailer.
+func (s *Server) SubmitContact(ctx context.Context, message api.ContactMessage) error {
+	recipient := s.config.Server.Contact.General.Email
+	if recipient == "" {
+		recipient = s.config.Server.Contact.Admin.Email
+	}
+	mailEnabled := recipient != "" && s.mailer != nil && s.mailer.CanSend()
+	webhookEnabled := s.notifyManager != nil && s.notifyManager.HasWebhook("general")
+	if !mailEnabled && !webhookEnabled {
+		return fmt.Errorf("contact delivery is not configured")
+	}
+	if mailEnabled {
+		mailMessage := email.NewMessage([]string{recipient}, "[contact] "+message.Subject,
+			"Name: "+message.Name+"\nEmail: "+message.Email+"\n\n"+message.Message)
+		mailMessage.Headers["Reply-To"] = message.Email
+		if err := s.mailer.Send(mailMessage); err != nil {
+			return err
+		}
+	}
+	if webhookEnabled {
+		body := "Name: " + message.Name + "\nEmail: " + message.Email + "\n\n" + message.Message
+		if err := s.notifyManager.Dispatch(ctx, notify.Event{Role: "general", Name: "contact.received", Subject: message.Subject, Body: body, Severity: "info", SourceIP: message.SourceIP}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) dispatchNotification(event notify.Event) {
+	if s.notifyManager == nil || !s.notifyManager.HasWebhook(event.Role) {
+		return
+	}
+	if err := s.notifyManager.Dispatch(context.Background(), event); err != nil {
+		slog.Error("notification dispatch failed", "event", "notify.webhook_failed", "role", event.Role)
+	}
+}
+
+func (s *Server) dispatchExactNotification(event notify.Event) {
+	if s.notifyManager == nil || !notify.HasExactWebhook(s.config.Server.Contact, event.Role) {
+		return
+	}
+	if err := s.notifyManager.DispatchExact(context.Background(), event); err != nil {
+		slog.Error("notification dispatch failed", "event", "notify.webhook_failed", "role", event.Role)
+	}
 }
 
 // handleSecurityReportSubmit implements AI.md PART 11's 7-step coordinated-
@@ -213,6 +382,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 	}
 
 	if summary == "" || severity == "" || affectedComponent == "" || stepsToReproduce == "" || impact == "" || !agreedToDisclosure {
+		s.markContactCaptchaRequired(w, r)
 		s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"))
 		return
 	}
@@ -230,9 +400,9 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	plaintextBody := composeSecurityReportBody(trackingID, affectedComponent, affectedEndpoint, severity,
-		summary, stepsToReproduce, impact, suggestedFix, researcherEmail, researcherGPG,
-		creditPreference, creditName, disclosureDays, cveRequested)
+	plaintextBody := composeSecurityReportBody(s.notificationLang(), trackingID, affectedComponent,
+		affectedEndpoint, severity, summary, stepsToReproduce, impact, suggestedFix,
+		researcherEmail, researcherGPG, creditPreference, creditName, disclosureDays, cveRequested)
 
 	// Step 3: encrypt the report body at rest — PGP if a project keypair
 	// exists, otherwise AES-256-GCM with server.security.encryption_key.
@@ -267,7 +437,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Step 4: maintainer notification (security role, falls back to admin).
-	s.sendSecurityMaintainerNotification(report, plaintextBody)
+	s.sendSecurityMaintainerNotification(report, plaintextBody, researcherGPG, getClientIPSimple(r))
 
 	// Step 5: researcher acknowledgment, only if the researcher gave contact info.
 	if researcherEmail != "" {
@@ -280,6 +450,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Step 6: respond to the form POST.
+	s.clearContactCaptchaRequirement(w, r)
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"ok":   true,
@@ -303,32 +474,36 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 
 // composeSecurityReportBody assembles the plaintext security report content
 // that gets encrypted at rest per AI.md PART 11 step 3. Never persisted or
-// logged in plaintext form.
-func composeSecurityReportBody(trackingID, affectedComponent, affectedEndpoint, severity, summary,
+// logged in plaintext form. Per AI.md PART 30 "Email Template Translation",
+// every label resolves from an email.security_report.* i18n key via i18n.T
+// before rendering — no hardcoded English strings.
+func composeSecurityReportBody(lang, trackingID, affectedComponent, affectedEndpoint, severity, summary,
 	stepsToReproduce, impact, suggestedFix, researcherEmail, researcherGPG,
 	creditPreference, creditName string, disclosureDays int, cveRequested bool) string {
+	t := func(key string, args ...interface{}) string { return i18n.T(lang, key, args...) }
 	var b strings.Builder
-	fmt.Fprintf(&b, "Tracking ID: %s\n", trackingID)
-	fmt.Fprintf(&b, "Affected component: %s\n", affectedComponent)
-	fmt.Fprintf(&b, "Affected endpoint: %s\n", affectedEndpoint)
-	fmt.Fprintf(&b, "Severity: %s\n", severity)
-	fmt.Fprintf(&b, "Summary: %s\n\n", summary)
-	fmt.Fprintf(&b, "Steps to reproduce:\n%s\n\n", stepsToReproduce)
-	fmt.Fprintf(&b, "Impact:\n%s\n\n", impact)
+	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_tracking_id"), trackingID)
+	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_component"), affectedComponent)
+	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_endpoint"), affectedEndpoint)
+	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_severity"), severity)
+	fmt.Fprintf(&b, "%s %s\n\n", t("email.security_report.label_summary"), summary)
+	fmt.Fprintf(&b, "%s\n%s\n\n", t("email.security_report.label_steps"), stepsToReproduce)
+	fmt.Fprintf(&b, "%s\n%s\n\n", t("email.security_report.label_impact"), impact)
 	if suggestedFix != "" {
-		fmt.Fprintf(&b, "Suggested fix:\n%s\n\n", suggestedFix)
+		fmt.Fprintf(&b, "%s\n%s\n\n", t("email.security_report.label_fix"), suggestedFix)
 	}
-	fmt.Fprintf(&b, "CVE requested: %t\n", cveRequested)
-	fmt.Fprintf(&b, "Disclosure timeline preference: %d days\n", disclosureDays)
-	fmt.Fprintf(&b, "Credit preference: %s\n", creditPreference)
+	fmt.Fprintf(&b, "%s %t\n", t("email.security_report.label_cve"), cveRequested)
+	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_disclosure"),
+		t("email.security_report.days", disclosureDays))
+	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_credit"), creditPreference)
 	if creditName != "" {
-		fmt.Fprintf(&b, "Credit name: %s\n", creditName)
+		fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_credit_name"), creditName)
 	}
 	if researcherEmail != "" {
-		fmt.Fprintf(&b, "Researcher email: %s\n", researcherEmail)
+		fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_email"), researcherEmail)
 	}
 	if researcherGPG != "" {
-		fmt.Fprintf(&b, "Researcher GPG: %s\n", researcherGPG)
+		fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_gpg"), researcherGPG)
 	}
 	return b.String()
 }
@@ -350,31 +525,54 @@ func (s *Server) encryptSecurityReportBody(plaintext string) ([]byte, string, er
 	return []byte(encoded), security.EncryptionMethodAESGCM, nil
 }
 
+// notificationLang returns the language for server notification emails:
+// the server i18n default when a manager is configured, else "en".
+// Per AI.md PART 30 "Email Template Translation".
+func (s *Server) notificationLang() string {
+	if s.i18nManager != nil {
+		if dl := s.i18nManager.DefaultLanguage(); dl != "" {
+			return dl
+		}
+	}
+	return "en"
+}
+
 // sendSecurityMaintainerNotification sends the maintainer CC notification
 // per AI.md PART 11 step 4, to the security contact role (falls back to
 // admin per AI.md PART 12 fallback chain). Best-effort: a delivery failure
 // does not fail the submission since the report is already persisted.
-func (s *Server) sendSecurityMaintainerNotification(report security.Report, plaintextBody string) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
-		return
-	}
+func (s *Server) sendSecurityMaintainerNotification(report security.Report, plaintextBody, researcherGPG, sourceIP string) {
 	recipient := s.config.Server.Contact.Security.Email
 	if recipient == "" {
 		recipient = s.config.Server.Contact.Admin.Email
 	}
-	if recipient == "" {
-		return
-	}
-
-	subject := fmt.Sprintf("[security] %s (%s)", report.Summary, report.TrackingID)
-	body := plaintextBody
-	if pubKey, err := security.LoadPublicKey(config.GetConfigDir()); err == nil && pubKey != "" {
-		if armored, err := security.EncryptMessageToArmoredKey(pubKey, []byte(plaintextBody)); err == nil {
-			body = armored
+	var pgpBody string
+	if researcherGPG != "" {
+		if encrypted, err := security.EncryptMessageToArmoredKey(researcherGPG, []byte(plaintextBody)); err == nil {
+			pgpBody = encrypted
 		}
 	}
-	msg := email.NewMessage([]string{recipient}, subject, body)
-	_ = s.mailer.Send(msg)
+	if pgpBody == "" {
+		if pubKey, err := security.LoadPublicKey(config.GetConfigDir()); err == nil && pubKey != "" {
+			if encrypted, err := security.EncryptMessageToArmoredKey(pubKey, []byte(plaintextBody)); err == nil {
+				pgpBody = encrypted
+			}
+		}
+	}
+	if recipient != "" && s.mailer != nil && s.mailer.IsEnabled() {
+		subject := fmt.Sprintf("[security] %s (%s)", report.Summary, report.TrackingID)
+		body := pgpBody
+		if body == "" {
+			body = string(report.EncryptedBody)
+			body = "WARNING: This report is encrypted with the server's AES-256-GCM key because no PGP key is configured. Configure and securely share the key before attempting to decrypt it.\n\n" + body
+		}
+		msg := email.NewMessage([]string{recipient}, subject, body)
+		_ = s.mailer.Send(msg)
+	}
+	if pgpBody != "" {
+		s.dispatchExactNotification(notify.Event{Role: "security", Name: "security.report_received", Subject: "Security report received", Body: pgpBody, Severity: report.Severity, TrackingID: report.TrackingID, SourceIP: sourceIP})
+	}
+	s.dispatchNotification(notify.Event{Role: "admin", Name: "security.report_received", Subject: "Security report received", Body: "A security report was received. Tracking ID: " + report.TrackingID + ". Severity: " + report.Severity + ".", Severity: report.Severity, TrackingID: report.TrackingID, SourceIP: sourceIP})
 }
 
 // sendSecurityResearcherAck sends the researcher acknowledgment email per
@@ -386,7 +584,14 @@ func (s *Server) sendSecurityResearcherAck(r *http.Request, researcherEmail, res
 	}
 
 	statusURL := fmt.Sprintf("%s/server/security/report/%s?token=%s", s.getBaseURL(r), trackingID, rawToken)
-	body := fmt.Sprintf("Thank you for your security report.\n\nTracking ID: %s\nStatus: %s\n", trackingID, statusURL)
+	// Per AI.md PART 30 "Email Template Translation": translated strings are
+	// resolved server-side via i18n.T before rendering — no hardcoded English.
+	lang := s.notificationLang()
+	body := fmt.Sprintf("%s\n\n%s %s\n%s %s\n",
+		i18n.T(lang, "email.security_report.ack_heading"),
+		i18n.T(lang, "email.security_report.label_tracking_id"), trackingID,
+		i18n.T(lang, "email.security_report.label_status"), statusURL)
+	subject := i18n.T(lang, "email.security_report.subject", trackingID)
 
 	if researcherGPGArmor != "" {
 		if armored, err := security.EncryptMessageToArmoredKey(researcherGPGArmor, []byte(body)); err == nil {
@@ -394,7 +599,7 @@ func (s *Server) sendSecurityResearcherAck(r *http.Request, researcherEmail, res
 		}
 	}
 
-	msg := email.NewMessage([]string{researcherEmail}, "Security report received: "+trackingID, body)
+	msg := email.NewMessage([]string{researcherEmail}, subject, body)
 	_ = s.mailer.Send(msg)
 }
 
@@ -442,16 +647,16 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	health := s.buildHealthInfo()
 
 	// Return 503 if not ready (unhealthy or maintenance)
-	if health.Status != "healthy" {
+	if health.Status == "unhealthy" || health.Status == "maintenance" || health.Status == "shutting_down" {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(w, "NOT READY: %s\n", health.Status)
+		writeResponseText(w, fmt.Sprintf("NOT READY: %s\n", health.Status))
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "READY\n")
+	writeResponseText(w, "READY\n")
 }
 
 // handleLivez handles Kubernetes liveness probe
@@ -460,7 +665,7 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	// Liveness probe is simpler - just check if server can respond
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "ALIVE\n")
+	writeResponseText(w, "ALIVE\n")
 }
 
 // buildHealthInfo constructs the HealthResponse per AI.md PART 13.
@@ -495,6 +700,19 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		Cache:     "ok",
 		Disk:      "ok",
 		Scheduler: "ok",
+	}
+
+	// Cache check — Ping exercises the backend; nil backend (caching
+	// disabled) is a valid configured state and healthy per AI.md PART 9.
+	if s.cache != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := s.cache.Ping(ctx); err != nil {
+			checks.Cache = "error"
+			if status == "healthy" {
+				status = "unhealthy"
+			}
+		}
+		cancel()
 	}
 
 	// Database check
@@ -534,6 +752,15 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		}
 	}
 
+	// I2P check (only when I2P is enabled — opt-in per AI.md PART 31.2)
+	if s.config.Server.I2P.Enabled {
+		if s.i2pManager != nil && s.i2pManager.IsRunning() {
+			checks.I2P = "ok"
+		} else {
+			checks.I2P = "error"
+		}
+	}
+
 	health := &HealthResponse{
 		// 1. Project identification from cfg.Branding per AI.md PART 13
 		Project: ProjectInfo{
@@ -557,15 +784,9 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		// 5. Features - PUBLIC only (PARTS 20, 32)
 		Features: FeaturesInfo{
 			Tor: torInfo,
-			// I2P (PART 31.2) is opt-in and not yet configurable — always
-			// reports disabled until the feature is implemented.
-			I2P: I2PInfo{
-				Enabled:  false,
-				Running:  false,
-				Status:   "disabled",
-				Hostname: "",
-				Provider: "none",
-			},
+			// I2P status from the eepsite manager per AI.md PART 13 /
+			// PART 31.2 — opt-in, so disabled is the default state.
+			I2P:   buildI2PInfo(s.i2pManager),
 			GeoIP: s.config.Server.GeoIP.Enabled,
 		},
 		// 7. Checks
@@ -578,7 +799,65 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		},
 	}
 
+	if health.Status == "healthy" && s.config.PendingRestart() {
+		health.Status = "restart_required"
+		health.PendingRestart = true
+		health.RestartReason = s.config.RestartSettings()
+	}
+
 	return health
+}
+
+// HealthSnapshot exposes the same checks and status to the versioned and
+// unversioned API health routes as the browser-facing endpoint.
+func (s *Server) HealthSnapshot() api.HealthSnapshot {
+	health := s.buildHealthInfo()
+	return api.HealthSnapshot{
+		Status:         health.Status,
+		PendingRestart: health.PendingRestart,
+		RestartReason:  append([]string(nil), health.RestartReason...),
+		Checks: api.ChecksInfo{
+			Database:  health.Checks.Database,
+			Cache:     health.Checks.Cache,
+			Disk:      health.Checks.Disk,
+			Scheduler: health.Checks.Scheduler,
+			Tor:       health.Checks.Tor,
+			I2P:       health.Checks.I2P,
+		},
+	}
+}
+
+// buildI2PInfo derives the features.i2p payload from the eepsite manager,
+// mirroring the src/api healthz mapping. Status uses the AI.md PART 13
+// enum (healthy/disabled/starting/error), not the manager's human string.
+// A nil manager (I2P not enabled) reports the disabled/none state per
+// AI.md PART 31.2.
+func buildI2PInfo(mgr *i2p.I2PManager) I2PInfo {
+	if mgr == nil || !mgr.Enabled() {
+		return I2PInfo{
+			Enabled:  false,
+			Running:  false,
+			Status:   "disabled",
+			Hostname: "",
+			Provider: "none",
+		}
+	}
+	if !mgr.IsRunning() {
+		return I2PInfo{
+			Enabled:  true,
+			Running:  false,
+			Status:   "error",
+			Hostname: "",
+			Provider: mgr.ProviderName(),
+		}
+	}
+	return I2PInfo{
+		Enabled:  true,
+		Running:  true,
+		Status:   "healthy",
+		Hostname: mgr.EepsiteAddress(),
+		Provider: mgr.ProviderName(),
+	}
 }
 
 // getRequestsTotal returns total requests served
@@ -591,13 +870,10 @@ func (s *Server) getRequestsTotal() int64 {
 }
 
 // getRequests24h returns requests in last 24 hours
-// Per AI.md PART 13: stats.requests_24h - uses total requests as approximation
-// Note: For accurate 24h tracking, a time-window based counter would be needed
+// getRequests24h returns the request count from the trailing 24-hour window.
 func (s *Server) getRequests24h() int64 {
-	// Return total requests as baseline (24h tracking requires more infrastructure)
-	// This could be enhanced with a rolling window counter in the future
 	if s.metrics != nil {
-		return s.metrics.GetTotalRequests()
+		return s.metrics.GetRequestsLast24Hours()
 	}
 	return 0
 }
@@ -623,15 +899,15 @@ func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthResponse
 	w.Header().Set("Content-Type", "application/json")
 
 	statusCode := http.StatusOK
-	if health.Status == "unhealthy" || health.Status == "maintenance" {
+	if health.Status == "unhealthy" || health.Status == "maintenance" || health.Status == "shutting_down" {
 		statusCode = http.StatusServiceUnavailable
 	}
 	w.WriteHeader(statusCode)
 
 	data, _ := jsonMarshal(health)
-	w.Write(data)
+	writeResponseBytes(w, data)
 	// Per AI.md PART 14: Single trailing newline
-	w.Write([]byte("\n"))
+	writeResponseText(w, "\n")
 }
 
 // respondHealthText responds with plain text health info per AI.md PART 13.
@@ -640,7 +916,7 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthResponse
 	w.Header().Set("Content-Type", "text/plain")
 
 	statusCode := http.StatusOK
-	if health.Status == "unhealthy" || health.Status == "maintenance" {
+	if health.Status == "unhealthy" || health.Status == "maintenance" || health.Status == "shutting_down" {
 		statusCode = http.StatusServiceUnavailable
 	}
 	w.WriteHeader(statusCode)
@@ -648,51 +924,51 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthResponse
 	var b strings.Builder
 
 	// 1. Project (PART 16: branding)
-	b.WriteString(fmt.Sprintf("project.name: %s\n", health.Project.Name))
-	b.WriteString(fmt.Sprintf("project.tagline: %s\n", health.Project.Tagline))
-	b.WriteString(fmt.Sprintf("project.description: %s\n", health.Project.Description))
+	fmt.Fprintf(&b, "project.name: %s\n", health.Project.Name)
+	fmt.Fprintf(&b, "project.tagline: %s\n", health.Project.Tagline)
+	fmt.Fprintf(&b, "project.description: %s\n", health.Project.Description)
 
 	// 2. Status
-	b.WriteString(fmt.Sprintf("status: %s\n", health.Status))
+	fmt.Fprintf(&b, "status: %s\n", health.Status)
 
 	// 3. Version & Build (PART 7)
-	b.WriteString(fmt.Sprintf("version: %s\n", health.Version))
-	b.WriteString(fmt.Sprintf("go_version: %s\n", health.GoVersion))
-	b.WriteString(fmt.Sprintf("build.commit: %s\n", health.Build.Commit))
-	b.WriteString(fmt.Sprintf("build.date: %s\n", health.Build.Date))
+	fmt.Fprintf(&b, "version: %s\n", health.Version)
+	fmt.Fprintf(&b, "go_version: %s\n", health.GoVersion)
+	fmt.Fprintf(&b, "build.commit: %s\n", health.Build.Commit)
+	fmt.Fprintf(&b, "build.date: %s\n", health.Build.Date)
 
 	// 4. Runtime (PART 6)
-	b.WriteString(fmt.Sprintf("uptime: %s\n", health.Uptime))
-	b.WriteString(fmt.Sprintf("mode: %s\n", health.Mode))
-	b.WriteString(fmt.Sprintf("timestamp: %s\n", health.Timestamp))
+	fmt.Fprintf(&b, "uptime: %s\n", health.Uptime)
+	fmt.Fprintf(&b, "mode: %s\n", health.Mode)
+	fmt.Fprintf(&b, "timestamp: %s\n", health.Timestamp)
 
 	// 5. Features - NON-NEGOTIABLE only (show actual status)
-	b.WriteString(fmt.Sprintf("features.tor.enabled: %t\n", health.Features.Tor.Enabled))
-	b.WriteString(fmt.Sprintf("features.tor.running: %t\n", health.Features.Tor.Running))
-	b.WriteString(fmt.Sprintf("features.tor.status: %s\n", health.Features.Tor.Status))
-	b.WriteString(fmt.Sprintf("features.tor.hostname: %s\n", health.Features.Tor.Hostname))
-	b.WriteString(fmt.Sprintf("features.i2p.enabled: %t\n", health.Features.I2P.Enabled))
-	b.WriteString(fmt.Sprintf("features.i2p.running: %t\n", health.Features.I2P.Running))
-	b.WriteString(fmt.Sprintf("features.i2p.status: %s\n", health.Features.I2P.Status))
-	b.WriteString(fmt.Sprintf("features.i2p.hostname: %s\n", health.Features.I2P.Hostname))
-	b.WriteString(fmt.Sprintf("features.i2p.provider: %s\n", health.Features.I2P.Provider))
-	b.WriteString(fmt.Sprintf("features.geoip: %t\n", health.Features.GeoIP))
+	fmt.Fprintf(&b, "features.tor.enabled: %t\n", health.Features.Tor.Enabled)
+	fmt.Fprintf(&b, "features.tor.running: %t\n", health.Features.Tor.Running)
+	fmt.Fprintf(&b, "features.tor.status: %s\n", health.Features.Tor.Status)
+	fmt.Fprintf(&b, "features.tor.hostname: %s\n", health.Features.Tor.Hostname)
+	fmt.Fprintf(&b, "features.i2p.enabled: %t\n", health.Features.I2P.Enabled)
+	fmt.Fprintf(&b, "features.i2p.running: %t\n", health.Features.I2P.Running)
+	fmt.Fprintf(&b, "features.i2p.status: %s\n", health.Features.I2P.Status)
+	fmt.Fprintf(&b, "features.i2p.hostname: %s\n", health.Features.I2P.Hostname)
+	fmt.Fprintf(&b, "features.i2p.provider: %s\n", health.Features.I2P.Provider)
+	fmt.Fprintf(&b, "features.geoip: %t\n", health.Features.GeoIP)
 
 	// 6. Checks
-	b.WriteString(fmt.Sprintf("checks.database: %s\n", health.Checks.Database))
-	b.WriteString(fmt.Sprintf("checks.cache: %s\n", health.Checks.Cache))
-	b.WriteString(fmt.Sprintf("checks.disk: %s\n", health.Checks.Disk))
-	b.WriteString(fmt.Sprintf("checks.scheduler: %s\n", health.Checks.Scheduler))
+	fmt.Fprintf(&b, "checks.database: %s\n", health.Checks.Database)
+	fmt.Fprintf(&b, "checks.cache: %s\n", health.Checks.Cache)
+	fmt.Fprintf(&b, "checks.disk: %s\n", health.Checks.Disk)
+	fmt.Fprintf(&b, "checks.scheduler: %s\n", health.Checks.Scheduler)
 	if health.Checks.Tor != "" {
-		b.WriteString(fmt.Sprintf("checks.tor: %s\n", health.Checks.Tor))
+		fmt.Fprintf(&b, "checks.tor: %s\n", health.Checks.Tor)
 	}
 
 	// 7. Stats
-	b.WriteString(fmt.Sprintf("stats.requests_total: %d\n", health.Stats.RequestsTotal))
-	b.WriteString(fmt.Sprintf("stats.requests_24h: %d\n", health.Stats.Requests24h))
-	b.WriteString(fmt.Sprintf("stats.active_connections: %d\n", health.Stats.ActiveConns))
+	fmt.Fprintf(&b, "stats.requests_total: %d\n", health.Stats.RequestsTotal)
+	fmt.Fprintf(&b, "stats.requests_24h: %d\n", health.Stats.Requests24h)
+	fmt.Fprintf(&b, "stats.active_connections: %d\n", health.Stats.ActiveConns)
 
-	fmt.Fprint(w, b.String())
+	writeResponseText(w, b.String())
 }
 
 // respondHealthHTML responds with HTML health page
@@ -700,6 +976,9 @@ func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, healt
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, "", "healthz")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "health.page_title")
+	if health.Status == "unhealthy" || health.Status == "maintenance" || health.Status == "shutting_down" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
 
 	data := &HealthPageData{
 		PageData: *baseData,
@@ -775,10 +1054,24 @@ func (s *Server) handleInternalError(w http.ResponseWriter, r *http.Request, con
 	s.handleError(w, r, http.StatusInternalServerError, title, msg)
 }
 
-// signCaptcha creates an HMAC-signed captcha ID containing the expected answer
+func (s *Server) contactCaptchaSigningKey() []byte {
+	secret := ""
+	if s.config != nil {
+		serverConfig := s.config.Get()
+		secret = serverConfig.Security.InstallationSecret
+		if secret == "" {
+			secret = serverConfig.SecretKey
+		}
+	}
+	if secret == "" {
+		secret = s.startTime.Format(time.RFC3339Nano)
+	}
+	return []byte("contact-captcha:" + secret)
+}
+
+// signCaptcha creates an HMAC-signed captcha ID containing the expected answer.
 func (s *Server) signCaptcha(answer int) string {
-	// Use server start time as HMAC key (stable per process, not guessable)
-	key := []byte(s.startTime.Format(time.RFC3339Nano))
+	key := s.contactCaptchaSigningKey()
 	data := strconv.Itoa(answer)
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(data))
@@ -869,6 +1162,76 @@ func (s *Server) setClearSiteData(w http.ResponseWriter, includeCookies bool) {
 	w.Header().Set("Clear-Site-Data", strings.Join(parts, ", "))
 }
 
+// safeRedirectPath returns a same-site redirect target, or "/" when the input
+// is anything else.
+//
+// The consent, announcement-dismiss, and CCPA handlers all finish by
+// redirecting the browser back to the page it came from. Taking that target
+// straight from the Referer header is an open redirect: Referer is
+// attacker-controlled, so a victim arriving from an evil site gets a 303 to an
+// arbitrary URL immediately after posting consent on our own domain — a
+// credible phishing primitive that launders the hop through our origin.
+//
+// AI.md PART 16 requires "same-site relative paths only" for `return_to`. Only
+// a root-relative path qualifies; a protocol-relative "//host" reference, a
+// value with a scheme, and a backslash (which some user agents normalize to
+// "/") are all rejected, as is anything carrying a control character that
+// could split the Location header. Callers pass the request's own
+// RequestURI() rather than the form field, so a tampered `return_to` cannot
+// widen the target either — the form value is only a hint.
+func safeRedirectPath(candidate string) string {
+	c := strings.TrimSpace(candidate)
+	if c == "" {
+		return "/"
+	}
+	if strings.ContainsAny(c, "\r\n\x00") {
+		return "/"
+	}
+	if strings.Contains(c, "\\") {
+		return "/"
+	}
+	if !strings.HasPrefix(c, "/") {
+		// A bare relative path, an absolute URL with a scheme, or a bare host.
+		return "/"
+	}
+	if strings.HasPrefix(c, "//") {
+		// Cross-origin reference, not a same-site path.
+		return "/"
+	}
+	if u, err := url.Parse(c); err == nil && u.IsAbs() {
+		return "/"
+	}
+	return c
+}
+
+// cookieSecure reports whether consent-related cookies should carry the Secure
+// attribute. It mirrors CSRFMiddleware.cookieSecure so a single
+// server.security.csrf.secure setting ("auto" by default) governs every cookie
+// the app sets, rather than each handler hardcoding a value.
+//
+// The consent, dismissed-announcement, and CCPA cookies previously set no
+// Secure flag at all, which meant the client-side JS path (which sets
+// SameSite=Lax; Secure) and the no-JS server path disagreed. The server path is
+// authoritative, so the omission is what had to change.
+func (s *Server) cookieSecure(r *http.Request) bool {
+	if s == nil || s.config == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(s.config.Server.Security.CSRF.Secure)) {
+	case "true":
+		return true
+	case "false":
+		return false
+	default:
+		// "auto": secure whenever the request itself is, and whenever the
+		// server is configured to terminate TLS in front of us.
+		if r != nil && r.TLS != nil {
+			return true
+		}
+		return s.config.Server.SSL.Enabled
+	}
+}
+
 // handleConsent handles POST /server/consent — sets the cookie_consent JSON cookie and redirects back.
 // Accepts choice=accept (all categories) or choice=decline (essential only).
 // Cookie format: {"essential":true,"preferences":true,"analytics":false,"timestamp":unix}
@@ -906,17 +1269,23 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 		analyticsEnabled = false
 	}
 
-	// Build JSON cookie value per spec
-	cookieVal := fmt.Sprintf(
+	// Build JSON cookie value per spec. The value is percent-encoded on the
+	// wire: net/http sanitizes cookie values and silently drops the double
+	// quotes out of raw JSON, which would leave the client unable to
+	// JSON.parse what it receives. Encoding matches the JS contract in
+	// AI.md PART 16 (encodeURIComponent on write, decodeURIComponent on
+	// read) and PathEscape/decodeURIComponent agree on every byte JSON uses.
+	cookieVal := url.PathEscape(fmt.Sprintf(
 		`{"essential":%t,"preferences":%t,"analytics":%t,"timestamp":%d}`,
 		essential, prefEnabled, analyticsEnabled, time.Now().Unix(),
-	)
+	))
 	http.SetCookie(w, &http.Cookie{
 		Name:     "cookie_consent",
 		Value:    cookieVal,
 		Path:     "/",
 		MaxAge:   365 * 24 * 60 * 60,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cookieSecure(r),
 	})
 
 	// Consent withdrawal (decline / unknown-treated-as-decline): clear cached and
@@ -927,11 +1296,14 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 		s.setClearSiteData(w, false)
 	}
 
-	ref := r.Referer()
-	if ref == "" {
-		ref = "/"
+	// return_to is the same-site relative path the form submits (AI.md PART 16);
+	// the Referer is only a fallback for a hand-rolled POST. Both are
+	// attacker-controlled, so both go through safeRedirectPath.
+	redirectTo := r.FormValue("return_to")
+	if strings.TrimSpace(redirectTo) == "" {
+		redirectTo = r.Referer()
 	}
-	http.Redirect(w, r, ref, http.StatusSeeOther)
+	http.Redirect(w, r, safeRedirectPath(redirectTo), http.StatusSeeOther)
 }
 
 // handleAnnouncementDismiss handles POST /announcements/dismiss.
@@ -948,11 +1320,12 @@ func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.FormValue("id"))
 	if id == "" {
-		ref := r.Referer()
-		if ref == "" {
-			ref = "/"
+		// Nothing to record, so just go back where the visitor came from.
+		redirectTo := r.FormValue("return_to")
+		if strings.TrimSpace(redirectTo) == "" {
+			redirectTo = r.Referer()
 		}
-		http.Redirect(w, r, ref, http.StatusSeeOther)
+		http.Redirect(w, r, safeRedirectPath(redirectTo), http.StatusSeeOther)
 		return
 	}
 
@@ -980,13 +1353,17 @@ func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Reques
 		Path:     "/",
 		MaxAge:   365 * 24 * 60 * 60,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cookieSecure(r),
 	})
 
-	ref := r.Referer()
-	if ref == "" {
-		ref = "/"
+	// return_to is the same-site relative path the form submits (AI.md PART 16);
+	// the Referer is only a fallback for a hand-rolled POST. Both are
+	// attacker-controlled, so both go through safeRedirectPath.
+	redirectTo := r.FormValue("return_to")
+	if strings.TrimSpace(redirectTo) == "" {
+		redirectTo = r.Referer()
 	}
-	http.Redirect(w, r, ref, http.StatusSeeOther)
+	http.Redirect(w, r, safeRedirectPath(redirectTo), http.StatusSeeOther)
 }
 
 // handleConsentCCPA handles POST /server/ccpa.
@@ -1010,6 +1387,7 @@ func (s *Server) handleConsentCCPA(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			MaxAge:   365 * 24 * 60 * 60,
 			SameSite: http.SameSiteLaxMode,
+			Secure:   s.cookieSecure(r),
 		})
 		// CCPA opt-out is a consent withdrawal (opt-out of sale/sharing) per AI.md
 		// PART 11. Clear cached and stored non-essential data; exclude "cookies" so
@@ -1025,12 +1403,16 @@ func (s *Server) handleConsentCCPA(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			MaxAge:   -1,
 			SameSite: http.SameSiteLaxMode,
+			Secure:   s.cookieSecure(r),
 		})
 	}
 
-	ref := r.Referer()
-	if ref == "" {
-		ref = "/"
+	// return_to is the same-site relative path the form submits (AI.md PART 16);
+	// the Referer is only a fallback for a hand-rolled POST. Both are
+	// attacker-controlled, so both go through safeRedirectPath.
+	redirectTo := r.FormValue("return_to")
+	if strings.TrimSpace(redirectTo) == "" {
+		redirectTo = r.Referer()
 	}
-	http.Redirect(w, r, ref, http.StatusSeeOther)
+	http.Redirect(w, r, safeRedirectPath(redirectTo), http.StatusSeeOther)
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 	"unicode"
 )
 
@@ -453,7 +455,7 @@ func (f *TrackingFetcher) fetchLiveTracking(ctx context.Context, trackingNumber,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("rate limited by API")

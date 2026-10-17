@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -103,21 +104,21 @@ func (h *HeadersHandler) HandleInstantQuery(ctx context.Context, query string) (
 			},
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"headers-result\">")
 
 	// Status line
-	content.WriteString(fmt.Sprintf("<strong>Status:</strong> %s<br><br>", escapeHTML(resp.Status)))
+	fmt.Fprintf(&content, "<strong>Status:</strong> %s<br><br>", escapeHTML(resp.Status))
 
 	// Analyze security headers
 	securityAnalysis := analyzeSecurityHeaders(resp.Header)
 	if len(securityAnalysis) > 0 {
 		content.WriteString("<strong>Security Analysis:</strong><br>")
 		for _, analysis := range securityAnalysis {
-			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s<br>", analysis))
+			fmt.Fprintf(&content, "&nbsp;&nbsp;%s<br>", analysis)
 		}
 		content.WriteString("<br>")
 	}
@@ -136,8 +137,8 @@ func (h *HeadersHandler) HandleInstantQuery(ctx context.Context, query string) (
 	for _, name := range headerNames {
 		values := resp.Header[name]
 		for _, value := range values {
-			content.WriteString(fmt.Sprintf("<tr><td style=\"vertical-align: top; padding-right: 10px;\"><strong>%s:</strong></td><td>%s</td></tr>",
-				escapeHTML(name), escapeHTML(value)))
+			fmt.Fprintf(&content, "<tr><td style=\"vertical-align: top; padding-right: 10px;\"><strong>%s:</strong></td><td>%s</td></tr>",
+				escapeHTML(name), escapeHTML(value))
 		}
 	}
 	content.WriteString("</table>")

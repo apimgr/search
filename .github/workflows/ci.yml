@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 env:
   PROJECTNAME: search
@@ -40,8 +40,8 @@ jobs:
           mkdir -p "/tmp/${PROJECTORG}"
           COVDIR=$(mktemp -d "/tmp/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
           go mod download
-          PKGS=$(go list ./... | grep -v /src/service)
-          go test -cover -coverprofile="${COVDIR}/coverage.out" ${PKGS}
+          go run ./src/cmd/apigen
+          go test -cover -coverprofile="${COVDIR}/coverage.out" ./...
           THRESHOLD=60
           PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
@@ -66,12 +66,18 @@ jobs:
       - name: go vet
         run: |
           go mod download
+          go run ./src/cmd/apigen
           go vet ./...
 
       - name: staticcheck
         run: |
           go mod download
+          go run ./src/cmd/apigen
           staticcheck ./...
+
+      - name: golangci-lint
+        run: |
+          golangci-lint run
 
   build:
     name: Build
@@ -101,6 +107,7 @@ jobs:
       - name: Build binaries
         run: |
           go mod download
+          go run ./src/cmd/apigen
           LDFLAGS="-s -w \
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
@@ -122,9 +129,9 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
             -ldflags "$LDFLAGS" -o /tmp/search-linux-arm64 ./src
           if [ -d src/client ]; then
-            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui \
               -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-amd64 ./src/client
-            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui \
               -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-arm64 ./src/client
           fi
           echo "Build OK"
@@ -137,19 +144,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan secrets (push — incremental)
-        if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.95.6
-        with:
-          base: ${{ github.event.before }}
-          head: ${{ github.event.after }}
-          extra_args: --only-verified
+      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
+      - name: Determine scan range
+        id: range
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          BASE=""; HEAD=""
+          if [ "$EVENT_NAME" = "push" ] && [ "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            BASE="$EVENT_BEFORE"; HEAD="$EVENT_SHA"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE="$PR_BASE_SHA"; HEAD="$PR_HEAD_SHA"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
-      - name: Scan secrets (PR — full history)
-        if: github.event_name != 'push'
-        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.95.6
+      - name: Scan for secrets (truffleHog)
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
         with:
-          extra_args: --only-verified
+          base: ${{ steps.range.outputs.base }}
+          head: ${{ steps.range.outputs.head }}
+          extra_args: --results=verified,unknown
 
   vuln-scan:
     name: Vulnerability scan
@@ -167,6 +186,7 @@ jobs:
       - name: Run govulncheck
         run: |
           go mod download
+          go run ./src/cmd/apigen
           govulncheck ./...
 
   workflow-policy:
@@ -175,13 +195,13 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - name: Check for tag-pinned actions
+      - name: Enforce SHA-pinned third-party actions
         run: |
-          VIOLATIONS=$(grep -rn 'uses:.*@v[0-9]' \
-            .github/workflows/ .gitea/workflows/ .forgejo/workflows/ 2>/dev/null || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "ERROR: Tag-pinned actions found — pin to full commit SHA:"
-            echo "$VIOLATIONS"
+          # Every third-party action must be pinned to a full 40-char commit SHA
+          bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::unpinned actions found:"
+            echo "$bad"
             exit 1
           fi
           echo "OK: all actions pinned to SHA"

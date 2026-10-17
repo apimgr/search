@@ -11,6 +11,7 @@ type Paths struct {
 	// Runtime paths
 	ConfigDir string
 	DataDir   string
+	CacheDir  string
 	LogDir    string
 	BackupDir string
 	PIDFile   string
@@ -53,11 +54,12 @@ func getLinuxPaths(org, name string, privileged bool) *Paths {
 		return &Paths{
 			ConfigDir:   baseConfig,
 			DataDir:     baseData,
+			CacheDir:    filepath.Join("/var/cache", org, name),
 			LogDir:      baseLog,
 			BackupDir:   baseBackup,
 			PIDFile:     filepath.Join("/var/run", org, name+".pid"),
 			SSLDir:      filepath.Join(baseConfig, "ssl"),
-			SecurityDir: filepath.Join(baseConfig, "security"),
+			SecurityDir: filepath.Join(baseData, "security"),
 			DBDir:       filepath.Join(baseData, "db"),
 		}
 	}
@@ -71,11 +73,12 @@ func getLinuxPaths(org, name string, privileged bool) *Paths {
 	return &Paths{
 		ConfigDir:   baseConfig,
 		DataDir:     baseData,
+		CacheDir:    filepath.Join(homeDir, ".cache", org, name),
 		LogDir:      filepath.Join(homeDir, ".local/log", org, name),
 		BackupDir:   baseBackup,
 		PIDFile:     filepath.Join(baseData, name+".pid"),
 		SSLDir:      filepath.Join(baseConfig, "ssl"),
-		SecurityDir: filepath.Join(baseConfig, "security"),
+		SecurityDir: filepath.Join(baseData, "security"),
 		DBDir:       filepath.Join(baseData, "db"),
 	}
 }
@@ -92,11 +95,12 @@ func getDarwinPaths(org, name string, privileged bool) *Paths {
 		return &Paths{
 			ConfigDir:   baseConfig,
 			DataDir:     baseData,
+			CacheDir:    filepath.Join("/Library/Caches", org, name),
 			LogDir:      baseLog,
 			BackupDir:   baseBackup,
 			PIDFile:     filepath.Join("/var/run", org, name+".pid"),
 			SSLDir:      filepath.Join(baseConfig, "ssl"),
-			SecurityDir: filepath.Join(baseConfig, "security"),
+			SecurityDir: filepath.Join(baseData, "security"),
 			DBDir:       filepath.Join(baseConfig, "db"),
 		}
 	}
@@ -110,11 +114,12 @@ func getDarwinPaths(org, name string, privileged bool) *Paths {
 	return &Paths{
 		ConfigDir:   baseConfig,
 		DataDir:     baseConfig,
+		CacheDir:    filepath.Join(homeDir, "Library/Caches", org, name),
 		LogDir:      baseLog,
 		BackupDir:   baseBackup,
 		PIDFile:     filepath.Join(baseConfig, name+".pid"),
 		SSLDir:      filepath.Join(baseConfig, "ssl"),
-		SecurityDir: filepath.Join(baseConfig, "security"),
+		SecurityDir: filepath.Join(baseConfig, "data", "security"),
 		DBDir:       filepath.Join(baseConfig, "db"),
 	}
 }
@@ -131,11 +136,12 @@ func getBSDPaths(org, name string, privileged bool) *Paths {
 		return &Paths{
 			ConfigDir:   baseConfig,
 			DataDir:     baseData,
+			CacheDir:    filepath.Join("/var/cache", org, name),
 			LogDir:      baseLog,
 			BackupDir:   baseBackup,
 			PIDFile:     filepath.Join("/var/run", org, name+".pid"),
 			SSLDir:      filepath.Join(baseConfig, "ssl"),
-			SecurityDir: filepath.Join(baseConfig, "security"),
+			SecurityDir: filepath.Join(baseData, "security"),
 			DBDir:       filepath.Join(baseData, "db"),
 		}
 	}
@@ -149,11 +155,12 @@ func getBSDPaths(org, name string, privileged bool) *Paths {
 	return &Paths{
 		ConfigDir:   baseConfig,
 		DataDir:     baseData,
+		CacheDir:    filepath.Join(homeDir, ".cache", org, name),
 		LogDir:      filepath.Join(homeDir, ".local/log", org, name),
 		BackupDir:   baseBackup,
 		PIDFile:     filepath.Join(baseData, name+".pid"),
 		SSLDir:      filepath.Join(baseConfig, "ssl"),
-		SecurityDir: filepath.Join(baseConfig, "security"),
+		SecurityDir: filepath.Join(baseData, "security"),
 		DBDir:       filepath.Join(baseData, "db"),
 	}
 }
@@ -175,11 +182,12 @@ func getWindowsPaths(org, name string, privileged bool) *Paths {
 		return &Paths{
 			ConfigDir:   baseConfig,
 			DataDir:     baseData,
+			CacheDir:    filepath.Join(baseConfig, "cache"),
 			LogDir:      baseLog,
 			BackupDir:   baseBackup,
 			PIDFile:     filepath.Join(baseConfig, name+".pid"),
 			SSLDir:      filepath.Join(baseConfig, "ssl"),
-			SecurityDir: filepath.Join(baseConfig, "security"),
+			SecurityDir: filepath.Join(baseData, "security"),
 			DBDir:       filepath.Join(baseConfig, "db"),
 		}
 	}
@@ -201,11 +209,12 @@ func getWindowsPaths(org, name string, privileged bool) *Paths {
 	return &Paths{
 		ConfigDir:   baseConfig,
 		DataDir:     baseData,
+		CacheDir:    filepath.Join(baseData, "cache"),
 		LogDir:      baseLog,
 		BackupDir:   baseBackup,
 		PIDFile:     filepath.Join(baseData, name+".pid"),
 		SSLDir:      filepath.Join(baseConfig, "ssl"),
-		SecurityDir: filepath.Join(baseConfig, "security"),
+		SecurityDir: filepath.Join(baseData, "security"),
 		DBDir:       filepath.Join(baseData, "db"),
 	}
 }
@@ -233,6 +242,7 @@ func (p *Paths) EnsureDirs() error {
 	dirs := []string{
 		p.ConfigDir,
 		p.DataDir,
+		p.CacheDir,
 		p.LogDir,
 		p.BackupDir,
 		p.SSLDir,

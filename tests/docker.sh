@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# @@License : WTFPL
+# Per AI.md PART 28: Integration testing in a Docker alpine container
+set -eo pipefail
 
 # Detect project info
 PROJECTNAME=$(basename "$PWD")
+random_suffix() {
+    printf '%08x' "$(((RANDOM << 15) | RANDOM))"
+}
 
 # Build via the Makefile's `dev` target — never invoke `go build` directly
 # (per AI.md PART 25: all toolchain commands run through Docker via the
@@ -17,10 +22,13 @@ if [ -z "$BUILT_LINE" ]; then
     exit 1
 fi
 BUILD_DIR=$(dirname "${BUILT_LINE#Built: }")
-trap "rm -rf $BUILD_DIR" EXIT
+cleanup() {
+    rm -rf -- "$BUILD_DIR"
+}
+trap cleanup EXIT
 
 echo "Testing in Docker (Alpine)..."
-docker run --rm \
+docker run --rm --name "${PROJECTNAME}-$(random_suffix)" \
   -v "$BUILD_DIR:/app" \
   alpine:latest sh -c "
     set -e
@@ -52,37 +60,37 @@ docker run --rm \
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
-    curl -f http://localhost:64580/api/v1/healthz || echo 'FAILED: /api/v1/healthz'
+    curl -q -LSsf http://localhost:64580/api/v1/healthz || echo 'FAILED: /api/v1/healthz'
 
     # Test .txt extension (plain text)
-    curl -f http://localhost:64580/api/v1/healthz.txt || echo 'FAILED: /api/v1/healthz.txt'
+    curl -q -LSsf http://localhost:64580/api/v1/healthz.txt || echo 'FAILED: /api/v1/healthz.txt'
 
     # Test Accept header: application/json
-    curl -f -H 'Accept: application/json' http://localhost:64580/healthz || echo 'FAILED: Accept JSON'
+    curl -q -LSsf -H 'Accept: application/json' http://localhost:64580/healthz || echo 'FAILED: Accept JSON'
 
     # Test Accept header: text/plain
-    curl -f -H 'Accept: text/plain' http://localhost:64580/healthz || echo 'FAILED: Accept text/plain'
+    curl -q -LSsf -H 'Accept: text/plain' http://localhost:64580/healthz || echo 'FAILED: Accept text/plain'
 
     echo '=== Project-Specific Endpoint Tests ==='
     # Search API endpoints (from IDEA.md)
-    curl -f 'http://localhost:64580/api/v1/search?q=test' || echo 'FAILED: /api/v1/search'
-    curl -f 'http://localhost:64580/api/v1/autocomplete?q=test' || echo 'FAILED: /api/v1/autocomplete'
-    curl -f http://localhost:64580/api/v1/engines || echo 'FAILED: /api/v1/engines'
-    curl -f 'http://localhost:64580/api/v1/search/related?q=test' || echo 'FAILED: /api/v1/search/related'
-    curl -f http://localhost:64580/api/v1/categories || echo 'FAILED: /api/v1/categories'
-    curl -f http://localhost:64580/api/v1/bangs || echo 'FAILED: /api/v1/bangs'
-    curl -f 'http://localhost:64580/api/v1/instant?q=2+2' || echo 'FAILED: /api/v1/instant'
+    curl -q -LSsf 'http://localhost:64580/api/v1/search?q=test' || echo 'FAILED: /api/v1/search'
+    curl -q -LSsf 'http://localhost:64580/api/v1/autocomplete?q=test' || echo 'FAILED: /api/v1/autocomplete'
+    curl -q -LSsf http://localhost:64580/api/v1/engines || echo 'FAILED: /api/v1/engines'
+    curl -q -LSsf 'http://localhost:64580/api/v1/search/related?q=test' || echo 'FAILED: /api/v1/search/related'
+    curl -q -LSsf http://localhost:64580/api/v1/categories || echo 'FAILED: /api/v1/categories'
+    curl -q -LSsf http://localhost:64580/api/v1/bangs || echo 'FAILED: /api/v1/bangs'
+    curl -q -LSsf 'http://localhost:64580/api/v1/instant?q=2+2' || echo 'FAILED: /api/v1/instant'
 
     # Frontend endpoints
-    curl -f http://localhost:64580/ || echo 'FAILED: Home page'
-    curl -f -H 'Accept: text/html' 'http://localhost:64580/search?q=test' || echo 'FAILED: Search page'
-    curl -f http://localhost:64580/preferences || echo 'FAILED: Preferences'
-    curl -f http://localhost:64580/server/about || echo 'FAILED: About'
-    curl -f http://localhost:64580/robots.txt || echo 'FAILED: robots.txt'
+    curl -q -LSsf http://localhost:64580/ || echo 'FAILED: Home page'
+    curl -q -LSsf -H 'Accept: text/html' 'http://localhost:64580/search?q=test' || echo 'FAILED: Search page'
+    curl -q -LSsf http://localhost:64580/preferences || echo 'FAILED: Preferences'
+    curl -q -LSsf http://localhost:64580/server/about || echo 'FAILED: About'
+    curl -q -LSsf http://localhost:64580/robots.txt || echo 'FAILED: robots.txt'
 
     # Static assets
-    curl -f http://localhost:64580/static/css/main.css || echo 'FAILED: CSS'
-    curl -f http://localhost:64580/static/js/app.js || echo 'FAILED: JS'
+    curl -q -LSsf http://localhost:64580/static/css/main.css || echo 'FAILED: CSS'
+    curl -q -LSsf http://localhost:64580/static/js/app.js || echo 'FAILED: JS'
 
     echo '=== Operator Token Tests ==='
     # Per AI.md PART 8/11: two-tier auth only (anonymous + operator bearer
@@ -95,13 +103,13 @@ docker run --rm \
         echo \"Operator token found: \${API_TOKEN:0:8}...\"
 
         # Operator-only endpoint should succeed with the token
-        curl -sf -H \"Authorization: Bearer \$API_TOKEN\" \\
+        curl -q -LSsf -H \"Authorization: Bearer \$API_TOKEN\" \\
             http://localhost:64580/server/status >/dev/null \\
             && echo '✓ /server/status authorized with operator token' \\
             || echo 'FAILED: /server/status with operator token'
 
         # Same endpoint without a token must be rejected
-        STATUS_CODE=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:64580/server/status)
+        STATUS_CODE=\$(curl -q -LSsf -o /dev/null -w '%{http_code}' http://localhost:64580/server/status 2>/dev/null || true)
         if [ \"\$STATUS_CODE\" = \"401\" ]; then
             echo '✓ /server/status rejects unauthenticated request (401)'
         else

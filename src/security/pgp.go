@@ -174,6 +174,26 @@ func UnlockPrivateKey(privArmor, installationSecret string) (*crypto.Key, error)
 	return unlocked, nil
 }
 
+// RelockPrivateKey re-encrypts an existing at-rest private key under a new
+// installation_secret, leaving the keypair itself unchanged. Per AI.md PART 11
+// "Secret Rotation": rotating installation_secret "re-encrypts the PGP private
+// key". Returns the new locked, armored private key.
+func RelockPrivateKey(privArmor, oldSecret, newSecret string) (string, error) {
+	unlocked, err := UnlockPrivateKey(privArmor, oldSecret)
+	if err != nil {
+		return "", err
+	}
+	locked, err := unlocked.Lock(pgpDerivePassphrase(newSecret))
+	if err != nil {
+		return "", fmt.Errorf("pgp: lock private key: %w", err)
+	}
+	armored, err := locked.Armor()
+	if err != nil {
+		return "", fmt.Errorf("pgp: armor private key: %w", err)
+	}
+	return armored, nil
+}
+
 // KeyFingerprint returns the SHA-256 fingerprint of an armored public key.
 func KeyFingerprint(pubArmor string) (string, error) {
 	key, err := crypto.NewKeyFromArmored(pubArmor)

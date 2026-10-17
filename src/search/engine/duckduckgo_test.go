@@ -156,15 +156,11 @@ func TestDdgStripHTML(t *testing.T) {
 func buildDDGHTML(results []struct{ href, title, snippet string }) string {
 	var sb strings.Builder
 	for _, r := range results {
-		sb.WriteString(fmt.Sprintf(
-			`<a class="result__a" href="%s">%s</a>`,
-			r.href, r.title,
-		))
+		fmt.Fprintf(&sb, `<a class="result__a" href="%s">%s</a>`,
+			r.href, r.title)
 		if r.snippet != "" {
-			sb.WriteString(fmt.Sprintf(
-				`<div class="result__snippet">%s</div>`,
-				r.snippet,
-			))
+			fmt.Fprintf(&sb, `<div class="result__snippet">%s</div>`,
+				r.snippet)
 		}
 	}
 	return sb.String()

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -65,7 +67,7 @@ func (e *GitHub) Search(ctx context.Context, query *model.Query) ([]model.Result
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -112,7 +114,7 @@ func (e *GitHub) Search(ctx context.Context, query *model.Query) ([]model.Result
 			URL:      item.HTMLURL,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: model.CategoryGeneral,
+			Category: query.Category,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})

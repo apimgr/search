@@ -2,8 +2,29 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 )
+
+func writeResponseText(w io.Writer, value string) {
+	if _, err := io.WriteString(w, value); err != nil {
+		slog.Debug("failed to write HTTP response", "error", err)
+	}
+}
+
+func writeResponseBytes(w io.Writer, value []byte) {
+	if _, err := w.Write(value); err != nil {
+		slog.Debug("failed to write HTTP response", "error", err)
+	}
+}
+
+func writeResponseFormatted(w io.Writer, format string, args ...any) {
+	if _, err := fmt.Fprintf(w, format, args...); err != nil {
+		slog.Debug("failed to write formatted HTTP response", "error", err)
+	}
+}
 
 // respondJSON writes a JSON response with the given status code.
 // Per AI.md PART 6: used by debug endpoint handlers.

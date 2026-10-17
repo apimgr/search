@@ -29,7 +29,7 @@ func NewTimezoneHandler() *TimezoneHandler {
 			// "what time is it in {city}"
 			regexp.MustCompile(`(?i)^what\s+time\s+(?:is\s+it\s+)?in\s+(.+)\??$`),
 			// "current time in {city}"
-			regexp.MustCompile(`(?i)^current\s+time\s+in\s+(.+)$`),
+			regexp.MustCompile(`(?i)^current\s+time(?:\s+in)?\s+(.+)$`),
 			// "{time} {tz1} to {tz2}"
 			regexp.MustCompile(`(?i)^(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)\s+([a-zA-Z]+(?:/[a-zA-Z_]+)?)\s+(?:to|in)\s+([a-zA-Z]+(?:/[a-zA-Z_]+)?)$`),
 			// "convert {time} {tz1} to {tz2}"
@@ -196,7 +196,7 @@ func (h *TimezoneHandler) HandleInstantQuery(ctx context.Context, query string) 
 	lang := LangFromContext(ctx)
 
 	// Handle "time in {city}" patterns
-	timeInPattern := regexp.MustCompile(`(?i)^(?:time\s+in|what\s+time\s+(?:is\s+it\s+)?in|current\s+time\s+in)\s+(.+?)\??$`)
+	timeInPattern := regexp.MustCompile(`(?i)^(?:time\s+in|what\s+time\s+(?:is\s+it\s+)?in|current\s+time(?:\s+in)?)\s+(.+?)\??$`)
 	if matches := timeInPattern.FindStringSubmatch(query); len(matches) > 1 {
 		return h.handleTimeIn(query, matches[1], lang)
 	}
@@ -226,7 +226,7 @@ func (h *TimezoneHandler) handleTimeIn(query, location, lang string) (*Answer, e
 
 	if tzName == "" {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_title"),
 			Content: i18n.T(lang, "instant.timezone_unknown_location", escapeHTML(location)),
@@ -236,7 +236,7 @@ func (h *TimezoneHandler) handleTimeIn(query, location, lang string) (*Answer, e
 	loc, err := time.LoadLocation(tzName)
 	if err != nil {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_title"),
 			Content: i18n.T(lang, "instant.timezone_load_failed", tzName),
@@ -263,8 +263,9 @@ func (h *TimezoneHandler) handleTimeIn(query, location, lang string) (*Answer, e
 	// Get the timezone abbreviation
 	zoneName, _ := now.Zone()
 
+	worldClockHTML, worldClockData := renderWorldClock(now, lang)
 	return &Answer{
-		Type:  AnswerTypeTime,
+		Type:  AnswerTypeTimezone,
 		Query: query,
 		Title: i18n.T(lang, "instant.timezone_time_in", cases.Title(language.Und, cases.NoLower).String(location)),
 		Content: fmt.Sprintf(`<div class="timezone-result">
@@ -272,19 +273,69 @@ func (h *TimezoneHandler) handleTimeIn(query, location, lang string) (*Answer, e
 <div class="date-display">%s</div>
 <div class="timezone-info">%s (%s)</div>
 <div class="offset-info"><small>%s</small></div>
-</div>`,
+</div>%s`,
 			now.Format("3:04 PM"),
 			now.Format("Monday, January 2, 2006"),
 			zoneName,
 			tzName,
-			offsetStr),
+			offsetStr,
+			worldClockHTML),
 		Data: map[string]interface{}{
-			"time":     now.Format(time.RFC3339),
-			"timezone": tzName,
-			"zone":     zoneName,
-			"offset":   remoteOffset,
+			"time":       now.Format(time.RFC3339),
+			"timezone":   tzName,
+			"zone":       zoneName,
+			"offset":     remoteOffset,
+			"worldClock": worldClockData,
 		},
 	}, nil
+}
+
+type worldClockLocation struct {
+	name     string
+	timezone string
+}
+
+var worldClockLocations = []worldClockLocation{
+	{name: "UTC", timezone: "UTC"},
+	{name: "New York", timezone: "America/New_York"},
+	{name: "London", timezone: "Europe/London"},
+	{name: "Paris", timezone: "Europe/Paris"},
+	{name: "Tokyo", timezone: "Asia/Tokyo"},
+	{name: "Sydney", timezone: "Australia/Sydney"},
+}
+
+func renderWorldClock(at time.Time, lang string) (string, []map[string]string) {
+	var content strings.Builder
+	rows := make([]map[string]string, 0, len(worldClockLocations))
+	content.WriteString(`<section class="world-clock" aria-label="`)
+	content.WriteString(escapeHTML(i18n.T(lang, "instant.timezone_world_clock")))
+	content.WriteString(`"><h3>`)
+	content.WriteString(escapeHTML(i18n.T(lang, "instant.timezone_world_clock")))
+	content.WriteString(`</h3><ul>`)
+	for _, city := range worldClockLocations {
+		location, err := time.LoadLocation(city.timezone)
+		if err != nil {
+			continue
+		}
+		cityTime := at.In(location)
+		zone, offset := cityTime.Zone()
+		content.WriteString(`<li><strong>`)
+		content.WriteString(escapeHTML(city.name))
+		content.WriteString(`</strong> <time datetime="`)
+		content.WriteString(cityTime.Format(time.RFC3339))
+		content.WriteString(`">`)
+		content.WriteString(cityTime.Format("Mon 3:04 PM"))
+		content.WriteString(`</time> <span>`)
+		content.WriteString(escapeHTML(zone))
+		content.WriteString(`</span></li>`)
+		rows = append(rows, map[string]string{
+			"city": city.name, "timezone": city.timezone,
+			"time": cityTime.Format(time.RFC3339), "zone": zone,
+			"offset": strconv.Itoa(offset),
+		})
+	}
+	content.WriteString(`</ul></section>`)
+	return content.String(), rows
 }
 
 func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang string) (*Answer, error) {
@@ -294,7 +345,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang st
 
 	if fromTZName == "" {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
 			Content: i18n.T(lang, "instant.timezone_unknown_source", fromTZ),
@@ -303,7 +354,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang st
 
 	if toTZName == "" {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
 			Content: i18n.T(lang, "instant.timezone_unknown_target", toTZ),
@@ -313,7 +364,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang st
 	fromLoc, err := time.LoadLocation(fromTZName)
 	if err != nil {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
 			Content: i18n.T(lang, "instant.timezone_load_source_failed", fromTZName),
@@ -323,7 +374,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang st
 	toLoc, err := time.LoadLocation(toTZName)
 	if err != nil {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
 			Content: i18n.T(lang, "instant.timezone_load_target_failed", toTZName),
@@ -334,7 +385,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang st
 	parsedTime, err := h.parseTime(timeStr)
 	if err != nil {
 		return &Answer{
-			Type:    AnswerTypeTime,
+			Type:    AnswerTypeTimezone,
 			Query:   query,
 			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
 			Content: i18n.T(lang, "instant.timezone_parse_failed", timeStr),
@@ -362,7 +413,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang st
 	toZone, _ := targetTime.Zone()
 
 	return &Answer{
-		Type:  AnswerTypeTime,
+		Type:  AnswerTypeTimezone,
 		Query: query,
 		Title: i18n.T(lang, "instant.timezone_conversion_title"),
 		Content: fmt.Sprintf(`<div class="timezone-conversion">

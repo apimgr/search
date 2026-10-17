@@ -84,7 +84,7 @@ func (h *Base64Handler) HandleInstantQuery(ctx context.Context, query string) (*
 		Type:    AnswerTypeBase64,
 		Query:   query,
 		Title:   fmt.Sprintf("Base64 %s", opLabel),
-		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), opLabel, escapeHTML(result)),
+		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code> <button class=\"copy-btn\" data-copy=\"%s\">Copy</button>", escapeHTML(text), opLabel, escapeHTML(result), escapeHTML(result)),
 		Data: map[string]interface{}{
 			"input":     text,
 			"output":    result,

@@ -12,6 +12,7 @@ func TestAppModeString(t *testing.T) {
 	}{
 		{Production, "production"},
 		{Development, "development"},
+		{Debug, "debug"},
 		// Invalid mode should return default "production"
 		{AppMode(99), "production"},
 	}
@@ -29,7 +30,11 @@ func TestAppModeString(t *testing.T) {
 func TestSetAppMode(t *testing.T) {
 	// Save original
 	orig := currentMode
-	defer func() { currentMode = orig }()
+	origDebug := debugEnabled
+	defer func() {
+		currentMode = orig
+		debugEnabled = origDebug
+	}()
 
 	tests := []struct {
 		input string
@@ -39,6 +44,8 @@ func TestSetAppMode(t *testing.T) {
 		{"development", Development},
 		{"Development", Development},
 		{"DEV", Development},
+		{"debug", Debug},
+		{"DEBUG", Debug},
 		{"prod", Production},
 		{"production", Production},
 		{"Production", Production},
@@ -249,6 +256,27 @@ func TestFromEnv(t *testing.T) {
 			wantMode:  Production,
 			wantDebug: true,
 		},
+		{
+			name:      "MODE=debug defaults the debug flag on",
+			modeEnv:   "debug",
+			debugEnv:  "",
+			wantMode:  Debug,
+			wantDebug: true,
+		},
+		{
+			name:      "MODE=debug and DEBUG=false runs debug mode with debug off",
+			modeEnv:   "debug",
+			debugEnv:  "false",
+			wantMode:  Debug,
+			wantDebug: false,
+		},
+		{
+			name:      "MODE=debug and DEBUG=true",
+			modeEnv:   "debug",
+			debugEnv:  "true",
+			wantMode:  Debug,
+			wantDebug: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -257,9 +285,14 @@ func TestFromEnv(t *testing.T) {
 			currentMode = Production
 			debugEnabled = false
 
-			// Set environment variables
+			// Set environment variables; an empty case value means "unset",
+			// which FromEnv treats differently from an explicitly empty DEBUG
 			os.Setenv("MODE", tt.modeEnv)
-			os.Setenv("DEBUG", tt.debugEnv)
+			if tt.debugEnv == "" {
+				os.Unsetenv("DEBUG")
+			} else {
+				os.Setenv("DEBUG", tt.debugEnv)
+			}
 
 			// Call FromEnv
 			FromEnv()

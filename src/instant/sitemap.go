@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/version"
 )
 
@@ -117,11 +119,11 @@ func (h *SitemapHandler) HandleInstantQuery(ctx context.Context, query string) (
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>Sitemap:</strong> <a href=\"%s\">%s</a><br><br>", sitemapURL, sitemapURL))
+	fmt.Fprintf(&content, "<strong>Sitemap:</strong> <a href=\"%s\">%s</a><br><br>", sitemapURL, sitemapURL)
 
 	// If it's a sitemap index, show the sitemaps
 	if len(sitemapIndexURLs) > 0 {
-		content.WriteString(fmt.Sprintf("<strong>Sitemap Index (%d sitemaps):</strong><br>", len(sitemapIndexURLs)))
+		fmt.Fprintf(&content, "<strong>Sitemap Index (%d sitemaps):</strong><br>", len(sitemapIndexURLs))
 
 		// Show first 20 sitemaps
 		maxShow := 20
@@ -135,14 +137,14 @@ func (h *SitemapHandler) HandleInstantQuery(ctx context.Context, query string) (
 			if sm.LastMod != "" {
 				lastMod = fmt.Sprintf(" (Last modified: %s)", sm.LastMod)
 			}
-			content.WriteString(fmt.Sprintf("%d. <a href=\"%s\">%s</a>%s<br>", i+1, sm.Loc, sm.Loc, lastMod))
+			fmt.Fprintf(&content, "%d. <a href=\"%s\">%s</a>%s<br>", i+1, sm.Loc, sm.Loc, lastMod)
 		}
 
 		if len(sitemapIndexURLs) > maxShow {
-			content.WriteString(fmt.Sprintf("<br><em>... and %d more sitemaps</em>", len(sitemapIndexURLs)-maxShow))
+			fmt.Fprintf(&content, "<br><em>... and %d more sitemaps</em>", len(sitemapIndexURLs)-maxShow)
 		}
 	} else {
-		content.WriteString(fmt.Sprintf("<strong>URLs (%d total):</strong><br>", len(urls)))
+		fmt.Fprintf(&content, "<strong>URLs (%d total):</strong><br>", len(urls))
 
 		// Show first 25 URLs
 		maxShow := 25
@@ -168,11 +170,11 @@ func (h *SitemapHandler) HandleInstantQuery(ctx context.Context, query string) (
 				metaStr = fmt.Sprintf(" <small>(%s)</small>", strings.Join(meta, ", "))
 			}
 
-			content.WriteString(fmt.Sprintf("%d. <a href=\"%s\">%s</a>%s<br>", i+1, u.Loc, u.Loc, metaStr))
+			fmt.Fprintf(&content, "%d. <a href=\"%s\">%s</a>%s<br>", i+1, u.Loc, u.Loc, metaStr)
 		}
 
 		if len(urls) > maxShow {
-			content.WriteString(fmt.Sprintf("<br><em>... and %d more URLs</em>", len(urls)-maxShow))
+			fmt.Fprintf(&content, "<br><em>... and %d more URLs</em>", len(urls)-maxShow)
 		}
 	}
 
@@ -247,11 +249,11 @@ func (h *SitemapHandler) getSitemapURLsFromRobots(ctx context.Context, baseURL s
 	resp, err := h.client.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		if resp != nil {
-			resp.Body.Close()
+			closeutil.Close(resp.Body)
 		}
 		return nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	var sitemapURLs []string
 	scanner := bufio.NewScanner(resp.Body)
@@ -283,7 +285,7 @@ func (h *SitemapHandler) parseSitemap(ctx context.Context, sitemapURL string) ([
 	if err != nil {
 		return nil, nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil, fmt.Errorf("status %d", resp.StatusCode)

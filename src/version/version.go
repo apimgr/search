@@ -105,13 +105,13 @@ func (i Info) String() string {
 // Full returns a detailed version string
 func (i Info) Full() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s    %s\n", LabelVersion, i.Version))
-	sb.WriteString(fmt.Sprintf("%s     %s\n", LabelCommit, i.Commit))
-	sb.WriteString(fmt.Sprintf("%s %s\n", LabelBuildDate, i.BuildDate))
-	sb.WriteString(fmt.Sprintf("%s     %s\n", LabelBranch, i.Branch))
-	sb.WriteString(fmt.Sprintf("%s %s\n", LabelGoVersion, i.GoVersion))
-	sb.WriteString(fmt.Sprintf("%s    %s/%s\n", LabelOSArch, i.OS, i.Arch))
-	sb.WriteString(fmt.Sprintf("%s   %s", LabelCompiler, i.Compiler))
+	fmt.Fprintf(&sb, "%s    %s\n", LabelVersion, i.Version)
+	fmt.Fprintf(&sb, "%s     %s\n", LabelCommit, i.Commit)
+	fmt.Fprintf(&sb, "%s %s\n", LabelBuildDate, i.BuildDate)
+	fmt.Fprintf(&sb, "%s     %s\n", LabelBranch, i.Branch)
+	fmt.Fprintf(&sb, "%s %s\n", LabelGoVersion, i.GoVersion)
+	fmt.Fprintf(&sb, "%s    %s/%s\n", LabelOSArch, i.OS, i.Arch)
+	fmt.Fprintf(&sb, "%s   %s", LabelCompiler, i.Compiler)
 	return sb.String()
 }
 

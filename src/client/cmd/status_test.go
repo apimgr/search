@@ -8,6 +8,7 @@ import (
 
 	"github.com/apimgr/search/src/client/clicfg"
 
+	searchapi "github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/client/api"
 )
 
@@ -51,13 +52,13 @@ func TestStatusCommandRegistered(t *testing.T) {
 
 func TestRunStatusHealthy(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/server/healthz" {
+		if r.URL.Path == searchapi.APIPrefix+"/server/healthz" {
 			// Per AI.md PART 14: Wrapped response format
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 				Status:  "healthy",
 				Version: "1.0.0",
 				Uptime:  "24h",
-				Checks: map[string]string{
+				Checks: map[string]interface{}{
 					"database": "ok",
 					"cache":    "ok",
 				},
@@ -142,7 +143,7 @@ func TestRunStatusWithChecks(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
-			Checks: map[string]string{
+			Checks: map[string]interface{}{
 				"database": "healthy",
 				"cache":    "healthy",
 				"search":   "healthy",
@@ -297,7 +298,7 @@ func TestRunStatusOutputFormats(t *testing.T) {
 			Version:   "1.0.0",
 			Uptime:    "1h",
 			Timestamp: "2024-01-01T00:00:00Z",
-			Checks: map[string]string{
+			Checks: map[string]interface{}{
 				"db": "ok",
 			},
 		}})
@@ -436,7 +437,7 @@ func TestRunStatusMultipleChecks(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
-			Checks: map[string]string{
+			Checks: map[string]interface{}{
 				"database":  "connected",
 				"cache":     "ready",
 				"search":    "indexing",
@@ -473,7 +474,7 @@ func TestRunStatusJSONOutput(t *testing.T) {
 			Status:  "healthy",
 			Version: "1.0.0",
 			Uptime:  "1h30m",
-			Checks: map[string]string{
+			Checks: map[string]interface{}{
 				"db": "ok",
 			},
 		}})

@@ -2,6 +2,10 @@ package widget
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,4 +148,66 @@ func TestWeatherFetcherFetchValidation(t *testing.T) {
 			t.Errorf("WidgetData.Error = %q, want %q", data.Error, "invalid longitude")
 		}
 	})
+}
+
+type weatherRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip weatherRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
+func TestFetchWeatherIncludesFiveDayForecastAndCurrentHour(t *testing.T) {
+	body := `{"current_weather":{"temperature":18,"windspeed":7,"winddirection":90,"weathercode":2,"is_day":1,"time":"2026-10-11T13:00"},"hourly":{"time":["2026-10-11T12:00","2026-10-11T13:00"],"relativehumidity_2m":[30,61],"apparent_temperature":[17,19]},"daily":{"time":["2026-10-11","2026-10-12","2026-10-13","2026-10-14","2026-10-15"],"temperature_2m_max":[20,21,22,23,24],"temperature_2m_min":[10,11,12,13,14],"weather_code":[0,1,2,3,61]}}`
+	fetcher := NewWeatherFetcher(&config.WeatherWidgetConfig{})
+	fetcher.client = &http.Client{Transport: weatherRoundTripper(func(request *http.Request) (*http.Response, error) {
+		query := request.URL.Query()
+		if query.Get("forecast_days") != "5" || query.Get("daily") != "weather_code,temperature_2m_max,temperature_2m_min" {
+			t.Errorf("weather query does not request five-day conditions: %s", request.URL.RawQuery)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	data, err := fetcher.fetchWeather(context.Background(), 40, -70, "metric")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Humidity != 61 || data.FeelsLike != 19 {
+		t.Errorf("current-hour values = humidity %d, feels-like %v", data.Humidity, data.FeelsLike)
+	}
+	if len(data.Forecast) != 5 {
+		t.Fatalf("forecast has %d days, want 5", len(data.Forecast))
+	}
+	if data.Forecast[4].Description != "Rain" || data.Forecast[4].High != 24 || data.Forecast[4].Low != 14 {
+		t.Errorf("last forecast day = %#v", data.Forecast[4])
+	}
+}
+
+func TestCurrentWeatherHourIndexFallsBackWhenNoMatch(t *testing.T) {
+	if got := currentWeatherHourIndex([]string{"2026-10-11T12:00", "2026-10-11T13:00"}, "2026-10-11T14:00"); got != 0 {
+		t.Errorf("fallback hour index = %d, want 0", got)
+	}
+	if got := currentWeatherHourIndex(nil, "2026-10-11T14:00"); got != -1 {
+		t.Errorf("empty hour index = %d, want -1", got)
+	}
+}
+
+func TestWeatherRequestUsesMetricAndImperialUnits(t *testing.T) {
+	for _, test := range []struct {
+		units       string
+		temperature string
+		wind        string
+	}{{"metric", "celsius", "kmh"}, {"imperial", "fahrenheit", "mph"}} {
+		t.Run(test.units, func(t *testing.T) {
+			fetcher := NewWeatherFetcher(&config.WeatherWidgetConfig{})
+			fetcher.client = &http.Client{Transport: weatherRoundTripper(func(request *http.Request) (*http.Response, error) {
+				query, _ := url.ParseQuery(request.URL.RawQuery)
+				if query.Get("temperature_unit") != test.temperature || query.Get("windspeed_unit") != test.wind {
+					t.Errorf("unit parameters = %v", query)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"current_weather":{"temperature":1,"windspeed":2,"weathercode":0,"time":"2026-10-11T13:00"},"daily":{"time":["2026-10-11","2026-10-12","2026-10-13","2026-10-14","2026-10-15"],"temperature_2m_max":[1,2,3,4,5],"temperature_2m_min":[0,1,2,3,4],"weather_code":[0,1,2,3,4]}}`)), Request: request}, nil
+			})}
+			if _, err := fetcher.fetchWeather(context.Background(), 0, 0, test.units); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }

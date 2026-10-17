@@ -32,8 +32,17 @@ func (s *Server) registerTorInternalRoutes(r chi.Router) {
 // never a forwarded-for header, since it is a security boundary rather
 // than a display value — a proxy or a malicious client must never be
 // able to spoof its way past it.
+//
+// Requests relayed from the hidden service are also rejected: they present a
+// loopback RemoteAddr (the local Tor daemon) but are externally controlled,
+// so loopback-only endpoints must never serve them (AI.md PART 12 line
+// 16097 — the peer address is meaningless for a Tor request).
 func (s *Server) loopbackOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s.torRelayed(r) {
+			http.NotFound(w, r)
+			return
+		}
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			host = r.RemoteAddr

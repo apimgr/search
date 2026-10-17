@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -10,6 +11,24 @@ import (
 	"github.com/apimgr/search/src/config"
 	"golang.org/x/term"
 )
+
+func bannerPrintf(format string, args ...any) {
+	if _, err := fmt.Fprintf(os.Stdout, format, args...); err != nil {
+		slog.Debug("failed to write startup banner", "error", err)
+	}
+}
+
+func bannerPrintln(args ...any) {
+	if _, err := fmt.Fprintln(os.Stdout, args...); err != nil {
+		slog.Debug("failed to write startup banner", "error", err)
+	}
+}
+
+func bannerPrint(args ...any) {
+	if _, err := fmt.Fprint(os.Stdout, args...); err != nil {
+		slog.Debug("failed to write startup banner", "error", err)
+	}
+}
 
 // color wraps text in ANSI color code if colors are enabled
 // Per AI.md PART 8: NO_COLOR disables colors
@@ -39,7 +58,7 @@ type BannerInfo struct {
 // PrintBanner prints a responsive startup banner per AI.md PART 15 spec.
 // Adapts to terminal width: ≥80 full box drawing, 60-79 compact, 40-59 minimal,
 // <40 micro single-line, NO_COLOR/TERM=dumb plain text (no emojis or box drawing).
-// fmt.Fprintln(os.Stdout, ...) is used throughout this function: this is intentional
+// bannerPrintln( ...) is used throughout this function: this is intentional
 // terminal-only banner output, not application logging; log/slog must not be used here
 // as it would prepend timestamps and log levels to visual border characters.
 func PrintBanner(info *BannerInfo) {
@@ -82,7 +101,7 @@ func printBannerFull(info *BannerInfo, width int) {
 	}
 	innerWidth := width - 4
 
-	fmt.Fprintln(os.Stdout)
+	bannerPrintln()
 	printTopBorder(width)
 	printHeaderLine(info, innerWidth)
 	printSeparator(width)
@@ -93,7 +112,7 @@ func printBannerFull(info *BannerInfo, width int) {
 	printListenLine(info, innerWidth)
 	printTimestampLine(innerWidth)
 	printBottomBorder(width)
-	fmt.Fprintln(os.Stdout)
+	bannerPrintln()
 }
 
 // printBannerCompact renders the compact banner for 60-79 column terminals.
@@ -106,28 +125,28 @@ func printBannerCompact(info *BannerInfo) {
 
 	rocket := display.Emoji("🚀", "*")
 	pkg := display.Emoji("📦", "v")
-	fmt.Fprintf(os.Stdout, "%s %s %s%s\n",
+	bannerPrintf("%s %s %s%s\n",
 		color("\033[1;35m", rocket+" "+strings.ToUpper(appName)),
 		"",
 		color("\033[33m", pkg),
 		info.Version)
 
 	modeIcon, modeColor := bannerModeIcon(info.Mode)
-	fmt.Fprintf(os.Stdout, "%s %s\n",
+	bannerPrintf("%s %s\n",
 		modeIcon,
 		color(modeColor, "Mode: "+strings.ToLower(info.Mode)))
 
 	if info.HTTPSAddr != "" {
 		lock := display.Emoji("🔐", "[SSL]")
-		fmt.Fprintf(os.Stdout, "%s %s\n", lock, color("\033[32m", info.HTTPSAddr))
+		bannerPrintf("%s %s\n", lock, color("\033[32m", info.HTTPSAddr))
 	}
 	if info.HTTPAddr != "" && (info.HTTPSAddr == "" || info.HTTPSPort > 0) {
 		globe := display.Emoji("🌐", "[WEB]")
-		fmt.Fprintf(os.Stdout, "%s %s\n", globe, color("\033[34m", info.HTTPAddr))
+		bannerPrintf("%s %s\n", globe, color("\033[34m", info.HTTPAddr))
 	}
 	if info.TorAddr != "" {
 		onion := display.Emoji("🧅", "[TOR]")
-		fmt.Fprintf(os.Stdout, "%s %s\n", onion, color("\033[35m", info.TorAddr))
+		bannerPrintf("%s %s\n", onion, color("\033[35m", info.TorAddr))
 	}
 
 	proto := "http"
@@ -135,14 +154,14 @@ func printBannerCompact(info *BannerInfo) {
 		proto = "https"
 	}
 	listen := display.Emoji("📡", "[LISTEN]")
-	fmt.Fprintf(os.Stdout, "%s %s\n",
+	bannerPrintf("%s %s\n",
 		listen,
 		color("\033[36m", fmt.Sprintf("Listening: %s://%s", proto, info.ListenAddr)))
 
 	ok := display.Emoji("✅", "[OK]")
 	ts := time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST")
-	fmt.Fprintf(os.Stdout, "%s %s\n", ok, color("\033[32m", "Started: "+ts))
-	fmt.Fprintln(os.Stdout)
+	bannerPrintf("%s %s\n", ok, color("\033[32m", "Started: "+ts))
+	bannerPrintln()
 }
 
 // printBannerMinimal renders the minimal banner for 40-59 column terminals.
@@ -153,14 +172,14 @@ func printBannerMinimal(info *BannerInfo) {
 		appName = "Search"
 	}
 
-	fmt.Fprintf(os.Stdout, "%s %s\n", appName, info.Version)
-	fmt.Fprintf(os.Stdout, "%s\n", strings.ToLower(info.Mode))
+	bannerPrintf("%s %s\n", appName, info.Version)
+	bannerPrintf("%s\n", strings.ToLower(info.Mode))
 
 	addr := primaryURLHost(info)
 	if addr != "" {
-		fmt.Fprintf(os.Stdout, "%s\n", addr)
+		bannerPrintf("%s\n", addr)
 	}
-	fmt.Fprintln(os.Stdout)
+	bannerPrintln()
 }
 
 // printBannerMicro renders the micro banner for terminals <40 columns.
@@ -173,9 +192,9 @@ func printBannerMicro(info *BannerInfo) {
 
 	addr := primaryURLHost(info)
 	if addr != "" {
-		fmt.Fprintf(os.Stdout, "%s %s\n", appName, addr)
+		bannerPrintf("%s %s\n", appName, addr)
 	} else {
-		fmt.Fprintf(os.Stdout, "%s\n", appName)
+		bannerPrintf("%s\n", appName)
 	}
 }
 
@@ -187,26 +206,26 @@ func printBannerPlain(info *BannerInfo) {
 		appName = "Search"
 	}
 
-	fmt.Fprintf(os.Stdout, "%s v%s\n", appName, info.Version)
-	fmt.Fprintf(os.Stdout, "Mode: %s\n", strings.ToLower(info.Mode))
+	bannerPrintf("%s v%s\n", appName, info.Version)
+	bannerPrintf("Mode: %s\n", strings.ToLower(info.Mode))
 
 	if info.HTTPSAddr != "" {
-		fmt.Fprintf(os.Stdout, "URL: %s\n", info.HTTPSAddr)
+		bannerPrintf("URL: %s\n", info.HTTPSAddr)
 	}
 	if info.HTTPAddr != "" && (info.HTTPSAddr == "" || info.HTTPSPort > 0) {
-		fmt.Fprintf(os.Stdout, "URL: %s\n", info.HTTPAddr)
+		bannerPrintf("URL: %s\n", info.HTTPAddr)
 	}
 	if info.TorAddr != "" {
-		fmt.Fprintf(os.Stdout, "Tor: %s\n", info.TorAddr)
+		bannerPrintf("Tor: %s\n", info.TorAddr)
 	}
 
 	proto := "http"
 	if info.IsHTTPS {
 		proto = "https"
 	}
-	fmt.Fprintf(os.Stdout, "Listening: %s://%s\n", proto, info.ListenAddr)
-	fmt.Fprintf(os.Stdout, "Started: %s\n", time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST"))
-	fmt.Fprintln(os.Stdout)
+	bannerPrintf("Listening: %s://%s\n", proto, info.ListenAddr)
+	bannerPrintf("Started: %s\n", time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST"))
+	bannerPrintln()
 }
 
 // bannerModeIcon returns the emoji/icon and ANSI color for the current mode.
@@ -230,26 +249,26 @@ func primaryURLHost(info *BannerInfo) string {
 
 // printTopBorder prints the top border
 // Per AI.md PART 8: Respects NO_COLOR for border colors
-// fmt.Fprintln(os.Stdout) is intentional terminal banner output, not application logging
+// bannerPrintln() is intentional terminal banner output, not application logging
 func printTopBorder(width int) {
 	border := "╭" + strings.Repeat("─", width-2) + "╮"
-	fmt.Fprintln(os.Stdout, color("\033[36m", border))
+	bannerPrintln(color("\033[36m", border))
 }
 
 // printBottomBorder prints the bottom border
 // Per AI.md PART 8: Respects NO_COLOR for border colors
-// fmt.Fprintln(os.Stdout) is intentional terminal banner output, not application logging
+// bannerPrintln() is intentional terminal banner output, not application logging
 func printBottomBorder(width int) {
 	border := "╰" + strings.Repeat("─", width-2) + "╯"
-	fmt.Fprintln(os.Stdout, color("\033[36m", border))
+	bannerPrintln(color("\033[36m", border))
 }
 
 // printSeparator prints a separator line
 // Per AI.md PART 8: Respects NO_COLOR for border colors
-// fmt.Fprintln(os.Stdout) is intentional terminal banner output, not application logging
+// bannerPrintln() is intentional terminal banner output, not application logging
 func printSeparator(width int) {
 	separator := "├" + strings.Repeat("─", width-2) + "┤"
-	fmt.Fprintln(os.Stdout, color("\033[36m", separator))
+	bannerPrintln(color("\033[36m", separator))
 }
 
 // printLine prints a padded line within the banner
@@ -257,15 +276,15 @@ func printSeparator(width int) {
 // fmt.Fprint/Fprintln(os.Stdout) is intentional terminal banner output, not application logging
 func printLine(content string, innerWidth int) {
 	border := color("\033[36m", "│")
-	fmt.Fprint(os.Stdout, border+"  ")
+	bannerPrint(border + "  ")
 	visibleLen := visibleLength(content)
 	padding := innerWidth - visibleLen
 	if padding < 0 {
 		padding = 0
 	}
-	fmt.Fprint(os.Stdout, content)
-	fmt.Fprint(os.Stdout, strings.Repeat(" ", padding))
-	fmt.Fprintln(os.Stdout, border)
+	bannerPrint(content)
+	bannerPrint(strings.Repeat(" ", padding))
+	bannerPrintln(border)
 }
 
 // visibleLength calculates the visible length of a string (ignoring ANSI escape codes)

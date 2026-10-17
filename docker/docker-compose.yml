@@ -20,6 +20,8 @@ services:
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
+      GOOGLE_SAFE_BROWSING_API_KEY: ${GOOGLE_SAFE_BROWSING_API_KEY:-}
+      PHISHTANK_API_KEY: ${PHISHTANK_API_KEY:-}
       CACHE_URL: valkey://search-cache:6379
       # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
       # DATABASE_DRIVER: libsql

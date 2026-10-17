@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	searchapi "github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -159,7 +160,7 @@ func TestHealthResponseStruct(t *testing.T) {
 		Version:   "1.0.0",
 		Uptime:    "24h30m",
 		Timestamp: "2024-01-01T00:00:00Z",
-		Checks: map[string]string{
+		Checks: map[string]interface{}{
 			"database": "ok",
 			"cache":    "ok",
 		},
@@ -304,8 +305,9 @@ func TestSearchServerError(t *testing.T) {
 
 func TestHealth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/server/healthz" {
-			t.Errorf("Expected path /server/healthz, got %s", r.URL.Path)
+		wantPath := searchapi.APIPrefix + "/server/healthz"
+		if r.URL.Path != wantPath {
+			t.Errorf("Health() path = %q, want %q", r.URL.Path, wantPath)
 		}
 
 		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
@@ -314,6 +316,10 @@ func TestHealth(t *testing.T) {
 			"data": HealthResponse{
 				Status:  "healthy",
 				Version: "1.0.0",
+				Features: map[string]interface{}{
+					"tor": map[string]interface{}{"enabled": true, "status": "healthy"},
+				},
+				Checks: map[string]interface{}{"database": "ok"},
 			},
 		}
 		json.NewEncoder(w).Encode(response)
@@ -331,6 +337,13 @@ func TestHealth(t *testing.T) {
 	}
 	if result.Version != "1.0.0" {
 		t.Errorf("result.Version = %q", result.Version)
+	}
+	tor, ok := result.Features["tor"].(map[string]interface{})
+	if !ok || tor["enabled"] != true || tor["status"] != "healthy" {
+		t.Errorf("result.Features[tor] = %#v, want the nested API health feature", result.Features["tor"])
+	}
+	if result.Checks["database"] != "ok" {
+		t.Errorf("result.Checks[database] = %#v, want ok", result.Checks["database"])
 	}
 }
 

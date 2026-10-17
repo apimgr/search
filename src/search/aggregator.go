@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -84,6 +86,11 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 		return nil, err
 	}
 
+	engineQueryText, err := normalizeBooleanQuery(query.Text)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(a.engines) == 0 {
 		return nil, model.ErrNoEngines
 	}
@@ -143,7 +150,9 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 			defer wg.Done()
 
 			start := time.Now()
-			results, err := eng.Search(searchCtx, query)
+			engineQuery := *query
+			engineQuery.Text = engineQueryText
+			results, err := eng.Search(searchCtx, &engineQuery)
 			resultsChan <- engineResult{
 				engine:  eng,
 				results: results,
@@ -249,6 +258,18 @@ func (a *Aggregator) applyOperators(query *model.Query, ops *SearchOperators) {
 	}
 	if len(ops.ExcludeTerms) > 0 && len(query.ExcludeTerms) == 0 {
 		query.ExcludeTerms = ops.ExcludeTerms
+	}
+	if ops.DateRange != "" && query.DateBefore == "" && query.DateAfter == "" {
+		// daterange:YYYY-YYYY format - convert to DateAfter and DateBefore
+		parts := strings.Split(ops.DateRange, "-")
+		if len(parts) == 2 {
+			if year, err := strconv.Atoi(parts[0]); err == nil {
+				query.DateAfter = fmt.Sprintf("%d-01-01", year)
+			}
+			if year, err := strconv.Atoi(parts[1]); err == nil {
+				query.DateBefore = fmt.Sprintf("%d-12-31", year)
+			}
+		}
 	}
 	if ops.Before != "" && query.DateBefore == "" {
 		query.DateBefore = ops.Before
@@ -671,6 +692,21 @@ func deduplicateResults(results []model.Result) []model.Result {
 			// Keep thumbnail if we don't have one
 			if existing.Thumbnail == "" && result.Thumbnail != "" {
 				existing.Thumbnail = result.Thumbnail
+			}
+			if existing.ImageURL == "" && result.ImageURL != "" {
+				existing.ImageURL = result.ImageURL
+			}
+			if existing.ImageWidth == 0 {
+				existing.ImageWidth = result.ImageWidth
+			}
+			if existing.ImageHeight == 0 {
+				existing.ImageHeight = result.ImageHeight
+			}
+			if existing.ImageFormat == "" {
+				existing.ImageFormat = result.ImageFormat
+			}
+			if existing.FileSize == 0 {
+				existing.FileSize = result.FileSize
 			}
 
 			// Keep author if we don't have one

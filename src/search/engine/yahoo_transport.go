@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 )
@@ -26,6 +27,8 @@ import (
 // decides how the request is sent.
 type yahooRoundTripper struct {
 	dialTimeout time.Duration
+	//lint:ignore SA1019 A fresh uTLS-authenticated connection is required to match Yahoo's accepted ClientHello fingerprint.
+	//nolint:staticcheck
 	h2Transport *http2.Transport
 }
 
@@ -34,6 +37,8 @@ type yahooRoundTripper struct {
 func newYahooRoundTripper() *yahooRoundTripper {
 	return &yahooRoundTripper{
 		dialTimeout: 10 * time.Second,
+		//lint:ignore SA1019 The standard HTTP transport cannot take this already-authenticated uTLS connection.
+		//nolint:staticcheck
 		h2Transport: &http2.Transport{},
 	}
 }
@@ -64,14 +69,16 @@ func (rt *yahooRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 	uConn := utls.UClient(rawConn, config, utls.HelloChrome_Auto)
 	if err := uConn.HandshakeContext(ctx); err != nil {
-		rawConn.Close()
+		closeutil.Close(rawConn)
 		return nil, fmt.Errorf("yahoo: utls handshake failed: %w", err)
 	}
 
 	if uConn.ConnectionState().NegotiatedProtocol == http2.NextProtoTLS {
+		//lint:ignore SA1019 NewClientConn is needed to send HTTP/2 over the uTLS connection without losing Yahoo's required fingerprint.
+		//nolint:staticcheck
 		clientConn, err := rt.h2Transport.NewClientConn(uConn)
 		if err != nil {
-			uConn.Close()
+			closeutil.Close(uConn)
 			return nil, fmt.Errorf("yahoo: http2 client conn failed: %w", err)
 		}
 		return clientConn.RoundTrip(req)
@@ -80,13 +87,13 @@ func (rt *yahooRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	// HTTP/1.1: write the request and parse the response directly off the
 	// utls connection (mirrors the pattern from utls's own examples).
 	if err := req.Write(uConn); err != nil {
-		uConn.Close()
+		closeutil.Close(uConn)
 		return nil, fmt.Errorf("yahoo: writing http/1.1 request failed: %w", err)
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(uConn), req)
 	if err != nil {
-		uConn.Close()
+		closeutil.Close(uConn)
 		return nil, fmt.Errorf("yahoo: reading http/1.1 response failed: %w", err)
 	}
 

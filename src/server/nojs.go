@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/model"
 )
 
@@ -93,6 +94,19 @@ func (s *Server) renderNoJSSearch(w http.ResponseWriter, r *http.Request, data *
 	}
 	b.WriteString("</ul>\n</nav>\n")
 
+	if answer, ok := data.InstantAnswer.(*instant.Answer); ok && answer != nil {
+		b.WriteString(`<section class="instant-answer-box" data-type="` + html.EscapeString(string(answer.Type)) + `"><h2>` + html.EscapeString(answer.Title) + `</h2>` + "\n")
+		b.WriteString(`<div class="instant-answer-content">` + answer.Content + `</div>` + "\n")
+		if answer.Source != "" {
+			b.WriteString(`<p class="instant-answer-source">` + html.EscapeString(answer.Source))
+			if answer.SourceURL != "" {
+				b.WriteString(` <a href="` + safeHref(answer.SourceURL) + `" rel="noopener noreferrer">Source</a>`)
+			}
+			b.WriteString("</p>\n")
+		}
+		b.WriteString("</section>\n")
+	}
+
 	// Results section
 	results, _ := data.Results.([]model.Result)
 
@@ -108,6 +122,9 @@ func (s *Server) renderNoJSSearch(w http.ResponseWriter, r *http.Request, data *
 		b.WriteString("<ol class=\"results\">\n")
 		for _, result := range results {
 			b.WriteString("<li>\n<article>\n")
+			if result.Thumbnail != "" {
+				b.WriteString(`<img src="` + safeImageSrc(result.Thumbnail) + `" alt="` + html.EscapeString(result.Title) + `" loading="lazy">` + "\n")
+			}
 			b.WriteString(`<h2><a href="` + safeHref(result.URL) + `" rel="noopener noreferrer">` + html.EscapeString(result.Title) + `</a></h2>` + "\n")
 			if result.Domain != "" {
 				b.WriteString(`<p class="result-url">` + html.EscapeString(result.Domain) + `</p>` + "\n")
@@ -208,7 +225,9 @@ func (s *Server) renderHTMLToText(w http.ResponseWriter, name string, data inter
 	if err := s.renderer.Render(&buf, name, data); err != nil {
 		slog.Warn("nojs: template render failed, using fallback plain text", "template", name, "err", err)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "Error rendering page: %v\n", err)
+		if _, writeErr := fmt.Fprintf(w, "Error rendering page: %v\n", err); writeErr != nil {
+			slog.Debug("failed to write no-JS render error", "error", writeErr)
+		}
 		return
 	}
 	text := httputil.HTML2TextConverter(buf.String(), 80)
@@ -258,6 +277,13 @@ func safeHref(raw string) string {
 	}
 }
 
+func safeImageSrc(raw string) string {
+	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") && !strings.ContainsAny(raw, "\\\r\n") {
+		return html.EscapeString(raw)
+	}
+	return safeHref(raw)
+}
+
 // htmlQueryEscape percent-encodes a string for use in an HTML attribute
 // query string, using standard URL encoding with HTML entity for &.
 func htmlQueryEscape(s string) string {
@@ -288,7 +314,7 @@ func percentEncode(r rune) string {
 	b := []byte(string(r))
 	var sb strings.Builder
 	for _, by := range b {
-		sb.WriteString(fmt.Sprintf("%%%02X", by))
+		fmt.Fprintf(&sb, "%%%02X", by)
 	}
 	return sb.String()
 }

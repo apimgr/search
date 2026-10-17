@@ -33,6 +33,29 @@ func TestOpenAPISpecStruct(t *testing.T) {
 	}
 }
 
+func TestAssignOperationIDsAreStableAndUniqueForSharedRoutes(t *testing.T) {
+	shared := &Operation{}
+	paths := map[string]PathItem{
+		"/api/v1/info.txt": {Get: shared},
+		"/api/v1/info":     {Get: shared},
+	}
+
+	assignOperationIDs(paths)
+	first := paths["/api/v1/info"].Get.OperationID
+	second := paths["/api/v1/info.txt"].Get.OperationID
+	if first == "" || second == "" || first == second {
+		t.Fatalf("expected distinct non-empty operation IDs, got %q and %q", first, second)
+	}
+	if strings.Contains(first, ".") || strings.Contains(second, ".") {
+		t.Fatalf("operation IDs must not contain punctuation: %q, %q", first, second)
+	}
+
+	assignOperationIDs(paths)
+	if paths["/api/v1/info"].Get.OperationID != first || paths["/api/v1/info.txt"].Get.OperationID != second {
+		t.Fatal("operation IDs changed on a repeated generation pass")
+	}
+}
+
 func TestInfoStruct(t *testing.T) {
 	info := Info{
 		Title:       "Search API",
@@ -223,11 +246,32 @@ func TestGenerateSpecHasRequiredPaths(t *testing.T) {
 	spec := GenerateSpec(cfg, "http://localhost:8080")
 
 	// Per AI.md PART 13: canonical routes use /server/healthz
-	requiredPaths := []string{"/server/healthz", "/api/v1/server/healthz", "/api/v1/search", "/api/v1/autocomplete"}
+	requiredPaths := []string{
+		"/server/healthz", "/api/v1/server/healthz", "/api/v1/server/healthz.txt",
+		"/api/healthz",
+		"/api/v1/info", "/api/v1/info.txt", "/api/v1/search", "/api/v1/autocomplete",
+	}
 	for _, path := range requiredPaths {
 		if _, exists := spec.Paths[path]; !exists {
 			t.Errorf("Missing required path: %s", path)
 		}
+	}
+	for _, path := range []string{"/api/v1/healthz", "/api/v1/healthz.txt"} {
+		if _, exists := spec.Paths[path]; exists {
+			t.Errorf("Legacy health route must not be documented: %s", path)
+		}
+	}
+	healthSchema := spec.Components.Schemas["HealthResponse"]
+	for _, property := range []string{"project", "status", "version", "go_version", "build", "uptime", "mode", "timestamp", "features", "checks", "stats"} {
+		if _, exists := healthSchema.Properties[property]; !exists {
+			t.Errorf("HealthResponse schema is missing %q", property)
+		}
+	}
+	if _, exists := healthSchema.Properties["checks"].Properties["database"]; !exists {
+		t.Error("HealthResponse checks schema is missing database")
+	}
+	if _, exists := healthSchema.Properties["stats"].Properties["requests_total"]; !exists {
+		t.Error("HealthResponse stats schema is missing requests_total")
 	}
 }
 
@@ -282,6 +326,49 @@ func TestGeneratePaths(t *testing.T) {
 
 // Tests for generateComponents
 
+func TestGeneratePathsCoverGeoIPAndSchedulerRoutes(t *testing.T) {
+	paths := generatePaths()
+	required := map[string][]string{
+		"/api/v1/server/geoip/ips":                      {"GET"},
+		"/api/v1/server/geoip/ips/{ip}":                 {"GET"},
+		"/api/v1/server/geoip/presets":                  {"GET", "POST"},
+		"/api/v1/server/geoip/presets/{name}":           {"GET", "DELETE"},
+		"/api/v1/server/scheduler/tasks":                {"GET"},
+		"/api/v1/server/scheduler/tasks/{task}":         {"GET"},
+		"/api/v1/server/scheduler/tasks/{task}/history": {"GET"},
+		"/api/v1/server/scheduler/tasks/{task}/run":     {"POST"},
+		"/api/v1/server/scheduler/tasks/{task}/enable":  {"POST"},
+		"/api/v1/server/scheduler/tasks/{task}/disable": {"POST"},
+	}
+	for path, methods := range required {
+		item, ok := paths[path]
+		if !ok {
+			t.Errorf("missing generated API path %s", path)
+			continue
+		}
+		for _, method := range methods {
+			var operation *Operation
+			switch method {
+			case "GET":
+				operation = item.Get
+			case "POST":
+				operation = item.Post
+			case "DELETE":
+				operation = item.Delete
+			}
+			if operation == nil {
+				t.Errorf("missing %s operation for %s", method, path)
+				continue
+			}
+			if strings.Contains(path, "/scheduler/") || strings.Contains(path, "/presets") {
+				if len(operation.Security) == 0 {
+					t.Errorf("%s %s must require operator bearer authentication", method, path)
+				}
+			}
+		}
+	}
+}
+
 func TestGenerateComponents(t *testing.T) {
 	components := generateComponents()
 
@@ -300,13 +387,13 @@ func TestGenerateComponents(t *testing.T) {
 	}
 }
 
-// Tests for Handler
+// Tests for UIHandler and SpecHandler
 
 func TestHandlerServesSwaggerUI(t *testing.T) {
 	cfg := &config.Config{}
-	handler := Handler(cfg)
+	handler := UIHandler(cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/swagger", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger", nil)
 	rec := httptest.NewRecorder()
 
 	handler(rec, req)
@@ -331,9 +418,9 @@ func TestHandlerServesSwaggerUI(t *testing.T) {
 
 func TestHandlerServesJSON(t *testing.T) {
 	cfg := &config.Config{}
-	handler := Handler(cfg)
+	handler := SpecHandler(cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/swagger", nil)
 	rec := httptest.NewRecorder()
 
 	handler(rec, req)
@@ -343,7 +430,7 @@ func TestHandlerServesJSON(t *testing.T) {
 	}
 
 	contentType := rec.Header().Get("Content-Type")
-	if contentType != "application/json" {
+	if !strings.Contains(contentType, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", contentType)
 	}
 
@@ -357,18 +444,24 @@ func TestHandlerServesJSON(t *testing.T) {
 	}
 }
 
-func TestHandlerServesJSONWithAcceptHeader(t *testing.T) {
+// TestSpecHandlerVersionedPath verifies the versioned spec path serves the
+// same JSON document as the /api/swagger alias (AI.md PART 14: same handler,
+// never a redirect).
+func TestSpecHandlerVersionedPath(t *testing.T) {
 	cfg := &config.Config{}
-	handler := Handler(cfg)
+	handler := SpecHandler(cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/swagger", nil)
-	req.Header.Set("Accept", "application/json")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/swagger", nil)
 	rec := httptest.NewRecorder()
 
 	handler(rec, req)
 
+	if rec.Code != http.StatusOK {
+		t.Errorf("Status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
 	contentType := rec.Header().Get("Content-Type")
-	if contentType != "application/json" {
+	if !strings.Contains(contentType, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", contentType)
 	}
 }
@@ -713,7 +806,7 @@ func TestServeSwaggerUIWithDifferentThemes(t *testing.T) {
 			expectDarkCSS: true,
 		},
 		{
-			name:          "auto theme cookie defaults to dark",
+			name:          "auto theme cookie includes the dark base palette",
 			themeCookie:   "auto",
 			expectDarkCSS: true,
 		},
@@ -727,7 +820,7 @@ func TestServeSwaggerUIWithDifferentThemes(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 
-			serveSwaggerUI(rec, req, "http://localhost:8080")
+			UIHandler(nil)(rec, req)
 
 			body := rec.Body.String()
 
@@ -752,23 +845,25 @@ func TestServeSwaggerUIWithDifferentThemes(t *testing.T) {
 	}
 }
 
-// TestServeSwaggerUIBaseURLInjection tests that baseURL is correctly injected
+// TestServeSwaggerUIBaseURLInjection tests that the spec URL is built from the
+// request host and points at the canonical /api/swagger alias.
 func TestServeSwaggerUIBaseURLInjection(t *testing.T) {
-	testURLs := []string{
-		"http://localhost:8080",
-		"https://api.example.com",
-		"http://192.168.1.1:3000",
+	testHosts := []string{
+		"localhost:8080",
+		"api.example.com",
+		"192.168.1.1:3000",
 	}
 
-	for _, baseURL := range testURLs {
-		t.Run(baseURL, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/swagger", nil)
+	for _, host := range testHosts {
+		t.Run(host, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger", nil)
+			req.Host = host
 			rec := httptest.NewRecorder()
 
-			serveSwaggerUI(rec, req, baseURL)
+			UIHandler(nil)(rec, req)
 
 			body := rec.Body.String()
-			expectedURL := baseURL + `/openapi.json`
+			expectedURL := "http://" + host + "/api/swagger"
 			if !strings.Contains(body, expectedURL) {
 				t.Errorf("Response should contain spec URL %q", expectedURL)
 			}
@@ -777,13 +872,13 @@ func TestServeSwaggerUIBaseURLInjection(t *testing.T) {
 }
 
 func TestServeSwaggerUILanguageAttributes(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/swagger?lang=de", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger?lang=de", nil)
 	rec := httptest.NewRecorder()
 
-	serveSwaggerUI(rec, req, "http://localhost:8080")
+	UIHandler(nil)(rec, req)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `<html lang="de" dir="ltr">`) {
+	if !strings.Contains(body, `<html lang="de" dir="ltr"`) {
 		t.Fatalf("Swagger UI should use request locale, got body: %s", body)
 	}
 }
@@ -1048,6 +1143,27 @@ func TestGeneratePathsHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestOpenAPIRouteMethodsMatchRESTHandlers(t *testing.T) {
+	paths := generatePaths()
+	contact := paths["/api/v1/server/contact"]
+	if contact.Get == nil || contact.Post == nil {
+		t.Fatal("contact OpenAPI operations must include REST GET and POST")
+	}
+	if _, ok := contact.Post.Responses["200"]; !ok {
+		t.Error("contact POST must document its REST 200 success status")
+	}
+	if _, ok := contact.Post.Responses["201"]; ok {
+		t.Error("contact POST must not document an unreturned 201 status")
+	}
+	preferenceImport := paths["/api/v1/server/preferences/import"]
+	if preferenceImport.Get == nil || preferenceImport.Post != nil {
+		t.Fatal("preference import must document the REST GET operation only")
+	}
+	if len(preferenceImport.Get.Parameters) != 3 {
+		t.Errorf("preference import has %d query parameters, want theme, lang, and code", len(preferenceImport.Get.Parameters))
+	}
+}
+
 // TestGeneratePathsAutocompleteEndpoint tests autocomplete endpoint details
 func TestGeneratePathsAutocompleteEndpoint(t *testing.T) {
 	paths := generatePaths()
@@ -1102,14 +1218,24 @@ func TestGenerateComponentsHealthResponseSchema(t *testing.T) {
 			t.Errorf("HealthResponse should have %q field", field)
 		}
 	}
+	for _, field := range []string{"project", "go_version", "build", "mode", "timestamp", "features", "checks", "stats"} {
+		if _, exists := healthResp.Properties[field]; !exists {
+			t.Errorf("HealthResponse should have %q field", field)
+		}
+	}
+	for _, field := range []string{"ok", "data", "meta"} {
+		if _, exists := healthResp.Properties[field]; exists {
+			t.Errorf("bare HealthResponse schema must not include API envelope field %q", field)
+		}
+	}
 }
 
 // TestHandlerHTTPSViaForwardedProto tests handler with HTTPS via proxy
 func TestHandlerHTTPSViaForwardedProto(t *testing.T) {
 	cfg := &config.Config{}
-	handler := Handler(cfg)
+	handler := SpecHandler(cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/swagger", nil)
 	// Loopback is always a trusted proxy — X-Forwarded-Proto is honored.
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Host = "api.example.com"
@@ -1136,9 +1262,9 @@ func TestHandlerHTTPSViaForwardedProto(t *testing.T) {
 // TestHandlerWithForwardedHost tests handler with forwarded host header
 func TestHandlerWithForwardedHost(t *testing.T) {
 	cfg := &config.Config{}
-	handler := Handler(cfg)
+	handler := SpecHandler(cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/swagger", nil)
 	// Loopback is always a trusted proxy — X-Forwarded-Host is honored.
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Host = "localhost:8080"

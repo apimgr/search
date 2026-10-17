@@ -357,7 +357,7 @@ func TestMailerSendAlert(t *testing.T) {
 	}
 	ml := NewMailer(cfg)
 
-	err := ml.SendAlert("Test Alert", "Test message")
+	err := ml.SendToAdmins("Test Alert", "Test message")
 	if err == nil {
 		t.Error("SendAlert() should error when email is disabled")
 	}
@@ -370,7 +370,7 @@ func TestMailerSendAlertNoAdmins(t *testing.T) {
 	}
 	ml := NewMailer(cfg)
 
-	err := ml.SendAlert("Test Alert", "Test message")
+	err := ml.SendToAdmins("Test Alert", "Test message")
 	if err == nil {
 		t.Error("SendAlert() should error with no admin emails")
 	}
@@ -378,6 +378,9 @@ func TestMailerSendAlertNoAdmins(t *testing.T) {
 
 // Tests for SendSecurityAlert
 
+// Per AI.md PART 17, email features are hidden/disabled when SMTP is not
+// configured — that is a no-op, not an error. Every sender short-circuits
+// with `return nil` when CanSend() is false.
 func TestMailerSendSecurityAlert(t *testing.T) {
 	cfg := &Config{
 		Enabled:     false,
@@ -386,12 +389,13 @@ func TestMailerSendSecurityAlert(t *testing.T) {
 	}
 	ml := NewMailer(cfg)
 
-	err := ml.SendSecurityAlert("Login Failed", "192.168.1.1", "Multiple failed attempts")
-	if err == nil {
-		t.Error("SendSecurityAlert() should error when email is disabled")
+	if err := ml.SendSecurityAlert("Login Failed", "192.168.1.1", "Multiple failed attempts"); err != nil {
+		t.Errorf("SendSecurityAlert() with email disabled: want nil no-op, got %v", err)
 	}
 }
 
+// Enabled is true but SMTP.Host is empty, so CanSend() is still false and the
+// call must no-op before it ever reaches the empty AdminEmails check.
 func TestMailerSendSecurityAlertNoAdmins(t *testing.T) {
 	cfg := &Config{
 		Enabled:     true,
@@ -400,9 +404,8 @@ func TestMailerSendSecurityAlertNoAdmins(t *testing.T) {
 	}
 	ml := NewMailer(cfg)
 
-	err := ml.SendSecurityAlert("Security Event", "10.0.0.1", "Details here")
-	if err == nil {
-		t.Error("SendSecurityAlert() should error with no admin emails")
+	if err := ml.SendSecurityAlert("Security Event", "10.0.0.1", "Details here"); err != nil {
+		t.Errorf("SendSecurityAlert() with no SMTP host: want nil no-op, got %v", err)
 	}
 }
 
@@ -757,30 +760,6 @@ func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 	}
 }
 
-func TestEmailTemplateRenderAdminAlert(t *testing.T) {
-	et := NewEmailTemplate()
-
-	vars := map[string]string{
-		"app_name":    "TestApp",
-		"fqdn":        "https://example.com",
-		"timestamp":   "2026-06-13 12:00:00 UTC",
-		"alert_type":  "System Warning",
-		"alert_level": "warning",
-		"message":     "High CPU usage detected",
-	}
-
-	subject, body, err := et.Render(TemplateAdminAlert, vars)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "System Warning") {
-		t.Error("Body should contain alert type")
-	}
-}
-
 func TestEmailTemplateRenderBackupCompleted(t *testing.T) {
 	et := NewEmailTemplate()
 
@@ -851,7 +830,7 @@ func TestEmailTemplatePreviewTemplate(t *testing.T) {
 
 	templates := []TemplateType{
 		TemplateSecurityAlert,
-		TemplateAdminAlert,
+		TemplateSchedulerError,
 		TemplateBackupCompleted,
 		TemplateUpdateAvailable,
 		TemplateBackupFailed,
@@ -902,7 +881,7 @@ func TestGetAllTemplateTypes(t *testing.T) {
 
 	expectedTypes := []TemplateType{
 		TemplateSecurityAlert,
-		TemplateAdminAlert,
+		TemplateSchedulerError,
 		TemplateBackupCompleted,
 	}
 
@@ -933,7 +912,7 @@ func TestGetAllTemplateTypesInfo(t *testing.T) {
 
 func TestIsAccountEmail(t *testing.T) {
 	allTemplates := []TemplateType{
-		TemplateAdminAlert,
+		TemplateSchedulerError,
 		TemplateSecurityAlert,
 		TemplateBackupCompleted,
 		TemplateUpdateAvailable,
@@ -957,8 +936,8 @@ func TestTemplateTypeConstants(t *testing.T) {
 	if TemplateSecurityAlert != "security_alert" {
 		t.Errorf("TemplateSecurityAlert = %q, want %q", TemplateSecurityAlert, "security_alert")
 	}
-	if TemplateAdminAlert != "admin_alert" {
-		t.Errorf("TemplateAdminAlert = %q, want %q", TemplateAdminAlert, "admin_alert")
+	if TemplateSchedulerError != "scheduler_error" {
+		t.Errorf("TemplateSchedulerError = %q, want %q", TemplateSchedulerError, "scheduler_error")
 	}
 	if TemplateBackupCompleted != "backup_complete" {
 		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_complete")
@@ -1427,8 +1406,8 @@ func TestTemplateTypeConstantsPart18(t *testing.T) {
 	if TemplateTest != "test" {
 		t.Errorf("TemplateTest = %q, want %q", TemplateTest, "test")
 	}
-	if TemplateAdminAlert != "admin_alert" {
-		t.Errorf("TemplateAdminAlert = %q, want %q", TemplateAdminAlert, "admin_alert")
+	if TemplateSchedulerError != "scheduler_error" {
+		t.Errorf("TemplateSchedulerError = %q, want %q", TemplateSchedulerError, "scheduler_error")
 	}
 	if TemplateBackupCompleted != "backup_complete" {
 		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_complete")
@@ -1438,29 +1417,32 @@ func TestTemplateTypeConstantsPart18(t *testing.T) {
 	}
 }
 
-// Tests for AdminAlert with critical level
-
-func TestEmailTemplateRenderAdminAlertCritical(t *testing.T) {
+// The scheduler_error template takes task variables — there is no
+// "admin_alert" template; PART 17 defines exactly ten, and this is the one
+// that reports a failed scheduled task.
+func TestEmailTemplateRenderSchedulerErrorCritical(t *testing.T) {
 	et := NewEmailTemplate()
 
 	vars := map[string]string{
-		"app_name":    "TestApp",
-		"fqdn":        "https://example.com",
-		"timestamp":   "2026-06-13 12:00:00 UTC",
-		"alert_type":  "System Down",
-		"alert_level": "critical",
-		"message":     "Server is not responding",
+		"app_name":  "TestApp",
+		"fqdn":      "https://example.com",
+		"timestamp": "2026-06-13 12:00:00 UTC",
+		"task_name": "backup",
+		"error":     "Server is not responding",
+		"next_run":  "2026-06-14 12:00:00 UTC",
 	}
 
-	subject, body, err := et.Render(TemplateAdminAlert, vars)
+	subject, body, err := et.Render(TemplateSchedulerError, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	if !strings.Contains(subject, "critical") {
-		t.Error("Subject should contain critical level")
+	if !strings.Contains(subject, "TestApp") {
+		t.Errorf("Subject = %q, want it to contain the app name", subject)
 	}
-	if body == "" {
-		t.Error("Body should not be empty")
+	for _, want := range []string{"backup", "Server is not responding", "2026-06-14 12:00:00 UTC"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Body does not contain %q:\n%s", want, body)
+		}
 	}
 }
 
@@ -1531,13 +1513,13 @@ func TestEmailTemplateRenderEmptyVars(t *testing.T) {
 
 func TestTemplateInfoJSONTags(t *testing.T) {
 	info := TemplateInfo{
-		Type:           TemplateAdminAlert,
+		Type:           TemplateSchedulerError,
 		Name:           "Admin Alert",
 		Description:    "Administrative alert email",
 		IsAccountEmail: false,
 	}
 
-	if info.Type != TemplateAdminAlert {
+	if info.Type != TemplateSchedulerError {
 		t.Errorf("Type = %q", info.Type)
 	}
 	if info.Name != "Admin Alert" {
@@ -1580,7 +1562,7 @@ func TestGetAllTemplateTypesIncludesOperatorTemplates(t *testing.T) {
 
 func TestIsAccountEmailAllTemplates(t *testing.T) {
 	allTemplates := []TemplateType{
-		TemplateAdminAlert,
+		TemplateSchedulerError,
 		TemplateSecurityAlert,
 		TemplateBackupCompleted,
 		TemplateUpdateAvailable,
@@ -2066,7 +2048,7 @@ func TestMailerSendAlertWithServer(t *testing.T) {
 	}
 	ml := NewMailer(cfg)
 
-	err := ml.SendAlert("Test Alert", "Test message content")
+	err := ml.SendToAdmins("Test Alert", "Test message content")
 	if err == nil {
 		t.Error("SendAlert() should error with invalid SMTP server")
 	}

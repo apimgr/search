@@ -19,14 +19,14 @@ func NewConvertHandler() *ConvertHandler {
 	return &ConvertHandler{
 		patterns: []*regexp.Regexp{
 			// "convert X unit to unit" or "X unit to unit" or "X unit in unit"
-			regexp.MustCompile(`(?i)^(?:convert\s+)?(\d+(?:\.\d+)?)\s*([a-zA-Z°]+)\s+(?:to|in|->)\s+([a-zA-Z°]+)$`),
+			regexp.MustCompile(`(?i)^(?:convert\s+)?(\d+(?:\.\d+)?)\s*([a-zA-Z°/]+(?:\s+[a-zA-Z]+){0,2})\s+(?:to|in|->)\s+([a-zA-Z°/]+(?:\s+[a-zA-Z]+){0,2})$`),
 			// "X unit = ? unit"
-			regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)\s*([a-zA-Z°]+)\s*=\s*\?\s*([a-zA-Z°]+)$`),
+			regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)\s*([a-zA-Z°/]+(?:\s+[a-zA-Z]+){0,2})\s*=\s*\?\s*([a-zA-Z°/]+(?:\s+[a-zA-Z]+){0,2})$`),
 		},
 		// "convert X unit" or bare "X unit" with no destination given (e.g.
 		// "convert 33 degrees", "22 meters"). The target unit is resolved
 		// from the global unit-system default (see UnitsFromContext).
-		barePattern: regexp.MustCompile(`(?i)^(?:convert\s+)?(\d+(?:\.\d+)?)\s*(degrees?|°|[a-zA-Z]+)$`),
+		barePattern: regexp.MustCompile(`(?i)^(?:convert\s+)?(\d+(?:\.\d+)?)\s*(degrees?|°|[a-zA-Z/]+(?:\s+[a-zA-Z]+){0,2})$`),
 	}
 }
 
@@ -113,34 +113,45 @@ var categorySystems = map[string]unitSystemPair{
 	"length":      {metric: "meters", imperial: "feet"},
 	"weight":      {metric: "kilograms", imperial: "pounds"},
 	"volume":      {metric: "liters", imperial: "gallons"},
+	"area":        {metric: "square meters", imperial: "square feet"},
+	"speed":       {metric: "kilometers per hour", imperial: "miles per hour"},
 }
 
 // unitCategoryAndSystem maps every normalized unit that belongs to a
 // metric/imperial pair to its category and system.
 var unitCategoryAndSystem = map[string]struct{ category, system string }{
-	"celsius":     {"temperature", "metric"},
-	"fahrenheit":  {"temperature", "imperial"},
-	"meters":      {"length", "metric"},
-	"kilometers":  {"length", "metric"},
-	"centimeters": {"length", "metric"},
-	"millimeters": {"length", "metric"},
-	"miles":       {"length", "imperial"},
-	"feet":        {"length", "imperial"},
-	"inches":      {"length", "imperial"},
-	"yards":       {"length", "imperial"},
-	"grams":       {"weight", "metric"},
-	"kilograms":   {"weight", "metric"},
-	"milligrams":  {"weight", "metric"},
-	"tonnes":      {"weight", "metric"},
-	"pounds":      {"weight", "imperial"},
-	"ounces":      {"weight", "imperial"},
-	"tons":        {"weight", "imperial"},
-	"liters":      {"volume", "metric"},
-	"milliliters": {"volume", "metric"},
-	"gallons":     {"volume", "imperial"},
-	"quarts":      {"volume", "imperial"},
-	"pints":       {"volume", "imperial"},
-	"cups":        {"volume", "imperial"},
+	"celsius":             {"temperature", "metric"},
+	"fahrenheit":          {"temperature", "imperial"},
+	"meters":              {"length", "metric"},
+	"kilometers":          {"length", "metric"},
+	"centimeters":         {"length", "metric"},
+	"millimeters":         {"length", "metric"},
+	"miles":               {"length", "imperial"},
+	"feet":                {"length", "imperial"},
+	"inches":              {"length", "imperial"},
+	"yards":               {"length", "imperial"},
+	"grams":               {"weight", "metric"},
+	"kilograms":           {"weight", "metric"},
+	"milligrams":          {"weight", "metric"},
+	"tonnes":              {"weight", "metric"},
+	"pounds":              {"weight", "imperial"},
+	"ounces":              {"weight", "imperial"},
+	"tons":                {"weight", "imperial"},
+	"stones":              {"weight", "imperial"},
+	"liters":              {"volume", "metric"},
+	"milliliters":         {"volume", "metric"},
+	"gallons":             {"volume", "imperial"},
+	"quarts":              {"volume", "imperial"},
+	"pints":               {"volume", "imperial"},
+	"cups":                {"volume", "imperial"},
+	"square meters":       {"area", "metric"},
+	"hectares":            {"area", "metric"},
+	"square feet":         {"area", "imperial"},
+	"acres":               {"area", "imperial"},
+	"kilometers per hour": {"speed", "metric"},
+	"meters per second":   {"speed", "metric"},
+	"miles per hour":      {"speed", "imperial"},
+	"knots":               {"speed", "imperial"},
 }
 
 // unitSystem returns the category and unit system ("metric" or "imperial")
@@ -243,6 +254,7 @@ func categorySystemsUnit(pair unitSystemPair, system string) string {
 
 // normalizeUnit normalizes unit names to standard form
 func normalizeUnit(unit string) string {
+	unit = strings.Join(strings.Fields(strings.ToLower(unit)), " ")
 	aliases := map[string]string{
 		// Length
 		"m":           "meters",
@@ -284,6 +296,8 @@ func normalizeUnit(unit string) string {
 		"ounce":     "ounces",
 		"t":         "tons",
 		"ton":       "tons",
+		"st":        "stones",
+		"stone":     "stones",
 		"tonne":     "tonnes",
 
 		// Temperature
@@ -309,6 +323,21 @@ func normalizeUnit(unit string) string {
 		"pt":         "pints",
 		"pint":       "pints",
 		"cup":        "cups",
+		"tsp":        "teaspoons", "teaspoon": "teaspoons", "teaspoons": "teaspoons",
+		"tbsp": "tablespoons", "tablespoon": "tablespoons", "tablespoons": "tablespoons",
+
+		// Area
+		"sq m": "square meters", "sqm": "square meters", "square meter": "square meters", "square meters": "square meters", "square metre": "square meters", "square metres": "square meters",
+		"sq ft": "square feet", "sqft": "square feet", "square foot": "square feet", "square feet": "square feet",
+		"acre": "acres", "acres": "acres", "ha": "hectares", "hectare": "hectares", "hectares": "hectares",
+
+		// Speed
+		"mph": "miles per hour", "mi/h": "miles per hour", "miles per hour": "miles per hour",
+		"km/h": "kilometers per hour", "kph": "kilometers per hour", "kilometers per hour": "kilometers per hour", "kilometres per hour": "kilometers per hour",
+		"m/s": "meters per second", "meters per second": "meters per second", "metres per second": "meters per second",
+		"knot": "knots", "knots": "knots",
+		"degree": "degrees", "degrees": "degrees", "deg": "degrees", "°": "degrees",
+		"radian": "radians", "radians": "radians", "rad": "radians",
 
 		// Time
 		"s":      "seconds",
@@ -329,11 +358,16 @@ func normalizeUnit(unit string) string {
 		"year":   "years",
 
 		// Data
-		"b":  "bytes",
-		"kb": "kilobytes",
-		"mb": "megabytes",
-		"gb": "gigabytes",
-		"tb": "terabytes",
+		"b":        "bytes",
+		"byte":     "bytes",
+		"kb":       "kilobytes",
+		"kilobyte": "kilobytes",
+		"mb":       "megabytes",
+		"megabyte": "megabytes",
+		"gb":       "gigabytes",
+		"gigabyte": "gigabytes",
+		"tb":       "terabytes",
+		"terabyte": "terabytes",
 	}
 
 	if normalized, ok := aliases[unit]; ok {
@@ -370,6 +404,7 @@ func convert(value float64, from, to string) (float64, error) {
 		"pounds":     453.592,
 		"ounces":     28.3495,
 		"tons":       907185,
+		"stones":     6350.288,
 		"tonnes":     1000000,
 	}
 
@@ -381,7 +416,19 @@ func convert(value float64, from, to string) (float64, error) {
 		"quarts":      0.946353,
 		"pints":       0.473176,
 		"cups":        0.236588,
+		"teaspoons":   0.00492892159375,
+		"tablespoons": 0.01478676478125,
 	}
+
+	areaToSquareMeters := map[string]float64{
+		"square meters": 1, "square feet": 0.09290304, "acres": 4046.8564224, "hectares": 10000,
+	}
+
+	speedToMetersPerSecond := map[string]float64{
+		"meters per second": 1, "kilometers per hour": 1.0 / 3.6, "miles per hour": 0.44704, "knots": 0.5144444444444445,
+	}
+
+	angleToRadians := map[string]float64{"degrees": 0.017453292519943295, "radians": 1}
 
 	// Time (base: seconds)
 	timeToSeconds := map[string]float64{
@@ -411,7 +458,7 @@ func convert(value float64, from, to string) (float64, error) {
 	}
 
 	// Try each conversion table
-	tables := []map[string]float64{lengthToMeters, weightToGrams, volumeToLiters, timeToSeconds, dataToBytes}
+	tables := []map[string]float64{lengthToMeters, weightToGrams, volumeToLiters, areaToSquareMeters, speedToMetersPerSecond, angleToRadians, timeToSeconds, dataToBytes}
 
 	for _, table := range tables {
 		fromFactor, fromOk := table[from]

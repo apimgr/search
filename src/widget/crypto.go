@@ -4,16 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/version"
 )
 
 // CryptoFetcher fetches cryptocurrency prices from CoinGecko API
+const maximumCoinGeckoResponseBytes = 2 << 20
+
+// CryptoFetcher fetches cryptocurrency data from CoinGecko.
 type CryptoFetcher struct {
 	client *http.Client
 	config *config.CryptoWidgetConfig
@@ -26,13 +34,16 @@ type CryptoData struct {
 
 // CoinData represents data for a single cryptocurrency
 type CoinData struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Symbol    string  `json:"symbol"`
-	Price     float64 `json:"price"`
-	Change24h float64 `json:"change_24h"`
-	MarketCap float64 `json:"market_cap,omitempty"`
-	Volume24h float64 `json:"volume_24h,omitempty"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Symbol    string    `json:"symbol"`
+	Currency  string    `json:"currency"`
+	Amount    float64   `json:"amount,omitempty"`
+	Price     float64   `json:"price"`
+	Change24h float64   `json:"change_24h"`
+	MarketCap float64   `json:"market_cap,omitempty"`
+	Volume24h float64   `json:"volume_24h,omitempty"`
+	Chart     []float64 `json:"chart,omitempty"`
 }
 
 // CoinGeckoResponse represents CoinGecko API response
@@ -44,7 +55,11 @@ type CoinGeckoResponse map[string]struct {
 	EURChange24h float64 `json:"eur_24h_change"`
 	GBPChange24h float64 `json:"gbp_24h_change"`
 	USDMarketCap float64 `json:"usd_market_cap"`
+	EURMarketCap float64 `json:"eur_market_cap"`
+	GBPMarketCap float64 `json:"gbp_market_cap"`
 	USDVolume24h float64 `json:"usd_24h_vol"`
+	EURVolume24h float64 `json:"eur_24h_vol"`
+	GBPVolume24h float64 `json:"gbp_24h_vol"`
 }
 
 // NewCryptoFetcher creates a new crypto fetcher
@@ -93,6 +108,21 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 	if currency == "" {
 		currency = "usd"
 	}
+	switch strings.ToLower(currency) {
+	case "eur", "gbp", "usd":
+		currency = strings.ToLower(currency)
+	default:
+		currency = "usd"
+	}
+
+	amount := 1.0
+	if rawAmount := strings.TrimSpace(params["amount"]); rawAmount != "" {
+		parsedAmount, err := strconv.ParseFloat(rawAmount, 64)
+		if err != nil || parsedAmount <= 0 || parsedAmount > 1e15 {
+			return nil, fmt.Errorf("invalid cryptocurrency amount")
+		}
+		amount = parsedAmount
+	}
 
 	// Fetch from CoinGecko
 	coinIDs := url.QueryEscape(strings.Join(coins, ","))
@@ -119,7 +149,7 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 			UpdatedAt: time.Now(),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return &WidgetData{
@@ -129,13 +159,16 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 		}, nil
 	}
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maximumCoinGeckoResponseBytes+1))
+	if err != nil {
+		return &WidgetData{Type: WidgetCrypto, Error: err.Error(), UpdatedAt: time.Now()}, nil
+	}
+	if len(body) > maximumCoinGeckoResponseBytes {
+		return &WidgetData{Type: WidgetCrypto, Error: "cryptocurrency response exceeds the size limit", UpdatedAt: time.Now()}, nil
+	}
 	var cgResp CoinGeckoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cgResp); err != nil {
-		return &WidgetData{
-			Type:      WidgetCrypto,
-			Error:     err.Error(),
-			UpdatedAt: time.Now(),
-		}, nil
+	if err := json.Unmarshal(body, &cgResp); err != nil {
+		return &WidgetData{Type: WidgetCrypto, Error: err.Error(), UpdatedAt: time.Now()}, nil
 	}
 
 	// Convert response to our format
@@ -151,9 +184,13 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 			case "eur":
 				price = data.EUR
 				change = data.EURChange24h
+				marketCap = data.EURMarketCap
+				volume = data.EURVolume24h
 			case "gbp":
 				price = data.GBP
 				change = data.GBPChange24h
+				marketCap = data.GBPMarketCap
+				volume = data.GBPVolume24h
 			// usd
 			default:
 				price = data.USD
@@ -162,15 +199,21 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 				volume = data.USDVolume24h
 			}
 
-			cryptoData.Coins = append(cryptoData.Coins, CoinData{
+			coinData := CoinData{
 				ID:        coinID,
 				Name:      formatCoinName(coinID),
 				Symbol:    coinIDToSymbol(coinID),
+				Currency:  strings.ToUpper(currency),
+				Amount:    amount,
 				Price:     price,
 				Change24h: change,
 				MarketCap: marketCap,
 				Volume24h: volume,
-			})
+			}
+			if params["include_chart"] == "true" {
+				coinData.Chart = f.fetchPriceChart(ctx, coinID, currency)
+			}
+			cryptoData.Coins = append(cryptoData.Coins, coinData)
 		}
 	}
 
@@ -179,6 +222,49 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 		Data:      cryptoData,
 		UpdatedAt: time.Now(),
 	}, nil
+}
+
+func (f *CryptoFetcher) fetchPriceChart(ctx context.Context, coinID, currency string) []float64 {
+	query := url.Values{"vs_currency": {currency}, "days": {"1"}}
+	endpoint := "https://api.coingecko.com/api/v3/coins/" + url.PathEscape(coinID) + "/market_chart?" + query.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil
+	}
+	request.Header.Set("User-Agent", version.BrowserUserAgent)
+	response, err := f.client.Do(request)
+	if err != nil {
+		return nil
+	}
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Printf("failed to close CoinGecko chart response: %v", err)
+		}
+	}()
+	if response.StatusCode != http.StatusOK {
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, maximumCoinGeckoResponseBytes+1))
+	if err != nil || len(body) > maximumCoinGeckoResponseBytes {
+		return nil
+	}
+	var payload struct {
+		Prices [][]float64 `json:"prices"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return nil
+	}
+	points := make([]float64, 0, len(payload.Prices))
+	for _, point := range payload.Prices {
+		if len(point) < 2 || math.IsNaN(point[1]) || math.IsInf(point[1], 0) || point[1] <= 0 {
+			continue
+		}
+		points = append(points, point[1])
+	}
+	if len(points) > 288 {
+		points = points[len(points)-288:]
+	}
+	return points
 }
 
 // formatCoinName converts coin ID to display name

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/version"
 	"golang.org/x/net/html"
 )
@@ -99,7 +100,7 @@ func (h *FeedHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>Discovered %d feed(s) on %s:</strong><br><br>", len(feeds), domain))
+	fmt.Fprintf(&content, "<strong>Discovered %d feed(s) on %s:</strong><br><br>", len(feeds), domain)
 
 	for i, feed := range feeds {
 		feedType := strings.ToUpper(feed.Type)
@@ -107,8 +108,8 @@ func (h *FeedHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		if title == "" {
 			title = "Untitled Feed"
 		}
-		content.WriteString(fmt.Sprintf("%d. <strong>%s</strong> [%s]<br>", i+1, title, feedType))
-		content.WriteString(fmt.Sprintf("   <a href=\"%s\">%s</a><br><br>", feed.URL, feed.URL))
+		fmt.Fprintf(&content, "%d. <strong>%s</strong> [%s]<br>", i+1, title, feedType)
+		fmt.Fprintf(&content, "   <a href=\"%s\">%s</a><br><br>", feed.URL, feed.URL)
 	}
 
 	return &Answer{
@@ -186,7 +187,7 @@ func (h *FeedHandler) checkFeedURL(ctx context.Context, feedURL string) (*FeedIn
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
@@ -273,7 +274,7 @@ func (h *FeedHandler) parseFeedLinksFromHTML(ctx context.Context, baseURL string
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)

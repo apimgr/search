@@ -302,7 +302,9 @@ func TestResolveConfigPathWithExtension(t *testing.T) {
 	testFile := filepath.Join(tempDir, "custom.yml")
 
 	// Create the file
-	os.WriteFile(testFile, []byte{}, 0600)
+	if err := os.WriteFile(testFile, []byte{}, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	resolvedPath, err := ResolveConfigPath(testFile)
 	if err != nil {
@@ -319,7 +321,9 @@ func TestResolveConfigPathWithYamlExtension(t *testing.T) {
 	testFile := filepath.Join(tempDir, "custom.yaml")
 
 	// Create the file
-	os.WriteFile(testFile, []byte{}, 0600)
+	if err := os.WriteFile(testFile, []byte{}, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	resolvedPath, err := ResolveConfigPath(testFile)
 	if err != nil {
@@ -393,7 +397,9 @@ func TestAddExtIfNeededNoExt(t *testing.T) {
 
 	// Create a .yml file
 	ymlFile := filepath.Join(tempDir, "config.yml")
-	os.WriteFile(ymlFile, []byte{}, 0600)
+	if err := os.WriteFile(ymlFile, []byte{}, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	input := filepath.Join(tempDir, "config")
 	result, err := addExtIfNeeded(input)
@@ -854,7 +860,9 @@ func TestResolveConfigPathTildeNoExtension(t *testing.T) {
 
 	// Create the test file structure
 	testDir := filepath.Join(tempDir, "tildetest")
-	os.MkdirAll(testDir, 0755)
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Temporarily change HOME to use our temp directory
 	origHome := os.Getenv("HOME")

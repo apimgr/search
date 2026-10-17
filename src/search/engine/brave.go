@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -25,7 +27,7 @@ func NewBrave() *Brave {
 	config := model.NewEngineConfig("brave")
 	config.DisplayName = "Brave Search"
 	config.Priority = 75
-	config.Categories = []string{"general", "images", "news", "files", "music"}
+	config.Categories = []string{"general", "images", "news"}
 	config.SupportsTor = true
 
 	return &Brave{
@@ -45,9 +47,10 @@ func (e *Brave) Search(ctx context.Context, query *model.Query) ([]model.Result,
 	params.Set("q", query.Text)
 	params.Set("source", "web")
 
-	if query.Category == model.CategoryImages {
+	switch query.Category {
+	case model.CategoryImages:
 		searchURL = "https://search.brave.com/images"
-	} else if query.Category == model.CategoryNews {
+	case model.CategoryNews:
 		searchURL = "https://search.brave.com/news"
 	}
 
@@ -66,7 +69,7 @@ func (e *Brave) Search(ctx context.Context, query *model.Query) ([]model.Result,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Brave returned status %d", resp.StatusCode)

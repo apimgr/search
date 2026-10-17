@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -43,6 +44,11 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	}
 
 	statements := []string{
+		`CREATE TABLE IF NOT EXISTS {prefix}owners (
+			id TEXT PRIMARY KEY,
+			created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			last_seen_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+		)`,
 		// Scheduler task definitions — must match scheduler.go schema exactly
 		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_tasks (
 			task_id TEXT PRIMARY KEY,
@@ -185,6 +191,7 @@ func initServerSchema(ctx context.Context, db *DB) error {
 		// Search alerts
 		`CREATE TABLE IF NOT EXISTS {prefix}search_alerts (
 			id TEXT PRIMARY KEY,
+			owner_id TEXT REFERENCES {prefix}owners(id),
 			email TEXT NOT NULL,
 			query TEXT NOT NULL,
 			category TEXT NOT NULL,
@@ -236,6 +243,12 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			UNIQUE(alert_id, fingerprint)
 		)`,
 		`CREATE INDEX IF NOT EXISTS {prefix}idx_search_alert_results_alert ON {prefix}search_alert_results(alert_id, first_seen_at)`,
+		// Local QR short links store only AES-GCM encrypted destinations.
+		`CREATE TABLE IF NOT EXISTS {prefix}qr_shortlinks (
+			code TEXT PRIMARY KEY,
+			target_encrypted TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
 		// Security reports — coordinated disclosure pipeline per AI.md PART 11.
 		// Plaintext report content is never persisted: sensitive fields (steps to
 		// reproduce, impact, researcher contact, etc.) live only inside encrypted_body.
@@ -270,15 +283,91 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			keyservers_published TEXT,
 			revoked INTEGER NOT NULL DEFAULT 0
 		)`,
+		// Project-level cryptographic secrets per AI.md PART 11 "Cryptographic
+		// Keys": installation_secret, cookie_signing_key and csrf_token_secret
+		// live in server.db (not server.yml) because each has its own rotation
+		// lifecycle. Values are base64-encoded; previous_value holds the prior
+		// secret during its grace window so in-flight HMACs still validate.
+		`CREATE TABLE IF NOT EXISTS {prefix}app_secrets (
+			name TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			previous_value TEXT,
+			previous_expires_at DATETIME,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			rotated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
-
 	for _, stmt := range statements {
 		sql := applyPrefix(stmt)
 		if _, err := db.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("schema statement failed: %w\nSQL: %s", err, sql)
 		}
 	}
+	if err := ensureColumn(ctx, db, prefix+"search_alerts", "owner_id", "TEXT REFERENCES "+prefix+"owners(id)"); err != nil {
+		return fmt.Errorf("add search alert owner column: %w", err)
+	}
+	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_search_alerts_owner ON `+prefix+`search_alerts(owner_id)`); err != nil {
+		return fmt.Errorf("create search alert owner index: %w", err)
+	}
+	apiTokens := prefix + "api_tokens"
+	ownerTokenColumns := []struct {
+		name string
+		ddl  string
+	}{
+		{"owner_id", "TEXT REFERENCES " + prefix + "owners(id)"},
+		{"kind", "TEXT NOT NULL DEFAULT 'primary' CHECK (kind IN ('primary', 'linked'))"},
+		{"token_enc", "TEXT NOT NULL DEFAULT ''"},
+		{"rotated_at", "INTEGER"},
+		{"last_used_at", "INTEGER"},
+		{"revoked_at", "INTEGER"},
+		{"revoked_reason", "TEXT"},
+	}
+	for _, column := range ownerTokenColumns {
+		if err := ensureColumn(ctx, db, apiTokens, column.name, column.ddl); err != nil {
+			return fmt.Errorf("add owner token column %s: %w", column.name, err)
+		}
+	}
+	for _, stmt := range []string{
+		`CREATE INDEX IF NOT EXISTS ` + prefix + `idx_api_tokens_owner ON ` + apiTokens + `(owner_id)`,
+		`CREATE INDEX IF NOT EXISTS ` + prefix + `idx_api_tokens_active ON ` + apiTokens + `(revoked_at) WHERE revoked_at IS NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ` + prefix + `idx_api_tokens_primary_owner ON ` + apiTokens + `(owner_id) WHERE kind = 'primary' AND revoked_at IS NULL AND owner_id IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ` + prefix + `idx_api_tokens_linked_name ON ` + apiTokens + `(owner_id, name) WHERE kind = 'linked' AND revoked_at IS NULL`,
+	} {
+		if _, err := db.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("owner token index failed: %w\nSQL: %s", err, stmt)
+		}
+	}
 	return nil
+}
+
+func ensureColumn(ctx context.Context, db *DB, table, column, definition string) error {
+	rows, err := db.Query(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue interface{}
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return errors.Join(err, rows.Close())
+		}
+		if name == column {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Join(err, rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	_, err = db.Exec(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
+	return err
 }
 
 // initUsersSchema creates all tables for user.db.

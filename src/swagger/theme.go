@@ -4,8 +4,13 @@ package swagger
 // Per AI.md PART 19: Swagger & GraphQL Theming (NON-NEGOTIABLE)
 // Swagger must match project-wide theme system (light/dark/auto)
 func getSwaggerThemeCSS(theme string) string {
-	if theme == "light" {
+	switch theme {
+	case "light":
 		return swaggerLightTheme
+	case "auto":
+		// Auto follows the operating system preference: dark is the project
+		// default, light applies only when the OS asks for it.
+		return swaggerDarkTheme + "\n@media (prefers-color-scheme: light) {\n" + swaggerLightTheme + "\n}\n"
 	}
 	// Default to dark
 	return swaggerDarkTheme

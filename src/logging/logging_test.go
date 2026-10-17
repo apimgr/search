@@ -13,10 +13,19 @@ import (
 	"time"
 )
 
+func closeLoggerOnCleanup(t *testing.T, closeLogger func() error) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := closeLogger(); err != nil {
+			t.Errorf("close logger: %v", err)
+		}
+	})
+}
+
 func TestNewManager(t *testing.T) {
 	tmpDir := t.TempDir()
 	m := NewManager(tmpDir)
-	defer m.Close()
+	closeLoggerOnCleanup(t, m.Close)
 
 	if m == nil {
 		t.Fatal("NewManager returned nil")
@@ -43,7 +52,7 @@ func TestNewManager(t *testing.T) {
 
 func TestNewManagerDefaultDir(t *testing.T) {
 	m := NewManager("")
-	defer m.Close()
+	closeLoggerOnCleanup(t, m.Close)
 
 	if m == nil {
 		t.Fatal("NewManager returned nil")
@@ -63,7 +72,7 @@ func TestManagerClose(t *testing.T) {
 func TestManagerRotateAll(t *testing.T) {
 	tmpDir := t.TempDir()
 	m := NewManager(tmpDir)
-	defer m.Close()
+	closeLoggerOnCleanup(t, m.Close)
 
 	// Write some logs first
 	m.Server().Info("test message")
@@ -136,7 +145,7 @@ func TestAccessLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "access.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	entry := AccessEntry{
 		Timestamp: time.Now(),
@@ -170,7 +179,7 @@ func TestAccessLoggerFormats(t *testing.T) {
 			path := filepath.Join(tmpDir, format+".log")
 			logger := NewAccessLogger(path)
 			logger.SetFormat(format)
-			defer logger.Close()
+			closeLoggerOnCleanup(t, logger.Close)
 
 			entry := AccessEntry{
 				Timestamp: time.Now(),
@@ -198,7 +207,7 @@ func TestAccessLoggerCustomFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "custom.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	customFormat := "$remote_addr - $status - $request_time_ms"
 	logger.SetCustomFormat(customFormat)
@@ -220,7 +229,7 @@ func TestAccessLoggerLogRequest(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "request.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	req := &http.Request{
 		Method:     "GET",
@@ -240,7 +249,7 @@ func TestAccessLoggerRotate(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "rotate.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Log(AccessEntry{IP: "1.1.1.1", Status: 200})
 
@@ -305,7 +314,7 @@ func TestServerLogger(t *testing.T) {
 	logger := NewServerLogger(path)
 	// Disable stdout for tests
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Info("test info message")
 	logger.Warn("test warning")
@@ -328,7 +337,7 @@ func TestServerLoggerLevels(t *testing.T) {
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
 	logger.SetLevel(LevelDebug)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Debug("debug message")
 	logger.Info("info message")
@@ -354,7 +363,7 @@ func TestServerLoggerJSON(t *testing.T) {
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
 	logger.SetFormat("json")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Info("test message", map[string]interface{}{"key": "value"})
 
@@ -372,10 +381,12 @@ func TestServerLoggerWriter(t *testing.T) {
 	path := filepath.Join(tmpDir, "writer.log")
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	writer := logger.Writer()
-	writer.Write([]byte("test via writer"))
+	if _, err := writer.Write([]byte("test via writer")); err != nil {
+		t.Fatal(err)
+	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -409,7 +420,7 @@ func TestSecurityLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "security.log")
 	logger := NewSecurityLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogLoginFailed("192.168.1.1", "testuser", "/login")
 	logger.LogLoginSuccess("192.168.1.1", "testuser")
@@ -486,7 +497,7 @@ func TestAuditLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "192.168.1.1", "engines", "enabled google")
 	logger.LogTokenCreate("operator", "192.168.1.1", "api-token-1")
@@ -510,7 +521,7 @@ func TestAuditLoggerGenerateID(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	id := logger.generateAuditID()
 	if !strings.HasPrefix(id, "audit_") {
@@ -548,7 +559,7 @@ func TestErrorLogger(t *testing.T) {
 	path := filepath.Join(tmpDir, "error.log")
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	testErr := &testError{msg: "test error"}
 	logger.Error("something went wrong", testErr)
@@ -579,7 +590,7 @@ func TestErrorLoggerJSON(t *testing.T) {
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
 	logger.SetFormat("json")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Error("json error", nil, map[string]interface{}{"code": 500})
 
@@ -597,7 +608,7 @@ func TestDebugLogger(t *testing.T) {
 	path := filepath.Join(tmpDir, "debug.log")
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Debug logger is disabled by default
 	if logger.IsEnabled() {
@@ -636,7 +647,7 @@ func TestDebugLoggerJSON(t *testing.T) {
 	logger.SetStdout(false)
 	logger.Enable()
 	logger.SetFormat("json")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Debug("json debug", map[string]interface{}{"key": "value"})
 
@@ -708,7 +719,7 @@ func TestAccessLoggerLogRequestWithID(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "request-id.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	req := &http.Request{
 		Method:     "POST",
@@ -737,7 +748,7 @@ func TestAccessLoggerLogRequestWithXForwardedFor(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "xff.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	req := &http.Request{
 		Method:     "GET",
@@ -767,7 +778,7 @@ func TestAccessLoggerLogRequestWithXRealIP(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "xrealip.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	req := &http.Request{
 		Method:     "GET",
@@ -803,7 +814,7 @@ func TestAccessLoggerLogRequestWithTLS(t *testing.T) {
 	path := filepath.Join(tmpDir, "tls.log")
 	logger := NewAccessLogger(path)
 	logger.SetFormat("json")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Test all TLS versions
 	tlsVersions := []struct {
@@ -848,7 +859,7 @@ func TestAccessLoggerLogRequestWithIDAndTLS(t *testing.T) {
 	path := filepath.Join(tmpDir, "tls-id.log")
 	logger := NewAccessLogger(path)
 	logger.SetFormat("json")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Test all TLS versions with LogRequestWithID
 	tlsVersions := []uint16{0x0301, 0x0302, 0x0303, 0x0304}
@@ -877,7 +888,7 @@ func TestAccessLoggerIPv6Handling(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "ipv6.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Test IPv6 address with port (should NOT strip the bracket part)
 	req := &http.Request{
@@ -907,7 +918,7 @@ func TestAccessLoggerFormatWithVariablesEmptyCustomFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "empty-custom.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Set format to custom but leave customFormat empty - should fallback to combined
 	logger.SetFormat("custom")
@@ -939,7 +950,7 @@ func TestAccessLoggerFormatWithVariablesAllVariables(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "all-vars.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Test comprehensive custom format with all variables
 	customFormat := "$remote_addr $remote_user [$time_local] [$time_iso8601] [$time_unix] [$time_msec] \"$request\" " +
@@ -1012,7 +1023,7 @@ func TestAccessLoggerRotateWithExistingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "rotate-test.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Log(AccessEntry{IP: "1.1.1.1", Status: 200})
 
@@ -1036,7 +1047,7 @@ func TestAccessLoggerRotateWithExistingFile(t *testing.T) {
 
 func TestAccessLoggerEmptyPath(t *testing.T) {
 	logger := NewAccessLogger("")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Should not panic when logging with no file
 	logger.Log(AccessEntry{IP: "1.1.1.1", Status: 200})
@@ -1063,7 +1074,7 @@ func TestAccessLoggerLogWithRefererEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "referer.log")
 	logger := NewAccessLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Combined format with empty referer should use "-"
 	entry := AccessEntry{
@@ -1094,7 +1105,7 @@ func TestServerLoggerRotate(t *testing.T) {
 	path := filepath.Join(tmpDir, "server-rotate.log")
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Info("test message")
 
@@ -1109,7 +1120,7 @@ func TestServerLoggerRotateWithExistingFile(t *testing.T) {
 	path := filepath.Join(tmpDir, "server-rotate2.log")
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Info("test message")
 
@@ -1145,7 +1156,7 @@ func TestServerLoggerCloseNilFile(t *testing.T) {
 func TestServerLoggerEmptyPath(t *testing.T) {
 	logger := NewServerLogger("")
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Should not panic
 	logger.Info("test")
@@ -1157,7 +1168,7 @@ func TestServerLoggerTextFormatWithFields(t *testing.T) {
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
 	logger.SetFormat("text")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	fields := map[string]interface{}{
 		"field1": "value1",
@@ -1184,7 +1195,7 @@ func TestServerLoggerRedactsSensitiveFields(t *testing.T) {
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
 	logger.SetFormat("text")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	fields := map[string]interface{}{
 		"api_key":  "supersecretvalue",
@@ -1220,7 +1231,7 @@ func TestServerLoggerLevelFiltering(t *testing.T) {
 	logger.SetStdout(false)
 	// Only WARN and above
 	logger.SetLevel(LevelWarn)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Debug("debug")
 	logger.Info("info")
@@ -1248,7 +1259,7 @@ func TestServerLoggerWriterEmptyMessage(t *testing.T) {
 	path := filepath.Join(tmpDir, "server-writer-empty.log")
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	writer := logger.Writer()
 
@@ -1262,14 +1273,16 @@ func TestServerLoggerWriterEmptyMessage(t *testing.T) {
 	}
 
 	// Write non-empty
-	writer.Write([]byte("valid message"))
+	if _, err := writer.Write([]byte("valid message")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSecurityLoggerRotate(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "security-rotate.log")
 	logger := NewSecurityLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogLoginFailed("1.1.1.1", "user", "/login")
 
@@ -1283,7 +1296,7 @@ func TestSecurityLoggerRotateWithExistingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "security-rotate2.log")
 	logger := NewSecurityLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogLoginFailed("1.1.1.1", "user", "/login")
 
@@ -1317,7 +1330,7 @@ func TestSecurityLoggerCloseNilFile(t *testing.T) {
 
 func TestSecurityLoggerEmptyPath(t *testing.T) {
 	logger := NewSecurityLogger("")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Should not panic
 	logger.LogLoginFailed("1.1.1.1", "user", "/login")
@@ -1327,7 +1340,7 @@ func TestSecurityLoggerLogEntryDirectly(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "security-direct.log")
 	logger := NewSecurityLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	entry := SecurityEntry{
 		Timestamp: time.Now(),
@@ -1359,7 +1372,7 @@ func TestAuditLoggerLogWithPresetIDAndTime(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit-preset.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	presetTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 	entry := AuditEntry{
@@ -1390,7 +1403,7 @@ func TestAuditLoggerLogWithoutTarget(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit-notarget.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	entry := AuditEntry{
 		Event:    AuditActionRateLimitExceeded,
@@ -1416,7 +1429,7 @@ func TestAuditLoggerRotate(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit-rotate.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "1.1.1.1", "test", "init")
 
@@ -1430,7 +1443,7 @@ func TestAuditLoggerRotateWithExistingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit-rotate2.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "1.1.1.1", "test", "init")
 
@@ -1464,7 +1477,7 @@ func TestAuditLoggerCloseNilFile(t *testing.T) {
 
 func TestAuditLoggerEmptyPath(t *testing.T) {
 	logger := NewAuditLogger("")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Should not panic
 	logger.LogConfigChange("operator", "1.1.1.1", "test", "init")
@@ -1483,7 +1496,7 @@ func TestAuditLoggerBackupRestoreFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit-backup-fail.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogBackupRestore("admin", "1.1.1.1", "backup.tar.gz", false)
 
@@ -1504,7 +1517,7 @@ func TestAuditLoggerBackupFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit-backup-fail2.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogBackupFailed("operator", "1.1.1.1", "disk full")
 
@@ -1523,7 +1536,7 @@ func TestErrorLoggerRotate(t *testing.T) {
 	path := filepath.Join(tmpDir, "error-rotate.log")
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Error("test error", nil)
 
@@ -1538,7 +1551,7 @@ func TestErrorLoggerRotateWithExistingFile(t *testing.T) {
 	path := filepath.Join(tmpDir, "error-rotate2.log")
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Error("test error", nil)
 
@@ -1574,7 +1587,7 @@ func TestErrorLoggerCloseNilFile(t *testing.T) {
 func TestErrorLoggerEmptyPath(t *testing.T) {
 	logger := NewErrorLogger("")
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Should not panic
 	logger.Error("test", nil)
@@ -1585,7 +1598,7 @@ func TestErrorLoggerLogEntryDirectly(t *testing.T) {
 	path := filepath.Join(tmpDir, "error-direct.log")
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	entry := ErrorEntry{
 		Timestamp: time.Now(),
@@ -1617,7 +1630,7 @@ func TestErrorLoggerLogEntryDefaults(t *testing.T) {
 	path := filepath.Join(tmpDir, "error-defaults.log")
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Entry with empty Level and zero Timestamp - should use defaults
 	entry := ErrorEntry{
@@ -1640,7 +1653,7 @@ func TestErrorLoggerTextFormatWithAllFields(t *testing.T) {
 	logger := NewErrorLogger(path)
 	logger.SetStdout(false)
 	logger.SetFormat("text")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	testErr := &testError{msg: "underlying error"}
 	fields := map[string]interface{}{"code": 500, "service": "api"}
@@ -1667,7 +1680,7 @@ func TestDebugLoggerRotate(t *testing.T) {
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
 	logger.Enable()
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Debug("test debug")
 
@@ -1683,7 +1696,7 @@ func TestDebugLoggerRotateWithExistingFile(t *testing.T) {
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
 	logger.Enable()
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Debug("test debug")
 
@@ -1720,7 +1733,7 @@ func TestDebugLoggerEmptyPath(t *testing.T) {
 	logger := NewDebugLogger("")
 	logger.SetStdout(false)
 	logger.Enable()
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Should not panic
 	logger.Debug("test")
@@ -1732,7 +1745,7 @@ func TestDebugLoggerLogEntryDirectly(t *testing.T) {
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
 	logger.Enable()
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	entry := DebugEntry{
 		Timestamp: time.Now(),
@@ -1764,7 +1777,7 @@ func TestDebugLoggerLogEntryDefaults(t *testing.T) {
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
 	logger.Enable()
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// Entry with empty Level and zero Timestamp - should use defaults
 	entry := DebugEntry{
@@ -1788,7 +1801,7 @@ func TestDebugLoggerTextFormatWithAllFields(t *testing.T) {
 	logger.SetStdout(false)
 	logger.Enable()
 	logger.SetFormat("text")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	fields := map[string]interface{}{"module": "test", "count": 42}
 	logger.Debug("debug with fields", fields)
@@ -1814,7 +1827,7 @@ func TestDebugLoggerDisabledSkipsLogging(t *testing.T) {
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
 	// NOT enabled - default is disabled
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.Debug("should not appear")
 	logger.DebugWithCaller("should not appear", "file.go", 1, "Func")
@@ -1837,7 +1850,7 @@ func TestDebugLoggerJSONFormatWithCallerInfo(t *testing.T) {
 	logger.SetStdout(false)
 	logger.Enable()
 	logger.SetFormat("json")
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.DebugWithCaller("json caller debug", "myfile.go", 999, "TestFunction", map[string]interface{}{"data": "test"})
 
@@ -1863,7 +1876,7 @@ func TestDebugLoggerOpenFileWhenDisabled(t *testing.T) {
 	logger := NewDebugLogger(path)
 	logger.SetStdout(false)
 	// Disable is default, call openFile directly (via Enable/Disable cycle)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	// openFile should return nil when disabled
 	if logger.file != nil {
@@ -2377,17 +2390,13 @@ func TestMatchesAuditFilterNilTarget(t *testing.T) {
 // DefaultAuditRetentionPolicy tests
 // ============================================================
 
+// Per AI.md PART 11 "Sane Defaults" the audit retention default is keep: none,
+// which this package expresses as MaxAge 0 (rotated logs deleted on rotation).
 func TestDefaultAuditRetentionPolicy(t *testing.T) {
 	policy := DefaultAuditRetentionPolicy()
 
-	if policy.MaxAge == 0 {
-		t.Error("DefaultAuditRetentionPolicy MaxAge should be non-zero")
-	}
-	if policy.MaxAge < 24*time.Hour {
-		t.Error("DefaultAuditRetentionPolicy MaxAge should be at least one day")
-	}
-	if !policy.PreserveCritical {
-		t.Error("DefaultAuditRetentionPolicy should preserve critical events")
+	if policy.MaxAge != 0 {
+		t.Errorf("DefaultAuditRetentionPolicy MaxAge = %v, want 0 (keep: none)", policy.MaxAge)
 	}
 }
 
@@ -2399,7 +2408,7 @@ func TestQueryAuditLogsEmptyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
 	if err != nil {
@@ -2421,8 +2430,12 @@ func TestQueryAuditLogsNonExistentFile(t *testing.T) {
 	path := filepath.Join(tmpDir, "no-such-audit.log")
 	// Create logger but remove file immediately
 	logger := NewAuditLogger(path)
-	logger.Close()
-	os.Remove(path)
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 
 	// Re-open with no backing file
 	logger2 := &AuditLogger{path: path}
@@ -2440,7 +2453,7 @@ func TestQueryAuditLogsReturnsEntries(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "engines", "enabled google")
 	logger.LogIPBlocked("operator", "10.0.0.1", "1.2.3.4", "spam")
@@ -2462,7 +2475,7 @@ func TestQueryAuditLogsFilterByCategory(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "engines", "change")
 	logger.LogIPBlocked("operator", "10.0.0.1", "1.2.3.4", "spam")
@@ -2484,7 +2497,7 @@ func TestQueryAuditLogsFilterBySeverity(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "engines", "change")
 	logger.LogBruteForceDetected("10.0.0.2", "/api/v1/search", 10)
@@ -2502,7 +2515,7 @@ func TestQueryAuditLogsPagination(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	for i := 0; i < 5; i++ {
 		logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
@@ -2546,7 +2559,7 @@ func TestQueryAuditLogsTimeRange(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	past := time.Now().UTC().Add(-2 * time.Hour)
 	future := time.Now().UTC().Add(2 * time.Hour)
@@ -2585,7 +2598,7 @@ func TestExportAuditLogsJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "engines", "enabled google")
 	logger.LogIPBlocked("operator", "10.0.0.1", "5.6.7.8", "spam")
@@ -2609,7 +2622,7 @@ func TestExportAuditLogsCSV(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "engines", "enabled google")
 
@@ -2637,7 +2650,7 @@ func TestExportAuditLogsUnsupportedFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "engines", "change")
 
@@ -2652,7 +2665,7 @@ func TestExportAuditLogsEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	var buf bytes.Buffer
 	err := logger.ExportAuditLogs(AuditQueryOptions{}, AuditExportJSON, &buf)
@@ -2686,93 +2699,98 @@ func TestCleanupAuditLogsNonExistent(t *testing.T) {
 	}
 }
 
-func TestCleanupAuditLogsMaxEntries(t *testing.T) {
+func TestCleanupAuditLogsKeepNoneDeletesRotated(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
+
+	logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
+	if err := logger.Rotate(); err != nil {
+		t.Fatalf("Rotate() error = %v", err)
+	}
+
+	// keep: none - the rotated file is deleted, the live log survives
+	removed, err := logger.CleanupAuditLogs(AuditRetentionPolicy{MaxAge: 0})
+	if err != nil {
+		t.Fatalf("CleanupAuditLogs() error = %v", err)
+	}
+	if removed != 1 {
+		t.Errorf("CleanupAuditLogs() removed = %d, want 1", removed)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("live audit.log must survive cleanup: %v", err)
+	}
+}
+
+func TestCleanupAuditLogsNeverTruncatesLiveLog(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	closeLoggerOnCleanup(t, logger.Close)
 
 	for i := 0; i < 10; i++ {
 		logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
 	}
 
-	policy := AuditRetentionPolicy{
-		MaxAge:           0,
-		MaxEntries:       5,
-		PreserveCritical: false,
-	}
-
-	removed, err := logger.CleanupAuditLogs(policy)
-	if err != nil {
+	if _, err := logger.CleanupAuditLogs(AuditRetentionPolicy{MaxAge: 0}); err != nil {
 		t.Fatalf("CleanupAuditLogs() error = %v", err)
 	}
-	if removed != 5 {
-		t.Errorf("CleanupAuditLogs() removed = %d, want 5", removed)
-	}
 
+	// AI.md PART 11: the audit log is append-only - every entry must remain
 	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
 	if err != nil {
 		t.Fatalf("QueryAuditLogs() after cleanup error = %v", err)
 	}
-	if result.Total != 5 {
-		t.Errorf("After cleanup Total = %d, want 5", result.Total)
+	if result.Total != 10 {
+		t.Errorf("After cleanup Total = %d, want 10 (append-only log must not be pruned)", result.Total)
 	}
 }
 
-func TestCleanupAuditLogsPreservesCritical(t *testing.T) {
+func TestCleanupAuditLogsKeepForever(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
-	// Write 3 normal + 1 critical
-	for i := 0; i < 3; i++ {
-		logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
-	}
-	logger.LogBruteForceDetected("1.2.3.4", "/api/v1/search", 50)
-
-	policy := AuditRetentionPolicy{
-		MaxAge:           0,
-		MaxEntries:       2,
-		PreserveCritical: true,
-	}
-
-	_, err := logger.CleanupAuditLogs(policy)
-	if err != nil {
-		t.Fatalf("CleanupAuditLogs() error = %v", err)
-	}
-
-	result, err := logger.QueryAuditLogs(AuditQueryOptions{Severity: AuditSeverityCritical})
-	if err != nil {
-		t.Fatalf("QueryAuditLogs() after cleanup error = %v", err)
-	}
-	if result.Total < 1 {
-		t.Error("CleanupAuditLogs() should preserve critical entries")
-	}
-}
-
-func TestCleanupAuditLogsMaxAge(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "audit.log")
-	logger := NewAuditLogger(path)
-	defer logger.Close()
-
-	// Write a current entry
 	logger.LogConfigChange("operator", "10.0.0.1", "ssl", "change")
-
-	// Cleanup with zero MaxAge means no age filtering
-	policy := AuditRetentionPolicy{
-		MaxAge:           0,
-		MaxEntries:       0,
-		PreserveCritical: false,
+	if err := logger.Rotate(); err != nil {
+		t.Fatalf("Rotate() error = %v", err)
 	}
 
-	removed, err := logger.CleanupAuditLogs(policy)
+	// Negative MaxAge is keep: forever - nothing is deleted
+	removed, err := logger.CleanupAuditLogs(AuditRetentionPolicy{MaxAge: -1})
 	if err != nil {
 		t.Fatalf("CleanupAuditLogs() error = %v", err)
 	}
 	if removed != 0 {
-		t.Errorf("CleanupAuditLogs() with MaxAge=0 should remove 0, got %d", removed)
+		t.Errorf("CleanupAuditLogs() keep-forever removed = %d, want 0", removed)
+	}
+}
+
+func TestCleanupAuditLogsKeepDaysRetainsRecent(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	closeLoggerOnCleanup(t, logger.Close)
+
+	logger.LogConfigChange("operator", "10.0.0.1", "ssl", "change")
+	if err := logger.Rotate(); err != nil {
+		t.Fatalf("Rotate() error = %v", err)
+	}
+
+	// Today's rotated file is newer than a 30d cutoff and must be kept
+	removed, err := logger.CleanupAuditLogs(AuditRetentionPolicy{MaxAge: 30 * 24 * time.Hour})
+	if err != nil {
+		t.Fatalf("CleanupAuditLogs() error = %v", err)
+	}
+	if removed != 0 {
+		t.Errorf("CleanupAuditLogs() removed = %d, want 0", removed)
+	}
+
+	rotated := path + "." + time.Now().Format("2006-01-02")
+	if _, err := os.Stat(rotated); err != nil {
+		t.Errorf("recent rotated log must be kept: %v", err)
 	}
 }
 
@@ -2784,7 +2802,7 @@ func TestGetAuditStatsEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	stats, err := logger.GetAuditStats()
 	if err != nil {
@@ -2802,7 +2820,7 @@ func TestGetAuditStatsCounts(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigChange("operator", "10.0.0.1", "ssl", "change")
 	logger.LogConfigChange("operator", "10.0.0.1", "smtp", "change")
@@ -2858,7 +2876,7 @@ func TestLogServerStarted(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogServerStarted("1.2.3", "node-42")
 
@@ -2882,7 +2900,7 @@ func TestLogServerStopped(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogServerStopped("graceful shutdown", "node-1")
 
@@ -2902,7 +2920,7 @@ func TestLogMaintenanceEnteredExited(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogMaintenanceEntered("operator", "10.0.0.1", "db unavailable")
 	logger.LogMaintenanceExited("operator", "10.0.0.1")
@@ -2932,7 +2950,7 @@ func TestLogConfigUpdated(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogConfigUpdated("operator", "10.0.0.1", "server", "port", 8080, 9090)
 
@@ -2956,7 +2974,7 @@ func TestLogIPBlocked(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogIPBlocked("operator", "10.0.0.1", "5.6.7.8", "brute force")
 
@@ -2983,7 +3001,7 @@ func TestLogIPUnblocked(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogIPUnblocked("operator", "10.0.0.1", "5.6.7.8")
 
@@ -3003,7 +3021,7 @@ func TestLogRateLimitExceeded(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogRateLimitExceeded("1.2.3.4", "/api/v1/search", 100)
 
@@ -3027,7 +3045,7 @@ func TestLogBruteForceDetected(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogBruteForceDetected("9.8.7.6", "/api/v1/search", 50)
 
@@ -3051,7 +3069,7 @@ func TestLogCSRFFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogCSRFFailure("1.2.3.4", "/api/v1/server/preferences")
 
@@ -3071,7 +3089,7 @@ func TestLogInvalidToken(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogInvalidToken("1.2.3.4", "/server/status", "bearer")
 
@@ -3091,7 +3109,7 @@ func TestLogBackupDelete(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogBackupDelete("operator", "10.0.0.1", "backup-20240101.tar.gz")
 
@@ -3115,7 +3133,7 @@ func TestLogBackupFailed(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogBackupFailed("operator", "10.0.0.1", "disk full")
 
@@ -3142,7 +3160,7 @@ func TestLogSMTPUpdated(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogSMTPUpdated("operator", "10.0.0.1")
 
@@ -3162,7 +3180,7 @@ func TestLogSSLUpdated(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogSSLUpdated("operator", "10.0.0.1", "search.example.com")
 
@@ -3186,7 +3204,7 @@ func TestLogSchedulerTaskFailed(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogSchedulerTaskFailed("geoip_update", "connection timeout")
 
@@ -3210,7 +3228,7 @@ func TestLogSchedulerTaskManualRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	logger.LogSchedulerTaskManualRun("operator", "10.0.0.1", "blocklist_update", true)
 	logger.LogSchedulerTaskManualRun("operator", "10.0.0.1", "cve_update", false)
@@ -3244,7 +3262,7 @@ func TestLogEvent(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
 	logger := NewAuditLogger(path)
-	defer logger.Close()
+	closeLoggerOnCleanup(t, logger.Close)
 
 	actor := AuditActor{Type: "operator", Username: "admin", IP: "10.0.0.1"}
 	target := &AuditTarget{Type: "config", Name: "tor"}
@@ -3283,5 +3301,51 @@ func TestLogEvent(t *testing.T) {
 	}
 	if entry.Target == nil || entry.Target.Name != "tor" {
 		t.Errorf("LogEvent() Target.Name = %v, want tor", entry.Target)
+	}
+}
+
+// ============================================================
+// MaskTokenID tests per AI.md PART 11 lines 15335-15337
+// ============================================================
+
+func TestMaskTokenID(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"short is untouched", "abc123", "abc123"},
+		{"exactly eight is untouched", "abcd1234", "abcd1234"},
+		{"long is truncated", "token_abc12345678901234567890", "token_ab..."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MaskTokenID(tt.in); got != tt.want {
+				t.Errorf("MaskTokenID(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthLoggerMasksTokenID(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "auth.log")
+	logger := NewAuthLogger(path)
+	logger.SetFormat("json")
+
+	raw := "sk_live_0123456789abcdef"
+	logger.LogTokenIssue(raw, "operator", "10.0.0.1")
+	logger.Close()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if strings.Contains(string(data), raw) {
+		t.Error("auth.log must never contain a full token value")
+	}
+	if !strings.Contains(string(data), "sk_live_...") {
+		t.Errorf("auth.log should contain the masked token, got: %s", data)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -526,7 +527,7 @@ func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("failed to run integrity check: %w", err)
 	}
-	defer rows.Close()
+	defer closeutil.Close(rows)
 
 	var issues []string
 	for rows.Next() {
@@ -586,7 +587,7 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer db.Close()
+	defer closeutil.Close(db)
 
 	// Try to recover using VACUUM
 	ctx, cancel := context.WithTimeout(m.ctx, 300*time.Second)
@@ -611,7 +612,9 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	}
 
 	// Replace original with clean copy
-	db.Close()
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("failed to close repaired database before replacement: %w", err)
+	}
 	if err := os.Rename(vacuumPath, cleanedPath); err != nil {
 		return fmt.Errorf("failed to replace with clean database: %w", err)
 	}
@@ -692,13 +695,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer closeutil.Close(srcFile)
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer closeutil.Close(dstFile)
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return err
@@ -713,7 +716,7 @@ func fileChecksum(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer closeutil.Close(f)
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {

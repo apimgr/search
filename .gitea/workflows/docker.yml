@@ -6,11 +6,17 @@ on:
     tags:
       - 'v*'
       - '*.*.*'
+  schedule:
+    # 4am UTC daily — rebuild the devel image even without new commits
+    - cron: '0 4 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: docker-${{ gitea.ref }}
-  cancel-in-progress: ${{ gitea.ref != 'refs/heads/main' && gitea.ref != 'refs/heads/master' && gitea.ref != 'refs/heads/devel' && gitea.ref != 'refs/heads/dev' && gitea.ref != 'refs/heads/beta' }}
+  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 env:
   PROJECTNAME: search
@@ -21,6 +27,7 @@ jobs:
   build:
     name: Build and push Docker image
     runs-on: ubuntu-latest
+    if: gitea.event_name != 'schedule'
     permissions:
       contents: read
       packages: write
@@ -39,7 +46,7 @@ jobs:
           SERVER_URL="${{ gitea.server_url }}"
           REGISTRY="${SERVER_URL#https://}"
           REGISTRY="${REGISTRY#http://}"
-          echo "REGISTRY=${REGISTRY}" >> "$GITHUB_ENV"
+          echo "REGISTRY=${REGISTRY}" >> "$GITEA_ENV"
 
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
@@ -50,17 +57,19 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
-          echo "YYMM=$(date +"%y%m")" >> "$GITHUB_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITEA_ENV"
+          echo "YYMM=$(date +"%y%m")" >> "$GITEA_ENV"
           if [[ "${{ gitea.ref }}" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-            echo "VERSION=${VERSION#v}" >> "$GITHUB_ENV"
-            echo "IS_TAG=true" >> "$GITHUB_ENV"
+            VERSION="${GITEA_REF_NAME}"
+            echo "VERSION=${VERSION#v}" >> "$GITEA_ENV"
+            echo "IS_TAG=true" >> "$GITEA_ENV"
           else
-            echo "VERSION=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
-            echo "IS_TAG=false" >> "$GITHUB_ENV"
+            echo "VERSION=$(git rev-parse --short=7 HEAD)" >> "$GITEA_ENV"
+            echo "IS_TAG=false" >> "$GITEA_ENV"
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> "$GITHUB_ENV"
+          EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${EPOCH}" >> "$GITEA_ENV"
+          echo "BUILD_DATE=$(date -u -d @"${EPOCH}" +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITEA_ENV"
 
       - name: Determine tags
         id: tags
@@ -77,8 +86,8 @@ jobs:
               DEV_TAGS="$DEV_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
             fi
           fi
-          echo "prod_tags=$PROD_TAGS" >> "$GITHUB_OUTPUT"
-          echo "dev_tags=$DEV_TAGS" >> "$GITHUB_OUTPUT"
+          echo "prod_tags=$PROD_TAGS" >> "$GITEA_OUTPUT"
+          echo "dev_tags=$DEV_TAGS" >> "$GITEA_OUTPUT"
 
       - name: Build and push production image
         if: steps.tags.outputs.prod_tags != ''
@@ -93,6 +102,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             maintainer=casjay <casjay@yahoo.com>
@@ -128,6 +138,70 @@ jobs:
             manifest:org.opencontainers.image.licenses=MIT
             manifest:com.github.containers.toolbox=false
 
+  build-devel:
+    name: Build and push devel image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3  # v4.1.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Set registry from server URL
+        run: |
+          SERVER_URL="${{ gitea.server_url }}"
+          REGISTRY="${SERVER_URL#https://}"
+          REGISTRY="${REGISTRY#http://}"
+          echo "REGISTRY=${REGISTRY}" >> "$GITEA_ENV"
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Set build info
+        run: |
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITEA_ENV"
+          echo "YYMM=$(date +"%y%m")" >> "$GITEA_ENV"
+          if [[ "${{ gitea.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITEA_REF_NAME}"
+            echo "VERSION=${VERSION#v}" >> "$GITEA_ENV"
+            echo "IS_TAG=true" >> "$GITEA_ENV"
+          else
+            echo "VERSION=$(git rev-parse --short=7 HEAD)" >> "$GITEA_ENV"
+            echo "IS_TAG=false" >> "$GITEA_ENV"
+          fi
+          EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${EPOCH}" >> "$GITEA_ENV"
+          echo "BUILD_DATE=$(date -u -d @"${EPOCH}" +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITEA_ENV"
+
+      - name: Determine tags
+        id: tags
+        run: |
+          PROD_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+          DEV_TAGS=""
+          if [[ "${{ env.IS_TAG }}" == "true" ]]; then
+            PROD_TAGS="$PROD_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+            PROD_TAGS="$PROD_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            PROD_TAGS="$PROD_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.YYMM }}"
+          else
+            DEV_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
+            if [[ "${{ gitea.ref }}" == refs/heads/beta ]]; then
+              DEV_TAGS="$DEV_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
+            fi
+          fi
+          echo "prod_tags=$PROD_TAGS" >> "$GITEA_OUTPUT"
+          echo "dev_tags=$DEV_TAGS" >> "$GITEA_OUTPUT"
+
       - name: Build and push devel image
         if: steps.tags.outputs.dev_tags != ''
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -141,6 +215,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             maintainer=casjay <casjay@yahoo.com>

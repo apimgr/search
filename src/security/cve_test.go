@@ -77,6 +77,30 @@ func TestCVEManager_Count(t *testing.T) {
 	}
 }
 
+func TestCVEManager_NeedsInitialUpdate(t *testing.T) {
+	tests := []struct {
+		name    string
+		sources []CVESource
+		seed    bool
+		want    bool
+	}{
+		{name: "configured feeds without data", sources: []CVESource{{Name: "feed"}}, want: true},
+		{name: "no feeds", sources: []CVESource{}, want: false},
+		{name: "loaded CVEs", sources: []CVESource{{Name: "feed"}}, seed: true, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manager := NewCVEManager("", test.sources)
+			if test.seed {
+				manager.entries["CVE-2026-1234"] = CVEEntry{ID: "CVE-2026-1234"}
+			}
+			if got := manager.NeedsInitialUpdate(); got != test.want {
+				t.Fatalf("NeedsInitialUpdate() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestCVEManager_Lookup(t *testing.T) {
 	mgr := NewCVEManager("/tmp/test", []CVESource{})
 	mgr.entries["CVE-2024-1234"] = CVEEntry{

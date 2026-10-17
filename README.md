@@ -287,7 +287,7 @@ Zero-click answers displayed above search results:
 | UUID | `uuid` |
 | Hash | `sha256 hello` |
 
-Thesaurus answers use the [Datamuse API](https://www.datamuse.com/api/). Successful responses are cached for up to 24 hours. Datamuse states that API keys will be required starting February 1, 2027; its public documentation does not yet specify the request authentication format.
+Dictionary answers include all entries returned by [Free Dictionary API](https://dictionaryapi.dev/) and an optional word frequency estimate from the [Datamuse API](https://www.datamuse.com/api/) based on Google Books Ngrams (occurrences per million words). Thesaurus answers also use Datamuse. Successful thesaurus responses are cached for up to 24 hours. Datamuse states that API keys will be required starting February 1, 2027; its public documentation does not yet specify the request authentication format.
 
 ### Bang Shortcuts
 

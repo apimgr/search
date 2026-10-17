@@ -84,16 +84,15 @@ func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"emoji-result\">\n")
-	content.WriteString(fmt.Sprintf("<p>%s</p>\n", i18n.T(lang, "instant.emoji_found_matching", len(matches), escapeHTML(searchTerm))))
+	fmt.Fprintf(&content, "<p>%s</p>\n", i18n.T(lang, "instant.emoji_found_matching", len(matches), escapeHTML(searchTerm)))
 	content.WriteString("<div class=\"emoji-grid\" style=\"display: flex; flex-wrap: wrap; gap: 10px;\">\n")
 
 	for _, emoji := range matches {
-		content.WriteString(fmt.Sprintf(
-			"<div class=\"emoji-item\" style=\"text-align: center; padding: 10px; border: 1px solid #ddd; border-radius: 8px; min-width: 80px;\">\n"+
-				"<div style=\"font-size: 32px;\">%s</div>\n"+
-				"<div style=\"font-size: 12px;\">%s</div>\n"+
-				"</div>\n",
-			emoji.Emoji, emoji.Name))
+		fmt.Fprintf(&content, "<div class=\"emoji-item\" style=\"text-align: center; padding: 10px; border: 1px solid #ddd; border-radius: 8px; min-width: 80px;\">\n"+
+			"<div style=\"font-size: 32px;\">%s</div>\n"+
+			"<div style=\"font-size: 12px;\">%s</div>\n"+
+			"</div>\n",
+			emoji.Emoji, emoji.Name)
 	}
 
 	content.WriteString("</div>\n")

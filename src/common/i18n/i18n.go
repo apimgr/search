@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -223,12 +224,12 @@ func (m *Manager) parseAcceptLanguage(header string) string {
 
 		if len(langParts) > 1 {
 			qPart := strings.TrimSpace(langParts[1])
-			if strings.HasPrefix(qPart, "q=") {
-				fmt.Sscanf(qPart, "q=%f", &quality)
-			} else {
-				// Handle bare quality value (e.g., "en;0.5")
-				fmt.Sscanf(qPart, "%f", &quality)
+			qPart = strings.TrimPrefix(qPart, "q=")
+			parsedQuality, err := strconv.ParseFloat(qPart, 64)
+			if err != nil || parsedQuality < 0 || parsedQuality > 1 {
+				continue
 			}
+			quality = parsedQuality
 		}
 
 		// Normalize language code (en-US -> en)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 	"golang.org/x/net/html"
@@ -79,7 +80,7 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	if err != nil {
 		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_connect_failed")), nil
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_not_found", command)), nil
@@ -111,18 +112,18 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	// Build HTML content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>%s", escapeHTML(command)))
+	fmt.Fprintf(&content, "<strong>%s", escapeHTML(command))
 	if section != "" {
-		content.WriteString(fmt.Sprintf("(%s)", section))
+		fmt.Fprintf(&content, "(%s)", section)
 	}
 	content.WriteString("</strong><br><br>")
 
 	if manInfo.Name != "" {
-		content.WriteString(fmt.Sprintf("<strong>NAME</strong><br>%s<br><br>", escapeHTML(manInfo.Name)))
+		fmt.Fprintf(&content, "<strong>NAME</strong><br>%s<br><br>", escapeHTML(manInfo.Name))
 	}
 
 	if manInfo.Synopsis != "" {
-		content.WriteString(fmt.Sprintf("<strong>SYNOPSIS</strong><br><code>%s</code><br><br>", escapeHTML(manInfo.Synopsis)))
+		fmt.Fprintf(&content, "<strong>SYNOPSIS</strong><br><code>%s</code><br><br>", escapeHTML(manInfo.Synopsis))
 	}
 
 	if manInfo.Description != "" {
@@ -131,7 +132,7 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		if len(desc) > 800 {
 			desc = desc[:800] + "..."
 		}
-		content.WriteString(fmt.Sprintf("<strong>DESCRIPTION</strong><br>%s<br><br>", escapeHTML(desc)))
+		fmt.Fprintf(&content, "<strong>DESCRIPTION</strong><br>%s<br><br>", escapeHTML(desc))
 	}
 
 	// Show a few common options if available
@@ -143,23 +144,23 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		}
 		for i := 0; i < maxOptions; i++ {
 			opt := manInfo.Options[i]
-			content.WriteString(fmt.Sprintf("<code>%s</code> - %s<br>", escapeHTML(opt.Flag), escapeHTML(opt.Description)))
+			fmt.Fprintf(&content, "<code>%s</code> - %s<br>", escapeHTML(opt.Flag), escapeHTML(opt.Description))
 		}
 		if len(manInfo.Options) > 5 {
-			content.WriteString(fmt.Sprintf("<em>... and %d more options</em><br>", len(manInfo.Options)-5))
+			fmt.Fprintf(&content, "<em>... and %d more options</em><br>", len(manInfo.Options)-5)
 		}
 		content.WriteString("<br>")
 	}
 
 	// See also
 	if len(manInfo.SeeAlso) > 0 {
-		content.WriteString(fmt.Sprintf("<strong>SEE ALSO</strong><br>%s<br><br>", escapeHTML(strings.Join(manInfo.SeeAlso, ", "))))
+		fmt.Fprintf(&content, "<strong>SEE ALSO</strong><br>%s<br><br>", escapeHTML(strings.Join(manInfo.SeeAlso, ", ")))
 	}
 
 	// Links
 	content.WriteString("<strong>Links:</strong><br>")
-	content.WriteString(fmt.Sprintf("&bull; <a href=\"%s\" target=\"_blank\">View Full Man Page (man.cx)</a><br>", manURL))
-	content.WriteString(fmt.Sprintf("&bull; <a href=\"https://linux.die.net/man/1/%s\" target=\"_blank\">linux.die.net</a><br>", url.PathEscape(command)))
+	fmt.Fprintf(&content, "&bull; <a href=\"%s\" target=\"_blank\">View Full Man Page (man.cx)</a><br>", manURL)
+	fmt.Fprintf(&content, "&bull; <a href=\"https://linux.die.net/man/1/%s\" target=\"_blank\">linux.die.net</a><br>", url.PathEscape(command))
 
 	return &Answer{
 		Type:      AnswerTypeMan,

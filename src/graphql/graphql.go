@@ -1,14 +1,32 @@
 package graphql
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"html"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/instant"
+	"github.com/apimgr/search/src/search"
+	"github.com/apimgr/search/src/widget"
 	"github.com/graphql-go/graphql"
+	"github.com/graphql-go/graphql/language/ast"
+	"github.com/graphql-go/graphql/language/parser"
+)
+
+const (
+	maxGraphQLRequestBytes = 64 << 10
+	maxGraphQLQueryDepth   = 12
+	maxGraphQLQueryFields  = 100
 )
 
 // localizedHTTPError writes a transport-level error (bad method, bad body,
@@ -27,11 +45,13 @@ func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(body)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		slog.Debug("failed to write GraphQL error response", "error", err)
+	}
 }
 
 // Handler serves the GraphQL endpoint and GraphiQL UI
-func Handler(cfg *config.Config) http.HandlerFunc {
+func Handler(cfg *config.Config, dependencies ...Dependencies) http.HandlerFunc {
 	// Initialize schema on first call
 	if Schema.QueryType() == nil {
 		if err := InitSchema(); err != nil {
@@ -44,7 +64,12 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Handle POST requests (GraphQL queries)
 		if r.Method == http.MethodPost {
-			handleGraphQLQuery(w, r)
+			if len(dependencies) > 0 {
+				ctx := context.WithValue(r.Context(), dependenciesContextKey{}, dependencies[0])
+				handleGraphQLQueryWithContext(w, r.WithContext(ctx))
+			} else {
+				handleGraphQLQuery(w, r)
+			}
 			return
 		}
 
@@ -60,6 +85,11 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 
 // handleGraphQLQuery executes a GraphQL query
 func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
+	handleGraphQLQueryWithContext(w, r)
+}
+
+func handleGraphQLQueryWithContext(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxGraphQLRequestBytes)
 	var params struct {
 		Query         string                 `json:"query"`
 		Variables     map[string]interface{} `json:"variables"`
@@ -67,19 +97,120 @@ func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			localizedHTTPError(w, r, http.StatusRequestEntityTooLarge, "errors.bad_request")
+			return
+		}
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+		return
+	}
+	if cost, depth, ok := graphQLQueryCost(params.Query); ok && (cost > maxGraphQLQueryFields || depth > maxGraphQLQueryDepth) {
 		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 
+	ctx := context.WithValue(r.Context(), graphqlRequestContextKey{}, r)
+	ctx = context.WithValue(ctx, graphqlResponseWriterContextKey{}, w)
 	result := graphql.Do(graphql.Params{
 		Schema:         Schema,
 		RequestString:  params.Query,
 		VariableValues: params.Variables,
 		OperationName:  params.OperationName,
+		Context:        ctx,
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		slog.Debug("failed to write GraphQL response", "error", err)
+	}
+}
+
+func graphQLQueryCost(query string) (int, int, bool) {
+	document, err := parser.Parse(parser.ParseParams{Source: query})
+	if err != nil {
+		return 0, 0, false
+	}
+	fragments := make(map[string]*ast.FragmentDefinition)
+	for _, definition := range document.Definitions {
+		if fragment, ok := definition.(*ast.FragmentDefinition); ok && fragment.Name != nil {
+			fragments[fragment.Name.Value] = fragment
+		}
+	}
+	maxCost, maxDepth := 0, 0
+	for _, definition := range document.Definitions {
+		operation, ok := definition.(*ast.OperationDefinition)
+		if !ok {
+			continue
+		}
+		cost, depth, valid := graphQLSelectionCost(operation.SelectionSet, fragments, make(map[string]bool), 0)
+		if !valid {
+			return 0, 0, true
+		}
+		if cost > maxCost {
+			maxCost = cost
+		}
+		if depth > maxDepth {
+			maxDepth = depth
+		}
+	}
+	return maxCost, maxDepth, true
+}
+
+func graphQLSelectionCost(set *ast.SelectionSet, fragments map[string]*ast.FragmentDefinition, active map[string]bool, depth int) (int, int, bool) {
+	if set == nil {
+		return 0, depth, true
+	}
+	cost, maxDepth := 0, depth
+	for _, selection := range set.Selections {
+		switch item := selection.(type) {
+		case *ast.Field:
+			cost++
+			childDepth := depth + 1
+			if childDepth > maxDepth {
+				maxDepth = childDepth
+			}
+			childCost, childMax, valid := graphQLSelectionCost(item.SelectionSet, fragments, active, childDepth)
+			if !valid {
+				return 0, 0, false
+			}
+			cost += childCost
+			if childMax > maxDepth {
+				maxDepth = childMax
+			}
+		case *ast.InlineFragment:
+			childCost, childMax, valid := graphQLSelectionCost(item.SelectionSet, fragments, active, depth)
+			if !valid {
+				return 0, 0, false
+			}
+			cost += childCost
+			if childMax > maxDepth {
+				maxDepth = childMax
+			}
+		case *ast.FragmentSpread:
+			if item.Name == nil || active[item.Name.Value] {
+				return 0, 0, false
+			}
+			fragment := fragments[item.Name.Value]
+			if fragment == nil {
+				return 0, 0, false
+			}
+			active[item.Name.Value] = true
+			childCost, childMax, valid := graphQLSelectionCost(fragment.SelectionSet, fragments, active, depth)
+			delete(active, item.Name.Value)
+			if !valid {
+				return 0, 0, false
+			}
+			cost += childCost
+			if childMax > maxDepth {
+				maxDepth = childMax
+			}
+		}
+		if cost > maxGraphQLQueryFields || maxDepth > maxGraphQLQueryDepth {
+			return cost, maxDepth, true
+		}
+	}
+	return cost, maxDepth, true
 }
 
 // serveGraphiQL serves a server-rendered GraphQL explorer UI.
@@ -130,6 +261,10 @@ func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 			<pre id="response">Run a query to see results.</pre>
 		</div>
 	</main>
+	<details class="schema-panel">
+		<summary>GraphQL schema</summary>
+		<pre>` + html.EscapeString(GeneratedSchemaSDL) + `</pre>
+	</details>
 	<script>
 		function runQuery() {
 			var q = document.getElementById('query').value.trim();
@@ -153,7 +288,9 @@ func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 </html>`
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(html))
+	if _, err := w.Write([]byte(html)); err != nil {
+		slog.Debug("failed to write GraphQL UI", "error", err)
+	}
 }
 
 // buildBaseURL constructs the base URL from the request.
@@ -178,7 +315,52 @@ func UIHandler(cfg *config.Config) http.HandlerFunc {
 
 // QueryHandler returns an http.HandlerFunc that handles GraphQL POST queries only.
 // Registered at POST /api/graphql and POST /api/v1/server/graphql per AI.md PART 14.
-func QueryHandler(cfg *config.Config) http.HandlerFunc {
+func QueryHandler(cfg *config.Config, dependencies ...Dependencies) http.HandlerFunc {
+	if len(dependencies) > 0 {
+		return QueryHandlerWithDependencies(cfg, dependencies[0])
+	}
+	return QueryHandlerWithDependencies(cfg, Dependencies{})
+}
+
+// Dependencies are the live application services used by GraphQL resolvers.
+type Dependencies struct {
+	Aggregator        *search.Aggregator
+	Direct            *direct.Manager
+	Instant           *instant.Manager
+	Autocomplete      func(context.Context, string) []string
+	RelatedSearches   func(context.Context, string, int) ([]string, error)
+	Widgets           *widget.Manager
+	API               *api.Handler
+	ServerInfo        func() api.InfoResponse
+	GeoIPLookup       func(string) (api.GeoIPLookupResponse, error)
+	OperatorStatus    func(*http.Request) (interface{}, error)
+	OperatorConfig    func(*http.Request) (interface{}, error)
+	Preferences       func() interface{}
+	SavePreferences   func() interface{}
+	EngineInventory   func() []api.EngineInfo
+	ThumbnailRewriter func(string) string
+	StartedAt         time.Time
+}
+
+type dependenciesContextKey struct{}
+type graphqlRequestContextKey struct{}
+type graphqlResponseWriterContextKey struct{}
+
+func responseWriterFromContext(ctx context.Context) http.ResponseWriter {
+	writer, _ := ctx.Value(graphqlResponseWriterContextKey{}).(http.ResponseWriter)
+	return writer
+}
+
+func requestFromContext(ctx context.Context) *http.Request {
+	request, _ := ctx.Value(graphqlRequestContextKey{}).(*http.Request)
+	return request
+}
+
+// QueryHandlerWithDependencies serves GraphQL against the running application services.
+func QueryHandlerWithDependencies(cfg *config.Config, dependencies Dependencies) http.HandlerFunc {
+	if dependencies.StartedAt.IsZero() {
+		dependencies.StartedAt = time.Now()
+	}
 	if Schema.QueryType() == nil {
 		if err := InitSchema(); err != nil {
 			return func(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +373,8 @@ func QueryHandler(cfg *config.Config) http.HandlerFunc {
 			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 			return
 		}
-		handleGraphQLQuery(w, r)
+		ctx := context.WithValue(r.Context(), dependenciesContextKey{}, dependencies)
+		handleGraphQLQueryWithContext(w, r.WithContext(ctx))
 	}
 }
 

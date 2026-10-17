@@ -23,21 +23,27 @@ func CheckPIDFile(pidPath string) (bool, int, error) {
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		// Corrupt PID file — remove it and continue
-		os.Remove(pidPath)
+		if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
+			return false, 0, fmt.Errorf("remove corrupt PID file: %w", err)
+		}
 		return false, 0, nil
 	}
 
 	// Check if process is running
 	if !isProcessRunning(pid) {
 		// Stale PID file — remove it and continue
-		os.Remove(pidPath)
+		if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
+			return false, 0, fmt.Errorf("remove stale PID file: %w", err)
+		}
 		return false, 0, nil
 	}
 
 	// Process exists — verify it's actually our binary (guards against PID reuse)
 	if !isOurProcess(pid) {
 		// PID reused by another process — remove stale file and continue
-		os.Remove(pidPath)
+		if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
+			return false, 0, fmt.Errorf("remove PID file for another process: %w", err)
+		}
 		return false, 0, nil
 	}
 

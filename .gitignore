@@ -117,6 +117,9 @@ coverage.out
 # Runtime volume data (NEVER commit) - per AI.md PART 27
 volumes/
 
+# Build-time container overlay - per AI.md PART 3
+docker/rootfs/
+
 # IDE
 .idea/
 .vscode/
@@ -140,3 +143,7 @@ volumes/
 
 # Claude Code personal files (always gitignored)
 CLAUDE.local.md
+
+.cursor/
+.windsurf/
+AGENTS.md

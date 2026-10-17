@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
+	legoDNS "github.com/go-acme/lego/v4/providers/dns"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/providers/dns/digitalocean"
 	"github.com/go-acme/lego/v4/providers/dns/godaddy"
@@ -26,6 +29,20 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/net/publicsuffix"
 )
+
+//go:embed dns_providers.json
+var legoDNSProviderCatalog []byte
+
+type legoProviderDefinition struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Credentials []struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	} `json:"credentials"`
+}
+
+var legoProviderEnvMu sync.Mutex
 
 // DNSProviderInfo contains metadata about a DNS provider
 // Per AI.md PART 17: Admin WebUI provides dropdown with required fields
@@ -50,13 +67,15 @@ type Field struct {
 // DNSProviders returns all supported DNS providers with their required fields
 // Per AI.md: Full provider list from lego DNS providers
 func DNSProviders() []DNSProviderInfo {
-	return []DNSProviderInfo{
+	providers := []DNSProviderInfo{
 		{
 			ID:          "cloudflare",
 			Name:        "Cloudflare",
 			Description: "Cloudflare DNS",
 			Fields: []Field{
-				{Name: "api_token", Label: "API Token", Type: "password", Required: true, Help: "Cloudflare API token with Zone:DNS:Edit permission"},
+				{Name: "api_token", Label: "API Token", Type: "password", Required: false, Help: "Cloudflare API token with Zone:DNS:Edit permission (or use api_key + email)"},
+				{Name: "api_key", Label: "Global API Key", Type: "password", Required: false, Help: "Legacy Cloudflare Global API Key, requires email"},
+				{Name: "email", Label: "Email", Type: "text", Required: false, Help: "Cloudflare account email, required with api_key"},
 			},
 		},
 		{
@@ -117,6 +136,32 @@ func DNSProviders() []DNSProviderInfo {
 			},
 		},
 	}
+	var definitions []legoProviderDefinition
+	if err := json.Unmarshal(legoDNSProviderCatalog, &definitions); err != nil {
+		panic(fmt.Sprintf("invalid embedded lego DNS provider catalog: %v", err))
+	}
+	existing := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		existing[provider.ID] = struct{}{}
+	}
+	for _, definition := range definitions {
+		if _, ok := existing[definition.ID]; ok {
+			continue
+		}
+		info := DNSProviderInfo{ID: definition.ID, Name: definition.Name, Description: definition.Name + " DNS"}
+		for _, credential := range definition.Credentials {
+			label := strings.ReplaceAll(strings.ToLower(credential.Name), "_", " ")
+			label = strings.ToUpper(label[:1]) + label[1:]
+			fieldType := "text"
+			if strings.Contains(credential.Name, "KEY") || strings.Contains(credential.Name, "TOKEN") || strings.Contains(credential.Name, "SECRET") || strings.Contains(credential.Name, "PASSWORD") || strings.Contains(credential.Name, "CREDENTIAL") {
+				fieldType = "password"
+			}
+			info.Fields = append(info.Fields, Field{Name: credential.Name, Label: label, Type: fieldType, Help: credential.Description})
+		}
+		providers = append(providers, info)
+		existing[definition.ID] = struct{}{}
+	}
+	return providers
 }
 
 // GetProviderByID returns provider info by ID
@@ -134,12 +179,22 @@ func GetProviderByID(id string) *DNSProviderInfo {
 func CreateDNSProvider(providerID string, credentials map[string]string) (challenge.Provider, error) {
 	switch providerID {
 	case "cloudflare":
+		// AI.md PART 15 documents cloudflare as accepting api_token OR
+		// (api_key + email), so both credential shapes are handled here.
 		token := credentials["api_token"]
-		if token == "" {
-			return nil, fmt.Errorf("cloudflare: api_token is required")
+		if token != "" {
+			return cloudflare.NewDNSProviderConfig(&cloudflare.Config{
+				AuthToken: token,
+			})
+		}
+		apiKey := credentials["api_key"]
+		email := credentials["email"]
+		if apiKey == "" || email == "" {
+			return nil, fmt.Errorf("cloudflare: api_token or api_key and email are required")
 		}
 		return cloudflare.NewDNSProviderConfig(&cloudflare.Config{
-			AuthToken: token,
+			AuthEmail: email,
+			AuthKey:   apiKey,
 		})
 
 	case "cloudflare_legacy":
@@ -223,7 +278,111 @@ func CreateDNSProvider(providerID string, credentials map[string]string) (challe
 		})
 
 	default:
-		return nil, fmt.Errorf("unknown DNS provider: %s", providerID)
+		info := GetProviderByID(providerID)
+		if info == nil {
+			return nil, fmt.Errorf("dns provider %s is not supported; supported providers: %s", providerID, strings.Join(SupportedProviderIDs(), ", "))
+		}
+		return createLegoDNSProvider(providerID, info, credentials)
+	}
+}
+
+func createLegoDNSProvider(providerID string, info *DNSProviderInfo, credentials map[string]string) (result challenge.Provider, resultErr error) {
+	legoProviderEnvMu.Lock()
+	defer legoProviderEnvMu.Unlock()
+	original := make(map[string]*string, len(info.Fields))
+	for _, field := range info.Fields {
+		value, exists := os.LookupEnv(field.Name)
+		if exists {
+			copy := value
+			original[field.Name] = &copy
+		} else {
+			original[field.Name] = nil
+		}
+	}
+	defer func() {
+		var restoreErr error
+		for name, value := range original {
+			if value == nil {
+				restoreErr = errors.Join(restoreErr, os.Unsetenv(name))
+			} else {
+				restoreErr = errors.Join(restoreErr, os.Setenv(name, *value))
+			}
+		}
+		if restoreErr != nil {
+			result = nil
+			resultErr = errors.Join(resultErr, fmt.Errorf("restore lego DNS credential environment: %w", restoreErr))
+		}
+	}()
+	for _, field := range info.Fields {
+		if err := os.Unsetenv(field.Name); err != nil {
+			return nil, fmt.Errorf("clear lego DNS credential %s: %w", field.Name, err)
+		}
+	}
+	for _, field := range info.Fields {
+		if value := credentials[field.Name]; value != "" {
+			if err := os.Setenv(field.Name, value); err != nil {
+				return nil, fmt.Errorf("set lego DNS credential %s: %w", field.Name, err)
+			}
+		}
+	}
+	provider, err := legoDNS.NewDNSChallengeProviderByName(providerID)
+	if err != nil {
+		return nil, fmt.Errorf("initialize DNS provider %s: %w", providerID, err)
+	}
+	return provider, nil
+}
+
+// SupportedProviderIDs returns the identifiers of every DNS-01 provider this
+// build can construct, in registry order.
+func SupportedProviderIDs() []string {
+	providers := DNSProviders()
+	ids := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		ids = append(ids, provider.ID)
+	}
+	return ids
+}
+
+// ValidateCredentials verifies that a provider's required credentials are
+// present. AI.md PART 15 requires the server to validate DNS-01 credentials on
+// startup and again before every certificate request. An unknown provider is
+// rejected; a known provider is checked against its declared required fields.
+func ValidateCredentials(providerID string, credentials map[string]string) error {
+	if providerID == "" {
+		return fmt.Errorf("dns provider is required")
+	}
+
+	// Cloudflare accepts either credential shape per AI.md PART 15.
+	if providerID == "cloudflare" {
+		if credentials["api_token"] == "" && (credentials["api_key"] == "" || credentials["email"] == "") {
+			return fmt.Errorf("cloudflare: api_token or api_key and email are required")
+		}
+		return nil
+	}
+
+	info := GetProviderByID(providerID)
+	if info == nil {
+		return fmt.Errorf("dns provider %s is not supported; supported providers: %s",
+			providerID, strings.Join(SupportedProviderIDs(), ", "))
+	}
+	if !isExplicitDNSProvider(providerID) {
+		_, err := CreateDNSProvider(providerID, credentials)
+		return err
+	}
+	for _, field := range info.Fields {
+		if field.Required && strings.TrimSpace(credentials[field.Name]) == "" {
+			return fmt.Errorf("%s: %s is required", providerID, field.Name)
+		}
+	}
+	return nil
+}
+
+func isExplicitDNSProvider(providerID string) bool {
+	switch providerID {
+	case "cloudflare", "cloudflare_legacy", "route53", "digitalocean", "godaddy", "namecheap", "rfc2136":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -455,9 +614,13 @@ func isLoopback(host string) bool {
 func IsDevTLD(host, projectName string) bool {
 	lower := strings.ToLower(host)
 
-	// Check dynamic project-specific TLD (e.g., app.jokes, dev.search)
-	if projectName != "" && strings.HasSuffix(lower, "."+strings.ToLower(projectName)) {
-		return true
+	// Check dynamic project-specific TLD (e.g., app.jokes, dev.search) and the
+	// bare project name itself, which AI.md PART 15 also treats as a dev TLD.
+	if projectName != "" {
+		pn := strings.ToLower(projectName)
+		if lower == pn || strings.HasSuffix(lower, "."+pn) {
+			return true
+		}
 	}
 
 	// Check static dev TLDs
@@ -467,6 +630,23 @@ func IsDevTLD(host, projectName string) bool {
 		}
 	}
 
+	return false
+}
+
+// overlayTLDs are overlay-network suffixes. AI.md PART 15 forbids issuing or
+// self-signing any certificate for these — the overlay layer already provides
+// end-to-end encryption and Let's Encrypt does not support them.
+var overlayTLDs = []string{".onion", ".i2p", ".exit"}
+
+// IsOverlayAddress reports whether host is a Tor or I2P overlay address.
+// Overlay hosts are always served over plain HTTP and never get a certificate.
+func IsOverlayAddress(host string) bool {
+	lower := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, tld := range overlayTLDs {
+		if strings.HasSuffix(lower, tld) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -576,16 +756,18 @@ func GetDisplayURL(projectName string, port int, isHTTPS bool) string {
 	return formatURL(fqdn, port, isHTTPS)
 }
 
-// formatURL formats a URL with the appropriate protocol and port
+// formatURL formats a URL with the appropriate protocol and port.
+// Per AI.md PART 15 (URL Format Rule): port 443 always means HTTPS even when
+// isHTTPS was not set, and :80 and :443 are ALWAYS stripped.
 func formatURL(host string, port int, isHTTPS bool) string {
 	proto := "http"
-	if isHTTPS {
+	if isHTTPS || port == 443 {
 		proto = "https"
 	}
 
-	// Standard ports don't need to be shown
-	if (isHTTPS && port == 443) || (!isHTTPS && port == 80) {
-		return fmt.Sprintf("%s://%s", proto, host)
+	// Always strip :80 and :443
+	if port == 80 || port == 443 {
+		return proto + "://" + host
 	}
 
 	return fmt.Sprintf("%s://%s:%d", proto, host, port)

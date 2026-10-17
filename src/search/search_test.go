@@ -18,6 +18,7 @@ type mockEngine struct {
 	searchError   error
 	searchCalls   int64
 	searchDelay   time.Duration
+	searchQuery   string
 }
 
 func newMockEngine(name string, category model.Category, enabled bool) *mockEngine {
@@ -36,11 +37,12 @@ func newMockEngine(name string, category model.Category, enabled bool) *mockEngi
 func (m *mockEngine) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	atomic.AddInt64(&m.searchCalls, 1)
 
-	m.mu.RLock()
+	m.mu.Lock()
 	delay := m.searchDelay
 	err := m.searchError
 	results := m.searchResults
-	m.mu.RUnlock()
+	m.searchQuery = query.Text
+	m.mu.Unlock()
 
 	if delay > 0 {
 		select {
@@ -455,6 +457,42 @@ func TestAggregatorApplyFiltersDateRange(t *testing.T) {
 }
 
 // Tests for deduplication and sorting
+
+// TestAggregatorApplyOperatorsDateRange verifies daterange:YYYY-YYYY expands
+// into DateAfter/DateBefore so applyFilters can use it.
+func TestAggregatorApplyOperatorsDateRange(t *testing.T) {
+	agg := NewAggregatorSimple([]Engine{}, 10*time.Second)
+	query := &model.Query{Text: "go daterange:2020-2023"}
+
+	agg.applyOperators(query, ParseOperators(query.Text))
+
+	if query.DateAfter != "2020-01-01" {
+		t.Errorf("DateAfter = %q, want 2020-01-01", query.DateAfter)
+	}
+	if query.DateBefore != "2023-12-31" {
+		t.Errorf("DateBefore = %q, want 2023-12-31", query.DateBefore)
+	}
+}
+
+// TestAggregatorApplyOperatorsDateRangeSkippedWhenSet verifies explicit query
+// fields win over the operator, matching the rest of applyOperators.
+func TestAggregatorApplyOperatorsDateRangeSkippedWhenSet(t *testing.T) {
+	agg := NewAggregatorSimple([]Engine{}, 10*time.Second)
+	query := &model.Query{
+		Text:       "go daterange:2020-2023",
+		DateAfter:  "2019-06-01",
+		DateBefore: "2021-01-01",
+	}
+
+	agg.applyOperators(query, ParseOperators(query.Text))
+
+	if query.DateAfter != "2019-06-01" {
+		t.Errorf("DateAfter = %q, want 2019-06-01 (explicit value must win)", query.DateAfter)
+	}
+	if query.DateBefore != "2021-01-01" {
+		t.Errorf("DateBefore = %q, want 2021-01-01 (explicit value must win)", query.DateBefore)
+	}
+}
 
 func TestDeduplicateResults(t *testing.T) {
 	results := []model.Result{

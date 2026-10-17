@@ -1412,6 +1412,13 @@ func TestYouTubeParseVideoRenderer(t *testing.T) {
 			wantNil: true,
 		},
 		{
+			name: "malformed videoId",
+			video: map[string]interface{}{
+				"videoId": `bad/id<script>`,
+			},
+			wantNil: true,
+		},
+		{
 			name: "video with all fields",
 			video: map[string]interface{}{
 				"videoId": "abc123xyz00",
@@ -1631,9 +1638,9 @@ func TestEngineCategoriesConfig(t *testing.T) {
 		categories []string
 	}{
 		{"google", NewGoogle(), []string{"general", "images", "news", "videos", "files", "music"}},
-		{"duckduckgo", NewDuckDuckGo(), []string{"general", "images", "videos", "news", "files", "music"}},
-		{"bing", NewBing(), []string{"general", "images", "news", "videos", "files", "music"}},
-		{"brave", NewBrave(), []string{"general", "images", "news", "files", "music"}},
+		{"duckduckgo", NewDuckDuckGo(), []string{"general", "images", "videos", "news"}},
+		{"bing", NewBing(), []string{"general", "images", "news", "videos"}},
+		{"brave", NewBrave(), []string{"general", "images", "news"}},
 		{"wikipedia", NewWikipediaEngine(), []string{"general"}},
 		{"youtube", NewYouTubeEngine(), []string{"videos", "music"}},
 	}
@@ -2142,6 +2149,8 @@ func TestGoogleSearchCategories(t *testing.T) {
 		{"images", model.CategoryImages, "Image 1", "https://example.com/photo.jpg"},
 		{"news", model.CategoryNews, "News Title", "https://example.com/news/story"},
 		{"videos", model.CategoryVideos, "Video Title", "https://www.youtube.com/watch?v=abc"},
+		{"files", model.CategoryFiles, "Test Title", "https://example.com"},
+		{"music", model.CategoryMusic, "Test Title", "https://example.com"},
 	}
 
 	for _, tt := range tests {
@@ -2172,6 +2181,9 @@ func TestGoogleSearchCategories(t *testing.T) {
 			}
 			if results[0].URL != tt.wantURL {
 				t.Errorf("URL = %q, want %q", results[0].URL, tt.wantURL)
+			}
+			if results[0].Category != tt.category {
+				t.Errorf("Category = %q, want %q", results[0].Category, tt.category)
 			}
 		})
 	}
@@ -2753,7 +2765,7 @@ func TestExtractYahooRedirectURLComprehensive(t *testing.T) {
 
 // Test YouTube Search
 func TestYouTubeSearch(t *testing.T) {
-	ytJSON := `{"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"videoRenderer":{"videoId":"abc123XYZ_9","title":{"runs":[{"text":"Example Video"}]},"descriptionSnippet":{"runs":[{"text":"An example video description."}]},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/vi/abc123XYZ_9/default.jpg"}]},"ownerText":{"runs":[{"text":"Example Channel"}]},"viewCountText":{"simpleText":"1,000 views"},"publishedTimeText":{"simpleText":"1 day ago"}}}]}}]}}}}}`
+	ytJSON := `{"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"videoRenderer":{"videoId":"abc123XYZ_9","title":{"runs":[{"text":"Example Video"}]},"descriptionSnippet":{"runs":[{"text":"An example video description."}]},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/vi/abc123XYZ_9/default.jpg"}]},"ownerText":{"runs":[{"text":"Example Channel"}]},"viewCountText":{"simpleText":"1,000 views"},"lengthText":{"simpleText":"10:34"},"publishedTimeText":{"simpleText":"1 day ago"}}}]}}]}}}}}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -2784,6 +2796,37 @@ func TestYouTubeSearch(t *testing.T) {
 	}
 	if results[0].URL != "https://www.youtube.com/watch?v=abc123XYZ_9" {
 		t.Errorf("URL = %q, want %q", results[0].URL, "https://www.youtube.com/watch?v=abc123XYZ_9")
+	}
+	if results[0].Author != "Example Channel" || results[0].ViewCount != 1000 || results[0].Duration != 634 || results[0].EmbedURL != "https://www.youtube-nocookie.com/embed/abc123XYZ_9" {
+		t.Errorf("structured video metadata = author %q, views %d, duration %d, embed %q", results[0].Author, results[0].ViewCount, results[0].Duration, results[0].EmbedURL)
+	}
+}
+
+func TestParseYouTubeVideoMetadata(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		input string
+		want  int64
+	}{
+		{name: "plain count", input: "1,234 views", want: 1234},
+		{name: "thousands suffix", input: "1.5K views", want: 1500},
+		{name: "millions suffix", input: "2.25M views", want: 2_250_000},
+		{name: "missing count", input: "No views", want: 0},
+		{name: "empty", input: "", want: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := parseYouTubeViewCount(test.input); got != test.want {
+				t.Errorf("parseYouTubeViewCount(%q) = %d, want %d", test.input, got, test.want)
+			}
+		})
+	}
+	for _, test := range []struct {
+		input string
+		want  int
+	}{{"5:43", 343}, {"1:02:03", 3723}, {"99:99", 0}, {"live", 0}, {"", 0}} {
+		if got := parseYouTubeDuration(test.input); got != test.want {
+			t.Errorf("parseYouTubeDuration(%q) = %d, want %d", test.input, got, test.want)
+		}
 	}
 }
 
@@ -3139,7 +3182,7 @@ func TestRedditSearch(t *testing.T) {
 	query := &model.Query{
 		Text:     "test post",
 		Page:     1,
-		Category: model.CategoryGeneral,
+		Category: model.CategorySocial,
 	}
 	results, err := engine.Search(ctx, query)
 	if err != nil {
@@ -3147,6 +3190,9 @@ func TestRedditSearch(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Category != query.Category {
+		t.Errorf("Category = %q, want %q", results[0].Category, query.Category)
 	}
 	if results[0].Title != "Test Post" {
 		t.Errorf("Title = %q, want %q", results[0].Title, "Test Post")
@@ -3173,7 +3219,7 @@ func TestGitHubSearch(t *testing.T) {
 	query := &model.Query{
 		Text:     "test repo",
 		Page:     1,
-		Category: model.CategoryGeneral,
+		Category: model.CategoryIT,
 	}
 	results, err := engine.Search(ctx, query)
 	if err != nil {
@@ -3181,6 +3227,9 @@ func TestGitHubSearch(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Category != query.Category {
+		t.Errorf("Category = %q, want %q", results[0].Category, query.Category)
 	}
 	if results[0].Title != "example/repo" {
 		t.Errorf("Title = %q, want %q", results[0].Title, "example/repo")
@@ -3210,7 +3259,7 @@ func TestStackOverflowSearch(t *testing.T) {
 	query := &model.Query{
 		Text:     "test question",
 		Page:     1,
-		Category: model.CategoryGeneral,
+		Category: model.CategoryIT,
 	}
 	results, err := engine.Search(ctx, query)
 	if err != nil {
@@ -3218,6 +3267,9 @@ func TestStackOverflowSearch(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Category != query.Category {
+		t.Errorf("Category = %q, want %q", results[0].Category, query.Category)
 	}
 	if results[0].Title != "Test Question" {
 		t.Errorf("Title = %q, want %q", results[0].Title, "Test Question")

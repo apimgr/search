@@ -471,7 +471,7 @@ func TestSendAlertSuccess(t *testing.T) {
 		From:        FromConfig{Email: "noreply@example.com"},
 		AdminEmails: []string{"ops@example.com"},
 	})
-	if err := m.SendAlert("CPU High", "CPU usage is above 90%"); err != nil {
+	if err := m.SendToAdmins("CPU High", "CPU usage is above 90%"); err != nil {
 		t.Fatalf("SendAlert() error = %v", err)
 	}
 }

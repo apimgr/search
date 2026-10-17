@@ -1,13 +1,17 @@
 package server
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -41,7 +45,9 @@ func NewTemplateRenderer(cfg *config.Config, i18nManager *i18n.Manager) *Templat
 		i18nManager: i18nManager,
 	}
 
-	tr.loadTemplates()
+	if err := tr.loadTemplates(); err != nil {
+		slog.Error("failed to load embedded templates", "error", err)
+	}
 	return tr
 }
 
@@ -294,7 +300,9 @@ func (tr *TemplateRenderer) loadPagesRecursive(dir, prefix, layoutContent string
 func (tr *TemplateRenderer) Render(w io.Writer, name string, data interface{}) error {
 	// In dev mode, reload templates on each request
 	if tr.devMode {
-		tr.loadTemplates()
+		if err := tr.loadTemplates(); err != nil {
+			return fmt.Errorf("reload templates: %w", err)
+		}
 	}
 
 	tr.mu.RLock()
@@ -391,7 +399,63 @@ func StaticFileServer() http.Handler {
 	if err != nil {
 		return http.NotFoundHandler()
 	}
-	return http.FileServer(http.FS(staticFS))
+	return etagHandler(http.FileServer(http.FS(staticFS)))
+}
+
+// staticETags memoizes the per-file ETag, keyed by the cleaned,
+// prefix-stripped asset path. Assets are embedded in the binary and cannot
+// change while the process runs, so the digest is computed once per path and
+// never invalidated - no eviction logic is needed or wanted.
+var staticETags sync.Map
+
+// etagHandler adds a content-derived ETag and the 304 conditional-GET check
+// that http.FileServer omits. FileServer only understands If-Modified-Since,
+// and files reached through an embed.FS carry a zero modification time, so
+// that path never fires - every repeat request re-downloads the full asset
+// with nothing to revalidate against.
+//
+// A content hash rather than the build stamp is the correct validator here:
+// the stamp would be one value for every file, so a client asking about
+// app.css could not be told apart from one asking about app.js.
+func etagHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The ETag must be known before delegating, since a 304 replaces the
+		// body. Paths that are not readable files (missing assets, directory
+		// listings) simply get no ETag and fall through to the normal
+		// 404/listing behavior.
+		etag, ok := staticETag(r.URL.Path)
+		if ok {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "no-cache")
+			if etagMatches(r.Header.Get("If-None-Match"), etag) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// staticETag returns the quoted ETag for a static path, computing it on the
+// first request. The path is re-cleaned here so "/css/../css/public.css" and
+// "/css/public.css" share a single cache entry.
+func staticETag(urlPath string) (string, bool) {
+	name := strings.TrimPrefix(path.Clean("/"+urlPath), "/")
+	if name == "" || name == "." {
+		return "", false
+	}
+	if cached, ok := staticETags.Load(name); ok {
+		return cached.(string), true
+	}
+
+	data, err := GetStaticFile(name)
+	if err != nil || len(data) == 0 {
+		return "", false
+	}
+	sum := sha256.Sum256(data)
+	etag := `"` + hex.EncodeToString(sum[:16]) + `"`
+	staticETags.Store(name, etag)
+	return etag, true
 }
 
 // GetStaticFile returns the content of a static file
@@ -440,13 +504,17 @@ type PageData struct {
 	// HasConsentCookie is true when the request carries a valid cookie_consent cookie
 	// — when true the server skips rendering the cookie banner in the template.
 	HasConsentCookie bool
-	Extra            map[string]interface{}
-	ServerURL        string
+	// TrackingHTML is the analytics snippet for this request, or empty when
+	// server.tracking is unset or the visitor has not consented to analytics
+	// (AI.md PART 16). Rendered in <head>; empty means no third-party script.
+	TrackingHTML template.HTML
+	Extra        map[string]interface{}
+	ServerURL    string
 	// RequestPath is the current request's path+query, used to redirect the browser
 	// back to the same page after a no-JS form POST (e.g. the header theme-switch form).
 	RequestPath string
-	PrefsQuery       string
-	Prefs            GeneralPrefs
+	PrefsQuery  string
+	Prefs       GeneralPrefs
 }
 
 // GeneralPrefs holds the general-settings preference values (theme, units,
@@ -458,10 +526,13 @@ type GeneralPrefs struct {
 	DefaultCategory   string
 	SafeSearch        string
 	Units             string
+	WeatherUnits      string
 	ResultsPerPage    string
 	NewTab            bool
 	InfiniteScroll    bool
 	KeyboardShortcuts bool
+	SaveHistory       bool
+	VideoPreviews     bool
 }
 
 // ErrorPageData extends PageData with error-specific fields.
@@ -485,6 +556,12 @@ type SearchPageData struct {
 	Engines       []string
 	PerPage       int
 	SafeSearch    int
+	Language      string
+	Region        string
+	TimeRange     string
+	TimeFrom      string
+	TimeTo        string
+	FilterQuery   string
 	Pagination    *Pagination
 	Error         string
 	InstantAnswer interface{}
@@ -572,6 +649,7 @@ type ChecksInfo struct {
 	Disk      string `json:"disk"`
 	Scheduler string `json:"scheduler"`
 	Tor       string `json:"tor,omitempty"`
+	I2P       string `json:"i2p,omitempty"`
 }
 
 // StatsInfo represents public-safe aggregate statistics per AI.md PART 13.
@@ -598,11 +676,16 @@ type Pagination struct {
 // PART 11 — populated only when a valid rotating security_id was supplied.
 type ContactPageData struct {
 	PageData
-	ContactSent  bool
-	ContactError string
-	CaptchaA     int
-	CaptchaB     int
-	CaptchaID    string
+	ContactSent     bool
+	ContactError    string
+	CaptchaA        int
+	CaptchaB        int
+	CaptchaID       string
+	CaptchaRequired bool
+	CaptchaExternal bool
+	CaptchaLocal    bool
+	CaptchaProvider string
+	CaptchaSiteKey  string
 
 	// SecurityMode is true when a valid security_id switched the form into
 	// coordinated-disclosure (vulnerability report) mode.

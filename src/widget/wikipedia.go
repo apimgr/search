@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
+	"golang.org/x/net/html"
 )
 
 // WikipediaFetcher fetches Wikipedia summaries
@@ -27,6 +31,27 @@ type WikipediaData struct {
 	RelatedArticles []RelatedArticle `json:"related_articles,omitempty"`
 }
 
+// WikipediaSection is a bounded, text-only section of a full article.
+type WikipediaSection struct {
+	Anchor string `json:"anchor"`
+	Title  string `json:"title"`
+	Level  int    `json:"level"`
+	Text   string `json:"text"`
+}
+
+// WikipediaField is one label/value pair extracted from an article infobox.
+type WikipediaField struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// WikipediaArticleDetails contains the text-only additions used by full-page wiki answers.
+type WikipediaArticleDetails struct {
+	Sections        []WikipediaSection `json:"sections,omitempty"`
+	Infobox         []WikipediaField   `json:"infobox,omitempty"`
+	RelatedArticles []RelatedArticle   `json:"related_articles,omitempty"`
+}
+
 // RelatedArticle represents a related Wikipedia article
 type RelatedArticle struct {
 	Title   string `json:"title"`
@@ -37,7 +62,10 @@ type RelatedArticle struct {
 // NewWikipediaFetcher creates a new Wikipedia fetcher
 func NewWikipediaFetcher() *WikipediaFetcher {
 	return &WikipediaFetcher{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{
+			Timeout:       10 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}
 }
 
@@ -63,6 +91,9 @@ func (f *WikipediaFetcher) Fetch(ctx context.Context, params map[string]string) 
 	if lang == "" {
 		lang = "en"
 	}
+	if !wikipediaLanguagePattern.MatchString(lang) {
+		lang = "en"
+	}
 
 	// First, try direct article lookup
 	data, err := f.fetchArticleSummary(ctx, topic, lang)
@@ -77,7 +108,6 @@ func (f *WikipediaFetcher) Fetch(ctx context.Context, params map[string]string) 
 			return nil, err
 		}
 	}
-
 	if data == nil {
 		return &WidgetData{
 			Type:      WidgetWikipedia,
@@ -85,7 +115,6 @@ func (f *WikipediaFetcher) Fetch(ctx context.Context, params map[string]string) 
 			UpdatedAt: time.Now(),
 		}, nil
 	}
-
 	// Fetch related articles
 	related, _ := f.fetchRelatedArticles(ctx, data.Title, lang)
 	if len(related) > 0 {
@@ -97,6 +126,274 @@ func (f *WikipediaFetcher) Fetch(ctx context.Context, params map[string]string) 
 		Data:      data,
 		UpdatedAt: time.Now(),
 	}, nil
+}
+
+var wikipediaLanguagePattern = regexp.MustCompile(`^[a-z]{2,3}$`)
+
+const (
+	wikipediaDetailsLimit = 5 << 20
+	wikipediaMaxSections  = 8
+	wikipediaMaxFields    = 14
+)
+
+type wikipediaParseResponse struct {
+	Parse struct {
+		Sections []struct {
+			Anchor string `json:"anchor"`
+			Line   string `json:"line"`
+			Level  string `json:"level"`
+		} `json:"sections"`
+		Text json.RawMessage `json:"text"`
+	} `json:"parse"`
+}
+
+// fetchArticleDetails retrieves bounded parsed article HTML, then keeps only
+// plain text from headings, sections, and infobox rows. Remote markup is never
+// passed through to the browser.
+func (f *WikipediaFetcher) fetchArticleDetails(ctx context.Context, title, lang string) ([]WikipediaSection, []WikipediaField, error) {
+	params := url.Values{
+		"action": {"parse"}, "page": {title}, "prop": {"sections|text"},
+		"format": {"json"}, "formatversion": {"2"}, "disableeditsection": {"1"},
+	}
+	endpoint := fmt.Sprintf("https://%s.wikipedia.org/w/api.php?%s", lang, params.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("User-Agent", "Search/1.0 (privacy-focused search engine)")
+	resp, err := f.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer closeutil.Close(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("wikipedia parse API error: %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, wikipediaDetailsLimit+1))
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(body) > wikipediaDetailsLimit {
+		return nil, nil, fmt.Errorf("wikipedia article details exceed size limit")
+	}
+	var result wikipediaParseResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, nil, err
+	}
+	markup, err := decodeWikipediaHTML(result.Parse.Text)
+	if err != nil || markup == "" {
+		return nil, nil, fmt.Errorf("wikipedia parse response has no article HTML")
+	}
+	root, err := html.Parse(strings.NewReader(markup))
+	if err != nil {
+		return nil, nil, err
+	}
+	container := findWikiArticleBody(root)
+	if container == nil {
+		container = root
+	}
+	sections := extractWikiSections(container)
+	infobox := extractWikiInfobox(container)
+	return sections, infobox, nil
+}
+
+// FetchWikipediaArticleDetails fetches bounded article sections, infobox text,
+// and related article links with the caller's already-hardened HTTP client.
+func FetchWikipediaArticleDetails(ctx context.Context, client *http.Client, title, lang string) (*WikipediaArticleDetails, error) {
+	if client == nil {
+		return nil, fmt.Errorf("wikipedia HTTP client is required")
+	}
+	if !wikipediaLanguagePattern.MatchString(lang) {
+		lang = "en"
+	}
+	fetcher := &WikipediaFetcher{httpClient: client}
+	sections, infobox, err := fetcher.fetchArticleDetails(ctx, title, lang)
+	if err != nil {
+		return nil, err
+	}
+	related, _ := fetcher.fetchRelatedArticles(ctx, title, lang)
+	return &WikipediaArticleDetails{Sections: sections, Infobox: infobox, RelatedArticles: related}, nil
+}
+
+func decodeWikipediaHTML(raw json.RawMessage) (string, error) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text, nil
+	}
+	var wrapped map[string]string
+	if err := json.Unmarshal(raw, &wrapped); err != nil {
+		return "", err
+	}
+	return wrapped["*"], nil
+}
+
+func findWikiArticleBody(node *html.Node) *html.Node {
+	if node.Type == html.ElementNode && node.Data == "div" {
+		for _, class := range strings.Fields(attribute(node, "class")) {
+			if class == "mw-parser-output" {
+				return node
+			}
+		}
+	}
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if found := findWikiArticleBody(child); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func extractWikiSections(root *html.Node) []WikipediaSection {
+	sections := make([]WikipediaSection, 0, wikipediaMaxSections)
+	var current *WikipediaSection
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.ElementNode && len(node.Data) == 2 && node.Data[0] == 'h' && node.Data[1] >= '2' && node.Data[1] <= '6' {
+			if len(sections) == wikipediaMaxSections {
+				current = nil
+				return
+			}
+			anchor := attribute(node, "id")
+			if anchor == "" {
+				anchor = fmt.Sprintf("section-%d", len(sections)+1)
+			}
+			sections = append(sections, WikipediaSection{
+				Anchor: anchor,
+				Title:  strings.TrimSpace(wikiNodeText(node)),
+				Level:  int(node.Data[1] - '0'),
+			})
+			current = &sections[len(sections)-1]
+			return
+		}
+		if current != nil && node.Type == html.TextNode {
+			appendWikiText(current, node.Data)
+		}
+		if current != nil && node.Type == html.ElementNode && (node.Data == "script" || node.Data == "style" || node.Data == "table") {
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	for child := root.FirstChild; child != nil; child = child.NextSibling {
+		walk(child)
+	}
+	for i := range sections {
+		sections[i].Text = strings.TrimSpace(wikiPunctuationSpacingPattern.ReplaceAllString(sections[i].Text, "$1"))
+		if len(sections[i].Text) > 1800 {
+			sections[i].Text = sections[i].Text[:1800]
+		}
+	}
+	return sections
+}
+
+func appendWikiText(section *WikipediaSection, text string) {
+	if section == nil || len(section.Text) >= 1800 {
+		return
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return
+	}
+	if section.Text != "" {
+		section.Text += " "
+	}
+	remaining := 1800 - len(section.Text)
+	if len(text) > remaining {
+		text = text[:remaining]
+	}
+	section.Text += text
+}
+
+func extractWikiInfobox(root *html.Node) []WikipediaField {
+	var table *html.Node
+	var find func(*html.Node)
+	find = func(node *html.Node) {
+		if table != nil {
+			return
+		}
+		if node.Type == html.ElementNode && node.Data == "table" && strings.Contains(" "+attribute(node, "class")+" ", " infobox ") {
+			table = node
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			find(child)
+		}
+	}
+	find(root)
+	if table == nil {
+		return nil
+	}
+	fields := make([]WikipediaField, 0, wikipediaMaxFields)
+	var rows func(*html.Node)
+	rows = func(node *html.Node) {
+		if len(fields) >= wikipediaMaxFields {
+			return
+		}
+		if node.Type == html.ElementNode && node.Data == "tr" {
+			label := strings.TrimSpace(wikiNodeText(findWikiDescendant(node, "th")))
+			value := strings.TrimSpace(wikiNodeText(findWikiDescendant(node, "td")))
+			if label != "" && value != "" {
+				fields = append(fields, WikipediaField{Label: truncateWikiText(label, 120), Value: truncateWikiText(value, 320)})
+			}
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			rows(child)
+		}
+	}
+	rows(table)
+	return fields
+}
+
+func findWikiDescendant(node *html.Node, tag string) *html.Node {
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.ElementNode && child.Data == tag {
+			return child
+		}
+		if found := findWikiDescendant(child, tag); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func wikiNodeText(node *html.Node) string {
+	if node == nil {
+		return ""
+	}
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(current *html.Node) {
+		if current.Type == html.TextNode {
+			b.WriteString(current.Data)
+		} else if current.Type == html.ElementNode && (current.Data == "script" || current.Data == "style") {
+			return
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(node)
+	return wikiPunctuationSpacingPattern.ReplaceAllString(strings.Join(strings.Fields(b.String()), " "), "$1")
+}
+
+var wikiPunctuationSpacingPattern = regexp.MustCompile(`\s+([,.;:!?])`)
+
+func attribute(node *html.Node, name string) string {
+	for _, attr := range node.Attr {
+		if attr.Key == name {
+			return attr.Val
+		}
+	}
+	return ""
+}
+
+func truncateWikiText(text string, max int) string {
+	if len(text) > max {
+		return text[:max]
+	}
+	return text
 }
 
 // parseQuery extracts the topic from natural language queries
@@ -146,7 +443,7 @@ func (f *WikipediaFetcher) fetchArticleSummary(ctx context.Context, title, lang 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == 404 {
 		// Not found, will try search
@@ -221,7 +518,7 @@ func (f *WikipediaFetcher) searchAndFetch(ctx context.Context, query, lang strin
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("wikipedia search API error: %d", resp.StatusCode)
@@ -269,7 +566,7 @@ func (f *WikipediaFetcher) fetchRelatedArticles(ctx context.Context, title, lang
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("wikipedia links API error: %d", resp.StatusCode)

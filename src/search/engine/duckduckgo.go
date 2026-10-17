@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -26,7 +28,7 @@ func NewDuckDuckGo() *DuckDuckGo {
 	config.DisplayName = "DuckDuckGo"
 	// Highest priority (default engine)
 	config.Priority = 100
-	config.Categories = []string{"general", "images", "videos", "news", "files", "music"}
+	config.Categories = []string{"general", "images", "videos", "news"}
 	config.SupportsTor = true
 
 	return &DuckDuckGo{
@@ -94,7 +96,7 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("duckduckgo rate-limited: status %d", resp.StatusCode)
@@ -295,7 +297,7 @@ func (e *DuckDuckGo) searchImages(ctx context.Context, query *model.Query) ([]mo
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("DuckDuckGo images returned status %d", resp.StatusCode)
@@ -331,6 +333,8 @@ func (e *DuckDuckGo) searchImages(ctx context.Context, query *model.Query) ([]mo
 			Title:       img.Title,
 			URL:         img.URL,
 			Thumbnail:   img.Thumbnail,
+			ImageURL:    img.Image,
+			ImageFormat: imageFormatFromURL(img.Image),
 			Content:     fmt.Sprintf("%dx%d - %s", img.Width, img.Height, img.Source),
 			Engine:      e.Name(),
 			Category:    model.CategoryImages,
@@ -363,7 +367,7 @@ func (e *DuckDuckGo) getVQDToken(ctx context.Context, query string) (string, err
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Read body to extract vqd token
 	body, err := ReadBody(resp)
@@ -467,7 +471,7 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *model.Query) ([]mo
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("DuckDuckGo videos returned status %d", resp.StatusCode)
@@ -564,7 +568,7 @@ func (e *DuckDuckGo) searchNews(ctx context.Context, query *model.Query) ([]mode
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("DuckDuckGo news returned status %d", resp.StatusCode)

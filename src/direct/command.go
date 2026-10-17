@@ -2,15 +2,19 @@ package direct
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
+	xhtml "golang.org/x/net/html"
 )
 
 // TLDRHandler handles tldr:{command} queries
@@ -56,21 +60,14 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			var content strings.Builder
-			buf := make([]byte, 1024)
-			for {
-				n, err := resp.Body.Read(buf)
-				if n > 0 {
-					content.Write(buf[:n])
-				}
-				if err != nil {
-					break
-				}
+			content, readErr := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+			closeutil.Close(resp.Body)
+			if readErr != nil || len(content) > 1<<20 {
+				continue
 			}
-			resp.Body.Close()
 
 			// Parse tldr markdown format
-			markdown := content.String()
+			markdown := string(content)
 			htmlContent := parseTLDRMarkdown(markdown, term)
 
 			return &Answer{
@@ -90,7 +87,7 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		}
 
 		// Close body before trying the next platform to avoid leaking connections
-		resp.Body.Close()
+		closeutil.Close(resp.Body)
 	}
 
 	return &Answer{
@@ -98,7 +95,7 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Term:        term,
 		Title:       fmt.Sprintf("tldr: %s", term),
 		Description: i18n.T(lang, "direct.command_not_found"),
-		Content:     fmt.Sprintf("<p>No tldr page found for <code>%s</code>.</p><p>Try searching for it using <code>man:%s</code> or <code>cheat:%s</code>.</p>", term, term, term),
+		Content:     fmt.Sprintf("<p>No tldr page found for <code>%s</code>.</p><p>Try searching for it using <code>man:%s</code> or <code>cheat:%s</code>.</p>", escapeHTML(term), escapeHTML(term), escapeHTML(term)),
 		Error:       "not_found",
 	}, nil
 }
@@ -120,20 +117,20 @@ func parseTLDRMarkdown(markdown, command string) string {
 		if strings.HasPrefix(line, "# ") {
 			// Command title
 			title := strings.TrimPrefix(line, "# ")
-			html.WriteString(fmt.Sprintf("<h1>%s</h1>", escapeHTML(title)))
+			fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(title))
 		} else if strings.HasPrefix(line, "> ") {
 			// Description
 			desc := strings.TrimPrefix(line, "> ")
-			html.WriteString(fmt.Sprintf("<p class=\"description\">%s</p>", escapeHTML(desc)))
+			fmt.Fprintf(&html, "<p class=\"description\">%s</p>", escapeHTML(desc))
 		} else if strings.HasPrefix(line, "- ") {
 			// Example description
 			desc := strings.TrimPrefix(line, "- ")
-			html.WriteString(fmt.Sprintf("<p class=\"example-desc\">%s</p>", escapeHTML(desc)))
+			fmt.Fprintf(&html, "<p class=\"example-desc\">%s</p>", escapeHTML(desc))
 		} else if strings.HasPrefix(line, "`") && strings.HasSuffix(line, "`") {
 			// Code example
 			code := strings.Trim(line, "`")
-			html.WriteString(fmt.Sprintf("<pre class=\"example-code\"><code>%s</code></pre>", escapeHTML(code)))
-			html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+			fmt.Fprintf(&html, "<pre class=\"example-code\"><code>%s</code></pre>", escapeHTML(code))
+			html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 		}
 	}
 
@@ -194,7 +191,7 @@ func (h *ManHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		// Fallback to HTML scraping
 		return h.fetchManHTML(ctx, page, section)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return h.fetchManHTML(ctx, page, section)
@@ -207,7 +204,7 @@ func (h *ManHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		Content     string `json:"content"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &data); err != nil {
 		return h.fetchManHTML(ctx, page, section)
 	}
 
@@ -247,7 +244,7 @@ func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*A
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		term := page
@@ -263,18 +260,16 @@ func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*A
 			Error:       "not_found",
 		}, nil
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("man.cx returned HTTP %d", resp.StatusCode)
+	}
 
-	// Read response body
-	var content strings.Builder
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			content.Write(buf[:n])
-		}
-		if err != nil {
-			break
-		}
+	content, err := io.ReadAll(io.LimitReader(resp.Body, (2<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > 2<<20 {
+		return nil, fmt.Errorf("man.cx page exceeds maximum size")
 	}
 
 	term := page
@@ -287,7 +282,7 @@ func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*A
 		Term:        term,
 		Title:       fmt.Sprintf("man %s", page),
 		Description: fmt.Sprintf("Manual page for %s", page),
-		Content:     extractManContent(content.String()),
+		Content:     extractManContent(string(content)),
 		Source:      "man.cx",
 		SourceURL:   manURL,
 	}, nil
@@ -295,21 +290,113 @@ func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*A
 
 // formatManPage formats man page content as HTML
 func formatManPage(content string) string {
-	// Already HTML from API, just wrap it
-	return fmt.Sprintf("<div class=\"man-content\">%s</div>", content)
+	return "<div class=\"man-content\">" + sanitizeManHTML(content) + "</div>"
 }
 
 // extractManContent extracts man page content from HTML
-func extractManContent(html string) string {
-	// man.cx renders the manual page body inside a <main> element (it no
-	// longer wraps content in <pre> as it did historically); extract that
-	// subtree rather than searching for the obsolete <pre> wrapper.
-	start := strings.Index(html, "<main>")
-	end := strings.LastIndex(html, "</main>")
-	if start >= 0 && end > start {
-		return fmt.Sprintf("<div class=\"man-content\">%s</div>", html[start+len("<main>"):end])
+func extractManContent(rawHTML string) string {
+	document, err := xhtml.Parse(strings.NewReader(rawHTML))
+	if err != nil {
+		return "<p>Failed to parse man page content.</p>"
+	}
+	var main *xhtml.Node
+	var findMain func(*xhtml.Node)
+	findMain = func(node *xhtml.Node) {
+		if main != nil {
+			return
+		}
+		if node.Type == xhtml.ElementNode && node.Data == "main" {
+			main = node
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			findMain(child)
+		}
+	}
+	findMain(document)
+	if main != nil {
+		var content strings.Builder
+		for child := main.FirstChild; child != nil; child = child.NextSibling {
+			renderSafeManNode(&content, child)
+		}
+		return "<div class=\"man-content\">" + content.String() + "</div>"
 	}
 	return "<p>Failed to parse man page content.</p>"
+}
+
+func sanitizeManHTML(rawHTML string) string {
+	document, err := xhtml.Parse(strings.NewReader(rawHTML))
+	if err != nil {
+		return html.EscapeString(rawHTML)
+	}
+	var output strings.Builder
+	var renderBody func(*xhtml.Node)
+	renderBody = func(node *xhtml.Node) {
+		if node.Type == xhtml.ElementNode && node.Data == "body" {
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				renderSafeManNode(&output, child)
+			}
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			renderBody(child)
+		}
+	}
+	renderBody(document)
+	return output.String()
+}
+
+var safeManElements = map[string]bool{
+	"a": true, "b": true, "blockquote": true, "br": true, "caption": true, "code": true,
+	"dd": true, "div": true, "dl": true, "dt": true, "em": true, "h1": true, "h2": true,
+	"h3": true, "h4": true, "h5": true, "h6": true, "hr": true, "i": true, "li": true,
+	"ol": true, "p": true, "pre": true, "span": true, "strong": true, "sub": true, "sup": true,
+	"table": true, "tbody": true, "td": true, "th": true, "thead": true, "tr": true, "u": true, "ul": true,
+}
+
+func renderSafeManNode(output *strings.Builder, node *xhtml.Node) {
+	switch node.Type {
+	case xhtml.TextNode:
+		output.WriteString(html.EscapeString(node.Data))
+	case xhtml.ElementNode:
+		if node.Data == "script" || node.Data == "style" || node.Data == "iframe" || node.Data == "object" || node.Data == "svg" || node.Data == "math" {
+			return
+		}
+		allowed := safeManElements[node.Data]
+		if allowed {
+			output.WriteByte('<')
+			output.WriteString(node.Data)
+			for _, attr := range node.Attr {
+				value := ""
+				keep := false
+				switch attr.Key {
+				case "class", "id", "title":
+					value, keep = attr.Val, true
+				case "href":
+					parsed, err := url.Parse(strings.TrimSpace(attr.Val))
+					if err == nil && parsed.User == nil && (parsed.Scheme == "https" || parsed.Scheme == "http" || strings.HasPrefix(attr.Val, "#")) {
+						value, keep = attr.Val, true
+					}
+				}
+				if keep {
+					output.WriteByte(' ')
+					output.WriteString(attr.Key)
+					output.WriteString("=\"")
+					output.WriteString(html.EscapeString(value))
+					output.WriteByte('"')
+				}
+			}
+			output.WriteByte('>')
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			renderSafeManNode(output, child)
+		}
+		if allowed && node.Data != "br" && node.Data != "hr" {
+			output.WriteString("</")
+			output.WriteString(node.Data)
+			output.WriteByte('>')
+		}
+	}
 }
 
 // CheatHandler handles cheat:{command} queries
@@ -350,7 +437,7 @@ func (h *CheatHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Treat a missing topic as not_found and any other non-200 as an error
 	if resp.StatusCode != http.StatusOK {
@@ -367,19 +454,15 @@ func (h *CheatHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		return nil, fmt.Errorf("cheat.sh returned status %d", resp.StatusCode)
 	}
 
-	var content strings.Builder
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			content.Write(buf[:n])
-		}
-		if err != nil {
-			break
-		}
+	content, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > 1<<20 {
+		return nil, fmt.Errorf("cheat.sh response exceeds maximum size")
 	}
 
-	cheatContent := content.String()
+	cheatContent := string(content)
 
 	if strings.Contains(cheatContent, "Unknown topic") {
 		return &Answer{

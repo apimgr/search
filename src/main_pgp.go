@@ -7,7 +7,9 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/user"
@@ -129,8 +131,7 @@ func pgpOpenDB() (*database.DatabaseManager, error) {
 		return nil, err
 	}
 	if err := database.InitSchema(context.Background(), dm); err != nil {
-		dm.Close()
-		return nil, err
+		return nil, errors.Join(err, dm.Close())
 	}
 	return dm, nil
 }
@@ -357,7 +358,11 @@ func runPGPGenerate() {
 	if err != nil {
 		fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to open database, keypair metadata not recorded: %v\n", err)
 	} else {
-		defer dm.Close()
+		defer func() {
+			if err := dm.Close(); err != nil {
+				slog.Warn("failed to close PGP metadata database", "error", err)
+			}
+		}()
 		if err := pgpInsertKeypairRow(dm, kp.Fingerprint, kp.ExpiresAt); err != nil {
 			fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to record keypair metadata: %v\n", err)
 		} else {
@@ -455,7 +460,11 @@ func runPGPRotate() {
 	if err != nil {
 		fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to open database, keypair metadata not recorded: %v\n", err)
 	} else {
-		defer dm.Close()
+		defer func() {
+			if err := dm.Close(); err != nil {
+				slog.Warn("failed to close PGP metadata database", "error", err)
+			}
+		}()
 		if err := pgpInsertKeypairRow(dm, kp.Fingerprint, kp.ExpiresAt); err != nil {
 			fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to record keypair metadata: %v\n", err)
 		} else if id, _, err = pgpCurrentKeypairRow(dm); err == nil {
@@ -488,7 +497,11 @@ func runPGPPublish() {
 	if err != nil {
 		fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to open database: %v\n", err)
 	} else {
-		defer dm.Close()
+		defer func() {
+			if err := dm.Close(); err != nil {
+				slog.Warn("failed to close PGP metadata database", "error", err)
+			}
+		}()
 		id, _, _ = pgpCurrentKeypairRow(dm)
 	}
 	pgpPublish(cfg, dm, id)
@@ -647,7 +660,11 @@ func runPGPImport(file string) {
 	if err != nil {
 		fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to open database, keypair metadata not recorded: %v\n", err)
 	} else {
-		defer dm.Close()
+		defer func() {
+			if err := dm.Close(); err != nil {
+				slog.Warn("failed to close PGP metadata database", "error", err)
+			}
+		}()
 		if err := pgpInsertKeypairRow(dm, kp.Fingerprint, kp.ExpiresAt); err != nil {
 			fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to record keypair metadata: %v\n", err)
 		}
@@ -705,7 +722,11 @@ func runPGPDelete() {
 	if err != nil {
 		fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to open database: %v\n", err)
 	} else {
-		defer dm.Close()
+		defer func() {
+			if err := dm.Close(); err != nil {
+				slog.Warn("failed to close PGP metadata database", "error", err)
+			}
+		}()
 		if id, _, err := pgpCurrentKeypairRow(dm); err == nil && id != 0 {
 			_ = pgpMarkRevoked(dm, id)
 		}

@@ -13,9 +13,21 @@ import (
 	"github.com/apimgr/search/src/config"
 )
 
+// newTestTorService builds a TorService whose config and data directories live in
+// the test's temp dir, so vanity candidates and imported keys never touch the
+// real {config_dir}/tor or {data_dir}/tor.
+func newTestTorService(t *testing.T, cfg *config.Config) *TorService {
+	t.Helper()
+	ts := NewTorService(cfg)
+	base := t.TempDir()
+	ts.dataDir = filepath.Join(base, "data", "tor")
+	ts.configDir = filepath.Join(base, "config", "tor")
+	return ts
+}
+
 func TestNewTorService(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	if ts == nil {
 		t.Fatal("NewTorService() returned nil")
@@ -33,7 +45,7 @@ func TestNewTorService(t *testing.T) {
 
 func TestTorServiceIsRunningInitial(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	if ts.IsRunning() {
 		t.Error("IsRunning() should be false initially")
@@ -42,7 +54,7 @@ func TestTorServiceIsRunningInitial(t *testing.T) {
 
 func TestTorServiceGetOnionAddressInitial(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	addr := ts.GetOnionAddress()
 	if addr != "" {
@@ -52,7 +64,7 @@ func TestTorServiceGetOnionAddressInitial(t *testing.T) {
 
 func TestTorServiceGetTorStatus(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	status := ts.GetTorStatus()
 	if status == nil {
@@ -73,15 +85,15 @@ func TestTorServiceGetTorStatus(t *testing.T) {
 		t.Error("Status should have 'status' field")
 	}
 
-	// When not running, status should be "disconnected"
-	if status["status"] != "disconnected" {
-		t.Errorf("status[status] = %v, want %q", status["status"], "disconnected")
+	// When not running and no failure recorded, status is empty per AI.md PART 31
+	if status["status"] != "" {
+		t.Errorf("status[status] = %v, want %q", status["status"], "")
 	}
 }
 
 func TestTorServiceShutdown(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Shutdown should not panic when not running
 	ts.Shutdown()
@@ -94,7 +106,7 @@ func TestTorServiceShutdown(t *testing.T) {
 
 func TestTorServiceStopNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Stop when not running should succeed
 	err := ts.StopTorService()
@@ -107,7 +119,7 @@ func TestTorServiceStopNotRunning(t *testing.T) {
 // Tor is auto-enabled when binary is found. Test Stop instead.
 func TestTorServiceStopWhenNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Stop is a no-op when not running
 	err := ts.StopTorService()
@@ -177,7 +189,7 @@ func TestVanityProgressStruct(t *testing.T) {
 
 func TestTorServiceGetVanityProgress(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	progress := ts.GetVanityProgress()
 	if progress == nil {
@@ -192,7 +204,7 @@ func TestTorServiceGetVanityProgress(t *testing.T) {
 
 func TestTorServiceGenerateVanityPrefixTooLong(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Prefix longer than 6 characters should fail
 	err := ts.GenerateVanity("abcdefgh")
@@ -203,7 +215,7 @@ func TestTorServiceGenerateVanityPrefixTooLong(t *testing.T) {
 
 func TestTorServiceGenerateVanityInvalidChars(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Invalid characters should fail
 	invalidPrefixes := []string{
@@ -229,7 +241,7 @@ func TestTorServiceGenerateVanityInvalidChars(t *testing.T) {
 
 func TestTorServiceGenerateVanityValidChars(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Valid base32 characters
 	validPrefixes := []string{
@@ -252,7 +264,7 @@ func TestTorServiceGenerateVanityValidChars(t *testing.T) {
 
 func TestGetTorConfigDoesNotEmitLegacyInvalidOption(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	torrc := ts.getTorConfig()
 	if strings.Contains(torrc, "MaxStreamsPerCircuit ") {
@@ -263,56 +275,9 @@ func TestGetTorConfigDoesNotEmitLegacyInvalidOption(t *testing.T) {
 	}
 }
 
-func TestSanitizeTorrcContentRemovesLegacyInvalidOption(t *testing.T) {
-	input := strings.Join([]string{
-		"SafeLogging 1",
-		"MaxStreamsPerCircuit 100",
-		"BandwidthRate 1 MB",
-	}, "\n")
-
-	got := sanitizeTorrcContent(input)
-	if strings.Contains(got, "MaxStreamsPerCircuit ") {
-		t.Fatal("sanitizeTorrcContent() should remove MaxStreamsPerCircuit")
-	}
-	if !strings.Contains(got, "BandwidthRate 1 MB") {
-		t.Fatal("sanitizeTorrcContent() should preserve unrelated lines")
-	}
-}
-
-func TestSanitizeTorrcContentMigratesUnixControlPort(t *testing.T) {
-	input := "ControlPort unix:/old/control.sock\nSafeLogging 1"
-
-	got := sanitizeTorrcContent(input)
-	// Per AI.md PART 31: all OSes use ControlPort 127.0.0.1:auto — unix socket → TCP
-	if !strings.Contains(got, "ControlPort 127.0.0.1:auto") {
-		t.Fatal("sanitizeTorrcContent() should migrate unix socket to ControlPort 127.0.0.1:auto")
-	}
-	if strings.Contains(got, "ControlSocket ") {
-		t.Fatal("sanitizeTorrcContent() should remove ControlSocket entries from legacy unix socket config")
-	}
-}
-
-func TestSanitizeTorrcContentRemovesControlSocketLine(t *testing.T) {
-	dataDir := "/tmp/search-tor"
-	input := strings.Join([]string{
-		"ControlPort 0",
-		"ControlSocket " + dataDir + "/control.sock",
-		"SafeLogging 1",
-	}, "\n")
-
-	got := sanitizeTorrcContent(input)
-	if strings.Contains(got, "ControlSocket ") {
-		t.Fatal("sanitizeTorrcContent() should strip standalone ControlSocket lines")
-	}
-	// ControlPort 0 should be upgraded to 127.0.0.1:auto per AI.md PART 31
-	if !strings.Contains(got, "ControlPort 127.0.0.1:auto") {
-		t.Fatal("sanitizeTorrcContent() should upgrade ControlPort 0 to 127.0.0.1:auto")
-	}
-}
-
 func TestTorServiceCancelVanity(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Start vanity generation
 	ts.GenerateVanity("abc")
@@ -329,7 +294,7 @@ func TestTorServiceCancelVanity(t *testing.T) {
 
 func TestTorServiceCancelVanityNotStarted(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// CancelVanity when nothing is running should not panic
 	ts.CancelVanity()
@@ -337,7 +302,7 @@ func TestTorServiceCancelVanityNotStarted(t *testing.T) {
 
 func TestTorServiceApplyVanityAddressNotGenerated(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Should fail if no vanity address generated
 	_, err := ts.ApplyVanityAddress()
@@ -348,7 +313,7 @@ func TestTorServiceApplyVanityAddressNotGenerated(t *testing.T) {
 
 func TestTorServiceRegenerateAddressNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Should fail if Tor is not running
 	_, err := ts.RegenerateAddress()
@@ -359,7 +324,7 @@ func TestTorServiceRegenerateAddressNotRunning(t *testing.T) {
 
 func TestTorServiceExportKeysNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Should fail if Tor is not running
 	_, err := ts.ExportKeys()
@@ -370,7 +335,7 @@ func TestTorServiceExportKeysNotRunning(t *testing.T) {
 
 func TestTorServiceImportKeysEmpty(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Should fail with empty key
 	_, err := ts.ImportKeys([]byte{})
@@ -381,14 +346,6 @@ func TestTorServiceImportKeysEmpty(t *testing.T) {
 	_, err = ts.ImportKeys(nil)
 	if err == nil {
 		t.Error("ImportKeys() should fail with nil key")
-	}
-}
-
-func TestCheckTorConnection(t *testing.T) {
-	// With bine, this is a simplified check that always returns true
-	result := CheckTorConnection("127.0.0.1:9050")
-	if !result {
-		t.Error("CheckTorConnection() should return true (simplified check)")
 	}
 }
 
@@ -456,7 +413,7 @@ func TestTorServiceStartNoTorBinary(t *testing.T) {
 	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	defer func() { lookPath = orig; statFile = origStat }()
 
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Start should succeed (binary not found → Tor is optional, returns nil)
 	err := ts.StartTorService()
@@ -480,7 +437,7 @@ func TestTorServiceRestartNotRunning(t *testing.T) {
 	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	defer func() { lookPath = origLP; statFile = origStat }()
 
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Restart when not running should attempt to start and return nil immediately
 	err := ts.RestartTorService()
@@ -495,7 +452,7 @@ func TestTorServiceRestartNotRunning(t *testing.T) {
 // Test TorService struct fields
 func TestTorServiceStructFields(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Verify all fields are initialized correctly
 	if ts.config == nil {
@@ -564,7 +521,7 @@ func TestFindTorBinaryScenarios(t *testing.T) {
 // Test vanityGenerator global state
 func TestVanityGeneratorGlobal(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Initial state
 	progress := ts.GetVanityProgress()
@@ -588,7 +545,7 @@ func TestVanityGeneratorGlobal(t *testing.T) {
 // Test GenerateVanity with valid short prefixes
 func TestTorServiceGenerateVanityShortPrefixes(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	tests := []string{"a", "ab", "abc", "abcd", "abcde", "abcdef"}
 
@@ -603,23 +560,28 @@ func TestTorServiceGenerateVanityShortPrefixes(t *testing.T) {
 	}
 }
 
-// Test GenerateVanity cancels previous generation
-func TestTorServiceGenerateVanityCancelsPrevious(t *testing.T) {
+// TestTorServiceGenerateVanityRejectsConcurrent verifies the "one search at a
+// time" rule from AI.md PART 31: starting a second search while one is running
+// fails instead of silently replacing it.
+func TestTorServiceGenerateVanityRejectsConcurrent(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
-	// Start first generation
-	ts.GenerateVanity("ab")
+	// A 6-character prefix keeps the first search running long enough to test
+	// the rejection path.
+	if err := ts.GenerateVanity("abcdef"); err != nil {
+		t.Fatalf("GenerateVanity() error = %v", err)
+	}
+	defer ts.CancelVanity()
 
-	// Start second generation (should cancel first)
-	ts.GenerateVanity("cd")
-
-	progress := ts.GetVanityProgress()
-	if progress.Prefix != "cd" {
-		t.Errorf("Prefix should be 'cd', got %q", progress.Prefix)
+	if err := ts.GenerateVanity("cd"); err == nil {
+		t.Error("GenerateVanity() should fail while another search is running")
 	}
 
-	ts.CancelVanity()
+	progress := ts.GetVanityProgress()
+	if progress.Prefix != "abcdef" {
+		t.Errorf("Prefix should still be 'abcdef', got %q", progress.Prefix)
+	}
 }
 
 // Test generateOnionV3Address produces valid addresses
@@ -659,7 +621,7 @@ func TestTorServiceTryGenerateVanityAddressMultiple(t *testing.T) {
 // Test GetTorStatus fields
 func TestTorServiceGetTorStatusFields(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	status := ts.GetTorStatus()
 
@@ -675,7 +637,7 @@ func TestTorServiceGetTorStatusFields(t *testing.T) {
 // SetEnabled was removed per AI.md PART 32 (no enable/disable toggle).
 func TestTorServiceStopIsNoOpWhenNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	err := ts.StopTorService()
 	if err != nil {
@@ -690,7 +652,7 @@ func TestTorServiceStopIsNoOpWhenNotRunning(t *testing.T) {
 // Test Stop is idempotent
 func TestTorServiceStopIdempotent(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Stop multiple times should not panic
 	for i := 0; i < 5; i++ {
@@ -704,7 +666,7 @@ func TestTorServiceStopIdempotent(t *testing.T) {
 // Test Shutdown is idempotent
 func TestTorServiceShutdownIdempotent(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Shutdown multiple times should not panic
 	ts.Shutdown()
@@ -715,7 +677,7 @@ func TestTorServiceShutdownIdempotent(t *testing.T) {
 // Test concurrent access to TorService
 func TestTorServiceConcurrentAccess(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	done := make(chan bool)
 
@@ -755,7 +717,7 @@ func TestTorServiceImportKeysValidData(t *testing.T) {
 	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	defer func() { lookPath = origLP; statFile = origStat }()
 
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Create some test key data
 	keyData := make([]byte, 64)
@@ -785,7 +747,7 @@ func TestLookPathFunction(t *testing.T) {
 // Test Start when already running returns early
 func TestTorServiceStartAlreadyRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Manually set running to true
 	ts.mu.Lock()
@@ -807,7 +769,7 @@ func TestTorServiceStartAlreadyRunning(t *testing.T) {
 // Test GetOnionAddress when running
 func TestTorServiceGetOnionAddressWhenSet(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Manually set onion address
 	ts.mu.Lock()
@@ -823,14 +785,14 @@ func TestTorServiceGetOnionAddressWhenSet(t *testing.T) {
 // Test vanity generation prefix validation
 func TestTorServiceGenerateVanityValidation(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	tests := []struct {
 		prefix  string
 		wantErr bool
 	}{
-		// Empty is valid
-		{"", false},
+		// Empty is invalid — AI.md PART 31 requires a 1-6 character prefix
+		{"", true},
 		// Single char valid
 		{"a", false},
 		// Short valid
@@ -875,7 +837,7 @@ func TestTorServiceGenerateVanityValidation(t *testing.T) {
 // Test ApplyVanityAddress when found
 func TestTorServiceApplyVanityAddressWhenFound(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Manually set found state
 	vanityGen.mu.Lock()
@@ -900,7 +862,7 @@ func TestTorServiceApplyVanityAddressWhenFound(t *testing.T) {
 // Test ExportKeys when running but no keys
 func TestTorServiceExportKeysNoKeys(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Manually set running
 	ts.mu.Lock()
@@ -940,7 +902,7 @@ func TestCommonTorLocations(t *testing.T) {
 // Test GetVanityProgress returns copy
 func TestTorServiceGetVanityProgressReturnsCopy(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	progress1 := ts.GetVanityProgress()
 	progress2 := ts.GetVanityProgress()
@@ -966,7 +928,7 @@ func TestTorServiceRestartSequence(t *testing.T) {
 	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	defer func() { lookPath = origLP; statFile = origStat }()
 
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Restart should call Stop (succeeds) then Start (returns nil — binary not found)
 	err := ts.RestartTorService()
@@ -980,7 +942,7 @@ func TestTorServiceWithConfig(t *testing.T) {
 	cfg.Server.Tor.VirtualPort = 8080
 	cfg.Server.Port = 3000
 
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 	if ts == nil {
 		t.Fatal("NewTorService returned nil")
 	}
@@ -988,23 +950,6 @@ func TestTorServiceWithConfig(t *testing.T) {
 	status := ts.GetTorStatus()
 	if status["enabled"] != true {
 		t.Errorf("Status enabled = %v, want true", status["enabled"])
-	}
-}
-
-// Test CheckTorConnection always returns true (simplified)
-func TestCheckTorConnectionAlwaysTrue(t *testing.T) {
-	addresses := []string{
-		"127.0.0.1:9050",
-		"localhost:9050",
-		"0.0.0.0:9050",
-		"",
-	}
-
-	for _, addr := range addresses {
-		result := CheckTorConnection(addr)
-		if !result {
-			t.Errorf("CheckTorConnection(%q) = false, want true", addr)
-		}
 	}
 }
 
@@ -1026,7 +971,7 @@ func TestEnsureTorDirsCreatesDirectories(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Override unexported fields directly (same package)
 	ts.dataDir = filepath.Join(tempDir, "data", "tor")
@@ -1039,6 +984,7 @@ func TestEnsureTorDirsCreatesDirectories(t *testing.T) {
 	expectedDirs := []string{
 		ts.dataDir,
 		filepath.Join(ts.dataDir, "site"),
+		filepath.Join(ts.dataDir, "vanity"),
 		ts.configDir,
 	}
 
@@ -1067,7 +1013,7 @@ func TestEnsureTorDirsIdempotent(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 	ts.dataDir = filepath.Join(tempDir, "data", "tor")
 	ts.configDir = filepath.Join(tempDir, "config", "tor")
 
@@ -1098,7 +1044,7 @@ func TestGetHTTPClientNilDialer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := config.DefaultConfig()
-			ts := NewTorService(cfg)
+			ts := newTestTorService(t, cfg)
 			// dialer is nil by default
 
 			client := ts.GetHTTPClient(tt.useTor)
@@ -1116,7 +1062,7 @@ func TestGetHTTPClientNilDialer(t *testing.T) {
 // TestGetHTTPClientReturnType verifies GetHTTPClient always returns a *http.Client.
 func TestGetHTTPClientReturnType(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	client := ts.GetHTTPClient(false)
 	if _, ok := interface{}(client).(*http.Client); !ok {
@@ -1132,7 +1078,7 @@ func TestGetHTTPClientReturnType(t *testing.T) {
 // no Tor session has been established (dialer is nil).
 func TestOutboundEnabledNilDialer(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	if ts.OutboundEnabled() {
 		t.Error("OutboundEnabled() = true, want false when dialer is nil")
@@ -1147,7 +1093,7 @@ func TestOutboundEnabledNilDialer(t *testing.T) {
 // the TorService context is cancelled. This exercises the ctx.Done() branch.
 func TestMonitorTorCancellationExits(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	done := make(chan struct{})
 	go func() {
@@ -1175,7 +1121,7 @@ func TestMonitorTorCancellationExits(t *testing.T) {
 // start where the bine handshake failed but the flag was already set externally).
 func TestTorServiceStopWhenRunningNoTorInstance(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Simulate a running state with no actual Tor instance
 	ts.mu.Lock()
@@ -1219,7 +1165,7 @@ func TestTorServiceImportKeysRunningNoTorInstance(t *testing.T) {
 	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	defer func() { lookPath = origLP; statFile = origStat }()
 
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Simulate running=true with no Tor instance and no Tor binary on PATH
 	ts.mu.Lock()
@@ -1239,27 +1185,27 @@ func TestTorServiceImportKeysRunningNoTorInstance(t *testing.T) {
 // getTorConfig — missing branches
 // =====================================================================
 
-// TestGetTorConfigUseNetwork verifies that UseNetwork=true produces "SocksPort auto".
+// TestGetTorConfigUseNetwork verifies that UseNetwork=true produces "SocksPort 127.0.0.1:auto".
 func TestGetTorConfigUseNetwork(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.UseNetwork = true
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	content := ts.getTorConfig()
-	if !strings.Contains(content, "SocksPort auto") {
+	if !strings.Contains(content, "SocksPort 127.0.0.1:auto") {
 		t.Errorf("getTorConfig() missing 'SocksPort auto' when UseNetwork=true; got:\n%s", content)
 	}
 }
 
 // TestGetTorConfigAllowUserPreference verifies that AllowUserPreference=true
-// also produces "SocksPort auto" (same SOCKS branch as UseNetwork).
+// also produces "SocksPort 127.0.0.1:auto" (same SOCKS branch as UseNetwork).
 func TestGetTorConfigAllowUserPreference(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.AllowUserPreference = true
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	content := ts.getTorConfig()
-	if !strings.Contains(content, "SocksPort auto") {
+	if !strings.Contains(content, "SocksPort 127.0.0.1:auto") {
 		t.Errorf("getTorConfig() missing 'SocksPort auto' when AllowUserPreference=true")
 	}
 }
@@ -1268,7 +1214,7 @@ func TestGetTorConfigAllowUserPreference(t *testing.T) {
 func TestGetTorConfigSafeLoggingFalse(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.SafeLogging = false
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	content := ts.getTorConfig()
 	if !strings.Contains(content, "SafeLogging 0") {
@@ -1280,7 +1226,7 @@ func TestGetTorConfigSafeLoggingFalse(t *testing.T) {
 func TestGetTorConfigMaxMonthlyBandwidth(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.MaxMonthlyBandwidth = "10 GB"
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	content := ts.getTorConfig()
 	if !strings.Contains(content, "AccountingMax 10 GB") {
@@ -1296,7 +1242,7 @@ func TestGetTorConfigMaxMonthlyBandwidth(t *testing.T) {
 func TestGetTorConfigCloseCircuitOnStreamLimit(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.CloseCircuitOnStreamLimit = true
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	content := ts.getTorConfig()
 	if strings.Contains(content, "CircuitStreamTimeout") {
@@ -1323,7 +1269,7 @@ func TestTorServiceStartFakeBinary(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.Binary = fakeTor
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 	// Use a 5-second context so the bootstrap goroutine (EnableNetwork) does not
 	// block the test for 3 minutes if bine manages to "start" the dead process.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1348,7 +1294,7 @@ func TestTorServiceStartFakeBinary(t *testing.T) {
 // checks that the goroutine returns within a reasonable deadline.
 func TestMonitorTorWithIntervalFastTick(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ts.ctx = ctx
@@ -1374,26 +1320,29 @@ func TestMonitorTorWithIntervalFastTick(t *testing.T) {
 }
 
 // =====================================================================
-// runVanityGeneration — direct call, exercises default branch + Found path
+// Vanity generation worker coverage
 // =====================================================================
 
-// TestRunVanityGenerationFindsMatch exercises the core generation loop by calling
-// runVanityGeneration directly with a single-character prefix. With only 32
-// possible base32 characters, a match is expected within at most a few thousand
+// TestRunVanityWorkerFindsMatch exercises the core search loop by calling
+// runVanityWorker directly with a single-character prefix. With only 32 possible
+// base32 characters, a match is expected within at most a few thousand
 // iterations (~3% hit rate per attempt). A 10-second deadline prevents the test
 // from hanging indefinitely if the RNG is pathological.
-func TestRunVanityGenerationFindsMatch(t *testing.T) {
+func TestRunVanityWorkerFindsMatch(t *testing.T) {
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Initialise global state exactly as GenerateVanity does, but synchronously.
+	// Initialise global state exactly as GenerateVanityWithWorkers does, but
+	// synchronously.
 	vanityGen.mu.Lock()
+	vanityGen.attempts.Store(0)
 	vanityGen.progress = &VanityProgress{
+		State:     "running",
 		Prefix:    "a",
-		Attempts:  0,
+		Workers:   1,
 		StartTime: time.Now(),
 		Running:   true,
 	}
@@ -1401,11 +1350,11 @@ func TestRunVanityGenerationFindsMatch(t *testing.T) {
 	vanityGen.mu.Unlock()
 
 	// Call the worker directly in the test goroutine; it blocks until found or ctx done.
-	ts.runVanityGeneration(ctx, "a")
+	ts.runVanityWorker(ctx, cancel, "a")
 
 	progress := ts.GetVanityProgress()
 	if !progress.Found {
-		t.Errorf("runVanityGeneration(%q) did not find a match within 10s (attempts=%d)",
+		t.Fatalf("runVanityWorker(%q) did not find a match within 10s (attempts=%d)",
 			"a", progress.Attempts)
 	}
 	if progress.Address == "" {
@@ -1415,7 +1364,22 @@ func TestRunVanityGenerationFindsMatch(t *testing.T) {
 		t.Error("Found=true but PrivateKey is empty")
 	}
 	if progress.Running {
-		t.Error("Running should be false after runVanityGeneration returns")
+		t.Error("Running should be false after a match is found")
+	}
+	if progress.State != "found" {
+		t.Errorf("State = %q, want %q", progress.State, "found")
+	}
+
+	// The candidate must be persisted under {data_dir}/tor/vanity/{address}/
+	// with all three key files, per AI.md PART 31.
+	for _, name := range torKeyFiles {
+		path := filepath.Join(ts.vanityDir(), progress.Address, name)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("candidate file %q missing: %v", path, err)
+		}
+	}
+	if got := progress.Candidates; len(got) != 1 || got[0] != progress.Address {
+		t.Errorf("Candidates = %v, want [%s]", got, progress.Address)
 	}
 }
 
@@ -1462,7 +1426,7 @@ func TestStartTorServiceWithRealBinary(t *testing.T) {
 	cfg := config.DefaultConfig()
 	// BootstrapTimeout = 0 (the zero-value default) so the
 	// `bootstrapTimeout = 3 * time.Minute` assignment is taken.
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Cancel the TorService context after 20s — before the 30s slow-timer —
 	// so EnableNetwork returns early and the fast-path select branch is covered.
@@ -1491,7 +1455,7 @@ func TestEnsureTorDirsFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
+	ts := newTestTorService(t, cfg)
 
 	// Place a regular file at the dataDir path so MkdirAll fails with ENOTDIR.
 	blocker := filepath.Join(tmpDir, "tor")

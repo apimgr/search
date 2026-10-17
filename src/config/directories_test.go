@@ -241,11 +241,13 @@ func TestEnsureDirectories(t *testing.T) {
 	SetDataDirOverride(tmpDir + "/data")
 	SetLogDirOverride(tmpDir + "/logs")
 	SetCacheDirOverride(tmpDir + "/cache")
+	SetBackupDirOverride(tmpDir + "/backup")
 	defer func() {
 		SetConfigDirOverride("")
 		SetDataDirOverride("")
 		SetLogDirOverride("")
 		SetCacheDirOverride("")
+		SetBackupDirOverride("")
 	}()
 
 	err = EnsureDirectories()
@@ -253,12 +255,13 @@ func TestEnsureDirectories(t *testing.T) {
 		t.Errorf("EnsureDirectories() error = %v", err)
 	}
 
-	// Verify directories were created (EnsureDirectories creates config, data, log, cache, but not backup)
+	// Verify all runtime directories, including backups, were created.
 	dirs := []string{
 		tmpDir + "/config",
 		tmpDir + "/data",
 		tmpDir + "/logs",
 		tmpDir + "/cache",
+		tmpDir + "/backup",
 	}
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {

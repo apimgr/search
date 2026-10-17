@@ -448,8 +448,10 @@ func TestLoadFromEnvModeDefault(t *testing.T) {
 
 	cfg := LoadFromEnv()
 
-	if cfg.Mode != "production" {
-		t.Errorf("Mode default = %q, want %q", cfg.Mode, "production")
+	// Mode is stored raw; GetMode() is the normalizing accessor that applies
+	// the "production unless explicitly dev/debug" default.
+	if got := cfg.GetMode(); got != "production" {
+		t.Errorf("GetMode() with MODE unset = %q, want %q", got, "production")
 	}
 }
 

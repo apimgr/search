@@ -103,6 +103,7 @@ nav:
     - Installation: installation.md
     - Configuration: configuration.md
   - Usage:
+    - Search: search.md
     - API Reference: api.md
     - CLI Reference: cli.md
     - Integrations: integrations.md

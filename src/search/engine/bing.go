@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -26,7 +28,7 @@ func NewBing() *BingEngine {
 	config := model.NewEngineConfig("bing")
 	config.DisplayName = "Bing"
 	config.Priority = 80
-	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
+	config.Categories = []string{"general", "images", "news", "videos"}
 	config.SupportsTor = false
 
 	client := &http.Client{
@@ -64,7 +66,7 @@ func (e *BingEngine) Search(ctx context.Context, query *model.Query) ([]model.Re
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)

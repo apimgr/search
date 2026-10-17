@@ -15,38 +15,13 @@ permissions:
 
 concurrency:
   group: ci-${{ gitea.ref }}
-  cancel-in-progress: ${{ gitea.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 env:
   PROJECTNAME: search
   PROJECTORG: apimgr
 
 jobs:
-  secret-scan:
-    name: Secret scan (full history)
-    runs-on: ubuntu-latest
-    steps:
-      # v7.0.0
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          fetch-depth: 0
-
-      - name: Scan secrets (push — incremental)
-        if: gitea.event_name == 'push'
-        # v3.95.6
-        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70
-        with:
-          base: ${{ gitea.event.before }}
-          head: ${{ gitea.event.after }}
-          extra_args: --only-verified
-
-      - name: Scan secrets (scheduled/PR — full history)
-        if: gitea.event_name != 'push'
-        # v3.95.6
-        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70
-        with:
-          extra_args: --only-verified
-
   test:
     name: Test
     if: gitea.event_name != 'schedule'
@@ -65,8 +40,8 @@ jobs:
           mkdir -p "/tmp/${PROJECTORG}"
           COVDIR=$(mktemp -d "/tmp/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
           go mod download
-          PKGS=$(go list ./... | grep -v /src/service)
-          go test -cover -coverprofile="${COVDIR}/coverage.out" ${PKGS}
+          go run ./src/cmd/apigen
+          go test -cover -coverprofile="${COVDIR}/coverage.out" ./...
           THRESHOLD=60
           PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
@@ -91,12 +66,18 @@ jobs:
       - name: go vet
         run: |
           go mod download
+          go run ./src/cmd/apigen
           go vet ./...
 
       - name: staticcheck
         run: |
           go mod download
+          go run ./src/cmd/apigen
           staticcheck ./...
+
+      - name: golangci-lint
+        run: |
+          golangci-lint run
 
   build:
     name: Build
@@ -114,18 +95,19 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=$(cat release.txt 2>/dev/null || echo "devel")" >> "$GITHUB_ENV"
-          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")" >> "$GITHUB_ENV"
-          echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITHUB_ENV"
+          echo "VERSION=$(cat release.txt 2>/dev/null || echo "devel")" >> "$GITEA_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")" >> "$GITEA_ENV"
+          echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITEA_ENV"
           if [ -f site.txt ]; then
-            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITHUB_ENV"
+            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITEA_ENV"
           else
-            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITEA_ENV"
           fi
 
       - name: Build binaries
         run: |
           go mod download
+          go run ./src/cmd/apigen
           LDFLAGS="-s -w \
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
@@ -147,12 +129,46 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
             -ldflags "$LDFLAGS" -o /tmp/search-linux-arm64 ./src
           if [ -d src/client ]; then
-            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui \
               -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-amd64 ./src/client
-            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui \
               -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-arm64 ./src/client
           fi
           echo "Build OK"
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+
+      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
+      - name: Determine scan range
+        id: range
+        env:
+          EVENT_NAME: ${{ gitea.event_name }}
+          EVENT_BEFORE: ${{ gitea.event.before }}
+          EVENT_SHA: ${{ gitea.sha }}
+          PR_BASE_SHA: ${{ gitea.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ gitea.event.pull_request.head.sha }}
+        run: |
+          BASE=""; HEAD=""
+          if [ "$EVENT_NAME" = "push" ] && [ "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            BASE="$EVENT_BEFORE"; HEAD="$EVENT_SHA"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE="$PR_BASE_SHA"; HEAD="$PR_HEAD_SHA"
+          fi
+          echo "base=$BASE" >> "$GITEA_OUTPUT"
+          echo "head=$HEAD" >> "$GITEA_OUTPUT"
+
+      - name: Scan for secrets (truffleHog)
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
+        with:
+          base: ${{ steps.range.outputs.base }}
+          head: ${{ steps.range.outputs.head }}
+          extra_args: --results=verified,unknown
 
   vuln-scan:
     name: Vulnerability scan
@@ -170,22 +186,22 @@ jobs:
       - name: Run govulncheck
         run: |
           go mod download
+          go run ./src/cmd/apigen
           govulncheck ./...
 
   workflow-policy:
     name: Workflow SHA policy
     runs-on: ubuntu-latest
     steps:
-      # v7.0.0
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - name: Check for tag-pinned actions
+      - name: Enforce SHA-pinned third-party actions
         run: |
-          VIOLATIONS=$(grep -rn 'uses:.*@v[0-9]' \
-            .github/workflows/ .gitea/workflows/ .forgejo/workflows/ 2>/dev/null || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "ERROR: Tag-pinned actions found — pin to full commit SHA:"
-            echo "$VIOLATIONS"
+          # Every third-party action must be pinned to a full 40-char commit SHA
+          bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::unpinned actions found:"
+            echo "$bad"
             exit 1
           fi
           echo "OK: all actions pinned to SHA"
@@ -196,16 +212,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      # v7.0.0
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Set up Docker Buildx
-        # v4.1.0
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
 
       - name: Build image for scan
-        # v7.2.0
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           file: docker/Dockerfile
@@ -219,8 +232,7 @@ jobs:
             COMMIT_ID=scan
 
       - name: Run Trivy vulnerability scanner
-        # v0.36.0
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: 'search:scan'
           format: 'table'

@@ -181,35 +181,6 @@ func TestBuildListenURLs(t *testing.T) {
 }
 
 // ============================================================
-// findSourceDir
-// ============================================================
-
-func TestFindSourceDir(t *testing.T) {
-	t.Run("returns non-empty path without error in dev environment", func(t *testing.T) {
-		dir, err := findSourceDir()
-		if err != nil {
-			t.Skipf("findSourceDir() returned error %v — not in a source tree", err)
-		}
-		if dir == "" {
-			t.Error("findSourceDir() returned empty string without error")
-		}
-	})
-
-	t.Run("returned path contains go.mod", func(t *testing.T) {
-		dir, err := findSourceDir()
-		if err != nil {
-			t.Skipf("findSourceDir() error: %v", err)
-		}
-		if dir == "." {
-			return
-		}
-		if _, statErr := os.Stat(dir + "/go.mod"); statErr != nil {
-			t.Errorf("findSourceDir() = %q but go.mod not found there: %v", dir, statErr)
-		}
-	})
-}
-
-// ============================================================
 // printVersion — output smoke tests
 // ============================================================
 
@@ -274,7 +245,6 @@ func TestPrintHelp(t *testing.T) {
 		"--service",
 		"--maintenance",
 		"--update",
-		"--build",
 		"--shell",
 		"--debug",
 	}
@@ -300,12 +270,12 @@ func TestPrintCompletions(t *testing.T) {
 		},
 		{
 			shell:    "zsh",
-			mustHave: []string{"_arguments", "--service", "--update", "--build"},
+			mustHave: []string{"_arguments", "--service", "--update"},
 		},
 		{
 			// fish uses -l <name> (no leading --) for long option names
 			shell:    "fish",
-			mustHave: []string{"complete", "-l service", "-l update", "-l build"},
+			mustHave: []string{"complete", "-l service", "-l update"},
 		},
 		{
 			shell:    "powershell",
@@ -421,33 +391,6 @@ func TestFormatUptimeAdditionalEdges(t *testing.T) {
 // ============================================================
 // formatBytes edge cases not in main_test.go
 // ============================================================
-
-func TestFormatBytesAdditionalEdges(t *testing.T) {
-	tests := []struct {
-		name  string
-		bytes int64
-		want  string
-	}{
-		{
-			name:  "exactly 1 TB",
-			bytes: 1024 * 1024 * 1024 * 1024,
-			want:  "1.0 TB",
-		},
-		{
-			name:  "negative bytes treated as sub-unit",
-			bytes: -1,
-			want:  "-1 B",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := formatBytes(tt.bytes)
-			if got != tt.want {
-				t.Errorf("formatBytes(%d) = %q, want %q", tt.bytes, got, tt.want)
-			}
-		})
-	}
-}
 
 // ============================================================
 // generateSetupToken — idempotency / entropy

@@ -263,7 +263,6 @@ func beautifyJavaScript(code, indent string) (string, error) {
 	inString := false
 	stringChar := rune(0)
 	escaped := false
-	prevChar := rune(0)
 
 	writeIndent := func() {
 		for i := 0; i < indentLevel; i++ {
@@ -275,14 +274,12 @@ func beautifyJavaScript(code, indent string) (string, error) {
 		if escaped {
 			result.WriteRune(r)
 			escaped = false
-			prevChar = r
 			continue
 		}
 
 		if r == '\\' && inString {
 			result.WriteRune(r)
 			escaped = true
-			prevChar = r
 			continue
 		}
 
@@ -290,7 +287,6 @@ func beautifyJavaScript(code, indent string) (string, error) {
 			inString = true
 			stringChar = r
 			result.WriteRune(r)
-			prevChar = r
 			continue
 		}
 
@@ -298,19 +294,16 @@ func beautifyJavaScript(code, indent string) (string, error) {
 			inString = false
 			stringChar = 0
 			result.WriteRune(r)
-			prevChar = r
 			continue
 		}
 
 		if inString {
 			result.WriteRune(r)
-			prevChar = r
 			continue
 		}
 
 		// Skip existing whitespace
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			prevChar = r
 			continue
 		}
 
@@ -337,12 +330,8 @@ func beautifyJavaScript(code, indent string) (string, error) {
 			result.WriteRune('\n')
 			writeIndent()
 		default:
-			if prevChar == ',' || prevChar == '{' || prevChar == '[' || prevChar == ';' {
-				// Already handled by newline
-			}
 			result.WriteRune(r)
 		}
-		prevChar = r
 	}
 
 	return result.String(), nil

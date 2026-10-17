@@ -131,3 +131,24 @@ func createMacOSServiceAccount(name string) (*SystemUser, error) {
 		Shell: "/usr/bin/false",
 	}, nil
 }
+
+// DeleteSystemUser removes the macOS service account and group created by the
+// server. Per AI.md PART 23 uninstall: dscl . -delete entries are the inverse
+// of the dscl . -create commands.
+func DeleteSystemUser(name string) error {
+	svcName := "_" + name
+	var lastErr error
+	for _, args := range [][]string{
+		{"dscl", ".", "-delete", "/Users/" + svcName},
+		{"dscl", ".", "-delete", "/Groups/" + svcName},
+	} {
+		cmd := exec.Command(args[0], args[1:]...)
+		if err := cmd.Run(); err != nil {
+			lastErr = fmt.Errorf("%s %s: %w", args[0], strings.Join(args[1:], " "), err)
+		}
+	}
+	if lastErr != nil && UserExists(svcName) {
+		return lastErr
+	}
+	return nil
+}

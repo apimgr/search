@@ -23,6 +23,11 @@
             {{/* CSRF Token */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
+            <div class="sr-only" aria-hidden="true">
+                <label for="website">Website</label>
+                <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+            </div>
+
             {{if .SecurityMode}}
             {{/* Coordinated-disclosure mode: security_id plus hidden auto-filled fields, per AI.md PART 11 */}}
             <input type="hidden" name="security_id" value="{{.SecurityID}}">
@@ -134,12 +139,25 @@
             </div>
             {{end}}
 
-            {{/* Simple captcha */}}
+            {{if .CaptchaRequired}}
+            {{if .CaptchaExternal}}
+            <div class="form-group captcha-group">
+                {{if eq .CaptchaProvider "recaptcha"}}
+                <div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div>
+                <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+                {{else if eq .CaptchaProvider "hcaptcha"}}
+                <div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div>
+                <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+                {{end}}
+            </div>
+            {{else if .CaptchaLocal}}
             <div class="form-group captcha-group">
                 <label for="captcha">{{t "contact.verification_question" .CaptchaA .CaptchaB}} <span class="required">*</span></label>
                 <input type="hidden" name="captcha_id" value="{{.CaptchaID}}">
                 <input type="number" id="captcha" name="captcha" required placeholder="{{t "contact.answer_placeholder"}}" autocomplete="off">
             </div>
+            {{end}}
+            {{end}}
 
             {{if .ContactError}}
             <div class="form-error">

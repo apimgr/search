@@ -1,7 +1,9 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -22,11 +24,18 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")
 	}
+	key, err := base64.StdEncoding.DecodeString(cfg.Server.Security.EncryptionKey)
+	if err != nil || len(key) != 32 {
+		t.Errorf("DefaultConfig encryption key must decode to 32 bytes, got length %d and error %v", len(key), err)
+	}
 	if cfg.Search.ResultsPerPage != 100 {
 		t.Errorf("Search.ResultsPerPage = %d, want %d", cfg.Search.ResultsPerPage, 100)
 	}
 	if cfg.Search.Timeout != 10 {
 		t.Errorf("Search.Timeout = %d, want %d", cfg.Search.Timeout, 10)
+	}
+	if cfg.Server.Pages.Contact.SuccessMessage != "Thank you for your message. We'll respond soon." {
+		t.Errorf("Contact.SuccessMessage = %q, want the AI.md default", cfg.Server.Pages.Contact.SuccessMessage)
 	}
 }
 
@@ -283,6 +292,8 @@ func TestConfigReload(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Server.Title = "Initial Title"
 	cfg.Server.Port = 8080
+	cfg.Data.SecurityDir = filepath.Join(tmpDir, "security-initial")
+	cfg.Data.CVE.Source = "https://nvd.example/initial"
 	err = cfg.Save(configPath)
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -293,6 +304,8 @@ func TestConfigReload(t *testing.T) {
 	// Modify the file externally
 	cfg2 := DefaultConfig()
 	cfg2.Server.Title = "Modified Title"
+	cfg2.Data.SecurityDir = filepath.Join(tmpDir, "security-modified")
+	cfg2.Data.CVE.Source = "https://nvd.example/modified"
 	// This should NOT change after reload (port requires restart)
 	cfg2.Server.Port = 9999
 	err = cfg2.Save(configPath)
@@ -309,6 +322,9 @@ func TestConfigReload(t *testing.T) {
 	// Title should change
 	if cfg.Server.Title != "Modified Title" {
 		t.Errorf("After reload, Server.Title = %q, want %q", cfg.Server.Title, "Modified Title")
+	}
+	if cfg.Data.SecurityDir != filepath.Join(tmpDir, "security-modified") || cfg.Data.CVE.Source != "https://nvd.example/modified" {
+		t.Errorf("After reload, Data = %#v, want modified security directory and CVE source", cfg.Data)
 	}
 
 	// Port should NOT change (requires restart)
@@ -693,7 +709,8 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 	if cfg.Server.RateLimit.Read.Requests != 120 {
 		t.Errorf("RateLimit.Read.Requests not fixed, got %d", cfg.Server.RateLimit.Read.Requests)
 	}
-	if cfg.Server.Compression.Level != 6 {
+	// Per AI.md "Response Compression": level: 5
+	if cfg.Server.Compression.Level != 5 {
 		t.Errorf("Compression.Level not fixed, got %d", cfg.Server.Compression.Level)
 	}
 	if len(cfg.Engines) == 0 {
@@ -971,6 +988,34 @@ func TestAuthConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestNormalizeHTTPSMode(t *testing.T) {
+	tests := []struct {
+		name      string
+		port      int
+		httpsPort int
+		enabled   bool
+		want      bool
+	}{
+		{name: "single 443 forces HTTPS", port: 443, want: true},
+		{name: "single nonstandard port keeps HTTP", port: 8443, want: false},
+		{name: "dual port enables HTTPS", port: 80, httpsPort: 443, want: true},
+		{name: "explicit SSL remains enabled", port: 8443, enabled: true, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			cfg.Server.Port = tt.port
+			cfg.Server.HTTPSPort = tt.httpsPort
+			cfg.Server.SSL.Enabled = tt.enabled
+			normalizeHTTPSMode(cfg)
+			if cfg.Server.SSL.Enabled != tt.want {
+				t.Errorf("SSL.Enabled = %v, want %v", cfg.Server.SSL.Enabled, tt.want)
+			}
+		})
+	}
+	normalizeHTTPSMode(nil)
+}
+
 func TestInitialize(t *testing.T) {
 	// Save original directory overrides
 	origConfig := os.Getenv("SEARCH_CONFIG_DIR")
@@ -1025,6 +1070,64 @@ func TestInitialize(t *testing.T) {
 	// Verify config path is set
 	if cfg.GetPath() == "" {
 		t.Error("Config path should be set after Initialize()")
+	}
+}
+
+func TestInitializeRepairsAndPersistsMissingEncryptionKey(t *testing.T) {
+	parent := filepath.Join(os.TempDir(), ProjectOrg)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmpDir, err := os.MkdirTemp(parent, ProjectName+"-config-init-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Errorf("remove temporary config directory: %v", err)
+		}
+	})
+
+	SetConfigDirOverride(filepath.Join(tmpDir, "config"))
+	SetDataDirOverride(filepath.Join(tmpDir, "data"))
+	SetLogDirOverride(filepath.Join(tmpDir, "logs"))
+	SetCacheDirOverride(filepath.Join(tmpDir, "cache"))
+	SetBackupDirOverride(filepath.Join(tmpDir, "backup"))
+	SetDatabaseDirOverride(filepath.Join(tmpDir, "database"))
+	t.Cleanup(func() {
+		SetConfigDirOverride("")
+		SetDataDirOverride("")
+		SetLogDirOverride("")
+		SetCacheDirOverride("")
+		SetBackupDirOverride("")
+		SetDatabaseDirOverride("")
+	})
+
+	configPath := filepath.Join(tmpDir, "config", "server.yml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	seed := DefaultConfig()
+	seed.Server.Security.EncryptionKey = ""
+	if err := seed.Save(configPath); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+
+	initialized, err := Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	key, err := base64.StdEncoding.DecodeString(initialized.Server.Security.EncryptionKey)
+	if err != nil || len(key) != 32 {
+		t.Fatalf("initialized encryption key must decode to 32 bytes, got length %d and error %v", len(key), err)
+	}
+
+	persisted, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("reload initialized config: %v", err)
+	}
+	if persisted.Server.Security.EncryptionKey != initialized.Server.Security.EncryptionKey {
+		t.Fatal("initialized encryption key was not persisted")
 	}
 }
 
@@ -1134,8 +1237,9 @@ func TestCompressionConfigDefaults(t *testing.T) {
 	if !cfg.Server.Compression.Enabled {
 		t.Error("Compression.Enabled should be true by default")
 	}
-	if cfg.Server.Compression.Level != 6 {
-		t.Errorf("Compression.Level = %d, want 6", cfg.Server.Compression.Level)
+	// Per AI.md "Response Compression": level: 5
+	if cfg.Server.Compression.Level != 5 {
+		t.Errorf("Compression.Level = %d, want 5", cfg.Server.Compression.Level)
 	}
 }
 
@@ -1145,5 +1249,57 @@ func TestServerTokenDefault(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.Server.Token == "" {
 		t.Error("Server.Token should be auto-generated by DefaultConfig")
+	}
+}
+
+func TestTorContactEmailConfigKey(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config-tor-contact-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := tmpDir + "/server.yml"
+	yamlContent := "server:\n  tor:\n    contact_email: tor-admin@example.com\n"
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0600); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Server.Tor.ContactEmail != "tor-admin@example.com" {
+		t.Errorf("Tor.ContactEmail = %q, want %q", cfg.Server.Tor.ContactEmail, "tor-admin@example.com")
+	}
+}
+
+func TestLoadNormalizesLegacyUpdateChannels(t *testing.T) {
+	for _, test := range []struct {
+		branch string
+		want   string
+	}{
+		{branch: "daily", want: "devel"},
+		{branch: "rolling", want: "devel"},
+		{branch: "dev", want: "devel"},
+		{branch: "development", want: "devel"},
+		{branch: "devel", want: "devel"},
+		{branch: "beta", want: "beta"},
+		{branch: "", want: "stable"},
+	} {
+		t.Run(test.branch, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "server.yml")
+			content := "server:\n  update:\n    branch: " + test.branch + "\n"
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Server.Update.Branch != test.want {
+				t.Fatalf("normalized branch = %q, want %q", cfg.Server.Update.Branch, test.want)
+			}
+		})
 	}
 }

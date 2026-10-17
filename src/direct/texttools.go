@@ -2,6 +2,7 @@ package direct
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -9,7 +10,15 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
+	"github.com/evanw/esbuild/pkg/api"
+	"github.com/tdewolff/minify/v2"
+	"github.com/tdewolff/minify/v2/css"
+	"github.com/tdewolff/minify/v2/html"
+	"github.com/tdewolff/minify/v2/js"
+	minifyjson "github.com/tdewolff/minify/v2/json"
+	"github.com/tdewolff/minify/v2/xml"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -184,7 +193,7 @@ func formatCaseContent(text string, conversions map[string]string, target string
 	html.WriteString("<h1>Case Converter</h1>")
 
 	html.WriteString("<h2>Input</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(text)))
+	fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(text))
 
 	html.WriteString("<h2>Conversions</h2>")
 	html.WriteString("<table class=\"case-table\">")
@@ -198,8 +207,8 @@ func formatCaseContent(text string, conversions map[string]string, target string
 			strings.EqualFold(target, strings.ReplaceAll(name, "_", "")) {
 			class = " class=\"highlighted\""
 		}
-		html.WriteString(fmt.Sprintf("<tr%s><td><strong>%s</strong></td><td><code>%s</code></td><td><button class=\"copy-btn\" onclick=\"copyText('%s')\">Copy</button></td></tr>",
-			class, name, escapeHTML(val), escapeHTML(val)))
+		fmt.Fprintf(&html, "<tr%s><td><strong>%s</strong></td><td><code>%s</code></td><td><button type=\"button\" class=\"copy-btn\" data-copy=\"%s\">Copy</button></td></tr>",
+			class, name, escapeHTML(val), escapeHTML(val))
 	}
 
 	html.WriteString("</tbody></table>")
@@ -290,15 +299,15 @@ func formatSlugContent(text string, slugs map[string]string) string {
 	html.WriteString("<h1>URL Slug Generator</h1>")
 
 	html.WriteString("<h2>Input</h2>")
-	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(text)))
+	fmt.Fprintf(&html, "<pre><code>%s</code></pre>", escapeHTML(text))
 
 	html.WriteString("<h2>Generated Slugs</h2>")
 	html.WriteString("<table class=\"slug-table\">")
 	html.WriteString("<tbody>")
 
 	for name, slug := range slugs {
-		html.WriteString(fmt.Sprintf("<tr><td><strong>%s</strong></td><td><code>%s</code></td><td><button class=\"copy-btn\" onclick=\"copyText('%s')\">Copy</button></td></tr>",
-			name, escapeHTML(slug), escapeHTML(slug)))
+		fmt.Fprintf(&html, "<tr><td><strong>%s</strong></td><td><code>%s</code></td><td><button type=\"button\" class=\"copy-btn\" data-copy=\"%s\">Copy</button></td></tr>",
+			name, escapeHTML(slug), escapeHTML(slug))
 	}
 
 	html.WriteString("</tbody></table>")
@@ -437,17 +446,17 @@ func formatLoremContent(text string, wordCount, charCount int) string {
 	html.WriteString("<div class=\"lorem-content\">")
 	html.WriteString("<h1>Lorem Ipsum Generator</h1>")
 
-	html.WriteString(fmt.Sprintf("<p>%d words, %d characters</p>", wordCount, charCount))
+	fmt.Fprintf(&html, "<p>%d words, %d characters</p>", wordCount, charCount)
 
 	html.WriteString("<div class=\"lorem-text\">")
 	// Convert paragraphs to HTML
 	paragraphs := strings.Split(text, "\n\n")
 	for _, p := range paragraphs {
-		html.WriteString(fmt.Sprintf("<p>%s</p>", escapeHTML(p)))
+		fmt.Fprintf(&html, "<p>%s</p>", escapeHTML(p))
 	}
 	html.WriteString("</div>")
 
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyText(document.querySelector('.lorem-text').innerText)\">Copy Text</button>")
+	fmt.Fprintf(&html, "<button type=\"button\" class=\"copy-btn\" data-copy=\"%s\">Copy Text</button>", escapeHTML(text))
 
 	html.WriteString("</div>")
 	return html.String()
@@ -562,15 +571,15 @@ func formatWordContent(text string, stats map[string]interface{}, wordFreq map[s
 
 	html.WriteString("<table class=\"stats-table\">")
 	html.WriteString("<tbody>")
-	html.WriteString(fmt.Sprintf("<tr><td>Characters</td><td>%d</td></tr>", stats["charCount"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Characters (no spaces)</td><td>%d</td></tr>", stats["charNoSpaces"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Words</td><td>%d</td></tr>", stats["wordCount"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Sentences</td><td>%d</td></tr>", stats["sentenceCount"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Paragraphs</td><td>%d</td></tr>", stats["paragraphCount"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Lines</td><td>%d</td></tr>", stats["lineCount"].(int)))
-	html.WriteString(fmt.Sprintf("<tr><td>Average Word Length</td><td>%.1f characters</td></tr>", stats["avgWordLen"].(float64)))
-	html.WriteString(fmt.Sprintf("<tr><td>Reading Time</td><td>%s</td></tr>", stats["readingTime"].(string)))
-	html.WriteString(fmt.Sprintf("<tr><td>Speaking Time</td><td>%s</td></tr>", stats["speakingTime"].(string)))
+	fmt.Fprintf(&html, "<tr><td>Characters</td><td>%d</td></tr>", stats["charCount"].(int))
+	fmt.Fprintf(&html, "<tr><td>Characters (no spaces)</td><td>%d</td></tr>", stats["charNoSpaces"].(int))
+	fmt.Fprintf(&html, "<tr><td>Words</td><td>%d</td></tr>", stats["wordCount"].(int))
+	fmt.Fprintf(&html, "<tr><td>Sentences</td><td>%d</td></tr>", stats["sentenceCount"].(int))
+	fmt.Fprintf(&html, "<tr><td>Paragraphs</td><td>%d</td></tr>", stats["paragraphCount"].(int))
+	fmt.Fprintf(&html, "<tr><td>Lines</td><td>%d</td></tr>", stats["lineCount"].(int))
+	fmt.Fprintf(&html, "<tr><td>Average Word Length</td><td>%.1f characters</td></tr>", stats["avgWordLen"].(float64))
+	fmt.Fprintf(&html, "<tr><td>Reading Time</td><td>%s</td></tr>", stats["readingTime"].(string))
+	fmt.Fprintf(&html, "<tr><td>Speaking Time</td><td>%s</td></tr>", stats["speakingTime"].(string))
 	html.WriteString("</tbody></table>")
 
 	// Top words
@@ -601,7 +610,7 @@ func formatWordContent(text string, stats map[string]interface{}, wordFreq map[s
 			if shown >= 10 {
 				break
 			}
-			html.WriteString(fmt.Sprintf("<li><strong>%s</strong>: %d</li>", escapeHTML(wc.word), wc.count))
+			fmt.Fprintf(&html, "<li><strong>%s</strong>: %d</li>", escapeHTML(wc.word), wc.count)
 			shown++
 		}
 		html.WriteString("</ul>")
@@ -634,7 +643,7 @@ func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*
 	lang := ""
 	code := term
 
-	prefixes := []string{"js ", "javascript ", "css ", "html ", "sql ", "json ", "xml "}
+	prefixes := []string{"js ", "javascript ", "typescript ", "ts ", "css ", "scss ", "less ", "html ", "sql ", "json ", "xml ", "php ", "python "}
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(strings.ToLower(term), prefix) {
 			lang = strings.TrimSuffix(prefix, " ")
@@ -647,14 +656,49 @@ func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*
 	if lang == "" {
 		lang = detectLanguage(code)
 	}
+	indent, minify, style, remaining, optionErr := parseBeautifyOptions(code)
+	if optionErr != nil {
+		return nil, optionErr
+	}
+	code = remaining
+	if strings.TrimSpace(code) == "" {
+		return nil, fmt.Errorf("code required")
+	}
+	style, styleErr := normalizeBeautifyStyle(lang, style)
+	if styleErr != nil {
+		return nil, styleErr
+	}
+	if lang == "json" && !json.Valid([]byte(code)) {
+		return nil, fmt.Errorf("cannot format invalid JSON")
+	}
 
 	// Beautify
 	beautified := beautifyCode(code, lang)
+	beautified, styleErr = applyBeautifyStyle(beautified, code, lang, style)
+	if styleErr != nil {
+		return nil, styleErr
+	}
+	if indent != "" {
+		beautified = reindentFormatted(beautified, lang, indent)
+	}
+	minified := ""
+	if minify {
+		compact, err := minifyCode(code, lang)
+		if err != nil {
+			return nil, err
+		}
+		minified = compact
+	}
 
 	data := map[string]interface{}{
-		"input":    code,
-		"output":   beautified,
-		"language": lang,
+		"input":        code,
+		"output":       beautified,
+		"language":     lang,
+		"input_lines":  countLines(code),
+		"output_lines": countLines(beautified),
+		"indent":       indent,
+		"style":        style,
+		"minified":     minified,
 	}
 
 	return &Answer{
@@ -662,10 +706,341 @@ func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*
 		Term:        truncateString(term, 50),
 		Title:       fmt.Sprintf("Code Beautifier (%s)", lang),
 		Description: i18n.T(uiLang, "direct.formatted_code"),
-		Content:     formatBeautifyContent(code, beautified, lang),
+		Content:     formatBeautifyContent(code, beautified, lang, indent, style, minified),
 		Source:      "Code Beautifier",
 		Data:        data,
 	}, nil
+}
+
+func minifyCode(code, language string) (string, error) {
+	switch language {
+	case "sql":
+		return minifySQLSource(code), nil
+	case "scss", "less":
+		return minifyStylesheetSource(code), nil
+	case "python":
+		return minifyPythonSource(code), nil
+	}
+	if language == "ts" || language == "typescript" {
+		result := api.Transform(code, api.TransformOptions{
+			Loader:            api.LoaderTS,
+			Target:            api.ESNext,
+			MinifyWhitespace:  true,
+			MinifySyntax:      true,
+			MinifyIdentifiers: true,
+			LogLevel:          api.LogLevelSilent,
+		})
+		if len(result.Errors) > 0 {
+			return "", fmt.Errorf("cannot minify TypeScript source: %s", result.Errors[0].Text)
+		}
+		return strings.TrimSpace(string(result.Code)), nil
+	}
+	mediaType := ""
+	switch language {
+	case "js", "javascript":
+		mediaType = "application/javascript"
+	case "css":
+		mediaType = "text/css"
+	case "html":
+		mediaType = "text/html"
+	case "xml":
+		mediaType = "application/xml"
+	case "json":
+		mediaType = "application/json"
+	case "php":
+		mediaType = "application/x-httpd-php"
+	default:
+		return "", fmt.Errorf("minification is unavailable for %s", language)
+	}
+	if language == "json" {
+		var value interface{}
+		if err := json.Unmarshal([]byte(code), &value); err != nil {
+			return "", fmt.Errorf("cannot minify invalid JSON: %w", err)
+		}
+	}
+	minifier := minify.New()
+	minifier.AddFunc("application/javascript", js.Minify)
+	minifier.AddFunc("text/css", css.Minify)
+	minifier.AddFunc("text/html", html.Minify)
+	minifier.AddFunc("application/json", minifyjson.Minify)
+	minifier.AddFunc("application/xml", xml.Minify)
+	phpMinifier := &html.Minifier{TemplateDelims: [2]string{"<?", "?>"}}
+	minifier.Add("application/x-httpd-php", phpMinifier)
+	minified, err := minifier.String(mediaType, code)
+	if err != nil {
+		return "", fmt.Errorf("cannot minify %s source: %w", language, err)
+	}
+	return minified, nil
+}
+
+func minifyStylesheetSource(source string) string {
+	var output strings.Builder
+	quote := byte(0)
+	escaped := false
+	blockComment := false
+	preserveBlockComment := false
+	lineComment := false
+	pendingSpace := false
+	for index := 0; index < len(source); index++ {
+		character := source[index]
+		var next byte
+		if index+1 < len(source) {
+			next = source[index+1]
+		}
+		if blockComment {
+			if preserveBlockComment {
+				output.WriteByte(character)
+			}
+			if character == '*' && next == '/' {
+				if preserveBlockComment {
+					output.WriteByte(next)
+				}
+				blockComment = false
+				preserveBlockComment = false
+				index++
+				pendingSpace = true
+			}
+			continue
+		}
+		if lineComment {
+			if character == '\n' {
+				lineComment = false
+				pendingSpace = true
+			}
+			continue
+		}
+		if quote != 0 {
+			output.WriteByte(character)
+			if escaped {
+				escaped = false
+			} else if character == '\\' {
+				escaped = true
+			} else if character == quote {
+				quote = 0
+			}
+			continue
+		}
+		if character == '\'' || character == '"' {
+			writePendingSpace(&output, pendingSpace)
+			pendingSpace = false
+			quote = character
+			output.WriteByte(character)
+			continue
+		}
+		if character == '/' && next == '*' {
+			if index+2 < len(source) && source[index+2] == '!' {
+				writePendingSpace(&output, pendingSpace)
+				pendingSpace = false
+				output.WriteString("/*!")
+				index += 2
+				blockComment = true
+				preserveBlockComment = true
+				continue
+			}
+			blockComment = true
+			index++
+			pendingSpace = true
+			continue
+		}
+		if character == '/' && next == '/' && (index == 0 || isCSSCommentBoundary(source[index-1])) {
+			lineComment = true
+			index++
+			pendingSpace = true
+			continue
+		}
+		if character == ' ' || character == '\t' || character == '\r' || character == '\n' {
+			pendingSpace = true
+			continue
+		}
+		if strings.ContainsRune("{}:;,", rune(character)) {
+			trimTrailingSpace(&output)
+			pendingSpace = false
+			output.WriteByte(character)
+			continue
+		}
+		if pendingSpace && output.Len() > 0 {
+			previous := output.String()[output.Len()-1]
+			if cssTokenByte(previous) && cssTokenByte(character) || character == '+' || character == '-' || character == '.' || character == '#' || previous == '+' || previous == '-' {
+				output.WriteByte(' ')
+			}
+		}
+		pendingSpace = false
+		output.WriteByte(character)
+	}
+	return strings.TrimSpace(output.String())
+}
+
+func isCSSCommentBoundary(character byte) bool {
+	return character == ' ' || character == '\t' || character == '\r' || character == '\n' || character == ';' || character == '{' || character == '}'
+}
+
+func cssTokenByte(character byte) bool {
+	return character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || strings.ContainsRune("_$#@-", rune(character))
+}
+
+func trimTrailingSpace(output *strings.Builder) {
+	value := strings.TrimRight(output.String(), " \t")
+	output.Reset()
+	output.WriteString(value)
+}
+
+func writePendingSpace(output *strings.Builder, pending bool) {
+	if pending && output.Len() > 0 && !strings.HasSuffix(output.String(), " ") {
+		output.WriteByte(' ')
+	}
+}
+
+func minifySQLSource(source string) string {
+	var output strings.Builder
+	quote := byte(0)
+	escaped := false
+	blockComment := false
+	preserveBlockComment := false
+	pendingSpace := false
+	for index := 0; index < len(source); index++ {
+		character := source[index]
+		var next byte
+		if index+1 < len(source) {
+			next = source[index+1]
+		}
+		if blockComment {
+			if preserveBlockComment {
+				output.WriteByte(character)
+			}
+			if character == '*' && next == '/' {
+				if preserveBlockComment {
+					output.WriteByte(next)
+				}
+				blockComment = false
+				preserveBlockComment = false
+				index++
+				pendingSpace = true
+			}
+			continue
+		}
+		if quote != 0 {
+			output.WriteByte(character)
+			if escaped {
+				escaped = false
+			} else if character == '\\' {
+				escaped = true
+			} else if character == quote {
+				if next == quote {
+					output.WriteByte(next)
+					index++
+				} else {
+					quote = 0
+				}
+			}
+			continue
+		}
+		if character == '\'' || character == '"' || character == '`' {
+			writePendingSpace(&output, pendingSpace)
+			pendingSpace = false
+			quote = character
+			output.WriteByte(character)
+			continue
+		}
+		if character == '[' {
+			writePendingSpace(&output, pendingSpace)
+			pendingSpace = false
+			quote = ']'
+			output.WriteByte(character)
+			continue
+		}
+		if character == '-' && next == '-' {
+			for index < len(source) && source[index] != '\n' {
+				index++
+			}
+			pendingSpace = true
+			continue
+		}
+		if character == '/' && next == '*' {
+			if index+2 < len(source) && source[index+2] == '+' {
+				writePendingSpace(&output, pendingSpace)
+				pendingSpace = false
+				output.WriteString("/*+")
+				index += 2
+				blockComment = true
+				preserveBlockComment = true
+				continue
+			}
+			blockComment = true
+			index++
+			pendingSpace = true
+			continue
+		}
+		if character == ' ' || character == '\t' || character == '\r' || character == '\n' {
+			pendingSpace = true
+			continue
+		}
+		if strings.ContainsRune(",;()", rune(character)) {
+			trimTrailingSpace(&output)
+			pendingSpace = false
+			output.WriteByte(character)
+			continue
+		}
+		writePendingSpace(&output, pendingSpace)
+		pendingSpace = false
+		output.WriteByte(character)
+	}
+	return strings.TrimSpace(output.String())
+}
+
+func minifyPythonSource(source string) string {
+	lines := strings.Split(strings.ReplaceAll(source, "\r\n", "\n"), "\n")
+	kept := make([]string, 0, len(lines))
+	var tripleQuote byte
+	for _, line := range lines {
+		if tripleQuote == 0 {
+			line = strings.TrimRight(stripPythonComment(line, &tripleQuote), " \t")
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+		} else {
+			stripPythonComment(line, &tripleQuote)
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+func stripPythonComment(line string, tripleQuote *byte) string {
+	quote := byte(0)
+	escaped := false
+	for index := 0; index < len(line); index++ {
+		character := line[index]
+		if *tripleQuote != 0 {
+			if character == *tripleQuote && index+2 < len(line) && line[index+1] == character && line[index+2] == character {
+				*tripleQuote = 0
+				index += 2
+			}
+			continue
+		}
+		if quote != 0 {
+			if escaped {
+				escaped = false
+			} else if character == '\\' {
+				escaped = true
+			} else if character == quote {
+				quote = 0
+			}
+			continue
+		}
+		if (character == '\'' || character == '"') && index+2 < len(line) && line[index+1] == character && line[index+2] == character {
+			*tripleQuote = character
+			index += 2
+			continue
+		}
+		if character == '\'' || character == '"' {
+			quote = character
+			continue
+		}
+		if character == '#' {
+			return line[:index]
+		}
+	}
+	return line
 }
 
 func detectLanguage(code string) string {
@@ -683,6 +1058,9 @@ func detectLanguage(code string) string {
 	if strings.Contains(code, "function") || strings.Contains(code, "const ") || strings.Contains(code, "var ") || strings.Contains(code, "=>") {
 		return "javascript"
 	}
+	if regexp.MustCompile(`(?m)^(def|class|import|from)\s+`).MatchString(code) {
+		return "python"
+	}
 	if strings.Contains(code, "{") && (strings.Contains(code, ":") || strings.Contains(code, ";")) {
 		return "css"
 	}
@@ -693,19 +1071,529 @@ func detectLanguage(code string) string {
 	return "unknown"
 }
 
+func parseBeautifyOptions(code string) (string, bool, string, string, error) {
+	fields := strings.Fields(code)
+	indent := ""
+	style := ""
+	minify := false
+	consumed := 0
+	for consumed < len(fields) {
+		field := fields[consumed]
+		switch {
+		case strings.HasPrefix(field, "--indent="):
+			indent = strings.TrimPrefix(field, "--indent=")
+			if indent != "2" && indent != "4" && indent != "tab" {
+				return "", false, "", "", fmt.Errorf("indent must be 2, 4, or tab")
+			}
+			consumed++
+		case strings.HasPrefix(field, "--style="):
+			style = strings.TrimPrefix(field, "--style=")
+			consumed++
+		case field == "--minify":
+			minify = true
+			consumed++
+		default:
+			return indent, minify, style, remainingBeautifySource(code, fields, consumed), nil
+		}
+	}
+	return indent, minify, style, remainingBeautifySource(code, fields, consumed), nil
+}
+
+func remainingBeautifySource(code string, fields []string, consumed int) string {
+	remaining := code
+	for index := 0; index < consumed; index++ {
+		remaining = strings.TrimLeft(remaining, " \t\r\n")
+		remaining = strings.TrimPrefix(remaining, fields[index])
+	}
+	return strings.TrimSpace(remaining)
+}
+
+func normalizeBeautifyStyle(language, requested string) (string, error) {
+	language = strings.ToLower(language)
+	if requested == "" || requested == "standard" {
+		switch language {
+		case "js", "javascript", "ts", "typescript", "php":
+			return "kr", nil
+		case "css", "scss", "less", "html", "xml":
+			return "expanded", nil
+		case "json":
+			return "pretty", nil
+		case "sql":
+			return "uppercase", nil
+		case "python":
+			return "pep8", nil
+		default:
+			return "standard", nil
+		}
+	}
+	allowed := map[string]map[string]bool{
+		"js": {"kr": true, "allman": true, "compact": true}, "javascript": {"kr": true, "allman": true, "compact": true},
+		"ts": {"kr": true, "allman": true, "compact": true}, "typescript": {"kr": true, "allman": true, "compact": true},
+		"php": {"kr": true, "allman": true, "compact": true},
+		"css": {"expanded": true, "compact": true}, "scss": {"expanded": true, "compact": true}, "less": {"expanded": true, "compact": true},
+		"html": {"expanded": true, "compact": true}, "xml": {"expanded": true, "compact": true},
+		"json":   {"pretty": true, "compact": true},
+		"sql":    {"uppercase": true, "lowercase": true, "compact": true},
+		"python": {"pep8": true},
+	}
+	if !allowed[language][requested] {
+		return "", fmt.Errorf("style %q is not supported for %s", requested, language)
+	}
+	return requested, nil
+}
+
+func applyBeautifyStyle(formatted, source, language, style string) (string, error) {
+	switch style {
+	case "allman":
+		return allmanBraceStyle(formatted), nil
+	case "compact":
+		return minifyCode(source, language)
+	case "lowercase":
+		return lowercaseSQLKeywords(formatted), nil
+	default:
+		return formatted, nil
+	}
+}
+
+func allmanBraceStyle(formatted string) string {
+	var output strings.Builder
+	quote := byte(0)
+	escaped := false
+	lineComment := false
+	blockComment := false
+	for index := 0; index < len(formatted); index++ {
+		current := formatted[index]
+		if lineComment {
+			output.WriteByte(current)
+			if current == '\n' {
+				lineComment = false
+			}
+			continue
+		}
+		if blockComment {
+			output.WriteByte(current)
+			if current == '*' && index+1 < len(formatted) && formatted[index+1] == '/' {
+				output.WriteByte(formatted[index+1])
+				index++
+				blockComment = false
+			}
+			continue
+		}
+		if quote != 0 {
+			output.WriteByte(current)
+			if escaped {
+				escaped = false
+			} else if current == '\\' {
+				escaped = true
+			} else if current == quote {
+				quote = 0
+			}
+			continue
+		}
+		if current == '/' && index+1 < len(formatted) {
+			if formatted[index+1] == '/' {
+				output.WriteString("//")
+				index++
+				lineComment = true
+				continue
+			}
+			if formatted[index+1] == '*' {
+				output.WriteString("/*")
+				index++
+				blockComment = true
+				continue
+			}
+		}
+		if current == '\'' || current == '"' || current == '`' {
+			quote = current
+			output.WriteByte(current)
+			continue
+		}
+		if current == '{' {
+			for output.Len() > 0 {
+				text := output.String()
+				if text[len(text)-1] != ' ' && text[len(text)-1] != '\t' {
+					break
+				}
+				output.Reset()
+				output.WriteString(strings.TrimRight(text, " \t"))
+			}
+			text := output.String()
+			if len(text) > 0 && text[len(text)-1] != '\n' {
+				lineStart := strings.LastIndex(text, "\n") + 1
+				indent := text[lineStart:]
+				indent = indent[:len(indent)-len(strings.TrimLeft(indent, " \t"))]
+				output.WriteByte('\n')
+				output.WriteString(indent)
+			}
+		}
+		output.WriteByte(current)
+	}
+	return output.String()
+}
+
+func lowercaseSQLKeywords(formatted string) string {
+	keywords := map[string]struct{}{}
+	for _, keyword := range strings.Fields("SELECT FROM WHERE AND OR NOT IN IS NULL LIKE BETWEEN JOIN INNER LEFT RIGHT OUTER ON AS GROUP BY ORDER HAVING LIMIT OFFSET INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE ALTER DROP DISTINCT COUNT SUM AVG MIN MAX CASE WHEN THEN ELSE END UNION ALL ASC DESC") {
+		keywords[keyword] = struct{}{}
+	}
+	var output strings.Builder
+	quote := byte(0)
+	escaped := false
+	for index := 0; index < len(formatted); {
+		current := formatted[index]
+		if quote != 0 {
+			output.WriteByte(current)
+			index++
+			if escaped {
+				escaped = false
+			} else if current == '\\' {
+				escaped = true
+			} else if current == quote {
+				quote = 0
+			}
+			continue
+		}
+		if current == '\'' || current == '"' || current == '`' {
+			quote = current
+			output.WriteByte(current)
+			index++
+			continue
+		}
+		if current >= 'A' && current <= 'Z' {
+			end := index + 1
+			for end < len(formatted) && ((formatted[end] >= 'A' && formatted[end] <= 'Z') || (formatted[end] >= '0' && formatted[end] <= '9') || formatted[end] == '_') {
+				end++
+			}
+			word := formatted[index:end]
+			if _, ok := keywords[word]; ok {
+				output.WriteString(strings.ToLower(word))
+			} else {
+				output.WriteString(word)
+			}
+			index = end
+			continue
+		}
+		output.WriteByte(current)
+		index++
+	}
+	return output.String()
+}
+
+func reindentFormatted(formatted, language, indent string) string {
+	unit := 2
+	if language == "python" {
+		unit = 4
+	}
+	indentText := "  "
+	switch indent {
+	case "4":
+		indentText = "    "
+	case "tab":
+		indentText = "\t"
+	}
+	lines := strings.Split(formatted, "\n")
+	for index, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if trimmed == "" {
+			lines[index] = ""
+			continue
+		}
+		leading := len(line) - len(trimmed)
+		level := leading / unit
+		lines[index] = strings.Repeat(indentText, level) + trimmed
+	}
+	return strings.Join(lines, "\n")
+}
+
 func beautifyCode(code, lang string) string {
 	switch lang {
 	case "json":
 		return beautifyJSON(code)
 	case "html", "xml":
 		return beautifyHTML(code)
-	case "css":
+	case "css", "scss", "less":
 		return beautifyCSS(code)
 	case "sql":
 		return beautifySQL(code)
+	case "js", "javascript", "ts", "typescript":
+		return beautifyJavaScript(code)
+	case "php":
+		return beautifyJavaScript(code)
+	case "python":
+		return beautifyPython(code)
 	default:
 		return code
 	}
+}
+
+func countLines(text string) int {
+	if text == "" {
+		return 0
+	}
+	return strings.Count(text, "\n") + 1
+}
+
+func beautifyPython(code string) string {
+	lines := strings.Split(strings.ReplaceAll(code, "\r\n", "\n"), "\n")
+	formatted := make([]string, 0, len(lines))
+	indentLevel := 0
+	continuationDepth := 0
+	tripleQuote := rune(0)
+	for _, line := range lines {
+		if tripleQuote != 0 {
+			// Whitespace inside a multiline string is data, not source
+			// indentation. Preserve those lines byte-for-byte so formatting
+			// cannot silently change the Python program's string value.
+			formatted = append(formatted, line)
+			continuationDepth = pythonDelimiterDepth(line, continuationDepth, &tripleQuote)
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			formatted = append(formatted, "")
+			continue
+		}
+		if continuationDepth == 0 && pythonDedentPattern.MatchString(trimmed) && indentLevel > 0 {
+			indentLevel--
+		}
+		level := indentLevel + continuationDepth
+		if level < 0 {
+			level = 0
+		}
+		formatted = append(formatted, strings.Repeat("    ", level)+trimmed)
+		continuationDepth = pythonDelimiterDepth(trimmed, continuationDepth, &tripleQuote)
+		if continuationDepth == 0 && tripleQuote == 0 && strings.HasSuffix(trimmed, ":") {
+			indentLevel++
+		}
+	}
+	return strings.TrimSpace(strings.Join(formatted, "\n"))
+}
+
+var pythonDedentPattern = regexp.MustCompile(`^(elif\b|else\s*:|except\b|finally\s*:|case\b)`)
+
+func pythonDelimiterDepth(line string, depth int, tripleQuote *rune) int {
+	quote := rune(0)
+	escaped := false
+	for index := 0; index < len(line); {
+		character, width := utf8.DecodeRuneInString(line[index:])
+		if *tripleQuote != 0 {
+			quote := string(*tripleQuote) + string(*tripleQuote) + string(*tripleQuote)
+			if strings.HasPrefix(line[index:], quote) {
+				*tripleQuote = 0
+				index += 3
+				continue
+			}
+			_, size := utf8.DecodeRuneInString(line[index:])
+			index += size
+			continue
+		}
+		if quote != 0 {
+			if escaped {
+				escaped = false
+			} else if character == '\\' {
+				escaped = true
+			} else if character == quote {
+				quote = 0
+			}
+			index += width
+			continue
+		}
+		if character == '#' {
+			break
+		}
+		if (character == '\'' || character == '"') && strings.HasPrefix(line[index:], strings.Repeat(string(character), 3)) {
+			*tripleQuote = character
+			index += 3
+			continue
+		}
+		switch character {
+		case '\'', '"':
+			quote = character
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		}
+		index += width
+	}
+	return depth
+}
+
+func beautifyJavaScript(code string) string {
+	var output strings.Builder
+	indent := 0
+	parenDepth := 0
+	quote := rune(0)
+	escaped := false
+	lineComment := false
+	blockComment := false
+	pendingSpace := false
+	lineStart := true
+	skipNext := false
+	writeIndent := func() {
+		if lineStart {
+			output.WriteString(strings.Repeat("  ", indent))
+			lineStart = false
+		}
+	}
+	writeNewline := func() {
+		trimmed := strings.TrimRight(output.String(), " \t")
+		output.Reset()
+		output.WriteString(trimmed)
+		if !strings.HasSuffix(trimmed, "\n") {
+			output.WriteByte('\n')
+		}
+		lineStart = true
+		pendingSpace = false
+	}
+	for index, char := range code {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		next := rune(0)
+		if index+1 < len(code) {
+			next, _ = utf8.DecodeRuneInString(code[index+1:])
+		}
+		if quote != 0 {
+			writeIndent()
+			output.WriteRune(char)
+			if escaped {
+				escaped = false
+			} else if char == '\\' {
+				escaped = true
+			} else if char == quote {
+				quote = 0
+			}
+			continue
+		}
+		if lineComment {
+			writeIndent()
+			output.WriteRune(char)
+			if char == '\n' {
+				lineComment = false
+				lineStart = true
+			}
+			continue
+		}
+		if blockComment {
+			writeIndent()
+			output.WriteRune(char)
+			if char == '/' && index > 0 && code[index-1] == '*' {
+				blockComment = false
+			}
+			continue
+		}
+		if char == '/' && next == '/' {
+			writeIndent()
+			if pendingSpace {
+				output.WriteByte(' ')
+			}
+			output.WriteString("//")
+			skipNext = true
+			lineComment = true
+			pendingSpace = false
+			continue
+		}
+		if char == '/' && next == '*' {
+			writeIndent()
+			if pendingSpace {
+				output.WriteByte(' ')
+			}
+			output.WriteString("/*")
+			skipNext = true
+			blockComment = true
+			pendingSpace = false
+			continue
+		}
+		if char == '\'' || char == '"' || char == '`' {
+			writeIndent()
+			if pendingSpace {
+				output.WriteByte(' ')
+			}
+			output.WriteRune(char)
+			quote = char
+			pendingSpace = false
+			continue
+		}
+		if unicode.IsSpace(char) {
+			pendingSpace = true
+			continue
+		}
+		switch char {
+		case '{':
+			writeIndent()
+			if pendingSpace || (output.Len() > 0 && !strings.HasSuffix(output.String(), " ") && !strings.HasSuffix(output.String(), "\n")) {
+				output.WriteByte(' ')
+			}
+			output.WriteRune(char)
+			indent++
+			writeNewline()
+		case '}':
+			if !lineStart {
+				writeNewline()
+			}
+			if indent > 0 {
+				indent--
+			}
+			writeIndent()
+			output.WriteRune(char)
+			if next != ';' && next != ',' && next != ')' && next != ']' {
+				writeNewline()
+			}
+		case ';':
+			writeIndent()
+			output.WriteRune(char)
+			if parenDepth == 0 {
+				writeNewline()
+			} else {
+				output.WriteByte(' ')
+			}
+		case ',':
+			writeIndent()
+			output.WriteString(", ")
+			pendingSpace = false
+		case ':':
+			writeIndent()
+			output.WriteString(": ")
+			pendingSpace = false
+		case '(':
+			writeIndent()
+			if pendingSpace {
+				output.WriteByte(' ')
+			}
+			output.WriteRune(char)
+			parenDepth++
+			pendingSpace = false
+		case ')':
+			writeIndent()
+			output.WriteRune(char)
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		case '[':
+			writeIndent()
+			if pendingSpace {
+				output.WriteByte(' ')
+			}
+			output.WriteRune(char)
+			pendingSpace = false
+		case ']':
+			writeIndent()
+			output.WriteRune(char)
+		default:
+			writeIndent()
+			if pendingSpace && output.Len() > 0 && !strings.HasSuffix(output.String(), " ") && !strings.HasSuffix(output.String(), "\n") {
+				output.WriteByte(' ')
+			}
+			output.WriteRune(char)
+			pendingSpace = false
+		}
+	}
+	return strings.TrimSpace(output.String())
 }
 
 func beautifyJSON(code string) string {
@@ -746,7 +1634,9 @@ func beautifyJSON(code string) string {
 			result.WriteRune('\n')
 			result.WriteString(strings.Repeat("  ", indent))
 		case '}', ']':
-			indent--
+			if indent > 0 {
+				indent--
+			}
 			result.WriteRune('\n')
 			result.WriteString(strings.Repeat("  ", indent))
 			result.WriteRune(r)
@@ -784,7 +1674,7 @@ func beautifyHTML(code string) string {
 		}
 
 		// Check if closing tag
-		if strings.HasPrefix(line, "</") {
+		if strings.HasPrefix(line, "</") && indent > 0 {
 			indent--
 		}
 
@@ -802,36 +1692,245 @@ func beautifyHTML(code string) string {
 }
 
 func beautifyCSS(code string) string {
-	// Simple CSS beautification
-	code = strings.ReplaceAll(code, "{", " {\n  ")
-	code = strings.ReplaceAll(code, "}", "\n}\n\n")
-	code = strings.ReplaceAll(code, ";", ";\n  ")
-	code = regexp.MustCompile(`\n  \n`).ReplaceAllString(code, "\n")
-	return strings.TrimSpace(code)
+	var output strings.Builder
+	indent := 0
+	parenDepth := 0
+	for index := 0; index < len(code); {
+		character := code[index]
+		if character == '\\' && index+1 < len(code) {
+			output.WriteString(code[index : index+2])
+			index += 2
+			continue
+		}
+		if character == '\'' || character == '"' {
+			end := scanCSSQuotedToken(code, index, character)
+			output.WriteString(code[index:end])
+			index = end
+			continue
+		}
+		if index+1 < len(code) && code[index:index+2] == "/*" {
+			end := strings.Index(code[index+2:], "*/")
+			if end < 0 {
+				output.WriteString(code[index:])
+				break
+			}
+			end += index + 4
+			output.WriteString(code[index:end])
+			index = end
+			continue
+		}
+		if character == '#' && index+1 < len(code) && code[index+1] == '{' {
+			end := scanCSSInterpolation(code, index)
+			output.WriteString(code[index:end])
+			index = end
+			continue
+		}
+		switch character {
+		case '(':
+			parenDepth++
+			output.WriteByte(character)
+		case ')':
+			if parenDepth > 0 {
+				parenDepth--
+			}
+			output.WriteByte(character)
+		case '{':
+			formattedPrefix := output.String()
+			if output.Len() > 0 && !strings.HasSuffix(formattedPrefix, " ") && !strings.HasSuffix(formattedPrefix, "\t") && !strings.HasSuffix(formattedPrefix, "\n") {
+				output.WriteByte(' ')
+			}
+			output.WriteByte('{')
+			indent++
+			output.WriteString("\n" + strings.Repeat("  ", indent))
+		case ';':
+			output.WriteByte(character)
+			if parenDepth == 0 {
+				output.WriteString("\n" + strings.Repeat("  ", indent))
+			}
+		case '}':
+			if parenDepth == 0 {
+				trimmed := strings.TrimRight(output.String(), " \t\r\n")
+				output.Reset()
+				output.WriteString(trimmed)
+				if output.Len() > 0 && !strings.HasSuffix(output.String(), "\n") {
+					output.WriteByte('\n')
+				}
+				if indent > 0 {
+					indent--
+				}
+				output.WriteString(strings.Repeat("  ", indent))
+			}
+			output.WriteByte(character)
+			if parenDepth == 0 {
+				output.WriteString("\n\n")
+			}
+		default:
+			output.WriteByte(character)
+		}
+		index++
+	}
+	return strings.TrimSpace(output.String())
+}
+
+func scanCSSInterpolation(code string, start int) int {
+	depth := 0
+	for index := start; index < len(code); index++ {
+		if code[index] == '\'' || code[index] == '"' {
+			index = scanCSSQuotedToken(code, index, code[index]) - 1
+			continue
+		}
+		switch code[index] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return index + 1
+			}
+		}
+	}
+	return len(code)
+}
+
+func scanCSSQuotedToken(code string, start int, quote byte) int {
+	escaped := false
+	for index := start + 1; index < len(code); index++ {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if code[index] == '\\' {
+			escaped = true
+			continue
+		}
+		if code[index] == quote {
+			return index + 1
+		}
+	}
+	return len(code)
 }
 
 func beautifySQL(code string) string {
-	// Simple SQL beautification
 	keywords := []string{"SELECT", "FROM", "WHERE", "AND", "OR", "ORDER BY", "GROUP BY", "HAVING", "JOIN", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "ON", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE"}
-
-	for _, kw := range keywords {
-		re := regexp.MustCompile(`(?i)\b` + kw + `\b`)
-		code = re.ReplaceAllStringFunc(code, func(m string) string {
-			return "\n" + strings.ToUpper(m)
-		})
+	pattern := regexp.MustCompile(`(?i)\b(?:` + strings.Join(keywords, `|`) + `)\b`)
+	var output strings.Builder
+	codeStart := 0
+	for index := 0; index < len(code); {
+		if delimiter := sqlDollarQuoteDelimiter(code, index); delimiter != "" {
+			output.WriteString(formatSQLCodeSegment(pattern, code[codeStart:index]))
+			end := strings.Index(code[index+len(delimiter):], delimiter)
+			if end < 0 {
+				output.WriteString(code[index:])
+				return strings.TrimSpace(output.String())
+			}
+			end += index + 2*len(delimiter)
+			output.WriteString(code[index:end])
+			index = end
+			codeStart = end
+			continue
+		}
+		quote := code[index]
+		if quote == '\'' || quote == '"' || quote == '`' || quote == '[' {
+			output.WriteString(formatSQLCodeSegment(pattern, code[codeStart:index]))
+			end := scanSQLQuotedToken(code, index, quote)
+			output.WriteString(code[index:end])
+			index = end
+			codeStart = end
+			continue
+		}
+		if (index+1 < len(code) && code[index:index+2] == "--") || code[index] == '#' {
+			output.WriteString(formatSQLCodeSegment(pattern, code[codeStart:index]))
+			end := strings.IndexByte(code[index:], '\n')
+			if end < 0 {
+				output.WriteString(code[index:])
+				return strings.TrimSpace(output.String())
+			}
+			end += index + 1
+			output.WriteString(code[index:end])
+			index = end
+			codeStart = end
+			continue
+		}
+		if index+1 < len(code) && code[index:index+2] == "/*" {
+			output.WriteString(formatSQLCodeSegment(pattern, code[codeStart:index]))
+			end := strings.Index(code[index+2:], "*/")
+			if end < 0 {
+				output.WriteString(code[index:])
+				return strings.TrimSpace(output.String())
+			}
+			end += index + 4
+			output.WriteString(code[index:end])
+			index = end
+			codeStart = end
+			continue
+		}
+		index++
 	}
-
-	return strings.TrimSpace(code)
+	output.WriteString(formatSQLCodeSegment(pattern, code[codeStart:]))
+	return strings.TrimSpace(output.String())
 }
 
-func formatBeautifyContent(input, output, lang string) string {
+func sqlDollarQuoteDelimiter(code string, start int) string {
+	if code[start] != '$' {
+		return ""
+	}
+	end := strings.IndexByte(code[start+1:], '$')
+	if end < 0 {
+		return ""
+	}
+	end += start + 1
+	for index := start + 1; index < end; index++ {
+		character := code[index]
+		if character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || index > start+1 && character >= '0' && character <= '9' {
+			continue
+		}
+		return ""
+	}
+	return code[start : end+1]
+}
+
+func scanSQLQuotedToken(code string, start int, quote byte) int {
+	closeQuote := quote
+	if quote == '[' {
+		closeQuote = ']'
+	}
+	for index := start + 1; index < len(code); index++ {
+		if code[index] != closeQuote {
+			continue
+		}
+		if index+1 < len(code) && code[index+1] == closeQuote {
+			index++
+			continue
+		}
+		return index + 1
+	}
+	return len(code)
+}
+
+func formatSQLCodeSegment(pattern *regexp.Regexp, code string) string {
+	return pattern.ReplaceAllStringFunc(code, func(keyword string) string {
+		return "\n" + strings.ToUpper(keyword)
+	})
+}
+
+func formatBeautifyContent(input, output, lang, indent, style, minified string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"beautify-content\">")
-	html.WriteString(fmt.Sprintf("<h1>Code Beautifier - %s</h1>", escapeHTML(lang)))
+	fmt.Fprintf(&html, "<h1>Code Beautifier - %s</h1>", escapeHTML(lang))
+	fmt.Fprintf(&html, "<p class=\"line-counts\">Lines before: %d · Lines after: %d</p>", countLines(input), countLines(output))
+	if indent != "" {
+		fmt.Fprintf(&html, "<p>Indentation: %s</p>", escapeHTML(indent))
+	}
+	fmt.Fprintf(&html, "<p class=\"formatter-style\">Style: %s</p>", escapeHTML(style))
 
 	html.WriteString("<h2>Formatted Code</h2>")
-	html.WriteString(fmt.Sprintf("<pre class=\"code %s\"><code>%s</code></pre>", escapeHTML(lang), escapeHTML(output)))
-	html.WriteString("<button class=\"copy-btn\" onclick=\"copyCode(this)\">Copy</button>")
+	fmt.Fprintf(&html, "<pre class=\"code %s\"><code>%s</code></pre>", escapeHTML(lang), escapeHTML(output))
+	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
+	if minified != "" {
+		html.WriteString("<details class=\"minified-code\"><summary>Minified output</summary>")
+		html.WriteString("<pre><code>" + escapeHTML(minified) + "</code></pre></details>")
+	}
+	html.WriteString("<p class=\"formatter-options\">Options: prefix the source with <code>--indent=2</code>, <code>--indent=4</code>, or <code>--indent=tab</code>. Use <code>--style=allman</code> or <code>--style=kr</code> for JavaScript, TypeScript, and PHP; <code>--style=expanded</code> or <code>--style=compact</code> for CSS, SCSS, LESS, HTML, and XML; <code>--style=pretty</code> or <code>--style=compact</code> for JSON; and <code>--style=uppercase</code> or <code>--style=lowercase</code> for SQL. Python uses <code>pep8</code>. <code>--minify</code> is also available where supported.</p>")
 
 	html.WriteString("</div>")
 	return html.String()
@@ -943,13 +2042,14 @@ func formatDiffContent(text1, text2 string, diff []diffLine) string {
 	added := 0
 	removed := 0
 	for _, d := range diff {
-		if d.Type == "add" {
+		switch d.Type {
+		case "add":
 			added++
-		} else if d.Type == "remove" {
+		case "remove":
 			removed++
 		}
 	}
-	html.WriteString(fmt.Sprintf("<p>+%d additions, -%d removals</p>", added, removed))
+	fmt.Fprintf(&html, "<p>+%d additions, -%d removals</p>", added, removed)
 
 	// Side by side
 	html.WriteString("<div class=\"diff-view\">")
@@ -960,11 +2060,11 @@ func formatDiffContent(text1, text2 string, diff []diffLine) string {
 	for _, d := range diff {
 		switch d.Type {
 		case "same":
-			html.WriteString(fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", escapeHTML(d.Text), escapeHTML(d.Text)))
+			fmt.Fprintf(&html, "<tr><td>%s</td><td>%s</td></tr>", escapeHTML(d.Text), escapeHTML(d.Text))
 		case "remove":
-			html.WriteString(fmt.Sprintf("<tr class=\"removed\"><td class=\"removed\">%s</td><td></td></tr>", escapeHTML(d.Text)))
+			fmt.Fprintf(&html, "<tr class=\"removed\"><td class=\"removed\">%s</td><td></td></tr>", escapeHTML(d.Text))
 		case "add":
-			html.WriteString(fmt.Sprintf("<tr class=\"added\"><td></td><td class=\"added\">%s</td></tr>", escapeHTML(d.Text)))
+			fmt.Fprintf(&html, "<tr class=\"added\"><td></td><td class=\"added\">%s</td></tr>", escapeHTML(d.Text))
 		}
 	}
 

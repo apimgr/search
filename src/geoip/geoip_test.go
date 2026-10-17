@@ -19,7 +19,7 @@ import (
 // so we do not duplicate its parser tests here.
 
 func TestDatabaseURLs(t *testing.T) {
-	urls := []string{ASNURL, CountryURL, CityURL, WhoisURL}
+	urls := []string{ASNURL, CountryURL, CityIPv4URL, CityIPv6URL}
 	for _, u := range urls {
 		if u == "" {
 			t.Error("database URL is empty")
@@ -30,10 +30,18 @@ func TestDatabaseURLs(t *testing.T) {
 	}
 }
 
-func TestDatabaseURLsJsdelivrCDN(t *testing.T) {
-	for _, u := range []string{ASNURL, CountryURL, CityURL, WhoisURL} {
+// Per AI.md PART 19 the ASN and country databases come from the jsDelivr CDN
+// while the split IPv4/IPv6 city databases come from the ip-location-db
+// GitHub release assets.
+func TestDatabaseURLSources(t *testing.T) {
+	for _, u := range []string{ASNURL, CountryURL} {
 		if !strings.Contains(u, "cdn.jsdelivr.net") {
 			t.Errorf("URL %q is not on jsdelivr CDN", u)
+		}
+	}
+	for _, u := range []string{CityIPv4URL, CityIPv6URL} {
+		if !strings.Contains(u, "github.com/sapics/ip-location-db/releases") {
+			t.Errorf("URL %q is not a sapics/ip-location-db release asset", u)
 		}
 	}
 }
@@ -74,12 +82,9 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.ASN {
 		t.Error("default config should enable ASN DB")
 	}
-	// Per AI.md PART 19: all four databases enabled by default
+	// Per AI.md PART 19: all three databases are enabled by default
 	if !cfg.City {
 		t.Error("default config should enable city DB per AI.md PART 19")
-	}
-	if !cfg.WHOIS {
-		t.Error("default config should enable WHOIS DB per AI.md PART 19")
 	}
 }
 
@@ -207,10 +212,6 @@ func TestMmdbReaderClosedLookups(t *testing.T) {
 	city, region, postal, lat, lon, tz := r.LookupCity(net.ParseIP("8.8.8.8"))
 	if city != "" || region != "" || postal != "" || lat != 0 || lon != 0 || tz != "" {
 		t.Errorf("LookupCity on closed reader returned non-zero values")
-	}
-	o, n := r.LookupWHOIS(net.ParseIP("8.8.8.8"))
-	if o != "" || n != "" {
-		t.Errorf("LookupWHOIS on closed reader = (%q, %q)", o, n)
 	}
 }
 
@@ -528,7 +529,7 @@ func TestLookupASNNilRecord(t *testing.T) {
 // TestLookupCityNilRecord exercises LookupCity when the DB returns nil.
 func TestLookupCityNilRecord(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "city.mmdb")
+	path := writeTempMMDB(t, dir, "city-ipv4.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -537,21 +538,6 @@ func TestLookupCityNilRecord(t *testing.T) {
 	city, region, postal, lat, lon, tz := db.LookupCity(net.ParseIP("1.2.3.4"))
 	if city != "" || region != "" || postal != "" || lat != 0 || lon != 0 || tz != "" {
 		t.Error("LookupCity on empty DB should return zero values")
-	}
-}
-
-// TestLookupWHOISNilRecord exercises LookupWHOIS when the DB returns nil.
-func TestLookupWHOISNilRecord(t *testing.T) {
-	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "whois.mmdb")
-	db, err := openMMDB(path)
-	if err != nil {
-		t.Fatalf("openMMDB: %v", err)
-	}
-	defer db.Close()
-	org, net_ := db.LookupWHOIS(net.ParseIP("1.2.3.4"))
-	if org != "" || net_ != "" {
-		t.Errorf("LookupWHOIS on empty DB = (%q, %q)", org, net_)
 	}
 }
 
@@ -625,59 +611,6 @@ func TestLookupASNFlatFormat(t *testing.T) {
 			_, org := db.LookupASN(net.ParseIP("8.8.8.8"))
 			if org != tt.wantOrg {
 				t.Errorf("LookupASN org = %q, want %q", org, tt.wantOrg)
-			}
-		})
-	}
-}
-
-// TestLookupWHOISFlatFormat exercises the WHOIS lookup with various field names.
-func TestLookupWHOISFlatFormat(t *testing.T) {
-	tests := []struct {
-		name    string
-		fields  map[string]string
-		wantOrg string
-		wantNet string
-	}{
-		{
-			"organization field",
-			map[string]string{"organization": "Acme Corp", "network": "192.0.2.0/24"},
-			"Acme Corp",
-			"192.0.2.0/24",
-		},
-		{
-			"org field",
-			map[string]string{"org": "FooOrg", "range": "10.0.0.0/8"},
-			"FooOrg",
-			"10.0.0.0/8",
-		},
-		{
-			"name field with prefix",
-			map[string]string{"name": "BarNet", "prefix": "203.0.113.0/24"},
-			"BarNet",
-			"203.0.113.0/24",
-		},
-		{
-			"as_org field",
-			map[string]string{"as_org": "AsOrg"},
-			"AsOrg",
-			"",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := writeRecordMMDB(t, dir, "whois.mmdb", "whois", tt.fields)
-			db, err := openMMDB(path)
-			if err != nil {
-				t.Fatalf("openMMDB: %v", err)
-			}
-			defer db.Close()
-			org, net_ := db.LookupWHOIS(net.ParseIP("1.2.3.4"))
-			if org != tt.wantOrg {
-				t.Errorf("LookupWHOIS org = %q, want %q", org, tt.wantOrg)
-			}
-			if net_ != tt.wantNet {
-				t.Errorf("LookupWHOIS net = %q, want %q", net_, tt.wantNet)
 			}
 		})
 	}
@@ -785,7 +718,12 @@ func TestIsAllowedMatchesCountry(t *testing.T) {
 func TestLookupWithCityLoaded(t *testing.T) {
 	dir := t.TempDir()
 	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "US"})
-	writeRecordMMDB(t, dir, "city.mmdb", "city", map[string]string{"city": "New York"})
+	// AI.md PART 19 publishes city data as one database per IP version
+	// (dbip-city-ipv4.mmdb / dbip-city-ipv6.mmdb), so the loader looks for
+	// city-ipv4.mmdb / city-ipv6.mmdb. The retired single "city.mmdb" name is in
+	// legacyFiles and is deleted on load — writing it here leaves nothing to load
+	// and sends the loader off to download the real database over the network.
+	writeRecordMMDB(t, dir, "city-ipv4.mmdb", "city ipv4", map[string]string{"city": "New York"})
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: false, City: true}
 	l := NewLookup(cfg)
@@ -800,31 +738,6 @@ func TestLookupWithCityLoaded(t *testing.T) {
 	}
 	if result.City != "New York" {
 		t.Errorf("City = %q, want %q", result.City, "New York")
-	}
-}
-
-// TestLookupWithWHOISLoaded exercises the WHOIS lookup branch inside Lookup.
-func TestLookupWithWHOISLoaded(t *testing.T) {
-	dir := t.TempDir()
-	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "US"})
-	writeRecordMMDB(t, dir, "whois.mmdb", "whois", map[string]string{"organization": "TestOrg", "network": "8.8.8.0/24"})
-
-	cfg := &Config{Enabled: true, Dir: dir, Country: true, WHOIS: true}
-	l := NewLookup(cfg)
-	if err := l.LoadDatabases(); err != nil {
-		t.Fatalf("LoadDatabases: %v", err)
-	}
-	defer l.Close()
-
-	result := l.Lookup("8.8.8.8")
-	if result == nil {
-		t.Fatal("Lookup returned nil")
-	}
-	if result.RegistrantOrg != "TestOrg" {
-		t.Errorf("RegistrantOrg = %q, want %q", result.RegistrantOrg, "TestOrg")
-	}
-	if result.RegistrantNet != "8.8.8.0/24" {
-		t.Errorf("RegistrantNet = %q, want %q", result.RegistrantNet, "8.8.8.0/24")
 	}
 }
 
@@ -947,7 +860,6 @@ func TestLoadDatabasesAllDisabled(t *testing.T) {
 		Country: false,
 		ASN:     false,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 	if err := l.LoadDatabases(); err != nil {
@@ -971,7 +883,6 @@ func TestLoadDatabasesWithExistingFiles(t *testing.T) {
 		Country: true,
 		ASN:     true,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 	if err := l.LoadDatabases(); err != nil {
@@ -985,8 +896,9 @@ func TestLoadDatabasesAllExisting(t *testing.T) {
 	dir := t.TempDir()
 	writeTempMMDB(t, dir, "country.mmdb")
 	writeTempMMDB(t, dir, "asn.mmdb")
-	writeTempMMDB(t, dir, "city.mmdb")
-	writeTempMMDB(t, dir, "whois.mmdb")
+	// AI.md PART 19: city data ships as one database per IP version.
+	writeTempMMDB(t, dir, "city-ipv4.mmdb")
+	writeTempMMDB(t, dir, "city-ipv6.mmdb")
 
 	cfg := &Config{
 		Enabled: true,
@@ -994,7 +906,6 @@ func TestLoadDatabasesAllExisting(t *testing.T) {
 		Country: true,
 		ASN:     true,
 		City:    true,
-		WHOIS:   true,
 	}
 	l := NewLookup(cfg)
 	if err := l.LoadDatabases(); err != nil {
@@ -1020,7 +931,6 @@ func TestLoadDatabasesMissingFileWithBadData(t *testing.T) {
 		Country: true,
 		ASN:     false,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 	err := l.LoadDatabases()
@@ -1049,7 +959,6 @@ func TestLoadDatabasesInvalidMMDB(t *testing.T) {
 		Country: true,
 		ASN:     false,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 	err := l.LoadDatabases()
@@ -1077,7 +986,6 @@ func TestLoadDatabasesInvalidASN(t *testing.T) {
 		Country: true,
 		ASN:     true,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 	// Should not return error because country loaded successfully
@@ -1116,7 +1024,6 @@ func TestUpdateDatabasesDownloadFails(t *testing.T) {
 		Country: true,
 		ASN:     false,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 	// Pre-load so countryDB is non-nil (exercises the Close+replace branch)
@@ -1149,7 +1056,6 @@ func TestUpdateDatabasesWithMockServer(t *testing.T) {
 		Country: false,
 		ASN:     false,
 		City:    false,
-		WHOIS:   false,
 	}
 	l := NewLookup(cfg)
 
@@ -1179,8 +1085,9 @@ func TestUpdateDatabasesAllBranchesWithFailure(t *testing.T) {
 	dir := t.TempDir()
 	writeTempMMDB(t, dir, "country.mmdb")
 	writeTempMMDB(t, dir, "asn.mmdb")
-	writeTempMMDB(t, dir, "city.mmdb")
-	writeTempMMDB(t, dir, "whois.mmdb")
+	// AI.md PART 19: city data ships as one database per IP version.
+	writeTempMMDB(t, dir, "city-ipv4.mmdb")
+	writeTempMMDB(t, dir, "city-ipv6.mmdb")
 
 	cfg := &Config{
 		Enabled: true,
@@ -1188,7 +1095,6 @@ func TestUpdateDatabasesAllBranchesWithFailure(t *testing.T) {
 		Country: true,
 		ASN:     true,
 		City:    true,
-		WHOIS:   true,
 	}
 	l := NewLookup(cfg)
 	if err := l.LoadDatabases(); err != nil {
@@ -1221,10 +1127,11 @@ func TestCloseWithLoadedDBs(t *testing.T) {
 	dir := t.TempDir()
 	writeTempMMDB(t, dir, "country.mmdb")
 	writeTempMMDB(t, dir, "asn.mmdb")
-	writeTempMMDB(t, dir, "city.mmdb")
-	writeTempMMDB(t, dir, "whois.mmdb")
+	// AI.md PART 19: city data ships as one database per IP version.
+	writeTempMMDB(t, dir, "city-ipv4.mmdb")
+	writeTempMMDB(t, dir, "city-ipv6.mmdb")
 
-	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: true, City: true, WHOIS: true}
+	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: true, City: true}
 	l := NewLookup(cfg)
 	if err := l.LoadDatabases(); err != nil {
 		t.Fatalf("LoadDatabases: %v", err)
@@ -1235,7 +1142,7 @@ func TestCloseWithLoadedDBs(t *testing.T) {
 	if l.IsLoaded() {
 		t.Error("Lookup should not be loaded after Close")
 	}
-	if l.countryDB != nil || l.asnDB != nil || l.cityDB != nil || l.whoisDB != nil {
+	if l.countryDB != nil || l.asnDB != nil || l.cityDB4 != nil || l.cityDB6 != nil {
 		t.Error("all DB pointers should be nil after Close")
 	}
 }
@@ -1329,14 +1236,12 @@ func TestDefaultConfigValues(t *testing.T) {
 		got  interface{}
 		want interface{}
 	}{
-		// Per AI.md PART 19: GeoIP enabled by default; all four databases on; dir resolved at runtime.
+		// Per AI.md PART 19: GeoIP enabled by default; all three databases on; dir resolved at runtime.
 		{"Enabled", cfg.Enabled, true},
 		{"Dir", cfg.Dir, ""},
-		{"Update", cfg.Update, "weekly"},
 		{"ASN", cfg.ASN, true},
 		{"Country", cfg.Country, true},
 		{"City", cfg.City, true},
-		{"WHOIS", cfg.WHOIS, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

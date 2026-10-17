@@ -1,118 +1,80 @@
 package server
 
 import (
-	"encoding/base64"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/prefsync"
 )
 
-// normalizeSyncLanguage lowercases and strips any region/script subtag
-// (e.g. "fr-CA" -> "fr") to match the base language codes tracked by
-// i18n.Manager.SupportedLanguageCodes(). Mirrors the private
-// normalizeLanguageCode helper in src/common/i18n since that package does
-// not export it.
-func normalizeSyncLanguage(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	if value == "" {
-		return ""
-	}
-	if idx := strings.IndexAny(value, "-_"); idx != -1 {
-		value = value[:idx]
-	}
-	return value
-}
-
-// currentSyncPrefs reads the theme/lang cookies for the exportable preference
-// state, falling back to defaults per AI.md "Client-Side Preferences".
-func (s *Server) currentSyncPrefs(r *http.Request) (theme, lang string) {
-	theme = DefaultTheme
-	if c, err := r.Cookie("theme"); err == nil && IsValidTheme(c.Value) {
-		theme = c.Value
-	}
-
-	mgr := s.getI18nManager()
-	lang = mgr.DefaultLanguage()
-	if c, err := r.Cookie("lang"); err == nil {
-		if l := normalizeSyncLanguage(c.Value); l != "" && mgr.IsSupported(l) {
-			lang = l
-		}
-	}
-
-	return theme, lang
-}
-
-// handlePreferencesExport handles GET /server/preferences/export. Per AI.md
-// "Cross-device preference sync": reads the current theme/lang cookies and
-// returns the full import URL plus a base64url short code for the same
-// state. Stateless - nothing is written or looked up server-side.
 func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request) {
-	theme, lang := s.currentSyncPrefs(r)
-
-	query := url.Values{"theme": {theme}, "lang": {lang}}.Encode()
-
-	scheme := "https"
-	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
-		scheme = "http"
+	mgr := s.getI18nManager()
+	state, fullURL, code := prefsync.Export(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
+	w.Header().Set("Cache-Control", "no-store")
+	data := map[string]interface{}{"theme": state.Theme, "lang": state.Lang, "prefs": state.Prefs, "url": fullURL, "code": code}
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "text/plain") {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("URL: " + fullURL + "\nCode: " + code + "\n"))
+		return
 	}
-	fullURL := scheme + "://" + r.Host + "/server/preferences/import?" + query
-	shortCode := base64.RawURLEncoding.EncodeToString([]byte(query))
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"ok": true,
-		"data": map[string]string{
-			"theme":      theme,
-			"lang":       lang,
-			"full_url":   fullURL,
-			"short_code": shortCode,
-		},
-	})
+	if strings.Contains(accept, "application/json") {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
+		return
+	}
+	page := s.newPageData(w, r, "Preferences", "preferences")
+	page.Prefs = resolveGeneralPrefs(r)
+	page.Data = map[string]interface{}{"bangs": s.bangManager.GetAll(), "categories": s.bangManager.GetCategories(), "builtins": s.bangManager.GetBuiltins(), "syncURL": fullURL, "syncCode": code}
+	if err := s.renderer.Render(w, "preferences", page); err != nil {
+		s.handleInternalError(w, r, "preferences export render", err)
+	}
 }
 
-// handlePreferencesImport handles GET /server/preferences/import. Per AI.md
-// "Cross-device preference sync": accepts theme/lang as a plain query
-// string, or a pasted base64url short code (in the "code" param, optionally
-// still carrying a "https://.../import?" prefix which is stripped). Each
-// value is validated against its normal enum/BCP-47 allowlist - unknown or
-// malformed values are dropped rather than erroring. Valid values are
-// written as cookies, then it redirects with 303 so the code never lingers
-// in the visible URL or browser history.
 func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+	mgr := s.getI18nManager()
+	result := prefsync.Import(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
+	prefsync.Apply(w, r, "search", result)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Location", preferenceRedirect(r))
+	w.WriteHeader(http.StatusSeeOther)
+}
 
-	// A pasted short code takes precedence when present; it may still carry
-	// a "https://host/server/preferences/import?" prefix if the user copied
-	// the full URL into the code field instead of the code alone.
-	if code := query.Get("code"); code != "" {
-		if idx := strings.Index(code, "?"); idx != -1 {
-			code = code[idx+1:]
-		}
-		if decoded, err := base64.RawURLEncoding.DecodeString(code); err == nil {
-			// The stripped text decoded as base64 - treat it as the short code form.
-			if decodedQuery, err := url.ParseQuery(string(decoded)); err == nil {
-				query = decodedQuery
+func preferenceRedirect(r *http.Request) string {
+	target := r.URL.Query().Get("redirect")
+	if target == "" {
+		target = r.FormValue("redirect")
+	}
+	if validPreferenceRedirect(target) && !preferenceRedirectLoop(target) {
+		return target
+	}
+	if referer := r.Referer(); referer != "" {
+		candidate, err := url.Parse(referer)
+		current, currentErr := url.Parse(httputil.BuildURL(r, "/"))
+		if err == nil && currentErr == nil && candidate.IsAbs() && samePreferenceOrigin(candidate, current) {
+			target := candidate.RequestURI()
+			if validPreferenceRedirect(target) && !preferenceRedirectLoop(target) {
+				return target
 			}
-		} else if decodedQuery, err := url.ParseQuery(code); err == nil {
-			// Not valid base64 (e.g. the user pasted the plain "theme=dark&lang=fr"
-			// query string rather than the short code) - use it directly.
-			query = decodedQuery
 		}
 	}
+	return "/"
+}
 
-	if theme := query.Get("theme"); theme != "" && IsValidTheme(theme) {
-		SetTheme(w, theme)
+func validPreferenceRedirect(target string) bool {
+	if !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.HasPrefix(target, "/\\") || strings.ContainsAny(target, "\\\r\n") {
+		return false
 	}
+	parsed, err := url.Parse(target)
+	return err == nil && parsed.Scheme == "" && parsed.Host == "" && parsed.User == nil
+}
 
-	if lang := normalizeSyncLanguage(query.Get("lang")); lang != "" && s.getI18nManager().IsSupported(lang) {
-		i18n.SetLanguageCookie(w, lang)
-	}
+func preferenceRedirectLoop(target string) bool {
+	path := strings.SplitN(target, "?", 2)[0]
+	return strings.HasPrefix(path, "/server/preferences/import") || strings.HasPrefix(path, "/server/preferences/export") || path == "/server/preferences"
+}
 
-	redirectTo := "/"
-	if p := r.FormValue("redirect"); strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") {
-		redirectTo = p
-	}
-
-	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
+func samePreferenceOrigin(a, b *url.URL) bool {
+	return a != nil && b != nil && strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
 }

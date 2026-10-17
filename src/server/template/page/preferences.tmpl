@@ -7,7 +7,7 @@
 
     <div class="preferences-section">
         <h2>{{t "preferences.general_settings"}}</h2>
-        <form action="/server/preferences/general" method="POST" id="general-settings" class="preferences-form">
+        <form action="/server/preferences" method="POST" id="general-settings" class="preferences-form">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="form-group">
                 <label for="theme">{{t "preferences.theme"}}</label>
@@ -19,8 +19,15 @@
             </div>
 
             <div class="form-group">
+                <label for="lang">Language</label>
+                <select id="lang" name="lang">
+                    {{range .AvailableLanguages}}<option value="{{.Code}}" {{if eq $.Lang .Code}}selected{{end}}>{{.NativeName}}</option>{{end}}
+                </select>
+            </div>
+
+            <div class="form-group">
                 <label for="default-category">{{t "preferences.default_category_label"}}</label>
-                <select id="default-category" name="default_category">
+                <select id="default-category" name="search_pref_category">
                     <option value="general" {{if eq .Prefs.DefaultCategory "general"}}selected{{end}}>{{t "preferences.default_category_general"}}</option>
                     <option value="images" {{if eq .Prefs.DefaultCategory "images"}}selected{{end}}>{{t "search.categories.images"}}</option>
                     <option value="videos" {{if eq .Prefs.DefaultCategory "videos"}}selected{{end}}>{{t "search.categories.videos"}}</option>
@@ -36,7 +43,7 @@
 
             <div class="form-group">
                 <label for="safe-search">{{t "search.safe_search"}}</label>
-                <select id="safe-search" name="safe_search">
+                <select id="safe-search" name="search_pref_safe_search">
                     <option value="0" {{if eq .Prefs.SafeSearch "0"}}selected{{end}}>{{t "search.safe_search_off"}}</option>
                     <option value="1" {{if eq .Prefs.SafeSearch "1"}}selected{{end}}>{{t "search.safe_search_moderate"}}</option>
                     <option value="2" {{if eq .Prefs.SafeSearch "2"}}selected{{end}}>{{t "search.safe_search_strict"}}</option>
@@ -45,15 +52,24 @@
 
             <div class="form-group">
                 <label for="units">{{t "preferences.units_label"}}</label>
-                <select id="units" name="units">
+                <select id="units" name="search_pref_units">
                     <option value="metric" {{if eq .Prefs.Units "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
                     <option value="imperial" {{if eq .Prefs.Units "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
+                <label for="weather-units">{{t "preferences.weather_units"}}</label>
+                <select id="weather-units" name="search_widget_weather_units">
+                    <option value="auto" {{if eq .Prefs.WeatherUnits "auto"}}selected{{end}}>{{t "preferences.weather_units_global"}}</option>
+                    <option value="metric" {{if eq .Prefs.WeatherUnits "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
+                    <option value="imperial" {{if eq .Prefs.WeatherUnits "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
                 <label for="results-per-page">{{t "preferences.results_per_page"}}</label>
-                <select id="results-per-page" name="results_per_page">
+                <select id="results-per-page" name="search_pref_results_per_page">
                     <option value="10" {{if eq .Prefs.ResultsPerPage "10"}}selected{{end}}>10</option>
                     <option value="20" {{if eq .Prefs.ResultsPerPage "20"}}selected{{end}}>20</option>
                     <option value="30" {{if eq .Prefs.ResultsPerPage "30"}}selected{{end}}>30</option>
@@ -64,7 +80,8 @@
 
             <div class="form-group toggle-group">
                 <label class="toggle">
-                    <input type="checkbox" id="new-tab" name="new_tab" role="switch" aria-checked="{{if .Prefs.NewTab}}true{{else}}false{{end}}" {{if .Prefs.NewTab}}checked{{end}}>
+                    <input type="hidden" name="search_pref_new_tab_present" value="1">
+                    <input type="checkbox" id="new-tab" name="search_pref_new_tab" value="1" role="switch" aria-checked="{{if .Prefs.NewTab}}true{{else}}false{{end}}" {{if .Prefs.NewTab}}checked{{end}}>
                     <span class="toggle-track">
                         <span class="toggle-thumb"></span>
                     </span>
@@ -74,7 +91,8 @@
 
             <div class="form-group toggle-group">
                 <label class="toggle">
-                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll" role="switch" aria-checked="{{if .Prefs.InfiniteScroll}}true{{else}}false{{end}}" {{if .Prefs.InfiniteScroll}}checked{{end}}>
+                    <input type="hidden" name="search_pref_infinite_scroll_present" value="1">
+                    <input type="checkbox" id="infinite-scroll" name="search_pref_infinite_scroll" value="1" role="switch" aria-checked="{{if .Prefs.InfiniteScroll}}true{{else}}false{{end}}" {{if .Prefs.InfiniteScroll}}checked{{end}}>
                     <span class="toggle-track">
                         <span class="toggle-thumb"></span>
                     </span>
@@ -84,15 +102,89 @@
 
             <div class="form-group toggle-group">
                 <label class="toggle">
-                    <input type="checkbox" id="keyboard-shortcuts" name="keyboard_shortcuts" role="switch" aria-checked="{{if .Prefs.KeyboardShortcuts}}true{{else}}false{{end}}" {{if .Prefs.KeyboardShortcuts}}checked{{end}}>
+                    <input type="hidden" name="search_pref_keyboard_shortcuts_present" value="1">
+                    <input type="checkbox" id="keyboard-shortcuts" name="search_pref_keyboard_shortcuts" value="1" role="switch" aria-checked="{{if .Prefs.KeyboardShortcuts}}true{{else}}false{{end}}" {{if .Prefs.KeyboardShortcuts}}checked{{end}}>
                     <span class="toggle-track">
                         <span class="toggle-thumb"></span>
                     </span>
                     <span class="toggle-label">{{t "accessibility.keyboard_shortcuts_title"}}</span>
                 </label>
             </div>
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="hidden" name="search_pref_save_history_present" value="1">
+                    <input type="checkbox" id="save-history" name="search_pref_save_history" value="1" role="switch" aria-checked="{{if .Prefs.SaveHistory}}true{{else}}false{{end}}" {{if .Prefs.SaveHistory}}checked{{end}}>
+                    <span class="toggle-track">
+                        <span class="toggle-thumb"></span>
+                    </span>
+                    <span class="toggle-label">{{t "preferences.save_history"}}</span>
+                </label>
+            </div>
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="hidden" name="search_pref_video_previews_present" value="1">
+                    <input type="checkbox" id="video-previews" name="search_pref_video_previews" value="1" role="switch" aria-checked="{{if .Prefs.VideoPreviews}}true{{else}}false{{end}}" {{if .Prefs.VideoPreviews}}checked{{end}}>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">{{t "preferences.video_previews"}}</span>
+                </label>
+            </div>
+            <div class="form-group">
+                <button type="button" class="btn btn-secondary" id="clear-search-history">{{t "preferences.clear_history"}}</button>
+            </div>
         </form>
     </div>
+
+    <section class="preferences-section" aria-labelledby="owner-tokens-heading">
+        <h2 id="owner-tokens-heading">Tokens</h2>
+        {{with index .Data "ownerTokenMessage"}}<p role="status">{{.}}</p>{{end}}
+        {{with index .Data "ownerTokenRevealed"}}
+        <div class="token-reveal" role="alert">
+            <p>Copy this token now. It remains available through the reveal action.</p>
+            <code class="token-value">{{.}}</code>
+        </div>
+        {{end}}
+        {{with index .Data "ownerTokens"}}
+        <h3>Primary token</h3>
+        <code>{{index $.Data "ownerPrimaryMasked"}}</code>
+        <form action="/server/preferences/token/reveal" method="POST">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <button type="submit">Reveal primary token</button>
+        </form>
+        <form action="/server/preferences/token/rotate" method="POST" onsubmit="return confirm('Rotate the primary token? Existing clients using it will lose access.');">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="confirm" value="rotate">
+            <button type="submit">Rotate primary token</button>
+        </form>
+        <h3>Linked tokens</h3>
+        {{range .}}
+        {{if eq .Kind "linked"}}
+        <article class="owner-token-item">
+            <h4>{{.Name}}</h4>
+            <code>{{.Masked}}</code>
+            <p>Status: {{.Status}} · Created {{.CreatedAt}} · Last used {{.LastUsedAt}} · Expires {{.ExpiresAt}}</p>
+            <form action="/server/preferences/tokens/{{.ID}}/reveal" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">Reveal</button></form>
+            <form action="/server/preferences/tokens/{{.ID}}/rotate" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">Rotate</button></form>
+            <form action="/server/preferences/tokens/{{.ID}}/update" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Name <input name="name" value="{{.Name}}" maxlength="64" required></label><label>Expiry <select name="expires_at"><option value="never">Never</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="90d">90 days</option><option value="1y">1 year</option></select></label><button type="submit">Update</button></form>
+            <form action="/server/preferences/tokens/{{.ID}}/revoke" method="POST" onsubmit="return confirm('Revoke this linked token?');"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">Revoke</button></form>
+        </article>
+        {{end}}
+        {{end}}
+        <form action="/server/preferences/tokens" method="POST">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <label>Name <input name="name" maxlength="64" required></label>
+            <label>Expiry <select name="expires_at"><option value="never">Never</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="90d">90 days</option><option value="1y">1 year</option></select></label>
+            <button type="submit">Create linked token</button>
+        </form>
+        {{else}}
+        <p>Owner tokens let you manage resources created with this browser.</p>
+        <form action="/server/preferences/token/restore" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label for="restore-owner-token">Use an existing primary token</label>
+            <input id="restore-owner-token" name="token" type="password" autocomplete="off" required>
+            <button type="submit">Restore owner</button>
+        </form>
+        {{end}}
+    </section>
 
     <div class="preferences-section">
         <h2>{{t "preferences.search_bangs_heading"}}</h2>
@@ -290,12 +382,14 @@
 
         <div class="form-group">
             <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
-            <input type="text" id="sync-url" readonly>
+            <input type="text" id="sync-url" readonly {{with index .Data "syncURL"}}value="{{.}}"{{end}}>
+            {{with index .Data "syncURL"}}<p>URL: <code>{{.}}</code></p>{{end}}
         </div>
 
         <div class="form-group">
             <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
-            <input type="text" id="sync-code" readonly>
+            <input type="text" id="sync-code" readonly {{with index .Data "syncCode"}}value="{{.}}"{{end}}>
+            {{with index .Data "syncCode"}}<p>Code: <code>{{.}}</code></p>{{end}}
         </div>
 
         <div class="data-actions">
@@ -303,14 +397,13 @@
             <a id="qr-sync-prefs" class="btn btn-secondary" href="/direct/qr/" target="_blank" rel="noopener noreferrer">{{t "preferences.qr_code"}}</a>
         </div>
 
-        <div class="form-group">
-            <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
-            <input type="text" id="sync-paste" placeholder="{{t "preferences.sync_paste_placeholder"}}">
-        </div>
-
-        <div class="data-actions">
-            <button type="button" id="apply-sync-prefs" class="btn btn-secondary">{{t "preferences.apply_preferences"}}</button>
-        </div>
+        <form action="/server/preferences/import" method="GET">
+            <div class="form-group">
+                <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
+                <input type="text" id="sync-paste" name="code" placeholder="{{t "preferences.sync_paste_placeholder"}}">
+            </div>
+            <div class="data-actions"><button type="submit" id="apply-sync-prefs" class="btn btn-secondary">{{t "preferences.apply_preferences"}}</button></div>
+        </form>
     </div>
 
     <div class="preferences-actions">

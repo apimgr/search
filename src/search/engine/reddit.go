@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/common/closeutil"
+
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -103,7 +105,7 @@ func (e *Reddit) getAccessToken(ctx context.Context, clientID, clientSecret stri
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("Reddit access_token request returned status %d", resp.StatusCode)
@@ -144,7 +146,7 @@ func (e *Reddit) Search(ctx context.Context, query *model.Query) ([]model.Result
 		return nil, err
 	}
 
-	return e.listingToResults(listing), nil
+	return e.listingToResults(listing, query.Category), nil
 }
 
 // searchPublic queries the public old.reddit.com JSON API (avoids OAuth
@@ -173,7 +175,7 @@ func (e *Reddit) searchPublic(ctx context.Context, query *model.Query) (*redditL
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Reddit API returned status %d", resp.StatusCode)
@@ -219,7 +221,7 @@ func (e *Reddit) searchAuthenticated(ctx context.Context, query *model.Query, cl
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeutil.Close(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Reddit API returned status %d", resp.StatusCode)
@@ -234,7 +236,7 @@ func (e *Reddit) searchAuthenticated(ctx context.Context, query *model.Query, cl
 }
 
 // listingToResults converts a Reddit "Listing" JSON payload into search results.
-func (e *Reddit) listingToResults(data *redditListing) []model.Result {
+func (e *Reddit) listingToResults(data *redditListing, category model.Category) []model.Result {
 	results := make([]model.Result, 0)
 
 	for i, child := range data.Data.Children {
@@ -265,7 +267,7 @@ func (e *Reddit) listingToResults(data *redditListing) []model.Result {
 			URL:      postURL,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: model.CategoryGeneral,
+			Category: category,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})
