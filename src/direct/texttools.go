@@ -1658,7 +1658,7 @@ func beautifyJSON(code string) string {
 }
 
 func beautifyHTML(code string) string {
-	// Simple HTML beautification
+	code, preserved := preserveHTMLRawText(code)
 	// Add newlines after closing tags
 	code = regexp.MustCompile(`>\s*<`).ReplaceAllString(code, ">\n<")
 
@@ -1688,7 +1688,25 @@ func beautifyHTML(code string) string {
 		}
 	}
 
-	return strings.TrimSpace(result.String())
+	formatted := strings.TrimSpace(result.String())
+	for index, block := range preserved {
+		formatted = strings.ReplaceAll(formatted, htmlRawTextPlaceholder(index), block)
+	}
+	return formatted
+}
+
+var htmlRawTextBlockPattern = regexp.MustCompile(`(?is)<(?:pre|textarea|script|style)\b[^>]*>.*?</(?:pre|textarea|script|style)\s*>`)
+
+func preserveHTMLRawText(source string) (string, []string) {
+	blocks := htmlRawTextBlockPattern.FindAllString(source, -1)
+	for index, block := range blocks {
+		source = strings.Replace(source, block, htmlRawTextPlaceholder(index), 1)
+	}
+	return source, blocks
+}
+
+func htmlRawTextPlaceholder(index int) string {
+	return fmt.Sprintf("HTMLRAWTEXTBLOCK%dPLACEHOLDER", index)
 }
 
 func beautifyCSS(code string) string {

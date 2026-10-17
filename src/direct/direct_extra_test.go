@@ -4683,6 +4683,36 @@ func TestPkgHandlerAdditionalRegistries(t *testing.T) {
 	}
 }
 
+func TestPackageRegistriesOmitNegativeLifetimeDownloadCounts(t *testing.T) {
+	tests := []struct {
+		name, term, body string
+	}{
+		{
+			name: "crates.io",
+			term: "crate/negative-downloads-crate",
+			body: `{"crate":{"id":"negative-downloads-crate","name":"negative-downloads-crate","max_version":"1.0.0","downloads":-1}}`,
+		},
+		{
+			name: "RubyGems",
+			term: "gem/negative-downloads-gem",
+			body: `{"name":"negative-downloads-gem","version":"1.0.0","downloads":-1}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := NewPkgHandler()
+			handler.client = &http.Client{Transport: packageTestTransport{body: test.body}}
+			answer, err := handler.HandleDirectQuery(context.Background(), test.term)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if downloads, exists := answer.Data["downloads"]; !exists || downloads != nil {
+				t.Fatalf("invalid lifetime downloads = %#v, want explicit unavailable metadata", downloads)
+			}
+		})
+	}
+}
+
 func TestCratesWeeklyDownloadsUsesSevenDaysAndCache(t *testing.T) {
 	name := "cache-check-crate"
 	cacheKey := "crates:" + name
@@ -4764,6 +4794,24 @@ func TestBeautifySupportsAdditionalIDEALanguagesAndLineCounts(t *testing.T) {
 	}
 	if !strings.Contains(answer.Content, "Lines before: 2 · Lines after: 2") {
 		t.Errorf("line count summary missing: %s", answer.Content)
+	}
+}
+
+func TestBeautifyHTMLPreservesRawTextElementContents(t *testing.T) {
+	source := "<html><body><pre>first line\n  leading and trailing spaces  \nthird line</pre><textarea> first\n  second </textarea><script>if (left < right) {\n  run();\n}</script><style>.item {\n  content: \"a  b\";\n}</style></body></html>"
+	formatted := beautifyHTML(source)
+	for _, rawElement := range []string{
+		"<pre>first line\n  leading and trailing spaces  \nthird line</pre>",
+		"<textarea> first\n  second </textarea>",
+		"<script>if (left < right) {\n  run();\n}</script>",
+		"<style>.item {\n  content: \"a  b\";\n}</style>",
+	} {
+		if !strings.Contains(formatted, rawElement) {
+			t.Errorf("formatter changed raw text element contents %q: %q", rawElement, formatted)
+		}
+	}
+	if formatted == source {
+		t.Fatal("HTML input was not formatted")
 	}
 }
 

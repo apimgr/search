@@ -1318,6 +1318,10 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.MaxVersion) == "" {
 		return nil, fmt.Errorf("crates.io returned incomplete package metadata")
 	}
+	var totalDownloads interface{}
+	if p.Downloads >= 0 {
+		totalDownloads = p.Downloads
+	}
 	versionURL := apiURL + "/" + url.PathEscape(p.MaxVersion)
 	var versionResponse struct {
 		Version struct {
@@ -1351,7 +1355,7 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 	}
 	data := map[string]interface{}{
 		"name": p.Name, "version": p.MaxVersion, "license": p.License,
-		"downloads": p.Downloads, "weekly_downloads": weeklyDownloads, "dependencies": dependencies,
+		"downloads": totalDownloads, "weekly_downloads": weeklyDownloads, "dependencies": dependencies,
 		"updated": p.Updated, "repository": p.Repository, "readme_preview": readmePreview,
 		"registry": "crates.io",
 	}
@@ -1428,6 +1432,10 @@ func (h *PkgHandler) fetchRubyGem(ctx context.Context, name string) (*Answer, er
 	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Version) == "" {
 		return nil, fmt.Errorf("RubyGems returned incomplete package metadata")
 	}
+	var totalDownloads interface{}
+	if p.Downloads >= 0 {
+		totalDownloads = p.Downloads
+	}
 	var runtimeDependencies interface{}
 	if p.Dependencies.Runtime != nil {
 		runtimeDependencies = len(p.Dependencies.Runtime)
@@ -1447,7 +1455,7 @@ func (h *PkgHandler) fetchRubyGem(ctx context.Context, name string) (*Answer, er
 	}
 	data := map[string]interface{}{
 		"name": p.Name, "version": p.Version, "license": strings.Join(p.Licenses, ", "),
-		"updated": p.VersionCreated, "downloads": p.Downloads, "weekly_downloads": nil,
+		"updated": p.VersionCreated, "downloads": totalDownloads, "weekly_downloads": nil,
 		"dependencies": runtimeDependencies, "repository": p.SourceCodeURI, "readme_preview": readmePreview,
 		"registry": "rubygems",
 	}
