@@ -390,6 +390,8 @@ Formatter audit found that Python reindentation stripped meaningful leading/trai
 
 The SQL beautifier now scans quoted strings/identifiers, PostgreSQL dollar-quoted strings, line comments, and block comments as protected spans; only SQL outside those spans receives keyword formatting. The CSS/SCSS/LESS beautifier preserves quoted strings, comments, escaped delimiters, interpolation blocks, and semicolons inside function values while formatting block/declaration delimiters. Regression coverage checks protected content remains intact. The formatter TODO remains open for the other malformed and multiline language cases.
 
+The JavaScript beautifier now preserves regular-expression literals, including quantifier braces and escaped delimiters, without treating their braces as code blocks. A regression case also checks division operators remain division.
+
 The HTML beautifier now preserves the complete contents of `pre`, `textarea`, `script`, and `style` elements while formatting surrounding markup. Regression coverage checks multiline text, significant spaces, and comparison operators survive unchanged. The package metadata audit also rejects negative lifetime download counts from crates.io and RubyGems.
 
 Action: complete the remaining IDEA.md subfeatures without inventing upstream data; add evidence-backed threat checks; add offline handler-path tests for completed behavior.

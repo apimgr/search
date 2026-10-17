@@ -2020,6 +2020,19 @@ func TestBeautifyCodeHelpers(t *testing.T) {
 			t.Error("beautifyJSON should add newlines")
 		}
 	})
+	t.Run("beautifyJavaScript_preserves_regex_literals", func(t *testing.T) {
+		input := `const matcher=/^[a-z]{2,5}\/[0-9]+$/gi; const ratio = value / divisor; const scaled = value++ / divisor / scale;`
+		got := beautifyJavaScript(input)
+		if !strings.Contains(got, `/^[a-z]{2,5}\/[0-9]+$/gi`) {
+			t.Errorf("beautifyJavaScript changed a regular expression literal: %s", got)
+		}
+		if !strings.Contains(got, `value / divisor`) {
+			t.Errorf("beautifyJavaScript changed division into regex syntax: %s", got)
+		}
+		if !strings.Contains(got, `value++ / divisor / scale`) {
+			t.Errorf("beautifyJavaScript changed division after postfix increment: %s", got)
+		}
+	})
 	t.Run("beautifyCSS_rule", func(t *testing.T) {
 		got := beautifyCSS(`body{margin:0;padding:0;}`)
 		if !strings.Contains(got, "\n") {

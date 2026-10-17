@@ -1433,6 +1433,7 @@ func beautifyJavaScript(code string) string {
 	pendingSpace := false
 	lineStart := true
 	skipNext := false
+	skipUntil := 0
 	writeIndent := func() {
 		if lineStart {
 			output.WriteString(strings.Repeat("  ", indent))
@@ -1450,6 +1451,9 @@ func beautifyJavaScript(code string) string {
 		pendingSpace = false
 	}
 	for index, char := range code {
+		if index < skipUntil {
+			continue
+		}
 		if skipNext {
 			skipNext = false
 			continue
@@ -1508,6 +1512,18 @@ func beautifyJavaScript(code string) string {
 			blockComment = true
 			pendingSpace = false
 			continue
+		}
+		if char == '/' && canStartJavaScriptRegex(output.String()) {
+			if end := scanJavaScriptRegex(code, index); end > index {
+				writeIndent()
+				if pendingSpace && output.Len() > 0 && !strings.HasSuffix(output.String(), " ") && !strings.HasSuffix(output.String(), "\n") {
+					output.WriteByte(' ')
+				}
+				output.WriteString(code[index:end])
+				pendingSpace = false
+				skipUntil = end
+				continue
+			}
 		}
 		if char == '\'' || char == '"' || char == '`' {
 			writeIndent()
@@ -1594,6 +1610,67 @@ func beautifyJavaScript(code string) string {
 		}
 	}
 	return strings.TrimSpace(output.String())
+}
+
+func canStartJavaScriptRegex(formatted string) bool {
+	previous := strings.TrimSpace(formatted)
+	if previous == "" {
+		return true
+	}
+	if strings.HasSuffix(previous, "++") || strings.HasSuffix(previous, "--") {
+		return false
+	}
+	last, _ := utf8.DecodeLastRuneInString(previous)
+	switch last {
+	case '=', '(', '[', '{', ',', ':', ';', '!', '&', '|', '?', '+', '-', '*', '%', '^', '~', '<', '>':
+		return true
+	}
+	end := len(previous)
+	for end > 0 {
+		character, size := utf8.DecodeLastRuneInString(previous[:end])
+		if !unicode.IsLetter(character) && !unicode.IsDigit(character) && character != '_' && character != '$' {
+			break
+		}
+		end -= size
+	}
+	switch previous[end:] {
+	case "return", "throw", "case", "delete", "void", "typeof", "instanceof", "in", "of", "yield", "await":
+		return true
+	default:
+		return false
+	}
+}
+
+func scanJavaScriptRegex(code string, start int) int {
+	escaped := false
+	inCharacterClass := false
+	for index := start + 1; index < len(code); index++ {
+		character := code[index]
+		if character == '\n' || character == '\r' {
+			return 0
+		}
+		if escaped {
+			escaped = false
+			continue
+		}
+		switch character {
+		case '\\':
+			escaped = true
+		case '[':
+			inCharacterClass = true
+		case ']':
+			inCharacterClass = false
+		case '/':
+			if !inCharacterClass {
+				index++
+				for index < len(code) && (code[index] >= 'a' && code[index] <= 'z' || code[index] >= 'A' && code[index] <= 'Z') {
+					index++
+				}
+				return index
+			}
+		}
+	}
+	return 0
 }
 
 func beautifyJSON(code string) string {
