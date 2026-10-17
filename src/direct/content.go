@@ -1053,23 +1053,16 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 	}
 
 	var pkg struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		Name        string          `json:"name"`
+		Description json.RawMessage `json:"description"`
 		DistTags    struct {
 			Latest string `json:"latest"`
 		} `json:"dist-tags"`
-		Time struct {
-			Modified string `json:"modified"`
-		} `json:"time"`
+		Time       json.RawMessage `json:"time"`
 		License    json.RawMessage `json:"license"`
-		Repository struct {
-			URL string `json:"url"`
-		} `json:"repository"`
-		Homepage string `json:"homepage"`
-		Readme   string `json:"readme"`
-		Versions map[string]struct {
-			Dependencies map[string]interface{} `json:"dependencies"`
-		} `json:"versions"`
+		Repository json.RawMessage `json:"repository"`
+		Readme     json.RawMessage `json:"readme"`
+		Versions   json.RawMessage `json:"versions"`
 	}
 
 	if err := decodeBoundedJSON(resp.Body, 16<<20, &pkg); err != nil {
@@ -1079,13 +1072,23 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 		return nil, fmt.Errorf("npm registry returned incomplete package metadata")
 	}
 	var license string
-	if len(pkg.License) > 0 {
-		_ = json.Unmarshal(pkg.License, &license)
+	decodeOptionalJSONString(pkg.License, &license)
+	description := ""
+	decodeOptionalJSONString(pkg.Description, &description)
+	readme := ""
+	decodeOptionalJSONString(pkg.Readme, &readme)
+	var npmTime struct {
+		Modified json.RawMessage `json:"modified"`
 	}
-	var licenseValue interface{}
-	if strings.TrimSpace(license) != "" {
-		licenseValue = license
+	_ = json.Unmarshal(pkg.Time, &npmTime)
+	updated := ""
+	decodeOptionalJSONString(npmTime.Modified, &updated)
+	var npmRepository struct {
+		URL json.RawMessage `json:"url"`
 	}
+	_ = json.Unmarshal(pkg.Repository, &npmRepository)
+	repository := ""
+	decodeOptionalJSONString(npmRepository.URL, &repository)
 	var downloads struct {
 		Downloads *int `json:"downloads"`
 	}
@@ -1094,21 +1097,28 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 	if err := h.fetchPackageJSON(ctx, downloadURL, &downloads); err == nil && downloads.Downloads != nil && *downloads.Downloads >= 0 {
 		weeklyDownloads = *downloads.Downloads
 	}
-	var dependencies interface{}
-	if latestVersion, ok := pkg.Versions[pkg.DistTags.Latest]; ok && latestVersion.Dependencies != nil {
-		dependencies = len(latestVersion.Dependencies)
+	var npmVersions map[string]struct {
+		Dependencies json.RawMessage `json:"dependencies"`
 	}
-	readmePreview := truncateString(strings.TrimSpace(pkg.Readme), 2000)
+	_ = json.Unmarshal(pkg.Versions, &npmVersions)
+	var dependencies interface{}
+	if latestVersion, ok := npmVersions[pkg.DistTags.Latest]; ok {
+		var dependencyMap map[string]json.RawMessage
+		if json.Unmarshal(latestVersion.Dependencies, &dependencyMap) == nil && dependencyMap != nil {
+			dependencies = len(dependencyMap)
+		}
+	}
+	readmePreview := truncateString(strings.TrimSpace(readme), 2000)
 	data := map[string]interface{}{
 		"name":             pkg.Name,
-		"description":      pkg.Description,
+		"description":      description,
 		"version":          pkg.DistTags.Latest,
-		"license":          licenseValue,
+		"license":          packageOptionalString(license),
 		"registry":         "npm",
 		"weekly_downloads": weeklyDownloads,
 		"dependencies":     dependencies,
-		"updated":          pkg.Time.Modified,
-		"repository":       pkg.Repository.URL,
+		"updated":          packageOptionalString(updated),
+		"repository":       packageOptionalString(repository),
 		"readme_preview":   readmePreview,
 	}
 
@@ -1116,12 +1126,25 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 		Type:        AnswerTypePkg,
 		Term:        name,
 		Title:       pkg.Name,
-		Description: pkg.Description,
-		Content:     formatPkgContentWithDetails(lang, "npm", pkg.Name, pkg.Description, pkg.DistTags.Latest, license, "npm install "+pkg.Name, data),
+		Description: description,
+		Content:     formatPkgContentWithDetails(lang, "npm", pkg.Name, description, pkg.DistTags.Latest, license, "npm install "+pkg.Name, data),
 		Source:      "npm",
 		SourceURL:   fmt.Sprintf("https://www.npmjs.com/package/%s", url.PathEscape(name)),
 		Data:        data,
 	}, nil
+}
+
+func decodeOptionalJSONString(raw json.RawMessage, destination *string) {
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, destination)
+	}
+}
+
+func packageOptionalString(value string) interface{} {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
 }
 
 func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error) {

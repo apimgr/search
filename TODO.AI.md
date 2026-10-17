@@ -382,7 +382,7 @@ Remaining verified gaps:
 
 crates.io and RubyGems now omit malformed negative lifetime download totals as unavailable metadata rather than rendering the invalid values; regression tests cover both registry responses.
 
-npm package details retain valid name/version data when the optional license field has a malformed non-string value; the license is omitted and an offline handler test covers the fallback.
+npm package details retain valid name/version data when optional description, timestamp, license, repository, README, or dependency fields have malformed types. Invalid optional values are omitted; offline handler coverage exercises the malformed metadata together.
 
 The instant dictionary handler now merges every provider record so homographs and additional parts of speech remain visible, caps JSON responses at 1 MiB, and refuses redirects. Regression tests cover merged meanings, oversized bodies, and redirect rejection; the shared deterministic dictionary fixture now includes a second entry so SSR, no-JS, and browser tiers assert both records.
 

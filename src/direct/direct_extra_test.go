@@ -1911,7 +1911,7 @@ func TestPkgHandlerNPMMetadataIsRenderedSafely(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if answer.Data["weekly_downloads"] != 1234 || answer.Data["dependencies"] != 2 || answer.Data["updated"] != "2026-10-01T12:00:00Z" {
+	if answer.Data["weekly_downloads"] != 1234 || answer.Data["dependencies"] != 2 || answer.Data["updated"] != "2026-10-01T12:00:00Z" || answer.Data["license"] != "MIT" || answer.Data["repository"] != "https://github.com/example/sample" {
 		t.Fatalf("incomplete npm metadata: %#v", answer.Data)
 	}
 	if !strings.Contains(answer.Content, "1234") || !strings.Contains(answer.Content, "README preview") || !strings.Contains(answer.Content, "&lt;script&gt;") || strings.Contains(answer.Content, "<script>") {
@@ -1919,26 +1919,26 @@ func TestPkgHandlerNPMMetadataIsRenderedSafely(t *testing.T) {
 	}
 }
 
-type npmMalformedLicenseTransport struct{}
+type npmMalformedMetadataTransport struct{}
 
-func (npmMalformedLicenseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+func (npmMalformedMetadataTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	status, body := http.StatusBadGateway, `{}`
 	if request.URL.Host == "registry.npmjs.org" {
 		status = http.StatusOK
-		body = `{"name":"sample","description":"A package","dist-tags":{"latest":"1.2.3"},"license":{},"versions":{"1.2.3":{"dependencies":{"one":"^1"}}}}`
+		body = `{"name":"sample","description":{},"dist-tags":{"latest":"1.2.3"},"time":{"modified":[]},"license":{},"repository":{"url":{}},"readme":[],"versions":{"1.2.3":{"dependencies":[]}}}`
 	}
 	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
 }
 
-func TestPkgHandlerIgnoresMalformedOptionalNpmLicense(t *testing.T) {
+func TestPkgHandlerIgnoresMalformedOptionalNpmMetadata(t *testing.T) {
 	handler := NewPkgHandler()
-	handler.client = &http.Client{Transport: npmMalformedLicenseTransport{}}
+	handler.client = &http.Client{Transport: npmMalformedMetadataTransport{}}
 	answer, err := handler.HandleDirectQuery(context.Background(), "npm/sample")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if answer.Data["version"] != "1.2.3" || answer.Data["dependencies"] != 1 || answer.Data["license"] != nil {
-		t.Fatalf("malformed optional license discarded package metadata: %#v", answer.Data)
+	if answer.Data["version"] != "1.2.3" || answer.Data["dependencies"] != nil || answer.Data["license"] != nil || answer.Data["repository"] != nil || answer.Data["updated"] != nil {
+		t.Fatalf("malformed optional metadata discarded package details: %#v", answer.Data)
 	}
 }
 
