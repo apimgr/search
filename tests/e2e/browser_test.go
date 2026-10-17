@@ -778,6 +778,61 @@ func TestBrowserHomepageWidgets(t *testing.T) {
 	requireNoFailures(t, pf, "homepage widget controls")
 }
 
+func TestBrowserHomepageWidgetReorderPersists(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var initialJSON, reorderedJSON, storedOrder, persistedJSON string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.WaitVisible(`#widget-grid [data-widget]`, chromedp.ByQuery),
+		chromedp.Evaluate(`JSON.stringify(Array.from(document.querySelectorAll('#widget-grid [data-widget]'), function(widget) { return widget.dataset.widget; }))`, &initialJSON),
+		chromedp.Evaluate(`(() => {
+			const grid = document.getElementById('widget-grid');
+			const widget = grid.querySelector('[data-widget]');
+			const dataTransfer = new DataTransfer();
+			widget.dispatchEvent(new DragEvent('dragstart', {bubbles: true, dataTransfer: dataTransfer}));
+			grid.dispatchEvent(new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: dataTransfer, clientY: 1000000}));
+			grid.dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dataTransfer}));
+			widget.dispatchEvent(new DragEvent('dragend', {bubbles: true, dataTransfer: dataTransfer}));
+			return JSON.stringify(Array.from(grid.querySelectorAll('[data-widget]'), function(item) { return item.dataset.widget; }));
+		})()`, &reorderedJSON),
+		chromedp.Poll(`(() => {
+			const cookie = document.cookie.split('; ').find(function(value) { return value.startsWith('search_widgets='); });
+			return cookie ? decodeURIComponent(cookie.slice('search_widgets='.length)) : '';
+		})()`, &storedOrder, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.WaitVisible(`#widget-grid [data-widget]`, chromedp.ByQuery),
+		chromedp.Evaluate(`JSON.stringify(Array.from(document.querySelectorAll('#widget-grid [data-widget]'), function(widget) { return widget.dataset.widget; }))`, &persistedJSON),
+	); err != nil {
+		t.Fatalf("homepage widget reorder: %v", err)
+	}
+	var initial, reordered, persisted []string
+	if err := json.Unmarshal([]byte(initialJSON), &initial); err != nil {
+		t.Fatalf("decode initial widget order %q: %v", initialJSON, err)
+	}
+	if err := json.Unmarshal([]byte(reorderedJSON), &reordered); err != nil {
+		t.Fatalf("decode reordered widget order %q: %v", reorderedJSON, err)
+	}
+	if err := json.Unmarshal([]byte(persistedJSON), &persisted); err != nil {
+		t.Fatalf("decode persisted widget order %q: %v", persistedJSON, err)
+	}
+	if len(initial) < 2 {
+		t.Fatalf("widget reorder requires at least two enabled widgets, got %v", initial)
+	}
+	want := append(append([]string{}, initial[1:]...), initial[0])
+	if strings.Join(reordered, ",") != strings.Join(want, ",") {
+		t.Errorf("dragged widget order = %v, want %v", reordered, want)
+	}
+	if strings.Trim(storedOrder, `"`) != strings.Join(want, ",") {
+		t.Errorf("widget order cookie = %q, want %q", storedOrder, strings.Join(want, ","))
+	}
+	if strings.Join(persisted, ",") != strings.Join(want, ",") {
+		t.Errorf("reordered widgets after reload = %v, want %v", persisted, want)
+	}
+	requireNoFailures(t, pf, "homepage widget reorder")
+}
+
 // TestBrowserSwaggerDocsRender loads the Swagger UI page (PART 14 API docs
 // requirement) and asserts the JS-rendered widget actually mounts, with no
 // console errors — a common failure mode for embedded doc viewers is a CSP
