@@ -1378,7 +1378,7 @@
                 if (!/^[a-z0-9_-]+$/.test(shortcut) || BUILTIN_BANGS.some(function(builtin) { return builtin.shortcut === shortcut; })) return false;
                 return !normalizedQuery || shortcut.startsWith(normalizedQuery) || b.name.toLowerCase().includes(normalizedQuery);
             });
-            return builtins.concat(customMatches).slice(0, 10).map(function(b) {
+            return customMatches.concat(builtins).slice(0, 10).map(function(b) {
                 return { type: 'bang', shortcut: b.shortcut, name: b.name, category: b.category };
             });
         }

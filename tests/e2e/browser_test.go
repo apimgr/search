@@ -124,12 +124,20 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	}
 	runStage("show autocomplete",
 		chromedp.Navigate(site.URL+"/"),
-		chromedp.SendKeys(`#searchQuery`, "!fixture", chromedp.ByQuery),
+		chromedp.SendKeys(`#searchQuery`, "!", chromedp.ByQuery),
 		chromedp.Sleep(500*time.Millisecond),
 		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.innerText || ''`, &autocompleteText),
 	)
 	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
-		t.Fatalf("custom bang autocomplete suggestion = %q", autocompleteText)
+		t.Fatalf("custom bang suggestion for ! = %q", autocompleteText)
+	}
+	runStage("filter autocomplete by shortcut",
+		chromedp.SendKeys(`#searchQuery`, "fixture", chromedp.ByQuery),
+		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.innerText || ''`, &autocompleteText),
+	)
+	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
+		t.Fatalf("custom bang shortcut autocomplete suggestion = %q", autocompleteText)
 	}
 	runStage("submit custom shortcut",
 		chromedp.Click(`.autocomplete-bang`, chromedp.ByQuery),
