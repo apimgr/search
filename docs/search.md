@@ -2,6 +2,10 @@
 
 Search uses direct upstream search engines and combines their results. Search operators are normalized before a query is sent to each engine.
 
+## Bang shortcuts
+
+Use `!shortcut terms` to redirect a search to a built-in engine or site. In Preferences, custom bangs are stored in this browser and use a URL template containing `{query}`. The autocomplete suggests matching custom bangs; submitting one replaces `{query}` with the URL-encoded search terms. Custom targets must be HTTP or HTTPS URLs without embedded credentials.
+
 ## Image results
 
 Image thumbnails and full-size previews load through the signed same-origin

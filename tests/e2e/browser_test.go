@@ -82,6 +82,72 @@ func TestBrowserKeyboardSearchAndHelpShortcuts(t *testing.T) {
 	requireNoFailures(t, pf, "keyboard search and help shortcuts")
 }
 
+func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var pageURL string
+	var bangCount, invalidBangCount int
+	var urlValid bool
+	var autocompleteText, saveStatus string
+	runStage := func(name string, actions ...chromedp.Action) {
+		t.Helper()
+		if err := chromedp.Run(ctx, actions...); err != nil {
+			t.Fatalf("custom bang %s: %v", name, err)
+		}
+	}
+	runStage("create preferences",
+		chromedp.Navigate(site.URL+"/server/preferences"),
+	)
+	runStage("store custom shortcut",
+		chromedp.SetValue(`#bang-shortcut`, "fixture", chromedp.ByQuery),
+		chromedp.SetValue(`#bang-name`, "Fixture Search", chromedp.ByQuery),
+		chromedp.SetValue(`#bang-url`, site.URL+"/search?q={query}", chromedp.ByQuery),
+		chromedp.SetValue(`#bang-category`, "testing", chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#bang-url').validity.valid`, &urlValid),
+		chromedp.Click(`#add-custom-bang button[type=submit]`, chromedp.ByQuery),
+		chromedp.Evaluate(`JSON.parse(localStorage.getItem('search_custom_bangs') || '[]').length`, &bangCount),
+		chromedp.Evaluate(`document.querySelector('#save-status')?.textContent || ''`, &saveStatus),
+	)
+	if bangCount != 1 || !urlValid {
+		t.Fatalf("custom bang was not stored: count=%d valid=%t status=%q", bangCount, urlValid, saveStatus)
+	}
+	runStage("reject unsafe custom target",
+		chromedp.SetValue(`#bang-shortcut`, "unsafe", chromedp.ByQuery),
+		chromedp.SetValue(`#bang-name`, "Unsafe Search", chromedp.ByQuery),
+		chromedp.SetValue(`#bang-url`, "javascript:alert(1)", chromedp.ByQuery),
+		chromedp.Click(`#add-custom-bang button[type=submit]`, chromedp.ByQuery),
+		chromedp.Evaluate(`JSON.parse(localStorage.getItem('search_custom_bangs') || '[]').length`, &invalidBangCount),
+	)
+	if invalidBangCount != 1 {
+		t.Fatalf("unsafe custom bang target was stored or valid bang was lost: count=%d", invalidBangCount)
+	}
+	runStage("show autocomplete",
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.SendKeys(`#searchQuery`, "!fixture", chromedp.ByQuery),
+		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.innerText || ''`, &autocompleteText),
+	)
+	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
+		t.Fatalf("custom bang autocomplete suggestion = %q", autocompleteText)
+	}
+	runStage("submit custom shortcut",
+		chromedp.Click(`.autocomplete-bang`, chromedp.ByQuery),
+		chromedp.SendKeys(`#searchQuery`, "cats", chromedp.ByQuery),
+		chromedp.Click(`.search-btn`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+		chromedp.Location(&pageURL),
+	)
+	parsed, err := url.Parse(pageURL)
+	if err != nil {
+		t.Fatalf("parse custom bang destination %q: %v", pageURL, err)
+	}
+	if parsed.Path != "/search" || parsed.Query().Get("q") != "cats" {
+		t.Fatalf("custom bang destination=%q, want local search for cats", pageURL)
+	}
+	requireNoFailures(t, pf, "custom bang create, autocomplete, and redirect")
+}
+
 func TestBrowserAdvancedSearchSubmitsFilters(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

@@ -651,8 +651,8 @@
     // SEARCH AUTOCOMPLETE
     // ========================================================================
 
-    // Built-in bangs list (subset for quick suggestions)
     // Built-in bangs list (generated from src/search/bang/defaults.go)
+    var BANGS_KEY = 'search_custom_bangs';
     var BUILTIN_BANGS = [
         { shortcut: 'g', name: 'Google', category: 'general' },
         { shortcut: 'ddg', name: 'DuckDuckGo', category: 'general' },
@@ -1360,20 +1360,66 @@
 
         // Filter bangs based on query
         function filterBangs(query) {
-            if (!query) {
-                // Show popular bangs when just "!" is typed
-                return BUILTIN_BANGS.slice(0, 10).map(function(b) {
-                    return { type: 'bang', shortcut: b.shortcut, name: b.name, category: b.category };
-                });
-            }
-
-            var filtered = BUILTIN_BANGS.filter(function(b) {
-                return b.shortcut.toLowerCase().startsWith(query) ||
-                       b.name.toLowerCase().includes(query);
+            var normalizedQuery = (query || '').toLowerCase();
+            var builtins = BUILTIN_BANGS.filter(function(b) {
+                return !normalizedQuery || b.shortcut.toLowerCase().startsWith(normalizedQuery) ||
+                       b.name.toLowerCase().includes(normalizedQuery);
             });
-
-            return filtered.slice(0, 10).map(function(b) {
+            var custom = [];
+            try {
+                custom = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
+            } catch (e) {
+                custom = [];
+            }
+            if (!Array.isArray(custom)) custom = [];
+            var customMatches = custom.filter(function(b) {
+                if (!b || b.enabled === false || typeof b.shortcut !== 'string' || typeof b.name !== 'string') return false;
+                var shortcut = b.shortcut.toLowerCase();
+                if (!/^[a-z0-9_-]+$/.test(shortcut) || BUILTIN_BANGS.some(function(builtin) { return builtin.shortcut === shortcut; })) return false;
+                return !normalizedQuery || shortcut.startsWith(normalizedQuery) || b.name.toLowerCase().includes(normalizedQuery);
+            });
+            return builtins.concat(customMatches).slice(0, 10).map(function(b) {
                 return { type: 'bang', shortcut: b.shortcut, name: b.name, category: b.category };
+            });
+        }
+
+        function customBangTarget(query) {
+            var prefix = query.match(/^!([a-z0-9_-]+)\s+(.+)$/i);
+            var suffix = query.match(/^(.+?)\s+!([a-z0-9_-]+)$/i);
+            var shortcut = prefix ? prefix[1] : suffix ? suffix[2] : '';
+            var searchTerms = prefix ? prefix[2] : suffix ? suffix[1] : '';
+            if (!shortcut || !searchTerms.trim()) return '';
+            shortcut = shortcut.toLowerCase();
+            if (BUILTIN_BANGS.some(function(b) { return b.shortcut === shortcut; })) return '';
+
+            var bangs;
+            try {
+                bangs = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
+            } catch (e) {
+                return '';
+            }
+            if (!Array.isArray(bangs)) return '';
+            var bang = bangs.find(function(item) {
+                return item && item.enabled !== false && typeof item.shortcut === 'string' && item.shortcut.toLowerCase() === shortcut;
+            });
+            if (!bang || typeof bang.url !== 'string' || !bang.url.includes('{query}')) return '';
+
+            try {
+                var target = new URL(bang.url.split('{query}').join(encodeURIComponent(searchTerms.trim())));
+                if ((target.protocol !== 'http:' && target.protocol !== 'https:') || !target.hostname || target.username || target.password) return '';
+                return target.href;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        var searchForm = input.closest('form');
+        if (searchForm) {
+            searchForm.addEventListener('submit', function(e) {
+                var target = customBangTarget(input.value.trim());
+                if (!target) return;
+                e.preventDefault();
+                window.location.assign(target);
             });
         }
 
@@ -3045,7 +3091,6 @@
         if (!prefsPage) return;
 
         // Storage keys (widgets are server-side cookie — no WIDGETS_KEY here)
-        var BANGS_KEY = 'search_custom_bangs';
 
         // Load preferences from cookies; only the search-history records stay in localStorage.
         function loadPreferences() {
@@ -3436,8 +3481,24 @@
                     return;
                 }
 
+                if (!url.includes('{query}')) {
+                    showPrefStatus(t('preferences.required_fields_error', 'Please fill in all required fields'), true);
+                    urlInput.focus();
+                    return;
+                }
+                try {
+                    var templateURL = new URL(url.split('{query}').join('search-query'));
+                    if ((templateURL.protocol !== 'http:' && templateURL.protocol !== 'https:') || !templateURL.hostname || templateURL.username || templateURL.password) {
+                        throw new Error('invalid custom bang URL');
+                    }
+                } catch (e) {
+                    showPrefStatus(t('preferences.required_fields_error', 'Please fill in all required fields'), true);
+                    urlInput.focus();
+                    return;
+                }
+
                 var bangs = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
-                if (bangs.some(function(b) { return b.shortcut === shortcut; })) {
+                if (bangs.some(function(b) { return b.shortcut === shortcut; }) || BUILTIN_BANGS.some(function(b) { return b.shortcut === shortcut; })) {
                     showPrefStatus(t('preferences.bang_shortcut_exists', 'A bang with this shortcut already exists'), true);
                     return;
                 }
