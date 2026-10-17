@@ -118,6 +118,20 @@ func TestSSRKeyboardShortcutGuideMatchesSupportedActions(t *testing.T) {
 	}
 }
 
+func TestSSRBangSearchRedirectsToSelectedEngine(t *testing.T) {
+	s := newSession(t).withoutRedirects()
+	resp, _ := s.get("/search?q=%21g+cats")
+	requireStatus(t, resp, http.StatusFound)
+	location := resp.Header.Get("Location")
+	parsed, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("parse bang redirect location %q: %v", location, err)
+	}
+	if parsed.Host != "www.google.com" || parsed.Path != "/search" || parsed.Query().Get("q") != "cats" {
+		t.Fatalf("bang redirect location = %q, want Google search for cats", location)
+	}
+}
+
 // TestSSRHomePageIsFullyRendered guards the single most important Tier 1
 // property: the landing page arrives complete. It checks the search form, the
 // category selector, the navigation, and the footer — and explicitly rejects

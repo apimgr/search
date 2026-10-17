@@ -402,6 +402,8 @@ Language switching now has named assertions in all three tiers: `/?lang=de` chan
 
 Keyboard-shortcut coverage now checks the help table in SSR and no-JS and exercises `/` search focus, Escape clear/unfocus, `s` opening preferences, and `?`/Escape keyboard-help dialog behavior in the browser tier. The shortcut implementation and help text now agree with IDEA.md.
 
+SSR E2E now verifies a built-in `!g` bang preserves the query and redirects to the selected search engine.
+
 Advanced Search now has a server-rendered `<noscript>` native GET form. The server builds the same quoted, OR, exclusion, site, and file-type operators as the JS modal and carries time, language, and region filters into the request and rendered search-page metadata. Search categories also have a native selector when JavaScript is disabled. Server tests plus Tier-2 browser scenarios submit every advanced filter and select an image category without JavaScript; the complete three-tier E2E suite passes on this tree. The wider IDEA browser matrix remains open.
 
 IDEA Video Previews has a default-enabled local preference that persists through no-JS form saves, JavaScript saves, and reset. Its value is excluded from cross-device preference import/export to match IDEA.md's explicit allowlist. Disabled preference prevents preview event setup. Removed the previous resolution-cycling YouTube thumbnail imitation and direct `i.ytimg.com` requests; playback accepts only an actual same-origin WebM/MP4 clip and static thumbnails remain the fallback. Current search engines provide thumbnails but no preview clip URL, so clip playback, progress, and timeline scrubbing still need a provider-supported clip source before this IDEA feature can be considered complete.
