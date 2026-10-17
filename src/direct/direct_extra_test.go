@@ -5170,6 +5170,46 @@ func TestThesaurusRendersProviderSenseMetadataAndRelatedPhrases(t *testing.T) {
 	}
 }
 
+func TestThesaurusPreservesRelatedOnlyResultsAndReportsFailures(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		relatedStatus int
+		wantWord      bool
+		wantFailure   bool
+	}{
+		{name: "related words without synonyms", relatedStatus: http.StatusOK, wantWord: true},
+		{name: "related provider failure", relatedStatus: http.StatusServiceUnavailable, wantFailure: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler := NewThesaurusHandler()
+			handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+				body := `[]`
+				status := http.StatusOK
+				if request.URL.Query().Get("rel_trg") != "" {
+					status = test.relatedStatus
+					if status == http.StatusOK {
+						body = `[{"word":"kindness","tags":["n"],"defs":["the quality of being friendly"]}]`
+					}
+				}
+				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+			})}
+			answer, err := handler.HandleDirectQuery(context.Background(), "kind")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.wantWord {
+				if answer.Error != "" || answer.Data["related_available"] != true || !strings.Contains(answer.Content, "kindness") {
+					t.Fatalf("related-only answer was discarded: %#v", answer)
+				}
+				return
+			}
+			if !test.wantFailure || answer.Error != "" || answer.Data["related_available"] != false || !strings.Contains(answer.Content, "Failed to fetch") {
+				t.Fatalf("related-provider failure was not surfaced as a partial answer: %#v", answer)
+			}
+		})
+	}
+}
+
 func TestDictionaryAndThesaurusClientsRejectRedirects(t *testing.T) {
 	for _, test := range []struct {
 		name   string

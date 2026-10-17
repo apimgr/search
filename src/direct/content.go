@@ -758,7 +758,7 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	synonymEntries, synonymsErr := h.fetchThesaurusEntries(ctx, synURL)
 	antonymEntries, antonymsErr := h.fetchThesaurusEntries(ctx, antURL)
 	relatedURL := fmt.Sprintf("https://api.datamuse.com/words?rel_trg=%s&max=20&md=p", url.QueryEscape(term))
-	relatedEntries, _ := h.fetchThesaurusEntries(ctx, relatedURL)
+	relatedEntries, relatedErr := h.fetchThesaurusEntries(ctx, relatedURL)
 	synonyms := thesaurusEntryWords(synonymEntries)
 	antonyms := thesaurusEntryWords(antonymEntries)
 
@@ -769,7 +769,7 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 			Content:     "<p class=\"error\">Thesaurus data could not be loaded.</p>", Error: "fetch_failed",
 		}, nil
 	}
-	if synonymsErr == nil && antonymsErr == nil && len(synonyms) == 0 && len(antonyms) == 0 {
+	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 {
 		return &Answer{
 			Type:        AnswerTypeThesaurus,
 			Term:        term,
@@ -787,11 +787,15 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	if antonymsErr != nil {
 		content += "<p class=\"error\">Antonyms could not be loaded.</p>"
 	}
+	if relatedErr != nil {
+		content += fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(i18n.T(lang, "direct.failed_to_fetch")))
+	}
 	data := map[string]interface{}{
 		"word": term, "synonyms": synonyms, "antonyms": antonyms,
 		"synonym_entries": synonymEntries, "antonym_entries": antonymEntries,
 		"related_words":      thesaurusEntryWords(relatedEntries),
 		"synonyms_available": synonymsErr == nil, "antonyms_available": antonymsErr == nil,
+		"related_available": relatedErr == nil,
 	}
 
 	return &Answer{
