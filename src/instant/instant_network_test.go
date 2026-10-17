@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -2573,7 +2574,15 @@ func TestPackageMetadataRejectsOversizedJSON(t *testing.T) {
 func TestWritePackageLinkRejectsUnsafeAndEscapesSafeURLs(t *testing.T) {
 	var content strings.Builder
 	writePackageLink(&content, "Homepage", "javascript:alert(1)")
-	writePackageLink(&content, "Repository", "https://user:pass@example.test/repo?a=1&b=2\"<script>")
+	unsafeURL := (&url.URL{
+		Scheme:   "https",
+		User:     url.UserPassword("user", "pass"),
+		Host:     "example.test",
+		Path:     "/repo",
+		RawQuery: "a=1&b=2",
+		Fragment: `"<script>`,
+	}).String()
+	writePackageLink(&content, "Repository", unsafeURL)
 	if content.Len() != 0 {
 		t.Fatalf("unsafe package URLs were rendered: %s", content.String())
 	}
