@@ -509,6 +509,26 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	requireNoFailures(t, pf, "language preference save and localized homepage")
 }
 
+func TestBrowserDisabledVideoPreviewsSkipPreviewSetup(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx, network.SetCookie("search_pref_video_previews", "0").WithURL(site.URL).WithPath("/")); err != nil {
+		t.Fatalf("set disabled video preview preference: %v", err)
+	}
+	var previewContainerMissing bool
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL),
+		chromedp.Evaluate(`(() => { const result = document.createElement('a'); result.className = 'video-result'; result.dataset.previewUrl = '/preview.mp4'; document.body.appendChild(result); result.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true})); })()`, nil),
+		chromedp.Sleep(700*time.Millisecond),
+		chromedp.Evaluate(`document.querySelector('#video-preview-container') === null`, &previewContainerMissing),
+	); err != nil {
+		t.Fatalf("disabled video preview setup: %v", err)
+	}
+	if !previewContainerMissing {
+		t.Fatal("disabled video previews initialized the preview container")
+	}
+}
+
 // TestBrowserHomepageWidgets covers the dashboard's collapse, removal, and
 // persistence interactions through the actual homepage UI.
 func TestBrowserHomepageWidgets(t *testing.T) {
