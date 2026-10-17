@@ -1061,7 +1061,7 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 		Time struct {
 			Modified string `json:"modified"`
 		} `json:"time"`
-		License    string `json:"license"`
+		License    json.RawMessage `json:"license"`
 		Repository struct {
 			URL string `json:"url"`
 		} `json:"repository"`
@@ -1077,6 +1077,14 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 	}
 	if strings.TrimSpace(pkg.Name) == "" || strings.TrimSpace(pkg.DistTags.Latest) == "" {
 		return nil, fmt.Errorf("npm registry returned incomplete package metadata")
+	}
+	var license string
+	if len(pkg.License) > 0 {
+		_ = json.Unmarshal(pkg.License, &license)
+	}
+	var licenseValue interface{}
+	if strings.TrimSpace(license) != "" {
+		licenseValue = license
 	}
 	var downloads struct {
 		Downloads *int `json:"downloads"`
@@ -1095,7 +1103,7 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 		"name":             pkg.Name,
 		"description":      pkg.Description,
 		"version":          pkg.DistTags.Latest,
-		"license":          pkg.License,
+		"license":          licenseValue,
 		"registry":         "npm",
 		"weekly_downloads": weeklyDownloads,
 		"dependencies":     dependencies,
@@ -1109,7 +1117,7 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 		Term:        name,
 		Title:       pkg.Name,
 		Description: pkg.Description,
-		Content:     formatPkgContentWithDetails(lang, "npm", pkg.Name, pkg.Description, pkg.DistTags.Latest, pkg.License, "npm install "+pkg.Name, data),
+		Content:     formatPkgContentWithDetails(lang, "npm", pkg.Name, pkg.Description, pkg.DistTags.Latest, license, "npm install "+pkg.Name, data),
 		Source:      "npm",
 		SourceURL:   fmt.Sprintf("https://www.npmjs.com/package/%s", url.PathEscape(name)),
 		Data:        data,

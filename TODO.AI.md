@@ -382,6 +382,8 @@ Remaining verified gaps:
 
 crates.io and RubyGems now omit malformed negative lifetime download totals as unavailable metadata rather than rendering the invalid values; regression tests cover both registry responses.
 
+npm package details retain valid name/version data when the optional license field has a malformed non-string value; the license is omitted and an offline handler test covers the fallback.
+
 The instant dictionary handler now merges every provider record so homographs and additional parts of speech remain visible, caps JSON responses at 1 MiB, and refuses redirects. Regression tests cover merged meanings, oversized bodies, and redirect rejection; the shared deterministic dictionary fixture now includes a second entry so SSR, no-JS, and browser tiers assert both records.
 
 Archive selection now uses a stable capture identity derived from the source and capture metadata, and sorts tied timestamps deterministically. The native selector submits that identity so captures from separate archives at the same timestamp cannot select the wrong response; the range slider remains progressive enhancement. Added collision coverage and updated browser/no-JS flows. Dictionary and thesaurus clients now refuse redirects; dictionary responses also reject non-success statuses before parsing provider bodies. Direct/server tests and all three archive timeline tiers pass. Remaining dictionary/thesaurus metadata gaps and provider-parser cases still need completion.

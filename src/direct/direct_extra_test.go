@@ -1919,6 +1919,29 @@ func TestPkgHandlerNPMMetadataIsRenderedSafely(t *testing.T) {
 	}
 }
 
+type npmMalformedLicenseTransport struct{}
+
+func (npmMalformedLicenseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	status, body := http.StatusBadGateway, `{}`
+	if request.URL.Host == "registry.npmjs.org" {
+		status = http.StatusOK
+		body = `{"name":"sample","description":"A package","dist-tags":{"latest":"1.2.3"},"license":{},"versions":{"1.2.3":{"dependencies":{"one":"^1"}}}}`
+	}
+	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+}
+
+func TestPkgHandlerIgnoresMalformedOptionalNpmLicense(t *testing.T) {
+	handler := NewPkgHandler()
+	handler.client = &http.Client{Transport: npmMalformedLicenseTransport{}}
+	answer, err := handler.HandleDirectQuery(context.Background(), "npm/sample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Data["version"] != "1.2.3" || answer.Data["dependencies"] != 1 || answer.Data["license"] != nil {
+		t.Fatalf("malformed optional license discarded package metadata: %#v", answer.Data)
+	}
+}
+
 func TestPkgHandlerPyPIMetadataIsRenderedSafely(t *testing.T) {
 	packageDownloadsCache.Lock()
 	delete(packageDownloadsCache.entries, "pypi:sample")
