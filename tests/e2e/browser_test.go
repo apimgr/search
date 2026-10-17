@@ -82,6 +82,87 @@ func TestBrowserKeyboardSearchAndHelpShortcuts(t *testing.T) {
 	requireNoFailures(t, pf, "keyboard search and help shortcuts")
 }
 
+func TestBrowserKeyboardResultNavigationShortcuts(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var stateJSON string
+	setup := `
+		window.__keyboardClicks = [];
+		window.__keyboardOpened = [];
+		window.open = function(href, target, features) {
+			window.__keyboardOpened.push({href: href, target: target, features: features});
+		};
+		document.body.insertAdjacentHTML('beforeend', ` + "`" + `
+			<div class="search-result" data-keyboard-result="one"><h3>One</h3><a href="/keyboard/one">One</a></div>
+			<div class="search-result" data-keyboard-result="two"><h3>Two</h3><a href="/keyboard/two">Two</a></div>
+			<div class="search-result" data-keyboard-result="three"><h3>Three</h3><a href="/keyboard/three">Three</a></div>
+			<a class="pagination-prev" href="/keyboard/prev" data-keyboard-page="prev">Previous</a>
+			<a class="pagination-next" href="/keyboard/next" data-keyboard-page="next">Next</a>
+		` + "`" + `);
+		document.querySelectorAll('[data-keyboard-result] a, [data-keyboard-page]').forEach(function(link) {
+			link.addEventListener('click', function(event) {
+				event.preventDefault();
+				var result = link.closest('[data-keyboard-result]');
+				window.__keyboardClicks.push((result && result.dataset.keyboardResult) || link.dataset.keyboardPage);
+			});
+		});
+		window.__dispatchKeyboard = function(key, shiftKey) {
+			document.dispatchEvent(new KeyboardEvent('keydown', {key: key, shiftKey: !!shiftKey, bubbles: true}));
+		};
+	`
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/search?q=keyboard"),
+		chromedp.Evaluate(setup, nil),
+		chromedp.Evaluate(`__dispatchKeyboard('j'); __dispatchKeyboard('j'); __dispatchKeyboard('k'); __dispatchKeyboard('g'); __dispatchKeyboard('g'); __dispatchKeyboard('G'); __dispatchKeyboard('k')`, nil),
+		chromedp.Evaluate(`JSON.stringify({selected: Array.from(document.querySelectorAll('.search-result')).map(function(node) { return node.classList.contains('keyboard-selected'); }), clicks: window.__keyboardClicks.slice(), opened: window.__keyboardOpened.slice()})`, &stateJSON),
+	); err != nil {
+		t.Fatalf("keyboard result navigation: %v", err)
+	}
+	var state struct {
+		Selected []bool   `json:"selected"`
+		Clicks   []string `json:"clicks"`
+		Theme    string   `json:"theme"`
+		Opened   []struct {
+			Href     string `json:"href"`
+			Target   string `json:"target"`
+			Features string `json:"features"`
+		} `json:"opened"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		t.Fatalf("decode keyboard navigation state %q: %v", stateJSON, err)
+	}
+	if len(state.Selected) != 3 || state.Selected[1] != true || state.Selected[0] || state.Selected[2] {
+		t.Fatalf("j/k, gg, G did not leave the second result selected: %s", stateJSON)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Evaluate(`__dispatchKeyboard('Enter'); __dispatchKeyboard('o'); __dispatchKeyboard('O'); __dispatchKeyboard('1'); __dispatchKeyboard('2', true); __dispatchKeyboard('h'); __dispatchKeyboard('l'); __dispatchKeyboard('t')`, nil),
+		chromedp.Evaluate(`JSON.stringify({clicks: window.__keyboardClicks, opened: window.__keyboardOpened, theme: document.documentElement.getAttribute('data-theme-mode')})`, &stateJSON),
+	); err != nil {
+		t.Fatalf("keyboard result actions: %v", err)
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		t.Fatalf("decode keyboard action state %q: %v", stateJSON, err)
+	}
+	wantClicks := []string{"two", "two", "one", "prev", "next"}
+	if strings.Join(state.Clicks, ",") != strings.Join(wantClicks, ",") {
+		t.Errorf("Enter/o/quick jump/pagination clicks = %v, want %v", state.Clicks, wantClicks)
+	}
+	if len(state.Opened) != 2 {
+		t.Errorf("O and shifted quick jump should each open a new tab, got %+v", state.Opened)
+	} else {
+		for _, opened := range state.Opened {
+			if opened.Href != site.URL+"/keyboard/two" || opened.Target != "_blank" || !strings.Contains(opened.Features, "noopener") {
+				t.Errorf("new-tab shortcut should safely open the selected result, got %+v", opened)
+			}
+		}
+	}
+	if state.Theme != "light" {
+		t.Errorf("t should toggle the default dark theme to light, got %q", state.Theme)
+	}
+	requireNoFailures(t, pf, "keyboard result navigation shortcuts")
+}
+
 func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
