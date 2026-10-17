@@ -5203,8 +5203,10 @@ func TestDictionaryIncludesAllEntriesAndProviderFrequency(t *testing.T) {
 	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
 		body := `[]`
 		switch request.URL.Host {
+		case "en.wiktionary.org":
+			body = `{"en":[{"partOfSpeech":"noun","language":"English","definitions":[{"definition":"Visible <a href=\"/wiki/light\">electromagnetic radiation</a>."}]},{"partOfSpeech":"verb","language":"English","definitions":[{"definition":"To ignite."}]}]}`
 		case "api.dictionaryapi.dev":
-			body = `[{"word":"light","phonetic":"/laɪt/","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"Visible electromagnetic radiation."}],"antonyms":["darkness"]}]},{"word":"light","meanings":[{"partOfSpeech":"verb","definitions":[{"definition":"To ignite."}]}],"origin":"Old English līht"}]`
+			body = `[{"word":"light","phonetic":"/laɪt/","origin":"Old English līht","meanings":[{"partOfSpeech":"noun","definitions":[{"example":"The light shone brightly."}],"antonyms":["darkness"]}]}]`
 		case "api.datamuse.com":
 			if request.URL.Query().Get("md") != "f" || request.URL.Query().Get("qe") != "sp" {
 				t.Errorf("frequency query = %s", request.URL.RawQuery)
@@ -5219,11 +5221,49 @@ func TestDictionaryIncludesAllEntriesAndProviderFrequency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer.Content, "Visible electromagnetic radiation") || !strings.Contains(answer.Content, "To ignite") || !strings.Contains(answer.Content, "Old English") || !strings.Contains(answer.Content, "darkness") || !strings.Contains(answer.Content, "21.50 occurrences per million") {
+	if !strings.Contains(answer.Content, "Visible electromagnetic radiation") || !strings.Contains(answer.Content, "To ignite") || !strings.Contains(answer.Content, "Old English") || !strings.Contains(answer.Content, "darkness") || !strings.Contains(answer.Content, "The light shone brightly") || !strings.Contains(answer.Content, "21.50 occurrences per million") || answer.Source != "Wiktionary API" {
 		t.Fatalf("dictionary content omitted entry data: %s", answer.Content)
+	}
+	if strings.Contains(answer.Content, `href="/wiki/light"`) {
+		t.Fatalf("Wiktionary markup was emitted as HTML: %s", answer.Content)
 	}
 	if answer.Data["frequency_per_million"] != 21.5 {
 		t.Fatalf("frequency data = %#v", answer.Data["frequency_per_million"])
+	}
+}
+
+func TestDictionaryKeepsWiktionaryDefinitionsWhenEnrichmentProvidersFail(t *testing.T) {
+	handler := NewDictHandler()
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "en.wiktionary.org" {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"en":[{"partOfSpeech":"noun","definitions":[{"definition":"A resilient definition."}]}]}`)), Request: request}, nil
+		}
+		return nil, fmt.Errorf("simulated optional provider outage")
+	})}
+	answer, err := handler.HandleDirectQuery(context.Background(), "resilience")
+	if err != nil {
+		t.Fatalf("dictionary failed after an optional provider outage: %v", err)
+	}
+	if !strings.Contains(answer.Content, "A resilient definition.") || answer.Source != "Wiktionary API" {
+		t.Fatalf("Wiktionary definition was lost when enrichment failed: %#v", answer)
+	}
+}
+
+func TestDictionaryRejectsMalformedAndOversizedWiktionaryResponses(t *testing.T) {
+	for name, body := range map[string]string{
+		"malformed": `{"en":[`,
+		"oversized": strings.Repeat("x", (2<<20)+1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			handler := NewDictHandler()
+			handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+			})}
+			answer, err := handler.HandleDirectQuery(context.Background(), "resilience")
+			if err == nil || answer != nil {
+				t.Fatalf("invalid Wiktionary response accepted: answer=%#v error=%v", answer, err)
+			}
+		})
 	}
 }
 

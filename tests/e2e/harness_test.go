@@ -126,6 +126,8 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 		}
 	case "api.urbandictionary.com":
 		body = `{"list":[{"word":"yeet","definition":"To throw something with force.","example":"She yeeted the ball across the field.","thumbs_up":1200,"thumbs_down":20,"author":"fixture","written_on":"2026-01-01T00:00:00.000Z","permalink":"https://www.urbandictionary.com/define.php?term=yeet"}]}`
+	case "en.wiktionary.org":
+		body = `{"en":[{"partOfSpeech":"adjective","language":"English","definitions":[{"definition":"Lasting for a short time."}]},{"partOfSpeech":"noun","language":"English","definitions":[{"definition":"A short-lived thing."}]}]}`
 	case "api.dictionaryapi.dev":
 		body = `[{"word":"ephemeral","phonetic":"/ɪˈfem.ər.əl/","phonetics":[{"text":"/ɪˈfem.ər.əl/","audio":"https://api.dictionaryapi.dev/media/pronunciations/en/ephemeral-us.mp3"}],"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"Lasting for a short time.","example":"The ephemeral beauty of the sunset."}]}],"origin":"From Greek ephēmeros"},{"word":"ephemeral","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]}],"origin":"From Greek ephēmeros"}]`
 	case "geocoding-api.open-meteo.com":

@@ -31,6 +31,21 @@ import (
 	xhtml "golang.org/x/net/html"
 )
 
+func htmlText(raw string) string {
+	var output strings.Builder
+	tokenizer := xhtml.NewTokenizer(strings.NewReader(raw))
+	for {
+		tokenType := tokenizer.Next()
+		if tokenType == xhtml.ErrorToken {
+			break
+		}
+		if tokenType == xhtml.TextToken {
+			output.Write(tokenizer.Text())
+		}
+	}
+	return strings.Join(strings.Fields(output.String()), " ")
+}
+
 // WikiHandler handles wiki:{topic} queries
 type WikiHandler struct {
 	client *http.Client
@@ -351,8 +366,8 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 
 	lang := LangFromContext(ctx)
 
-	// Use Free Dictionary API
-	apiURL := fmt.Sprintf("https://api.dictionaryapi.dev/api/v2/entries/en/%s", url.PathEscape(term))
+	// Wiktionary is the project-defined source for dictionary definitions.
+	apiURL := fmt.Sprintf("https://en.wiktionary.org/api/rest_v1/page/definition/%s", url.PathEscape(term))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
@@ -379,32 +394,18 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("dictionary provider returned HTTP %d", resp.StatusCode)
 	}
-	var entries []struct {
-		Word      string `json:"word"`
-		Phonetic  string `json:"phonetic"`
-		Phonetics []struct {
-			Text      string `json:"text"`
-			Audio     string `json:"audio"`
-			SourceURL string `json:"sourceUrl"`
-		} `json:"phonetics"`
-		Meanings []struct {
-			PartOfSpeech string `json:"partOfSpeech"`
-			Definitions  []struct {
-				Definition string   `json:"definition"`
-				Example    string   `json:"example"`
-				Synonyms   []string `json:"synonyms"`
-				Antonyms   []string `json:"antonyms"`
-			} `json:"definitions"`
-			Synonyms []string `json:"synonyms"`
-			Antonyms []string `json:"antonyms"`
-		} `json:"meanings"`
-		Origin string `json:"origin"`
+	var wiktionary map[string][]struct {
+		PartOfSpeech string `json:"partOfSpeech"`
+		Language     string `json:"language"`
+		Definitions  []struct {
+			Definition string   `json:"definition"`
+			Examples   []string `json:"examples"`
+		} `json:"definitions"`
 	}
-
-	if err := decodeBoundedJSON(resp.Body, 2<<20, &entries); err != nil {
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &wiktionary); err != nil {
 		return nil, err
 	}
-
+	entries := wiktionary["en"]
 	if len(entries) == 0 {
 		return &Answer{
 			Type:        AnswerTypeDict,
@@ -416,7 +417,6 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		}, nil
 	}
 
-	entry := entries[0]
 	meanings := make([]struct {
 		PartOfSpeech string `json:"partOfSpeech"`
 		Definitions  []struct {
@@ -427,25 +427,108 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		} `json:"definitions"`
 		Synonyms []string `json:"synonyms"`
 		Antonyms []string `json:"antonyms"`
-	}, 0)
-	origins := make([]string, 0, len(entries))
-	phonetic := entry.Phonetic
-	audioURL := ""
+	}, 0, len(entries))
 	for _, item := range entries {
-		meanings = append(meanings, item.Meanings...)
-		if item.Origin != "" && !slices.Contains(origins, item.Origin) {
-			origins = append(origins, item.Origin)
+		meaning := struct {
+			PartOfSpeech string `json:"partOfSpeech"`
+			Definitions  []struct {
+				Definition string   `json:"definition"`
+				Example    string   `json:"example"`
+				Synonyms   []string `json:"synonyms"`
+				Antonyms   []string `json:"antonyms"`
+			} `json:"definitions"`
+			Synonyms []string `json:"synonyms"`
+			Antonyms []string `json:"antonyms"`
+		}{PartOfSpeech: item.PartOfSpeech}
+		for _, definition := range item.Definitions {
+			plain := htmlText(definition.Definition)
+			if plain == "" {
+				continue
+			}
+			example := ""
+			if len(definition.Examples) > 0 {
+				example = htmlText(definition.Examples[0])
+			}
+			meaning.Definitions = append(meaning.Definitions, struct {
+				Definition string   `json:"definition"`
+				Example    string   `json:"example"`
+				Synonyms   []string `json:"synonyms"`
+				Antonyms   []string `json:"antonyms"`
+			}{Definition: plain, Example: example})
 		}
-		if phonetic == "" && item.Phonetic != "" {
-			phonetic = item.Phonetic
+		if len(meaning.Definitions) > 0 {
+			meanings = append(meanings, meaning)
 		}
-		for _, sound := range item.Phonetics {
-			if audioURL = safeDictionaryAudioSource(sound.Audio); audioURL != "" {
-				break
+	}
+	if len(meanings) == 0 {
+		return nil, fmt.Errorf("dictionary provider returned no usable English definitions")
+	}
+	entryWord, phonetic, audioURL, origin := term, "", "", ""
+	metadataURL := fmt.Sprintf("https://api.dictionaryapi.dev/api/v2/entries/en/%s", url.PathEscape(term))
+	metadataReq, metadataErr := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
+	if metadataErr == nil {
+		metadataReq.Header.Set("User-Agent", version.BrowserUserAgent)
+		if metadataResp, fetchErr := h.client.Do(metadataReq); fetchErr == nil {
+			defer closeutil.Close(metadataResp.Body)
+			if metadataResp.StatusCode >= http.StatusOK && metadataResp.StatusCode < http.StatusMultipleChoices {
+				var metadata []struct {
+					Word      string `json:"word"`
+					Phonetic  string `json:"phonetic"`
+					Phonetics []struct {
+						Audio string `json:"audio"`
+					} `json:"phonetics"`
+					Origin   string `json:"origin"`
+					Meanings []struct {
+						PartOfSpeech string `json:"partOfSpeech"`
+						Definitions  []struct {
+							Example  string   `json:"example"`
+							Synonyms []string `json:"synonyms"`
+							Antonyms []string `json:"antonyms"`
+						} `json:"definitions"`
+						Synonyms []string `json:"synonyms"`
+						Antonyms []string `json:"antonyms"`
+					} `json:"meanings"`
+				}
+				if decodeBoundedJSON(metadataResp.Body, 2<<20, &metadata) == nil {
+					for _, item := range metadata {
+						if item.Word != "" {
+							entryWord = item.Word
+						}
+						if phonetic == "" {
+							phonetic = item.Phonetic
+						}
+						if origin == "" {
+							origin = item.Origin
+						}
+						for _, metadataMeaning := range item.Meanings {
+							for meaningIndex := range meanings {
+								if !strings.EqualFold(meanings[meaningIndex].PartOfSpeech, metadataMeaning.PartOfSpeech) {
+									continue
+								}
+								for definitionIndex, metadataDefinition := range metadataMeaning.Definitions {
+									if definitionIndex >= len(meanings[meaningIndex].Definitions) {
+										break
+									}
+									if meanings[meaningIndex].Definitions[definitionIndex].Example == "" {
+										meanings[meaningIndex].Definitions[definitionIndex].Example = metadataDefinition.Example
+									}
+									meanings[meaningIndex].Definitions[definitionIndex].Synonyms = append(meanings[meaningIndex].Definitions[definitionIndex].Synonyms, metadataDefinition.Synonyms...)
+									meanings[meaningIndex].Definitions[definitionIndex].Antonyms = append(meanings[meaningIndex].Definitions[definitionIndex].Antonyms, metadataDefinition.Antonyms...)
+								}
+								meanings[meaningIndex].Synonyms = append(meanings[meaningIndex].Synonyms, metadataMeaning.Synonyms...)
+								meanings[meaningIndex].Antonyms = append(meanings[meaningIndex].Antonyms, metadataMeaning.Antonyms...)
+							}
+						}
+						for _, sound := range item.Phonetics {
+							if audioURL = safeDictionaryAudioSource(sound.Audio); audioURL != "" {
+								break
+							}
+						}
+					}
+				}
 			}
 		}
 	}
-	origin := strings.Join(origins, "\n\n")
 	frequency := h.fetchWordFrequency(ctx, term)
 
 	proxyAudioURL := ""
@@ -453,8 +536,8 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		proxyAudioURL = "/direct/audio?url=" + url.QueryEscape(audioURL)
 	}
 	data := map[string]interface{}{
-		"word":     entry.Word,
-		"phonetic": entry.Phonetic,
+		"word":     entryWord,
+		"phonetic": phonetic,
 		"meanings": meanings,
 		"origin":   origin,
 		"audioURL": proxyAudioURL,
@@ -469,11 +552,11 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeDict,
 		Term:        term,
-		Title:       entry.Word,
-		Description: fmt.Sprintf("Dictionary entry for %s", entry.Word),
-		Content:     formatDictContentWithFrequency(entry.Word, phonetic, audioURL, meanings, origin, frequency),
-		Source:      "Free Dictionary API",
-		SourceURL:   "https://dictionaryapi.dev/",
+		Title:       entryWord,
+		Description: fmt.Sprintf("Dictionary entry for %s", entryWord),
+		Content:     formatDictContentWithFrequency(entryWord, phonetic, audioURL, meanings, origin, frequency),
+		Source:      "Wiktionary API",
+		SourceURL:   "https://en.wiktionary.org/api/rest_v1/",
 		Data:        data,
 	}, nil
 }
