@@ -12,7 +12,7 @@ import (
 var testLanguages = []string{"en", "fr", "de"}
 
 func TestImportDirectValuesWinAndRemainAdditive(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?code=theme%3Dlight%26lang%3Dfr%26search_pref_units%3Dmetric&theme=dark&cookie_consent=no&search_owner_token=secret", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?code=theme%3Dlight%26lang%3Dfr%26search_pref_units%3Dmetric&theme=dark&cookie_consent=no&search_owner_token=secret&search_pref_video_previews=0", nil)
 	req.AddCookie(&http.Cookie{Name: "search_pref_category", Value: "news"})
 	result := Import(req, "search", "en", testLanguages)
 	if result.State.Theme != "dark" || result.State.Lang != "fr" || result.State.Prefs["units"] != "metric" || result.State.Prefs["category"] != "news" {
@@ -21,7 +21,7 @@ func TestImportDirectValuesWinAndRemainAdditive(t *testing.T) {
 	if !contains(result.Applied, "theme") || !contains(result.Applied, "lang") || !contains(result.Applied, "search_pref_units") {
 		t.Fatalf("applied=%v", result.Applied)
 	}
-	if !contains(result.Ignored, "cookie_consent") || !contains(result.Ignored, "search_owner_token") {
+	if !contains(result.Ignored, "cookie_consent") || !contains(result.Ignored, "search_owner_token") || !contains(result.Ignored, "search_pref_video_previews") {
 		t.Fatalf("ignored=%v", result.Ignored)
 	}
 	w := httptest.NewRecorder()
@@ -73,14 +73,14 @@ func TestExportCanonicalIncludesOnlyPreferences(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "search_pref_video_previews", Value: "0"})
 	req.AddCookie(&http.Cookie{Name: "cookie_consent", Value: "secret"})
 	state, fullURL, code := Export(req, "search", "en", testLanguages)
-	if state.Theme != "light" || state.Lang != "de" || state.Prefs["units"] != "metric" || state.Prefs["save_history"] != "0" || state.Prefs["video_previews"] != "0" {
+	if state.Theme != "light" || state.Lang != "de" || state.Prefs["units"] != "metric" || state.Prefs["save_history"] != "0" {
 		t.Fatalf("state=%#v", state)
 	}
 	parsed, err := url.Parse(fullURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Query().Get("search_pref_units") != "metric" || parsed.Query().Get("search_pref_save_history") != "0" || parsed.Query().Get("search_pref_video_previews") != "0" || parsed.Query().Get("cookie_consent") != "" {
+	if parsed.Query().Get("search_pref_units") != "metric" || parsed.Query().Get("search_pref_save_history") != "0" || parsed.Query().Get("search_pref_video_previews") != "" || parsed.Query().Get("cookie_consent") != "" {
 		t.Fatalf("query=%s", parsed.RawQuery)
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(code)

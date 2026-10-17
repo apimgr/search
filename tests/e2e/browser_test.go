@@ -485,19 +485,26 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	var language, searchLabel string
+	var videoPreviewsEnabled bool
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#video-previews').checked = false`, nil),
 		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
 		chromedp.Evaluate(`document.documentElement.lang`, &language),
 		chromedp.Evaluate(`document.querySelector('#searchQuery').getAttribute('aria-label')`, &searchLabel),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Evaluate(`document.querySelector('#video-previews').checked`, &videoPreviewsEnabled),
 	); err != nil {
 		t.Fatalf("save language preference in browser: %v", err)
 	}
 	if language != "de" || searchLabel != "Suchen" {
 		t.Fatalf("language preference rendered lang=%q search label=%q, want de/Suchen", language, searchLabel)
+	}
+	if videoPreviewsEnabled {
+		t.Fatal("JavaScript preferences save did not persist the disabled video preview preference")
 	}
 	requireNoFailures(t, pf, "language preference save and localized homepage")
 }

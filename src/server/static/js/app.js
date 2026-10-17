@@ -3160,6 +3160,7 @@
             params.append('search_pref_keyboard_shortcuts', prefs.keyboard_shortcuts ? '1' : '0');
             params.append('search_pref_save_history', prefs.save_history ? '1' : '0');
             params.append('search_pref_video_previews', prefs.video_previews ? '1' : '0');
+            params.append('search_pref_video_previews_present', '1');
 
             var toggles = document.getElementById('widget-toggles');
             if (toggles) {

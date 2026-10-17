@@ -2977,6 +2977,27 @@ func TestHandlePreferencesSave(t *testing.T) {
 	}
 }
 
+func TestHandleGeneralPreferencesSavePersistsLocalVideoPreviewPreference(t *testing.T) {
+	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("search_pref_video_previews_present=1&search_pref_video_previews=0"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.handleGeneralPreferencesSave(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
+	}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == "search_pref_video_previews" {
+			if cookie.Value != "0" {
+				t.Fatalf("video preview preference = %q, want 0", cookie.Value)
+			}
+			return
+		}
+	}
+	t.Fatal("video preview preference cookie was not set")
+}
+
 func TestHandleBangProxyMissingURL(t *testing.T) {
 	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
 	r := httptest.NewRequest(http.MethodGet, "/bang-proxy", nil)

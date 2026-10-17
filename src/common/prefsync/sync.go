@@ -24,7 +24,6 @@ var preferenceEnums = map[string]map[string]bool{
 	"infinite_scroll":    {"0": true, "1": true},
 	"keyboard_shortcuts": {"0": true, "1": true},
 	"save_history":       {"0": true, "1": true},
-	"video_previews":     {"0": true, "1": true},
 }
 
 type State struct {

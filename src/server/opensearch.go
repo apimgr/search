@@ -416,7 +416,7 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		Name: "search_widget_weather_units", Value: weatherUnits, Path: "/",
 		MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode,
 	})
-	for _, key := range []string{"new_tab", "infinite_scroll", "keyboard_shortcuts", "save_history", "video_previews"} {
+	for _, key := range []string{"new_tab", "infinite_scroll", "keyboard_shortcuts", "save_history"} {
 		name := "search_pref_" + key
 		if values.Has(name + "_present") {
 			if values.Get(name) == "1" {
@@ -426,6 +426,19 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 			}
 			values.Del(name + "_present")
 		}
+	}
+	if values.Has("search_pref_video_previews_present") {
+		videoPreviews := "0"
+		if values.Get("search_pref_video_previews") == "1" {
+			videoPreviews = "1"
+		}
+		secure := strings.HasPrefix(strings.ToLower(httputil.BuildURL(r, "/")), "https://")
+		http.SetCookie(w, &http.Cookie{
+			Name: "search_pref_video_previews", Value: videoPreviews, Path: "/",
+			MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode, Secure: secure,
+		})
+		values.Del("search_pref_video_previews")
+		values.Del("search_pref_video_previews_present")
 	}
 	clone := r.Clone(r.Context())
 	urlCopy := *r.URL
