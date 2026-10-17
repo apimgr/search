@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -23,7 +24,12 @@ type DefinitionHandler struct {
 // NewDefinitionHandler creates a new definition handler
 func NewDefinitionHandler() *DefinitionHandler {
 	return &DefinitionHandler{
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 		patterns: []*regexp.Regexp{
 			regexp.MustCompile(`(?i)^define[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^definition[:\s]+(.+)$`),
@@ -106,7 +112,15 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 		Origin string `json:"origin"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	const maxDictionaryResponseBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDictionaryResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxDictionaryResponseBytes {
+		return nil, fmt.Errorf("dictionary response exceeds %d bytes", maxDictionaryResponseBytes)
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, err
 	}
 
@@ -116,6 +130,16 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 	}
 
 	entry := data[0]
+	for _, record := range data[1:] {
+		if entry.Phonetic == "" {
+			entry.Phonetic = record.Phonetic
+		}
+		entry.Phonetics = append(entry.Phonetics, record.Phonetics...)
+		entry.Meanings = append(entry.Meanings, record.Meanings...)
+		if entry.Origin == "" {
+			entry.Origin = record.Origin
+		}
+	}
 
 	// Build content
 	var content strings.Builder

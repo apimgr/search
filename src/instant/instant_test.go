@@ -4294,6 +4294,76 @@ func TestDefinitionHandlerEscapesProviderHTMLAndShowsPronunciation(t *testing.T)
 	}
 }
 
+func TestDefinitionHandlerCombinesAllProviderRecords(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(`[
+			{"word":"light","phonetic":"/laɪt/","phonetics":[],"meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"The natural agent that stimulates sight."}]}]},
+			{"word":"light","phonetic":"","phonetics":[],"meanings":[{"partOfSpeech":"verb","definitions":[{"definition":"Set fire to."}]}],"origin":"Old English"}
+		]`))
+	}))
+	defer server.Close()
+
+	handler := NewDefinitionHandler()
+	handler.client.Transport = &redirectTransport{target: server.URL}
+	answer, err := handler.HandleInstantQuery(context.Background(), "define light")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer == nil {
+		t.Fatal("dictionary handler returned no answer")
+	}
+	for _, expected := range []string{"noun", "verb", "The natural agent that stimulates sight.", "Set fire to.", "Old English"} {
+		if !strings.Contains(answer.Content, expected) {
+			t.Errorf("combined dictionary output missing %q: %s", expected, answer.Content)
+		}
+	}
+}
+
+type definitionRedirectTransport struct {
+	requests int
+}
+
+func (transport *definitionRedirectTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	transport.requests++
+	header := make(http.Header)
+	header.Set("Location", "http://127.0.0.1/private")
+	return &http.Response{
+		StatusCode: http.StatusFound,
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Request:    request,
+	}, nil
+}
+
+func TestDefinitionHandlerRejectsRedirects(t *testing.T) {
+	transport := &definitionRedirectTransport{}
+	handler := NewDefinitionHandler()
+	handler.client.Transport = transport
+	answer, err := handler.HandleInstantQuery(context.Background(), "define safe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer != nil || transport.requests != 1 {
+		t.Fatalf("redirect returned answer=%#v after %d requests; want no answer and no follow-up", answer, transport.requests)
+	}
+}
+
+func TestDefinitionHandlerRejectsOversizedProviderResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(writer, `[{}]`+strings.Repeat(" ", (1<<20)+1))
+	}))
+	defer server.Close()
+
+	handler := NewDefinitionHandler()
+	handler.client.Transport = &redirectTransport{target: server.URL}
+	if answer, err := handler.HandleInstantQuery(context.Background(), "define oversized"); err == nil || answer != nil {
+		t.Fatalf("oversized response returned answer=%#v, error=%v", answer, err)
+	}
+}
+
 func TestDefinitionHandlerRejectsInsecurePronunciationURL(t *testing.T) {
 	if got := safePronunciationURL("http://example.com/audio.mp3"); got != "" {
 		t.Errorf("safePronunciationURL() = %q, want empty for HTTP", got)
