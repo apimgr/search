@@ -750,38 +750,57 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	}
 
 	lang := LangFromContext(ctx)
-	type thesaurusSenseResult struct {
-		senses []thesaurusSense
-		err    error
+	type thesaurusProviderResult struct {
+		name    string
+		entries []thesaurusEntry
+		senses  []thesaurusSense
+		err     error
 	}
-	senseContext, cancelSense := context.WithCancel(ctx)
-	defer cancelSense()
-	senseResults := make(chan thesaurusSenseResult, 1)
-	go func() {
-		senses, err := h.fetchThesaurusSenses(senseContext, term)
-		senseResults <- thesaurusSenseResult{senses: senses, err: err}
-	}()
-
-	// Use Datamuse API for synonyms and antonyms
+	providerResults := make(chan thesaurusProviderResult, 4)
+	fetchEntries := func(name, apiURL string) {
+		go func() {
+			entries, err := h.fetchThesaurusEntries(ctx, apiURL)
+			providerResults <- thesaurusProviderResult{name: name, entries: entries, err: err}
+		}()
+	}
+	// Use Datamuse for word relations and Free Dictionary for available senses.
 	synURL := fmt.Sprintf("https://api.datamuse.com/words?rel_syn=%s&max=20", url.QueryEscape(term))
 	antURL := fmt.Sprintf("https://api.datamuse.com/words?rel_ant=%s&max=20", url.QueryEscape(term))
-
-	synonymEntries, synonymsErr := h.fetchThesaurusEntries(ctx, synURL)
-	antonymEntries, antonymsErr := h.fetchThesaurusEntries(ctx, antURL)
 	relatedURL := fmt.Sprintf("https://api.datamuse.com/words?rel_trg=%s&max=20&md=p", url.QueryEscape(term))
-	relatedEntries, relatedErr := h.fetchThesaurusEntries(ctx, relatedURL)
-	senseResult := <-senseResults
+	fetchEntries("synonyms", synURL)
+	fetchEntries("antonyms", antURL)
+	fetchEntries("related", relatedURL)
+	go func() {
+		senses, err := h.fetchThesaurusSenses(ctx, term)
+		providerResults <- thesaurusProviderResult{name: "senses", senses: senses, err: err}
+	}()
+	var synonymEntries, antonymEntries, relatedEntries []thesaurusEntry
+	var synonymsErr, antonymsErr, relatedErr, sensesErr error
+	var senses []thesaurusSense
+	for range 4 {
+		result := <-providerResults
+		switch result.name {
+		case "synonyms":
+			synonymEntries, synonymsErr = result.entries, result.err
+		case "antonyms":
+			antonymEntries, antonymsErr = result.entries, result.err
+		case "related":
+			relatedEntries, relatedErr = result.entries, result.err
+		case "senses":
+			senses, sensesErr = result.senses, result.err
+		}
+	}
 	synonyms := thesaurusEntryWords(synonymEntries)
 	antonyms := thesaurusEntryWords(antonymEntries)
 
-	if synonymsErr != nil && antonymsErr != nil && relatedErr != nil && (senseResult.err != nil || len(senseResult.senses) == 0) {
+	if synonymsErr != nil && antonymsErr != nil && relatedErr != nil && (sensesErr != nil || len(senses) == 0) {
 		return &Answer{
 			Type: AnswerTypeThesaurus, Term: term, Title: fmt.Sprintf("Thesaurus: %s", term),
 			Description: i18n.T(lang, "direct.failed_to_fetch"),
 			Content:     "<p class=\"error\">Thesaurus data could not be loaded.</p>", Error: "fetch_failed",
 		}, nil
 	}
-	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && senseResult.err == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 && len(senseResult.senses) == 0 {
+	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && sensesErr == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 && len(senses) == 0 {
 		return &Answer{
 			Type:        AnswerTypeThesaurus,
 			Term:        term,
@@ -792,7 +811,7 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 		}, nil
 	}
 
-	content := formatThesaurusEntriesContent(term, synonymEntries, antonymEntries, relatedEntries, senseResult.senses)
+	content := formatThesaurusEntriesContent(term, synonymEntries, antonymEntries, relatedEntries, senses)
 	if synonymsErr != nil {
 		content += "<p class=\"error\">Synonyms could not be loaded.</p>"
 	}
@@ -802,17 +821,17 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	if relatedErr != nil {
 		content += fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(i18n.T(lang, "direct.failed_to_fetch")))
 	}
-	if senseResult.err != nil {
+	if sensesErr != nil {
 		content += fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(i18n.T(lang, "direct.failed_to_fetch")))
 	}
 	data := map[string]interface{}{
 		"word": term, "synonyms": synonyms, "antonyms": antonyms,
 		"synonym_entries": synonymEntries, "antonym_entries": antonymEntries,
-		"senses":             senseResult.senses,
+		"senses":             senses,
 		"related_words":      thesaurusEntryWords(relatedEntries),
 		"synonyms_available": synonymsErr == nil, "antonyms_available": antonymsErr == nil,
 		"related_available": relatedErr == nil,
-		"senses_available":  senseResult.err == nil,
+		"senses_available":  sensesErr == nil,
 	}
 
 	return &Answer{
