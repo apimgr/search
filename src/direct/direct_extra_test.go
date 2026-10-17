@@ -5180,13 +5180,16 @@ func TestThesaurusRendersProviderSenseMetadataAndRelatedPhrases(t *testing.T) {
 		default:
 			body = `[]`
 		}
+		if request.URL.Host == "api.dictionaryapi.dev" {
+			body = `[{"meanings":[{"partOfSpeech":"adjective","synonyms":["swift"],"definitions":[{"definition":"moving at high speed","example":"The swift runner won.","antonyms":["sluggish"]}]}]}]`
+		}
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
 	})}
 	answer, err := handler.HandleDirectQuery(context.Background(), "rapid")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, fragment := range []string{"Synonyms", "Antonyms", "Related words and phrases", "quick", "moving fast", "adj", "slow", "quick fix"} {
+	for _, fragment := range []string{"Synonyms", "Antonyms", "Related words and phrases", "Senses and usage examples", "quick", "moving fast", "adj", "slow", "quick fix", "moving at high speed", "The swift runner won.", "sluggish"} {
 		if !strings.Contains(answer.Content, fragment) {
 			t.Errorf("thesaurus output missing %q: %s", fragment, answer.Content)
 		}

@@ -31,6 +31,24 @@ curl https://your-instance.example.com/api/autodiscover
 The CLI client (`search-cli`) reads this endpoint on every startup to check for
 updates and verify API compatibility.
 
+## Search Bar Widget
+
+Add a native HTML form to another site to send searches to a Search instance.
+Replace the example host with the instance's public base URL, and change the
+input ID if the page already uses `search-query`:
+
+```html
+<form action="https://your-instance.example.com/search" method="get" role="search">
+  <label for="search-query">Search</label>
+  <input id="search-query" type="search" name="q" required>
+  <button type="submit">Search</button>
+</form>
+```
+
+The browser submits the query using the same public search route as the main
+site. The form works without JavaScript and loads no third-party scripts or
+iframes. The instance's normal search privacy and result preferences apply.
+
 ## OpenSearch
 
 Search ships a standard OpenSearch description file at `/opensearch.xml`.

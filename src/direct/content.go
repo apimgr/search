@@ -750,6 +750,17 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	}
 
 	lang := LangFromContext(ctx)
+	type thesaurusSenseResult struct {
+		senses []thesaurusSense
+		err    error
+	}
+	senseContext, cancelSense := context.WithCancel(ctx)
+	defer cancelSense()
+	senseResults := make(chan thesaurusSenseResult, 1)
+	go func() {
+		senses, err := h.fetchThesaurusSenses(senseContext, term)
+		senseResults <- thesaurusSenseResult{senses: senses, err: err}
+	}()
 
 	// Use Datamuse API for synonyms and antonyms
 	synURL := fmt.Sprintf("https://api.datamuse.com/words?rel_syn=%s&max=20", url.QueryEscape(term))
@@ -759,17 +770,18 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	antonymEntries, antonymsErr := h.fetchThesaurusEntries(ctx, antURL)
 	relatedURL := fmt.Sprintf("https://api.datamuse.com/words?rel_trg=%s&max=20&md=p", url.QueryEscape(term))
 	relatedEntries, relatedErr := h.fetchThesaurusEntries(ctx, relatedURL)
+	senseResult := <-senseResults
 	synonyms := thesaurusEntryWords(synonymEntries)
 	antonyms := thesaurusEntryWords(antonymEntries)
 
-	if synonymsErr != nil && antonymsErr != nil {
+	if synonymsErr != nil && antonymsErr != nil && relatedErr != nil && (senseResult.err != nil || len(senseResult.senses) == 0) {
 		return &Answer{
 			Type: AnswerTypeThesaurus, Term: term, Title: fmt.Sprintf("Thesaurus: %s", term),
 			Description: i18n.T(lang, "direct.failed_to_fetch"),
 			Content:     "<p class=\"error\">Thesaurus data could not be loaded.</p>", Error: "fetch_failed",
 		}, nil
 	}
-	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 {
+	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && senseResult.err == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 && len(senseResult.senses) == 0 {
 		return &Answer{
 			Type:        AnswerTypeThesaurus,
 			Term:        term,
@@ -780,7 +792,7 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 		}, nil
 	}
 
-	content := formatThesaurusEntriesContent(term, synonymEntries, antonymEntries, relatedEntries)
+	content := formatThesaurusEntriesContent(term, synonymEntries, antonymEntries, relatedEntries, senseResult.senses)
 	if synonymsErr != nil {
 		content += "<p class=\"error\">Synonyms could not be loaded.</p>"
 	}
@@ -790,21 +802,26 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	if relatedErr != nil {
 		content += fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(i18n.T(lang, "direct.failed_to_fetch")))
 	}
+	if senseResult.err != nil {
+		content += fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(i18n.T(lang, "direct.failed_to_fetch")))
+	}
 	data := map[string]interface{}{
 		"word": term, "synonyms": synonyms, "antonyms": antonyms,
 		"synonym_entries": synonymEntries, "antonym_entries": antonymEntries,
+		"senses":             senseResult.senses,
 		"related_words":      thesaurusEntryWords(relatedEntries),
 		"synonyms_available": synonymsErr == nil, "antonyms_available": antonymsErr == nil,
 		"related_available": relatedErr == nil,
+		"senses_available":  senseResult.err == nil,
 	}
 
 	return &Answer{
 		Type:        AnswerTypeThesaurus,
 		Term:        term,
 		Title:       fmt.Sprintf("Thesaurus: %s", term),
-		Description: fmt.Sprintf("Synonyms and antonyms for %s", term),
+		Description: fmt.Sprintf("Synonyms, antonyms, senses, and usage examples for %s", term),
 		Content:     content,
-		Source:      "Datamuse",
+		Source:      "Datamuse and Free Dictionary API",
 		SourceURL:   "https://www.datamuse.com/api/",
 		Data:        data,
 	}, nil
@@ -814,6 +831,14 @@ type thesaurusEntry struct {
 	Word        string   `json:"word"`
 	Tags        []string `json:"tags"`
 	Definitions []string `json:"defs"`
+}
+
+type thesaurusSense struct {
+	PartOfSpeech string   `json:"partOfSpeech"`
+	Definition   string   `json:"definition"`
+	Example      string   `json:"example,omitempty"`
+	Synonyms     []string `json:"synonyms,omitempty"`
+	Antonyms     []string `json:"antonyms,omitempty"`
 }
 
 func thesaurusEntryWords(entries []thesaurusEntry) []string {
@@ -854,14 +879,131 @@ func (h *ThesaurusHandler) fetchThesaurusEntries(ctx context.Context, apiURL str
 	return entries, nil
 }
 
-func formatThesaurusEntriesContent(word string, synonyms, antonyms, related []thesaurusEntry) string {
+func (h *ThesaurusHandler) fetchThesaurusSenses(ctx context.Context, word string) ([]thesaurusSense, error) {
+	apiURL := "https://api.dictionaryapi.dev/api/v2/entries/en/" + url.PathEscape(word)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer closeutil.Close(resp.Body)
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("dictionary provider returned HTTP %d", resp.StatusCode)
+	}
+	var entries []struct {
+		Meanings []struct {
+			PartOfSpeech string   `json:"partOfSpeech"`
+			Synonyms     []string `json:"synonyms"`
+			Antonyms     []string `json:"antonyms"`
+			Definitions  []struct {
+				Definition string   `json:"definition"`
+				Example    string   `json:"example"`
+				Synonyms   []string `json:"synonyms"`
+				Antonyms   []string `json:"antonyms"`
+			} `json:"definitions"`
+		} `json:"meanings"`
+	}
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &entries); err != nil {
+		return nil, err
+	}
+	const maxSenses = 20
+	senses := make([]thesaurusSense, 0, maxSenses)
+	for _, entry := range entries {
+		for _, meaning := range entry.Meanings {
+			for _, definition := range meaning.Definitions {
+				if len(senses) >= maxSenses {
+					return senses, nil
+				}
+				definitionText := strings.TrimSpace(definition.Definition)
+				if definitionText == "" {
+					continue
+				}
+				sense := thesaurusSense{
+					PartOfSpeech: truncateString(strings.TrimSpace(meaning.PartOfSpeech), 40),
+					Definition:   truncateString(definitionText, 1000),
+					Example:      truncateString(strings.TrimSpace(definition.Example), 500),
+					Synonyms:     boundedUniqueWords(append(append([]string{}, meaning.Synonyms...), definition.Synonyms...), 20),
+					Antonyms:     boundedUniqueWords(append(append([]string{}, meaning.Antonyms...), definition.Antonyms...), 20),
+				}
+				senses = append(senses, sense)
+			}
+		}
+	}
+	return senses, nil
+}
+
+func boundedUniqueWords(words []string, maximum int) []string {
+	unique := make([]string, 0, min(len(words), maximum))
+	seen := make(map[string]struct{}, min(len(words), maximum))
+	for _, word := range words {
+		word = strings.TrimSpace(word)
+		key := strings.ToLower(word)
+		if word == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, truncateString(word, 80))
+		if len(unique) == maximum {
+			break
+		}
+	}
+	return unique
+}
+
+func formatThesaurusEntriesContent(word string, synonyms, antonyms, related []thesaurusEntry, senses []thesaurusSense) string {
 	var html strings.Builder
 	html.WriteString(`<div class="thesaurus-content">`)
 	fmt.Fprintf(&html, `<h1>%s</h1>`, escapeHTML(word))
 	writeThesaurusRelation(&html, "Synonyms", synonyms)
 	writeThesaurusRelation(&html, "Antonyms", antonyms)
 	writeThesaurusRelation(&html, "Related words and phrases", related)
+	writeThesaurusSenses(&html, senses)
 	return html.String() + `</div>`
+}
+
+func writeThesaurusSenses(output *strings.Builder, senses []thesaurusSense) {
+	if len(senses) == 0 {
+		return
+	}
+	output.WriteString(`<h2>Senses and usage examples</h2><div class="thesaurus-senses">`)
+	for _, sense := range senses {
+		output.WriteString(`<section class="thesaurus-sense">`)
+		if sense.PartOfSpeech != "" {
+			fmt.Fprintf(output, `<span class="part-of-speech">%s</span>`, escapeHTML(sense.PartOfSpeech))
+		}
+		fmt.Fprintf(output, `<p class="sense-definition">%s</p>`, escapeHTML(sense.Definition))
+		if sense.Example != "" {
+			fmt.Fprintf(output, `<p class="usage-example"><em>“%s”</em></p>`, escapeHTML(sense.Example))
+		}
+		writeThesaurusWordTags(output, "Synonyms", sense.Synonyms)
+		writeThesaurusWordTags(output, "Antonyms", sense.Antonyms)
+		output.WriteString(`</section>`)
+	}
+	output.WriteString(`</div>`)
+}
+
+func writeThesaurusWordTags(output *strings.Builder, label string, words []string) {
+	if len(words) == 0 {
+		return
+	}
+	fmt.Fprintf(output, `<p class="sense-%s"><strong>%s:</strong> `, strings.ToLower(label), escapeHTML(label))
+	for index, word := range words {
+		if index > 0 {
+			output.WriteString(`, `)
+		}
+		fmt.Fprintf(output, `<a href="/direct/thesaurus/%s">%s</a>`, url.PathEscape(word), escapeHTML(word))
+	}
+	output.WriteString(`</p>`)
 }
 
 func writeThesaurusRelation(output *strings.Builder, title string, entries []thesaurusEntry) {

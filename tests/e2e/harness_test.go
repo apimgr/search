@@ -129,7 +129,11 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 	case "en.wiktionary.org":
 		body = `{"en":[{"partOfSpeech":"adjective","language":"English","definitions":[{"definition":"Lasting for a short time."}]},{"partOfSpeech":"noun","language":"English","definitions":[{"definition":"A short-lived thing."}]}]}`
 	case "api.dictionaryapi.dev":
-		body = `[{"word":"ephemeral","phonetic":"/ɪˈfem.ər.əl/","phonetics":[{"text":"/ɪˈfem.ər.əl/","audio":"https://api.dictionaryapi.dev/media/pronunciations/en/ephemeral-us.mp3"}],"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"Lasting for a short time.","example":"The ephemeral beauty of the sunset."}]}],"origin":"From Greek ephēmeros"},{"word":"ephemeral","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]}],"origin":"From Greek ephēmeros"}]`
+		if strings.HasSuffix(request.URL.Path, "/happy") {
+			body = `[{"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"feeling or showing pleasure","example":"She felt happy with the result."}]}]}]`
+		} else {
+			body = `[{"word":"ephemeral","phonetic":"/ɪˈfem.ər.əl/","phonetics":[{"text":"/ɪˈfem.ər.əl/","audio":"https://api.dictionaryapi.dev/media/pronunciations/en/ephemeral-us.mp3"}],"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"Lasting for a short time.","example":"The ephemeral beauty of the sunset."}]}],"origin":"From Greek ephēmeros"},{"word":"ephemeral","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]}],"origin":"From Greek ephēmeros"}]`
+		}
 	case "geocoding-api.open-meteo.com":
 		body = `{"results":[{"name":"Tokyo","latitude":35.68,"longitude":139.69,"country":"Japan","admin1":"Tokyo"}]}`
 	case "api.nal.usda.gov":
@@ -406,8 +410,8 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		t.Error("dictionary answer is missing one or more fixture records")
 		return
 	}
-	if typeName == "thesaurus" && (!strings.Contains(answer, "joyful") || !strings.Contains(answer, "bad")) {
-		t.Error("thesaurus answer is missing fixture synonyms or antonyms")
+	if typeName == "thesaurus" && (!strings.Contains(answer, "joyful") || !strings.Contains(answer, "bad") || !strings.Contains(answer, "She felt happy with the result.")) {
+		t.Error("thesaurus answer is missing fixture synonyms, antonyms, or usage example")
 		return
 	}
 	if typeName == "wiki" && !strings.Contains(answer, "Python is a high-level programming language.") {

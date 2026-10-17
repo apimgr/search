@@ -21,6 +21,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
 - Portable Preferences: Save settings locally, export/import them, or share them with portable `prefs` links
 - Search Alerts: Accountless alerts with email verification plus private RSS and webhook delivery
+- Embeddable Search Bar: Native HTML form snippet that works without JavaScript or third-party embeds ([integration guide](docs/integrations.md#search-bar-widget))
 - Fast and Efficient: Written in Go with concurrent engine queries
 - Multiple Engines: Aggregate results from Google, Bing, DuckDuckGo, and more
 - Instant Answers: Calculator, unit/currency converter, weather, dictionary, and more
@@ -287,7 +288,7 @@ Zero-click answers displayed above search results:
 | UUID | `uuid` |
 | Hash | `sha256 hello` |
 
-Dictionary definitions come from the [Wiktionary API](https://en.wiktionary.org/api/rest_v1/). Optional pronunciation and etymology metadata comes from the [Free Dictionary API](https://dictionaryapi.dev/), and word frequency estimates come from the [Datamuse API](https://www.datamuse.com/api/) using Google Books Ngrams (occurrences per million words). Thesaurus answers also use Datamuse. Successful thesaurus responses are cached for up to 24 hours. Datamuse states that API keys will be required starting February 1, 2027; its public documentation does not yet specify the request authentication format.
+Dictionary definitions come from the [Wiktionary API](https://en.wiktionary.org/api/rest_v1/). Optional pronunciation and etymology metadata comes from the [Free Dictionary API](https://dictionaryapi.dev/), and word frequency estimates come from the [Datamuse API](https://www.datamuse.com/api/) using Google Books Ngrams (occurrences per million words). Thesaurus answers combine Datamuse synonym, antonym, and related-word results with optional Free Dictionary senses, usage examples, and per-sense synonyms and antonyms. Each provider can fail independently; available results remain visible. Successful thesaurus responses are cached for up to 24 hours. Datamuse states that API keys will be required starting February 1, 2027; its public documentation does not yet specify the request authentication format.
 
 ### Bang Shortcuts
 
