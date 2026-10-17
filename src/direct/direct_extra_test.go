@@ -1223,7 +1223,7 @@ func TestFormatCacheContentProvidesTimelineAndDownloadLinks(t *testing.T) {
 		{Timestamp: "20220102030405", Original: "https://example.com/page", URL: "https://archive.md/20220102030405/https://example.com/page", Source: "Archive.today"},
 	}
 	content := formatCacheContent("https://example.com/page", archives, snapshots, snapshots[0].Timestamp, archiveSnapshotID(snapshots[0]), 0, "", "")
-	for _, expected := range []string{`method="get" class="archive-timeline"`, `name="snapshot_id"`, `type="range"`, `max="2"`, `2024-01-02T03:04:05Z`, `type="submit">View archived snapshot`, "Download archived response", "20240102030405id_/https://example.com/page?a=1&amp;b=2", "https://archive.md/20220102030405/https://example.com/page", `href="/direct/cache-download-archive-today?`} {
+	for _, expected := range []string{`method="get" class="archive-timeline"`, `name="snapshot_id"`, `type="range"`, `max="2"`, `2024-01-02T03:04:05Z`, `type="submit">View archived snapshot`, "Download archived response", "20240102030405id_/https://example.com/page?a=1&amp;b=2", "https://archive.md/20220102030405/https://example.com/page", `href="/direct/cache-download-archive-today?`, "https://web.archive.org/save/https%3A%2F%2Fexample.com%2Fpage"} {
 		if !strings.Contains(content, expected) {
 			t.Errorf("cache content missing %q", expected)
 		}
