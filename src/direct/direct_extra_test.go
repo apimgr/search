@@ -5289,6 +5289,53 @@ func TestDictionaryKeepsWiktionaryDefinitionsWhenEnrichmentProvidersFail(t *test
 	}
 }
 
+func TestDictionaryKeepsDefinitionsWhenOptionalMetadataIsUnusable(t *testing.T) {
+	cases := []struct {
+		name          string
+		dictionaryAPI string
+		datamuse      string
+	}{
+		{name: "malformed dictionary metadata", dictionaryAPI: `[{`},
+		{name: "oversized dictionary metadata", dictionaryAPI: strings.Repeat("x", (2<<20)+1)},
+		{name: "malformed frequency metadata", datamuse: `[{`},
+		{name: "oversized frequency metadata", datamuse: strings.Repeat("x", (256<<10)+1)},
+		{name: "invalid frequency value", datamuse: `[{"word":"resilience","tags":["f:NaN"]}]`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			handler := NewDictHandler()
+			handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+				body := `[]`
+				switch request.URL.Host {
+				case "en.wiktionary.org":
+					body = `{"en":[{"partOfSpeech":"noun","language":"English","definitions":[{"definition":"A stable primary definition."}]}]}`
+				case "api.dictionaryapi.dev":
+					if test.dictionaryAPI != "" {
+						body = test.dictionaryAPI
+					}
+				case "api.datamuse.com":
+					if test.datamuse != "" {
+						body = test.datamuse
+					}
+				default:
+					t.Errorf("unexpected dictionary provider host %q", request.URL.Host)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+			})}
+			answer, err := handler.HandleDirectQuery(context.Background(), "resilience")
+			if err != nil {
+				t.Fatalf("optional metadata failure discarded the primary dictionary entry: %v", err)
+			}
+			if !strings.Contains(answer.Content, "A stable primary definition.") || answer.Error != "" {
+				t.Fatalf("primary definition missing after optional metadata failure: %#v", answer)
+			}
+			if _, exists := answer.Data["frequency_per_million"]; exists {
+				t.Errorf("invalid frequency metadata was published: %#v", answer.Data["frequency_per_million"])
+			}
+		})
+	}
+}
+
 func TestDictionaryRejectsMalformedAndOversizedWiktionaryResponses(t *testing.T) {
 	for name, body := range map[string]string{
 		"malformed": `{"en":[`,
