@@ -1462,7 +1462,13 @@
             // Skip if modifier keys (except shift for O)
             if (e.ctrlKey || e.altKey || e.metaKey) return;
 
-            // Focus search with /
+            // Focus search with / and open preferences with s.
+            if (e.key === 's' && !isInputFocused()) {
+                e.preventDefault();
+                window.location.assign('/server/preferences');
+                return;
+            }
+
             if (e.key === '/' && !isInputFocused()) {
                 e.preventDefault();
                 var searchInput = document.querySelector('.search-input, .header-search-input, input[name="q"]');
@@ -1483,6 +1489,10 @@
             if (e.key === 'Escape') {
                 closeNav();
                 if (isInputFocused()) {
+                    var activeElement = document.activeElement;
+                    if (activeElement.matches('.search-input, .header-search-input, input[name="q"]')) {
+                        activeElement.value = '';
+                    }
                     document.activeElement.blur();
                 }
                 return;
@@ -1658,6 +1668,7 @@
         var keyboardNavigationJumpResult = escapeHtml(t('accessibility.keyboard_navigation_jump_result', 'Jump to result N'));
         var keyboardActionsHeading = escapeHtml(t('accessibility.keyboard_actions_heading', 'Actions'));
         var keyboardActionFocusSearch = escapeHtml(t('accessibility.keyboard_action_focus_search', 'Focus search box'));
+        var keyboardActionOpenSettings = escapeHtml(t('nav.settings', 'Settings'));
         var keyboardActionOpenSelected = escapeHtml(t('accessibility.keyboard_action_open_selected', 'Open selected result'));
         var keyboardActionOpenNewTab = escapeHtml(t('accessibility.keyboard_action_open_new_tab', 'Open in new tab'));
         var keyboardActionToggleTheme = escapeHtml(t('accessibility.keyboard_action_toggle_theme', 'Toggle theme'));
@@ -1679,6 +1690,7 @@
                 '<div class="shortcut-group">' +
                     '<h3>' + keyboardActionsHeading + '</h3>' +
                     '<div class="shortcut"><kbd>/</kbd> <span>' + keyboardActionFocusSearch + '</span></div>' +
+                    '<div class="shortcut"><kbd>s</kbd> <span>' + keyboardActionOpenSettings + '</span></div>' +
                     '<div class="shortcut"><kbd>Enter</kbd> / <kbd>o</kbd> <span>' + keyboardActionOpenSelected + '</span></div>' +
                     '<div class="shortcut"><kbd>O</kbd> <span>' + keyboardActionOpenNewTab + '</span></div>' +
                     '<div class="shortcut"><kbd>t</kbd> <span>' + keyboardActionToggleTheme + '</span></div>' +

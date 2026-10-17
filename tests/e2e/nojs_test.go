@@ -69,6 +69,19 @@ func TestNoJSHomeSearchFormSubmitsNatively(t *testing.T) {
 	}
 }
 
+func TestNoJSKeyboardShortcutGuideRemainsReadable(t *testing.T) {
+	site := newTestSite(t)
+	html := runNoJS(t,
+		chromedp.Navigate(site.URL+"/server/help"),
+		chromedp.WaitVisible(`#keyboard-shortcuts`, chromedp.ByQuery),
+	)
+	for _, marker := range []string{`<kbd>/</kbd>`, `<kbd>s</kbd>`, "Settings", `<kbd>Escape</kbd>`} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("no-JS shortcut guide is missing %q", marker)
+		}
+	}
+}
+
 func TestNoJSSearchCategoryCanBeSelectedNatively(t *testing.T) {
 	site := newTestSite(t)
 	var pageURL, category string

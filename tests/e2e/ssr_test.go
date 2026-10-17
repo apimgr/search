@@ -109,6 +109,15 @@ func TestSSRPublicPagesRender(t *testing.T) {
 	}
 }
 
+func TestSSRKeyboardShortcutGuideMatchesSupportedActions(t *testing.T) {
+	s := newSession(t)
+	resp, body := s.get("/server/help")
+	requireStatus(t, resp, http.StatusOK)
+	for _, marker := range []string{`id="keyboard-shortcuts"`, `<kbd>/</kbd>`, `<kbd>s</kbd>`, "Settings", `<kbd>Escape</kbd>`, `<kbd>?</kbd>`} {
+		requireContains(t, body, marker, "keyboard shortcut guide")
+	}
+}
+
 // TestSSRHomePageIsFullyRendered guards the single most important Tier 1
 // property: the landing page arrives complete. It checks the search form, the
 // category selector, the navigation, and the footer — and explicitly rejects

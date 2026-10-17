@@ -49,6 +49,39 @@ func TestBrowserHomeSearchFlow(t *testing.T) {
 	requireNoFailures(t, pf, "/ -> /search")
 }
 
+func TestBrowserKeyboardSearchAndHelpShortcuts(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var searchFocused, searchCleared, helpOpened, helpClosed bool
+	var searchAfterEscape, pageURL string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: '/', bubbles: true}))`, nil),
+		chromedp.Evaluate(`document.activeElement === document.querySelector('#searchQuery')`, &searchFocused),
+		chromedp.SetValue(`#searchQuery`, "clear this search", chromedp.ByQuery),
+		chromedp.Evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))`, nil),
+		chromedp.Evaluate(`JSON.stringify({value: document.querySelector('#searchQuery').value, blurred: document.activeElement !== document.querySelector('#searchQuery')})`, &searchAfterEscape),
+		chromedp.Evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 's', bubbles: true}))`, nil),
+		chromedp.WaitVisible(`.preferences-page`, chromedp.ByQuery),
+		chromedp.Location(&pageURL),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(`document.activeElement.blur(); document.dispatchEvent(new KeyboardEvent('keydown', {key: '?', bubbles: true}))`, nil),
+		chromedp.WaitVisible(`#keyboard-help-modal`, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#keyboard-help-modal')?.open === true`, &helpOpened),
+		chromedp.Evaluate(`document.querySelector('#keyboard-help-modal')?.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))`, nil),
+		chromedp.WaitNotPresent(`#keyboard-help-modal`, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#keyboard-help-modal') === null`, &helpClosed),
+	); err != nil {
+		t.Fatalf("keyboard shortcut flow: %v", err)
+	}
+	searchCleared = strings.Contains(searchAfterEscape, `"value":""`) && strings.Contains(searchAfterEscape, `"blurred":true`)
+	if !searchFocused || !searchCleared || !strings.Contains(pageURL, "/server/preferences") || !helpOpened || !helpClosed {
+		t.Fatalf("keyboard shortcut results: focused=%t searchCleared=%t preferencesURL=%q helpOpened=%t helpClosed=%t", searchFocused, searchCleared, pageURL, helpOpened, helpClosed)
+	}
+	requireNoFailures(t, pf, "keyboard search and help shortcuts")
+}
+
 func TestBrowserAdvancedSearchSubmitsFilters(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
