@@ -5196,6 +5196,31 @@ func TestThesaurusRendersProviderSenseMetadataAndRelatedPhrases(t *testing.T) {
 	}
 }
 
+func TestThesaurusKeepsRelationsWhenSenseProviderFails(t *testing.T) {
+	handler := NewThesaurusHandler()
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		status := http.StatusOK
+		body := `[]`
+		if request.URL.Host == "api.dictionaryapi.dev" {
+			status = http.StatusServiceUnavailable
+			body = `upstream detail`
+		} else if request.URL.Query().Has("rel_syn") {
+			body = `[{"word":"cheerful","tags":["adj"]}]`
+		}
+		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	answer, err := handler.HandleDirectQuery(context.Background(), "happy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Error != "" || answer.Data["senses_available"] != false || answer.Data["synonyms_available"] != true {
+		t.Fatalf("dictionary outage discarded healthy relation data: %#v", answer)
+	}
+	if !strings.Contains(answer.Content, "cheerful") || !strings.Contains(answer.Content, "Failed to fetch") || strings.Contains(answer.Content, "upstream detail") {
+		t.Fatalf("dictionary outage response lost data or leaked provider body: %s", answer.Content)
+	}
+}
+
 func TestThesaurusPreservesRelatedOnlyResultsAndReportsFailures(t *testing.T) {
 	for _, test := range []struct {
 		name          string

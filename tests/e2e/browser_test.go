@@ -49,6 +49,35 @@ func TestBrowserHomeSearchFlow(t *testing.T) {
 	requireNoFailures(t, pf, "/ -> /search")
 }
 
+func TestBrowserSearchBarWidgetGETForm(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var pageURL string
+	form := fmt.Sprintf(`(() => {
+		const widget = document.createElement('form');
+		widget.action = %q + '/search';
+		widget.method = 'get';
+		widget.setAttribute('role', 'search');
+		widget.innerHTML = '<label for="widget-query">Search</label><input id="widget-query" type="search" name="q" required><button type="submit">Search</button>';
+		document.body.appendChild(widget);
+		widget.querySelector('input').value = 'widget integration';
+		widget.requestSubmit();
+	})()`, site.URL)
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(form, nil),
+		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+		chromedp.Location(&pageURL),
+	); err != nil {
+		t.Fatalf("Search Bar widget form submission: %v", err)
+	}
+	if !strings.Contains(pageURL, "/search?q=widget+integration") {
+		t.Fatalf("Search Bar widget landed on %q, want its native GET query", pageURL)
+	}
+	requireNoFailures(t, pf, "Search Bar widget GET form")
+}
+
 func TestBrowserKeyboardSearchAndHelpShortcuts(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
