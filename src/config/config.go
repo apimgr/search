@@ -87,6 +87,7 @@ type Config struct {
 	Search  SearchConfig            `yaml:"search"`
 	Engines map[string]EngineConfig `yaml:"engines"`
 	Data    DataConfig              `yaml:"data"`
+	Web     WebCSPConfig            `yaml:"web"`
 
 	// TorOverlay carries the root-level `tor:` block from AI.md PART 12 "Tor
 	// Hidden Service Configuration" (onion_address, contact_email). It is
@@ -99,6 +100,12 @@ type DataConfig struct {
 	SecurityDir string          `yaml:"security_dir"`
 	CVE         CVEDataConfig   `yaml:"cve"`
 	Trivy       TrivyDataConfig `yaml:"trivy"`
+}
+
+type WebCSPConfig struct {
+	CSP struct {
+		FrameSrcExtra string `yaml:"frame_src_extra"`
+	} `yaml:"csp"`
 }
 
 type CVEDataConfig struct {
@@ -270,6 +277,7 @@ func (c *Config) Reload() error {
 		c.Search = newCfg.Search
 		c.Engines = newCfg.Engines
 		c.Data = newCfg.Data
+		c.Web = newCfg.Web
 		c.TorOverlay = newCfg.TorOverlay
 
 		// Restore port/address if changed (require restart)
@@ -1997,6 +2005,9 @@ type EngineConfig struct {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
+		Web: WebCSPConfig{CSP: struct {
+			FrameSrcExtra string `yaml:"frame_src_extra"`
+		}{FrameSrcExtra: ""}},
 		Data: DataConfig{
 			SecurityDir: filepath.Join(GetDataDir(), "security"),
 			CVE:         CVEDataConfig{Source: "https://services.nvd.nist.gov/rest/json/cves/2.0", FilterByCPE: false},

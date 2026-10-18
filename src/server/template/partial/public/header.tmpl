@@ -68,7 +68,33 @@
             <span></span>
             <span></span>
         </label>
+        <a href="/server/preferences" class="header-icon-btn mobile-preferences-trigger" data-mobile-preferences-trigger aria-label="{{t "preferences.title"}}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33H15a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.09a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+        </a>
     </div>
+
+    <dialog class="mobile-preferences-dialog" id="mobile-preferences-dialog" aria-labelledby="mobile-preferences-title">
+        <header class="mobile-preferences-header">
+            <h2 id="mobile-preferences-title">{{t "preferences.title"}}</h2>
+            <form method="dialog"><button type="submit" class="btn-secondary" aria-label="{{t "preferences.title"}}">×</button></form>
+        </header>
+        <form action="/theme" method="POST" class="mobile-preferences-theme-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="redirect" value="{{.RequestPath}}">
+            <label for="mobile-preferences-theme">{{t "preferences.theme"}}</label>
+            <select id="mobile-preferences-theme" name="theme">
+                <option value="dark"{{if eq .ThemeMode "dark"}} selected{{end}}>{{t "preferences.theme_dark"}}</option>
+                <option value="light"{{if eq .ThemeMode "light"}} selected{{end}}>{{t "preferences.theme_light"}}</option>
+                <option value="auto"{{if eq .ThemeMode "auto"}} selected{{end}}>{{t "preferences.theme_auto"}}</option>
+            </select>
+            <button type="submit" class="btn-primary">{{t "common.ok"}}</button>
+        </form>
+        <iframe class="mobile-preferences-full" title="{{t "preferences.title"}}" data-mobile-preferences-frame loading="lazy"></iframe>
+        <a class="mobile-preferences-all" href="/server/preferences">{{t "preferences.title"}}</a>
+    </dialog>
 
     {{/* Mobile slide-in panel */}}
     <div class="nav-panel">

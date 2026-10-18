@@ -773,7 +773,7 @@ func TestBrowserDisabledVideoPreviewsSkipPreviewSetup(t *testing.T) {
 	var previewContainerMissing bool
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL),
-		chromedp.Evaluate(`(() => { const result = document.createElement('a'); result.className = 'video-result'; result.dataset.previewUrl = '/preview.mp4'; document.body.appendChild(result); result.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true})); })()`, nil),
+		chromedp.Evaluate(`(() => { const result = document.createElement('a'); result.className = 'video-result'; result.dataset.videoEmbed = 'https://www.youtube-nocookie.com/embed/abc123XYZ_9'; document.body.appendChild(result); result.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true})); })()`, nil),
 		chromedp.Sleep(700*time.Millisecond),
 		chromedp.Evaluate(`document.querySelector('#video-preview-container') === null`, &previewContainerMissing),
 	); err != nil {
@@ -781,6 +781,59 @@ func TestBrowserDisabledVideoPreviewsSkipPreviewSetup(t *testing.T) {
 	}
 	if !previewContainerMissing {
 		t.Fatal("disabled video previews initialized the preview container")
+	}
+}
+
+func TestBrowserMobileVideoPreviewSeeksOnSwipe(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var capturedSource string
+	var progressWidth string
+	var progressValue string
+	var seekMessage string
+	var seekOrigin string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(375, 812),
+		chromedp.Navigate(site.URL),
+		chromedp.Evaluate(`(() => {
+            Object.defineProperty(HTMLIFrameElement.prototype, 'src', {configurable:true, get(){return this.dataset.capturedSrc || ''}, set(value){this.dataset.capturedSrc = value;}});
+            const result = document.createElement('article');
+            result.className = 'video-result';
+            result.dataset.videoEmbed = 'https://www.youtube-nocookie.com/embed/abc123XYZ_9';
+            result.dataset.videoDuration = '120';
+            result.innerHTML = '<a class="video-thumbnail-link" href="https://youtube.com/watch?v=abc123XYZ_9"><div class="video-thumbnail-container" style="width:300px;height:169px"><img class="video-thumbnail"></div></a><h3 class="video-title">Fixture clip</h3>';
+            document.body.appendChild(result);
+        })()`, nil),
+		chromedp.Click(`.video-thumbnail-link`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#video-preview-container.visible.inline iframe`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => {
+            const frame = document.querySelector('#video-preview-container iframe');
+            frame.contentWindow.postMessage = function(message, origin) { window.__seekMessage = {message, origin}; };
+            const target = document.querySelector('.video-result');
+            const box = target.querySelector('.video-thumbnail-container').getBoundingClientRect();
+            const touch = x => new Touch({identifier:1, target, clientX:x, clientY:box.top + 20});
+            target.dispatchEvent(new TouchEvent('touchstart', {bubbles:true, cancelable:true, touches:[touch(box.left + 20)]}));
+            target.dispatchEvent(new TouchEvent('touchmove', {bubbles:true, cancelable:true, touches:[touch(box.left + box.width * 0.75)]}));
+            target.dispatchEvent(new TouchEvent('touchend', {bubbles:true, cancelable:true, touches:[]}));
+			return {src:frame.src, width:document.querySelector('.video-preview-progress span').style.width, value:document.querySelector('.video-preview-progress').getAttribute('aria-valuenow'), message:window.__seekMessage.message, origin:window.__seekMessage.origin};
+        })()`, &struct {
+			Source  *string `json:"src"`
+			Width   *string `json:"width"`
+			Value   *string `json:"value"`
+			Message *string `json:"message"`
+			Origin  *string `json:"origin"`
+		}{Source: &capturedSource, Width: &progressWidth, Value: &progressValue, Message: &seekMessage, Origin: &seekOrigin}),
+	); err != nil {
+		t.Fatalf("mobile video preview swipe: %v", err)
+	}
+	if !strings.Contains(capturedSource, "autoplay=1") || !strings.Contains(capturedSource, "mute=1") || !strings.Contains(capturedSource, "end=10") {
+		t.Errorf("preview iframe source %q is missing privacy or short-preview settings", capturedSource)
+	}
+	if progressWidth != "75%" || progressValue != "90" {
+		t.Errorf("swipe progress width=%q value=%q, want 75%% and 90 seconds", progressWidth, progressValue)
+	}
+	if !strings.Contains(seekMessage, `"func":"seekTo"`) || seekOrigin != "https://www.youtube-nocookie.com" {
+		t.Errorf("swipe did not seek the privacy-enhanced player safely: message=%q origin=%q", seekMessage, seekOrigin)
 	}
 }
 
@@ -1084,7 +1137,8 @@ func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	var overflow, searchWidth, viewportWidth, minTarget float64
-	var navToggle, categoriesAvailable, resultLayout bool
+	var navToggle, categoriesAvailable, resultLayout, preferencesSheetOpen bool
+	var sheetBottom, viewportHeight float64
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(375, 812),
 		chromedp.Navigate(site.URL+"/"),
@@ -1095,6 +1149,12 @@ func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
 		chromedp.Evaluate(`!!document.querySelector('label[for="nav-toggle"]')`, &navToggle),
 		chromedp.Evaluate(`!!document.querySelector('.category-tabs')`, &categoriesAvailable),
 		chromedp.Evaluate(`(() => { const els = Array.from(document.querySelectorAll('.header-mobile label, .search-form button, .category-tab')); const sizes = els.map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0).map(r => Math.min(r.width, r.height)); return sizes.length ? Math.min(...sizes) : 0 })()`, &minTarget),
+		chromedp.Click(`[data-mobile-preferences-trigger]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#mobile-preferences-dialog[open]`, chromedp.ByQuery),
+		chromedp.Evaluate(`!!document.querySelector('#mobile-preferences-dialog[open]')`, &preferencesSheetOpen),
+		chromedp.Evaluate(`document.querySelector('#mobile-preferences-dialog').getBoundingClientRect().bottom`, &sheetBottom),
+		chromedp.Evaluate(`window.innerHeight`, &viewportHeight),
+		chromedp.Click(`#mobile-preferences-dialog form[method="dialog"] button`, chromedp.ByQuery),
 		chromedp.Navigate(site.URL+"/search?q=mobile+layout"),
 		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => { const list = document.querySelector('.results-list'); return !!list && getComputedStyle(list).flexDirection !== 'row' })()`, &resultLayout),
@@ -1106,6 +1166,9 @@ func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
 	}
 	if !navToggle || !categoriesAvailable {
 		t.Error("mobile header navigation toggle or category navigation is missing")
+	}
+	if !preferencesSheetOpen || sheetBottom < viewportHeight-2 {
+		t.Errorf("mobile preferences did not open as a bottom sheet: open=%t bottom=%g viewport height=%g", preferencesSheetOpen, sheetBottom, viewportHeight)
 	}
 	if minTarget > 0 && minTarget < 44 {
 		t.Errorf("smallest visible interactive target is %gpx, want at least 44px", minTarget)

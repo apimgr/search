@@ -200,3 +200,13 @@ docker run \
   -v search_data:/data \
   ghcr.io/apimgr/search:latest
 ```
+
+The default Content Security Policy allows frames from the same origin only. To enable the on-demand YouTube privacy-enhanced video previews, add the provider to the per-directive frame source allow-list in `server.yml`:
+
+```yaml
+web:
+  csp:
+    frame_src_extra: https://www.youtube-nocookie.com
+```
+
+This appends the source to the existing `frame-src` directive. Video embeds are created only after a user activates a preview, and the static thumbnail remains available when the provider is blocked.

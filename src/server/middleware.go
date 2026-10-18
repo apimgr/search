@@ -143,6 +143,7 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 				csp = strings.ReplaceAll(csp, "upgrade-insecure-requests;", "")
 				csp = strings.ReplaceAll(csp, "upgrade-insecure-requests", "")
 			}
+			csp = appendCSPDirectiveSources(csp, "frame-src", m.config.Web.CSP.FrameSrcExtra)
 			w.Header().Set(cspHeader, csp)
 		}
 
@@ -222,6 +223,30 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func appendCSPDirectiveSources(policy, directive, extra string) string {
+	if strings.TrimSpace(extra) == "" || strings.ContainsAny(extra, ";\r\n") {
+		return policy
+	}
+
+	sources := strings.Fields(extra)
+	if len(sources) == 0 {
+		return policy
+	}
+	parts := strings.Split(policy, ";")
+	for index, part := range parts {
+		fields := strings.Fields(part)
+		if len(fields) == 0 || !strings.EqualFold(fields[0], directive) {
+			continue
+		}
+		parts[index] = strings.TrimSpace(part) + " " + strings.Join(sources, " ")
+		for partIndex := range parts {
+			parts[partIndex] = strings.TrimSpace(parts[partIndex])
+		}
+		return strings.Join(parts, "; ")
+	}
+	return strings.TrimRight(policy, "; ") + "; " + directive + " " + strings.Join(sources, " ")
 }
 
 // CORS handles Cross-Origin Resource Sharing via github.com/rs/cors per AI.md PART 16.

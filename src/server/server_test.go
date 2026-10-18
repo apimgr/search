@@ -157,6 +157,18 @@ func TestMiddlewareSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestMiddlewareSecurityHeadersAppendsConfiguredFrameSources(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Security.Headers.ContentSecurityPolicy = "default-src 'self'; frame-src 'self'; object-src 'none'"
+	cfg.Web.CSP.FrameSrcExtra = "https://www.youtube-nocookie.com"
+	middleware := NewMiddleware(cfg, nil)
+	recorder := httptest.NewRecorder()
+	middleware.SecurityHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got, want := recorder.Header().Get("Content-Security-Policy"), "default-src 'self'; frame-src 'self' https://www.youtube-nocookie.com; object-src 'none'"; got != want {
+		t.Fatalf("Content-Security-Policy = %q, want %q", got, want)
+	}
+}
+
 // TestMiddlewareSecurityHeadersOnion verifies that the Tor hidden service
 // never receives headers that would force a browser to upgrade the .onion
 // site to HTTPS. Per AI.md PART 31 the hidden service only ever maps

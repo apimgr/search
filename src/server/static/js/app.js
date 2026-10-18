@@ -6099,7 +6099,13 @@
     var hoverTimeout = null;
     var activePreview = null;
     var previewContainer = null;
-    var isTouchDevice = 'ontouchstart' in window;
+    var isTouchDevice = window.matchMedia('(max-width: 767px)').matches || 'ontouchstart' in window;
+    var lastTapResult = null;
+    var lastTapAt = 0;
+    var scrubStartX = 0;
+    var scrubResult = null;
+    var scrubMoved = false;
+    var suppressClickUntil = 0;
 
     // Initialize video preview functionality
     function initVideoPreview() {
@@ -6118,6 +6124,10 @@
         // Event delegation for video results
         document.addEventListener('mouseenter', handleMouseEnter, true);
         document.addEventListener('mouseleave', handleMouseLeave, true);
+        document.addEventListener('securitypolicyviolation', function(event) {
+            var blockedURI = event.blockedURI || '';
+            if (activePreview && event.effectiveDirective === 'frame-src' && blockedURI.indexOf('youtube-nocookie.com') !== -1) hideVideoPreview();
+        });
 
         // Touch device: swipe scrubbing
         if (isTouchDevice) {
@@ -6155,15 +6165,14 @@
     }
 
     function showVideoPreview(videoResult) {
-        var previewUrl = videoResult.dataset.previewUrl;
-        if (!previewUrl) return;
+        var embedUrl = videoResult.dataset.videoEmbed;
         var parsedPreview;
         try {
-            parsedPreview = new URL(previewUrl, window.location.href);
+            parsedPreview = new URL(embedUrl);
         } catch (e) {
             return;
         }
-        if (parsedPreview.origin !== window.location.origin || !/\.((webm)|(mp4))$/i.test(parsedPreview.pathname)) return;
+        if (parsedPreview.protocol !== 'https:' || parsedPreview.hostname !== 'www.youtube-nocookie.com' || parsedPreview.port || parsedPreview.username || parsedPreview.password || !/^\/embed\/[A-Za-z0-9_-]{6,20}$/.test(parsedPreview.pathname)) return;
 
         activePreview = videoResult;
 
@@ -6182,16 +6191,38 @@
             previewContainer.style.top = (window.innerHeight - 190) + 'px';
         }
 
-        var video = document.createElement('video');
-        video.src = parsedPreview.href;
-        video.autoplay = true;
-        video.muted = true;
-        video.loop = true;
-        video.playsInline = true;
-        video.preload = 'none';
-        video.className = 'video-preview-video';
-        video.addEventListener('error', hideVideoPreview, { once: true });
-        previewContainer.replaceChildren(video);
+        var frameURL = new URL(parsedPreview.href);
+        frameURL.searchParams.set('autoplay', '1');
+        frameURL.searchParams.set('mute', '1');
+        frameURL.searchParams.set('playsinline', '1');
+        frameURL.searchParams.set('controls', '0');
+        frameURL.searchParams.set('enablejsapi', '1');
+        frameURL.searchParams.set('origin', window.location.origin);
+        frameURL.searchParams.set('start', '0');
+        frameURL.searchParams.set('end', String(Math.min(10, Math.max(5, Number(videoResult.dataset.videoDuration) || 8))));
+
+        var frame = document.createElement('iframe');
+        frame.src = frameURL.href;
+        frame.title = videoResult.querySelector('.video-title') ? videoResult.querySelector('.video-title').textContent.trim() : 'Video preview';
+        frame.allow = 'autoplay; encrypted-media; picture-in-picture';
+        frame.setAttribute('allowfullscreen', '');
+        frame.referrerPolicy = 'strict-origin-when-cross-origin';
+        frame.className = 'video-preview-frame';
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+        frame.addEventListener('load', function() {
+            if (activePreview === videoResult) seekFrame(frame, parsedPreview.origin, Number(frame.dataset.seekSeconds) || 0);
+        }, { once: true });
+        var progress = document.createElement('div');
+        progress.className = 'video-preview-progress';
+        progress.setAttribute('role', 'progressbar');
+        progress.setAttribute('aria-label', 'Video preview position');
+        progress.setAttribute('aria-valuemin', '0');
+        progress.setAttribute('aria-valuemax', String(Math.max(1, Number(videoResult.dataset.videoDuration) || 8)));
+        progress.setAttribute('aria-valuenow', '0');
+        var progressFill = document.createElement('span');
+        progress.appendChild(progressFill);
+        previewContainer.replaceChildren(frame, progress);
+        previewContainer.dataset.embedOrigin = parsedPreview.origin;
 
         previewContainer.classList.add('visible');
         previewContainer.setAttribute('aria-hidden', 'false');
@@ -6200,51 +6231,85 @@
     function hideVideoPreview() {
         if (previewContainer) {
             previewContainer.classList.remove('visible');
+            previewContainer.classList.remove('inline');
             previewContainer.setAttribute('aria-hidden', 'true');
             previewContainer.innerHTML = '';
+            if (previewContainer.parentElement !== document.body) document.body.appendChild(previewContainer);
+            delete previewContainer.dataset.embedOrigin;
         }
         activePreview = null;
     }
 
     // Touch handling for mobile swipe scrubbing
-    var touchStartX = 0;
-    var touchVideoResult = null;
-
     function handleTouchStart(e) {
         var videoResult = window.closestFrom(e.target, '.video-result, .video-item, [data-video-id]');
-        if (!videoResult) return;
-
-        touchStartX = e.touches[0].clientX;
-        touchVideoResult = videoResult;
+        if (!videoResult || !videoResult.dataset.videoEmbed || !e.touches.length) return;
+        scrubStartX = e.touches[0].clientX;
+        scrubResult = videoResult;
+        scrubMoved = false;
     }
 
     function handleTouchMove(e) {
-        if (!touchVideoResult) return;
-
-        var deltaX = e.touches[0].clientX - touchStartX;
-        var progress = Math.min(100, Math.max(0, (deltaX / touchVideoResult.offsetWidth) * 100 + 50));
-
-        // Show visual feedback for scrubbing
-        var progressIndicator = touchVideoResult.querySelector('.touch-scrub-indicator');
-        if (!progressIndicator) {
-            progressIndicator = document.createElement('div');
-            progressIndicator.className = 'touch-scrub-indicator';
-            touchVideoResult.appendChild(progressIndicator);
-        }
-        progressIndicator.style.width = progress + '%';
+        if (!scrubResult || !e.touches.length) return;
+        var deltaX = e.touches[0].clientX - scrubStartX;
+        if (Math.abs(deltaX) < 8) return;
+        e.preventDefault();
+        scrubMoved = true;
+        var duration = Math.max(1, Number(scrubResult.dataset.videoDuration) || 8);
+        var bounds = scrubResult.querySelector('.video-thumbnail-container').getBoundingClientRect();
+        var progress = Math.min(1, Math.max(0, (e.touches[0].clientX - bounds.left) / bounds.width));
+        updatePreviewPosition(scrubResult, progress * duration);
     }
 
     function handleTouchEnd(e) {
-        if (!touchVideoResult) return;
-
-        var indicator = touchVideoResult.querySelector('.touch-scrub-indicator');
-        if (indicator) {
-            indicator.remove();
-        }
-
-        touchVideoResult = null;
-        touchStartX = 0;
+        if (scrubResult && scrubMoved) suppressClickUntil = Date.now() + 500;
+        scrubResult = null;
+        scrubStartX = 0;
+        scrubMoved = false;
     }
+
+    function updatePreviewPosition(videoResult, seconds) {
+        if (!activePreview || activePreview !== videoResult || !previewContainer) return;
+        var frame = previewContainer.querySelector('iframe');
+        var progress = previewContainer.querySelector('.video-preview-progress');
+        if (!frame || !progress) return;
+        var duration = Math.max(1, Number(videoResult.dataset.videoDuration) || 8);
+        var current = Math.min(duration, Math.max(0, seconds));
+        var percent = current / duration * 100;
+        progress.firstElementChild.style.width = percent + '%';
+        progress.setAttribute('aria-valuenow', String(Math.round(current)));
+        frame.dataset.seekSeconds = String(current);
+        seekFrame(frame, previewContainer.dataset.embedOrigin, current);
+    }
+
+    function seekFrame(frame, origin, seconds) {
+        frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [seconds, true] }), origin);
+    }
+
+    document.addEventListener('click', function(event) {
+        var target = event.target && event.target.nodeType === 1 ? event.target : event.target.parentElement;
+        var link = target && target.closest('.video-thumbnail-link');
+        var result = link && link.closest('.video-result');
+        if (!result || !isTouchDevice || !result.dataset.videoEmbed) return;
+        if (Date.now() < suppressClickUntil) {
+            event.preventDefault();
+            return;
+        }
+        var now = Date.now();
+        if (lastTapResult === result && now - lastTapAt < 400) {
+            hideVideoPreview();
+            return;
+        }
+        event.preventDefault();
+        lastTapResult = result;
+        lastTapAt = now;
+        if (activePreview === result) return;
+        hideVideoPreview();
+        showVideoPreview(result);
+        previewContainer.classList.add('inline');
+        var thumbnail = result.querySelector('.video-thumbnail-container');
+        if (thumbnail) thumbnail.appendChild(previewContainer);
+    });
 
     // Initialize on DOM ready — script loads at bottom of <body> so DOMContentLoaded
     // may have already fired; fall through to immediate init when readyState is not 'loading'.
@@ -6259,6 +6324,28 @@
         show: showVideoPreview,
         hide: hideVideoPreview
     };
+})();
+
+
+// ============================================================================
+// MOBILE PREFERENCES SHEET (native route remains available without JavaScript)
+// ============================================================================
+(function() {
+    'use strict';
+
+    document.addEventListener('click', function(event) {
+        var target = event.target && event.target.nodeType === 1 ? event.target : event.target.parentElement;
+        var trigger = target && target.closest('[data-mobile-preferences-trigger]');
+        if (!trigger || !window.matchMedia('(max-width: 767px)').matches) return;
+
+        var dialog = document.getElementById('mobile-preferences-dialog');
+        if (!dialog || typeof dialog.showModal !== 'function') return;
+
+        event.preventDefault();
+        if (!dialog.open) dialog.showModal();
+        var frame = dialog.querySelector('[data-mobile-preferences-frame]');
+        if (frame && !frame.hasAttribute('src')) frame.src = trigger.href;
+    });
 })();
 
 

@@ -493,6 +493,21 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	}
 }
 
+func TestNoJSMobilePreferencesTriggerNavigatesToFullSettings(t *testing.T) {
+	site := newTestSite(t)
+	var pageURL string
+	runNoJS(t,
+		chromedp.EmulateViewport(375, 812),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Click(`[data-mobile-preferences-trigger]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
+		chromedp.Location(&pageURL),
+	)
+	if !strings.Contains(pageURL, "/server/preferences") {
+		t.Fatalf("no-JS mobile preferences link navigated to %q, want full settings", pageURL)
+	}
+}
+
 func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

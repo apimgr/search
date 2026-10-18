@@ -24,6 +24,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")
 	}
+	if cfg.Web.CSP.FrameSrcExtra != "" {
+		t.Errorf("Web.CSP.FrameSrcExtra = %q, want empty by default", cfg.Web.CSP.FrameSrcExtra)
+	}
 	key, err := base64.StdEncoding.DecodeString(cfg.Server.Security.EncryptionKey)
 	if err != nil || len(key) != 32 {
 		t.Errorf("DefaultConfig encryption key must decode to 32 bytes, got length %d and error %v", len(key), err)
