@@ -4,14 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/search/src/version"
+)
+
+const (
+	maximumRelatedQueryBytes       = 2048
+	maximumRelatedSuggestions      = 20
+	maximumRelatedSuggestionLength = 200
+	maximumRelatedResponseBytes    = 1 << 20
+	maximumRelatedCacheEntries     = 500
 )
 
 // RelatedSearches provides related search suggestions
@@ -29,19 +39,25 @@ type relatedCacheEntry struct {
 // NewRelatedSearches creates a new related searches provider
 func NewRelatedSearches() *RelatedSearches {
 	return &RelatedSearches{
-		cache:      make(map[string]*relatedCacheEntry),
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		cache: make(map[string]*relatedCacheEntry),
+		httpClient: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}},
 	}
 }
 
 // GetRelated returns related search suggestions for a query
 func (rs *RelatedSearches) GetRelated(ctx context.Context, query string, limit int) ([]string, error) {
-	if query == "" {
+	query = strings.TrimSpace(query)
+	if query == "" || len(query) > maximumRelatedQueryBytes {
 		return nil, nil
 	}
 
 	if limit <= 0 {
 		limit = 8
+	}
+	if limit > maximumRelatedSuggestions {
+		limit = maximumRelatedSuggestions
 	}
 
 	// Check cache first
@@ -50,30 +66,46 @@ func (rs *RelatedSearches) GetRelated(ctx context.Context, query string, limit i
 	if entry, ok := rs.cache[cacheKey]; ok && time.Now().Before(entry.ExpiresAt) {
 		rs.mu.RUnlock()
 		if len(entry.Suggestions) > limit {
-			return entry.Suggestions[:limit], nil
+			return append([]string(nil), entry.Suggestions[:limit]...), nil
 		}
-		return entry.Suggestions, nil
+		return append([]string(nil), entry.Suggestions...), nil
 	}
 	rs.mu.RUnlock()
 
 	// Fetch from multiple sources
 	suggestions := rs.fetchRelatedSearches(ctx, query)
 
-	// Cache the results
-	rs.mu.Lock()
-	rs.cache[cacheKey] = &relatedCacheEntry{
-		Suggestions: suggestions,
-		ExpiresAt:   time.Now().Add(1 * time.Hour),
-	}
-	rs.mu.Unlock()
-
-	// Clean old cache entries periodically
-	go rs.cleanCache()
+	rs.cacheRelated(cacheKey, suggestions)
 
 	if len(suggestions) > limit {
 		return suggestions[:limit], nil
 	}
 	return suggestions, nil
+}
+
+func (rs *RelatedSearches) cacheRelated(key string, suggestions []string) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	now := time.Now()
+	for cachedKey, entry := range rs.cache {
+		if entry == nil || now.After(entry.ExpiresAt) {
+			delete(rs.cache, cachedKey)
+		}
+	}
+	if _, exists := rs.cache[key]; !exists && len(rs.cache) >= maximumRelatedCacheEntries {
+		oldestKey := ""
+		var oldest time.Time
+		for cachedKey, entry := range rs.cache {
+			if oldestKey == "" || entry.ExpiresAt.Before(oldest) {
+				oldestKey, oldest = cachedKey, entry.ExpiresAt
+			}
+		}
+		delete(rs.cache, oldestKey)
+	}
+	if len(suggestions) > maximumRelatedSuggestions {
+		suggestions = suggestions[:maximumRelatedSuggestions]
+	}
+	rs.cache[key] = &relatedCacheEntry{Suggestions: append([]string(nil), suggestions...), ExpiresAt: now.Add(time.Hour)}
 }
 
 // fetchRelatedSearches fetches related searches from autocomplete APIs
@@ -118,6 +150,10 @@ func (rs *RelatedSearches) fetchRelatedSearches(ctx context.Context, query strin
 
 	for suggestions := range results {
 		for _, s := range suggestions {
+			s = cleanRelatedSuggestion(s)
+			if s == "" || len(allSuggestions) >= maximumRelatedSuggestions {
+				continue
+			}
 			sLower := strings.ToLower(s)
 			if !seen[sLower] && sLower != queryLower {
 				seen[sLower] = true
@@ -149,18 +185,24 @@ func (rs *RelatedSearches) fetchDuckDuckGo(ctx context.Context, query string) []
 			log.Printf("failed to close DuckDuckGo autocomplete response: %v", err)
 		}
 	}()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil
+	}
 
 	var result []struct {
 		Phrase string `json:"phrase"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeRelatedResponse(resp.Body, &result); err != nil {
 		return nil
+	}
+	if len(result) > maximumRelatedSuggestions {
+		result = result[:maximumRelatedSuggestions]
 	}
 
 	suggestions := make([]string, 0, len(result))
 	for _, r := range result {
-		if r.Phrase != "" {
-			suggestions = append(suggestions, r.Phrase)
+		if phrase := cleanRelatedSuggestion(r.Phrase); phrase != "" {
+			suggestions = append(suggestions, phrase)
 		}
 	}
 
@@ -186,10 +228,13 @@ func (rs *RelatedSearches) fetchGoogle(ctx context.Context, query string) []stri
 			log.Printf("failed to close Google autocomplete response: %v", err)
 		}
 	}()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil
+	}
 
 	// Google returns [query, [suggestions]]
 	var result []interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeRelatedResponse(resp.Body, &result); err != nil {
 		return nil
 	}
 
@@ -204,12 +249,45 @@ func (rs *RelatedSearches) fetchGoogle(ctx context.Context, query string) []stri
 
 	var stringResults []string
 	for _, s := range suggestions {
-		if str, ok := s.(string); ok && str != "" {
-			stringResults = append(stringResults, str)
+		if str, ok := s.(string); ok {
+			if cleaned := cleanRelatedSuggestion(str); cleaned != "" {
+				stringResults = append(stringResults, cleaned)
+			}
+			if len(stringResults) == maximumRelatedSuggestions {
+				break
+			}
 		}
 	}
 
 	return stringResults
+}
+
+func decodeRelatedResponse(reader io.Reader, destination any) error {
+	body, err := io.ReadAll(io.LimitReader(reader, maximumRelatedResponseBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(body) > maximumRelatedResponseBytes {
+		return fmt.Errorf("related-search response exceeds %d bytes", maximumRelatedResponseBytes)
+	}
+	return json.Unmarshal(body, destination)
+}
+
+func cleanRelatedSuggestion(suggestion string) string {
+	suggestion = strings.TrimSpace(strings.Map(func(character rune) rune {
+		if character < 0x20 || character == 0x7f {
+			return -1
+		}
+		return character
+	}, suggestion))
+	if len(suggestion) > maximumRelatedSuggestionLength {
+		suggestion = suggestion[:maximumRelatedSuggestionLength]
+		for !utf8.ValidString(suggestion) {
+			suggestion = suggestion[:len(suggestion)-1]
+		}
+		suggestion = strings.TrimSpace(suggestion)
+	}
+	return suggestion
 }
 
 // generateVariations generates query variations

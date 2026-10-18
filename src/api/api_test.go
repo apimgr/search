@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -26,6 +28,16 @@ type testContactSubmitter struct {
 	calls int
 	last  ContactMessage
 	err   error
+}
+
+type autocompleteTestRoundTripper func(*http.Request) (*http.Response, error)
+
+func (transport autocompleteTestRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func autocompleteTestResponse(request *http.Request, status int, body string) *http.Response {
+	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}
 }
 
 type captureAPISearchEngine struct {
@@ -699,6 +711,9 @@ func TestValidateSearchDateRange(t *testing.T) {
 
 func TestAutocompleteWithQuery(t *testing.T) {
 	handler := newTestHandler()
+	handler.autocompleteClient.Transport = autocompleteTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return autocompleteTestResponse(request, http.StatusOK, `["test",["test suggestion"]]`), nil
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/autocomplete?q=test", nil)
 	w := httptest.NewRecorder()
@@ -722,6 +737,103 @@ func TestAutocompleteWithQuery(t *testing.T) {
 	_, ok := response.Data.([]interface{})
 	if !ok {
 		t.Error("Expected data to be an array")
+	}
+}
+
+func TestAutocompleteProviderCachesAndSanitizesSuggestions(t *testing.T) {
+	handler := newTestHandler()
+	requests := 0
+	handler.autocompleteClient.Transport = autocompleteTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.URL.Host != "duckduckgo.com" {
+			t.Errorf("autocomplete host = %q, want duckduckgo.com", request.URL.Host)
+		}
+		if request.URL.Query().Get("q") != "test query" {
+			t.Errorf("autocomplete query = %q, want escaped query value", request.URL.Query().Get("q"))
+		}
+		return autocompleteTestResponse(request, http.StatusOK, `["test query",["alpha","line\nbreak",""] ]`), nil
+	})
+
+	first := handler.fetchAutocompleteSuggestions(context.Background(), " test query ")
+	if len(first) != 2 || first[1] != "linebreak" {
+		t.Fatalf("first suggestions = %q, want sanitized provider values", first)
+	}
+	first[0] = "caller mutation"
+	second := handler.fetchAutocompleteSuggestions(context.Background(), "TEST QUERY")
+	if requests != 1 || len(second) != 2 || second[0] != "alpha" {
+		t.Fatalf("cached suggestions = %q after %d requests, want immutable one-hour cache", second, requests)
+	}
+	handler.autocompleteMu.Lock()
+	entry := handler.autocompleteCache["test query"]
+	if time.Until(entry.expiresAt) < 59*time.Minute {
+		handler.autocompleteMu.Unlock()
+		t.Fatalf("autocomplete cache TTL = %s, want one hour", time.Until(entry.expiresAt))
+	}
+	entry.expiresAt = time.Now().Add(-time.Second)
+	handler.autocompleteCache["test query"] = entry
+	handler.autocompleteMu.Unlock()
+	handler.fetchAutocompleteSuggestions(context.Background(), "test query")
+	if requests != 2 {
+		t.Fatalf("expired cache made %d provider requests, want refetch", requests)
+	}
+}
+
+func TestAutocompleteProviderRejectsFailuresAndOversizedInputs(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "upstream failure", status: http.StatusServiceUnavailable, body: `[]`},
+		{name: "redirect", status: http.StatusFound, body: `[]`},
+		{name: "malformed JSON", status: http.StatusOK, body: `[{`},
+		{name: "oversized JSON", status: http.StatusOK, body: `[]` + strings.Repeat(" ", maximumAutocompleteResponseBytes)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			requests := 0
+			handler := newTestHandler()
+			handler.autocompleteClient.Transport = autocompleteTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+				requests++
+				response := autocompleteTestResponse(request, test.status, test.body)
+				if test.status == http.StatusFound {
+					response.Header.Set("Location", "https://redirect.example/next")
+				}
+				return response, nil
+			})
+			if suggestions := handler.fetchAutocompleteSuggestions(context.Background(), "test"); len(suggestions) != 0 {
+				t.Fatalf("invalid provider response produced suggestions: %v", suggestions)
+			}
+			if requests != 1 {
+				t.Fatalf("invalid response caused %d requests, want one without following redirects", requests)
+			}
+		})
+	}
+
+	handler := newTestHandler()
+	requests := 0
+	handler.autocompleteClient.Transport = autocompleteTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		return autocompleteTestResponse(request, http.StatusOK, `["test",["ok"]]`), nil
+	})
+	if suggestions := handler.fetchAutocompleteSuggestions(context.Background(), strings.Repeat("x", maximumAutocompleteQueryBytes+1)); len(suggestions) != 0 {
+		t.Fatalf("oversized query produced suggestions: %v", suggestions)
+	}
+	if requests != 0 {
+		t.Fatalf("oversized query caused %d upstream requests", requests)
+	}
+}
+
+func TestAutocompleteCacheHasBoundedEntriesAndResults(t *testing.T) {
+	handler := newTestHandler()
+	for index := range maximumAutocompleteCacheEntries + 1 {
+		handler.cacheAutocomplete(fmt.Sprintf("query-%03d", index), []string{"one", "two"})
+	}
+	if got := len(handler.autocompleteCache); got != maximumAutocompleteCacheEntries {
+		t.Fatalf("autocomplete cache size = %d, want %d", got, maximumAutocompleteCacheEntries)
+	}
+	handler.cacheAutocomplete("bounded-results", make([]string, maximumAutocompleteSuggestions+1))
+	if got := len(handler.autocompleteCache["bounded-results"].suggestions); got != maximumAutocompleteSuggestions {
+		t.Fatalf("cached autocomplete results = %d, want %d", got, maximumAutocompleteSuggestions)
 	}
 }
 
@@ -2426,6 +2538,9 @@ func TestRegisterRoutes(t *testing.T) {
 
 func TestHandleAutocompletePublicMethod(t *testing.T) {
 	handler := newTestHandler()
+	handler.autocompleteClient.Transport = autocompleteTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return autocompleteTestResponse(request, http.StatusOK, `["test",["test suggestion"]]`), nil
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/autocomplete?q=test", nil)
 	w := httptest.NewRecorder()

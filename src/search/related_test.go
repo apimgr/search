@@ -2,9 +2,28 @@ package search
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
+
+type relatedTestRoundTripper func(*http.Request) (*http.Response, error)
+
+func (transport relatedTestRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func relatedTestResponse(request *http.Request, status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    request,
+	}
+}
 
 func TestNewRelatedSearches(t *testing.T) {
 	rs := NewRelatedSearches()
@@ -31,6 +50,133 @@ func TestRelatedSearchesGetRelatedEmpty(t *testing.T) {
 	if len(suggestions) != 0 {
 		t.Errorf("GetRelated() for empty query should return empty, got %v", suggestions)
 	}
+}
+
+func TestRelatedSearchesProviderResponsesAreBoundedAndValidated(t *testing.T) {
+	for _, provider := range []struct {
+		name string
+		host string
+		call func(*RelatedSearches, context.Context) []string
+	}{
+		{name: "DuckDuckGo", host: "duckduckgo.com", call: func(rs *RelatedSearches, ctx context.Context) []string { return rs.fetchDuckDuckGo(ctx, "test") }},
+		{name: "Google", host: "suggestqueries.google.com", call: func(rs *RelatedSearches, ctx context.Context) []string { return rs.fetchGoogle(ctx, "test") }},
+	} {
+		t.Run(provider.name, func(t *testing.T) {
+			for _, test := range []struct {
+				name   string
+				status int
+				body   string
+			}{
+				{name: "upstream error", status: http.StatusServiceUnavailable, body: `[]`},
+				{name: "redirect", status: http.StatusFound, body: `[]`},
+				{name: "malformed JSON", status: http.StatusOK, body: `[{`},
+				{name: "oversized JSON", status: http.StatusOK, body: `[]` + strings.Repeat(" ", maximumRelatedResponseBytes)},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					requests := 0
+					rs := NewRelatedSearches()
+					rs.httpClient.Transport = relatedTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+						requests++
+						if request.URL.Host != provider.host {
+							t.Errorf("request host = %q, want %q", request.URL.Host, provider.host)
+						}
+						response := relatedTestResponse(request, test.status, test.body)
+						if test.status == http.StatusFound {
+							response.Header.Set("Location", "https://redirect.example/next")
+						}
+						return response, nil
+					})
+					if got := provider.call(rs, context.Background()); len(got) != 0 {
+						t.Fatalf("invalid provider response produced suggestions: %v", got)
+					}
+					if requests != 1 {
+						t.Fatalf("request count = %d, want 1", requests)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestRelatedSearchesBoundAndSanitizeSuggestions(t *testing.T) {
+	var body strings.Builder
+	body.WriteString(`["query",["line\nbreak",`)
+	for index := range maximumRelatedSuggestions + 2 {
+		if index > 0 {
+			body.WriteByte(',')
+		}
+		fmt.Fprintf(&body, "%q", fmt.Sprintf("suggestion-%02d", index))
+	}
+	body.WriteString(`,"line\nbreak"]]`)
+	rs := NewRelatedSearches()
+	rs.httpClient.Transport = relatedTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return relatedTestResponse(request, http.StatusOK, body.String()), nil
+	})
+	suggestions := rs.fetchGoogle(context.Background(), "test")
+	if len(suggestions) != maximumRelatedSuggestions {
+		t.Fatalf("suggestion count = %d, want %d", len(suggestions), maximumRelatedSuggestions)
+	}
+	if suggestions[0] != "linebreak" {
+		t.Fatalf("control characters were not removed from suggestion: %q", suggestions[0])
+	}
+	for _, suggestion := range suggestions {
+		if strings.ContainsAny(suggestion, "\r\n\t") || len(suggestion) > maximumRelatedSuggestionLength {
+			t.Errorf("suggestion was not sanitized: %q", suggestion)
+		}
+	}
+}
+
+func TestRelatedSearchesDuckDuckGoParsesProviderSuggestions(t *testing.T) {
+	rs := NewRelatedSearches()
+	requests := 0
+	rs.httpClient.Transport = relatedTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.URL.Host != "duckduckgo.com" || request.URL.Path != "/ac/" {
+			t.Errorf("DuckDuckGo autocomplete request = %s", request.URL)
+		}
+		return relatedTestResponse(request, http.StatusOK, `[{"phrase":"related alpha"},{"phrase":"related beta"}]`), nil
+	})
+	suggestions := rs.fetchDuckDuckGo(context.Background(), "related query")
+	if requests != 1 || len(suggestions) != 2 || suggestions[0] != "related alpha" || suggestions[1] != "related beta" {
+		t.Fatalf("DuckDuckGo suggestions = %q after %d requests", suggestions, requests)
+	}
+}
+
+func TestRelatedSearchesCacheAndRequestBounds(t *testing.T) {
+	rs := NewRelatedSearches()
+	requests := 0
+	rs.httpClient.Transport = relatedTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		return relatedTestResponse(request, http.StatusOK, `["query",["provider suggestion"]]`), nil
+	})
+	if suggestions, err := rs.GetRelated(context.Background(), strings.Repeat("x", maximumRelatedQueryBytes+1), 10); err != nil || len(suggestions) != 0 {
+		t.Fatalf("oversized query returned suggestions %v or error %v", suggestions, err)
+	}
+	if requests != 0 {
+		t.Fatalf("oversized query made %d upstream requests", requests)
+	}
+
+	for index := range maximumRelatedCacheEntries + 1 {
+		rs.cacheRelated(fmt.Sprintf("query-%03d", index), []string{"a", "b", "c"})
+	}
+	rs.mu.RLock()
+	cacheSize := len(rs.cache)
+	rs.mu.RUnlock()
+	if cacheSize != maximumRelatedCacheEntries {
+		t.Fatalf("cache size = %d, want maximum %d", cacheSize, maximumRelatedCacheEntries)
+	}
+
+	for index := range 5 {
+		rs.cacheRelated(fmt.Sprintf("bounded-%d", index), make([]string, maximumRelatedSuggestions+1))
+	}
+	rs.mu.RLock()
+	for index := range 5 {
+		if got := len(rs.cache[fmt.Sprintf("bounded-%d", index)].Suggestions); got != maximumRelatedSuggestions {
+			rs.mu.RUnlock()
+			t.Fatalf("cached suggestion count = %d, want maximum %d", got, maximumRelatedSuggestions)
+		}
+	}
+	rs.mu.RUnlock()
 }
 
 func TestRelatedSearchesGetRelatedDefaultLimit(t *testing.T) {

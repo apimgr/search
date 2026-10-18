@@ -30,6 +30,10 @@ NOT (malware OR phishing)
 
 Malformed expressions, such as a trailing `AND` or an unmatched parenthesis, are rejected before any search engine is called.
 
+## Suggestions
+
+Search autocomplete uses DuckDuckGo suggestions. The related-search API combines DuckDuckGo and Google suggestions with local query variations. Successful autocomplete and related-search responses are cached for one hour, with bounded response sizes and cache entry counts; provider redirects and failed responses are ignored. Queries sent to these suggestion providers are visible to those providers.
+
 ## Instant answers
 
 Weather answers show current conditions and a five-day outlook from Open-Meteo. In Preferences, the weather widget can follow the global units preference or use a metric/imperial override. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.

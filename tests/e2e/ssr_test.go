@@ -203,6 +203,28 @@ func TestSSRSearchPageRendersQueryAndCategories(t *testing.T) {
 	requireContains(t, body, `href="/alerts/new?q=golang`, "search page")
 }
 
+func TestSSRRelatedSearchSuggestions(t *testing.T) {
+	s := newSession(t)
+	query := "ssr related fixture"
+	response, body := s.get("/api/v1/search/related?q=" + url.QueryEscape(query))
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("related-search status = %d, want 200: %s", response.StatusCode, body)
+	}
+	assertRelatedSuggestions(t, body, query)
+}
+
+func TestSSRAutocompleteSuggestions(t *testing.T) {
+	s := newSession(t)
+	query := "ssr autocomplete"
+	response, body := s.get("/autocomplete?q=" + url.QueryEscape(query))
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("autocomplete status = %d, want 200: %s", response.StatusCode, body)
+	}
+	assertAutocompleteSuggestions(t, body, query)
+}
+
 func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 	s := newSession(t)
 	response, body := s.get("/server/preferences/export", func(request *http.Request) {

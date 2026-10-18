@@ -69,6 +69,28 @@ func TestNoJSHomeSearchFormSubmitsNatively(t *testing.T) {
 	}
 }
 
+func TestNoJSRelatedSearchSuggestions(t *testing.T) {
+	site := newTestSite(t)
+	query := "nojs related fixture"
+	var body string
+	runNoJS(t,
+		chromedp.Navigate(site.URL+"/api/v1/search/related?q="+url.QueryEscape(query)),
+		chromedp.Text("body", &body, chromedp.ByQuery),
+	)
+	assertRelatedSuggestions(t, body, query)
+}
+
+func TestNoJSAutocompleteSuggestions(t *testing.T) {
+	site := newTestSite(t)
+	query := "nojs autocomplete"
+	var body string
+	runNoJS(t,
+		chromedp.Navigate(site.URL+"/autocomplete?q="+url.QueryEscape(query)),
+		chromedp.Text("body", &body, chromedp.ByQuery),
+	)
+	assertAutocompleteSuggestions(t, body, query)
+}
+
 func TestNoJSKeyboardShortcutGuideRemainsReadable(t *testing.T) {
 	site := newTestSite(t)
 	html := runNoJS(t,

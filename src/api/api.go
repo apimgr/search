@@ -19,7 +19,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/common/closeutil"
@@ -114,8 +116,24 @@ type Handler struct {
 	// auditLogger writes the scheduler.task_manual_run audit event per PART 11
 	auditLogger *logging.AuditLogger
 	// validate is the input validator per AI.md PART 3 requirement
-	validate *validator.Validate
+	validate           *validator.Validate
+	autocompleteMu     sync.RWMutex
+	autocompleteCache  map[string]autocompleteCacheEntry
+	autocompleteClient *http.Client
 }
+
+type autocompleteCacheEntry struct {
+	suggestions []string
+	expiresAt   time.Time
+}
+
+const (
+	maximumAutocompleteQueryBytes       = 2048
+	maximumAutocompleteSuggestions      = 10
+	maximumAutocompleteSuggestionLength = 200
+	maximumAutocompleteResponseBytes    = 1 << 20
+	maximumAutocompleteCacheEntries     = 500
+)
 
 // SetOwnerManager connects anonymous resource-token management to the server database.
 func (h *Handler) SetOwnerManager(manager *owner.Manager) { h.ownerManager = manager }
@@ -147,11 +165,18 @@ func (h *Handler) SetAuditLogger(al *logging.AuditLogger) {
 // NewHandler creates a new API handler
 func NewHandler(cfg *config.Config, registry *engine.Registry, aggregator *search.Aggregator) *Handler {
 	return &Handler{
-		config:     cfg,
-		registry:   registry,
-		aggregator: aggregator,
-		startTime:  time.Now(),
-		validate:   validator.New(),
+		config:            cfg,
+		registry:          registry,
+		aggregator:        aggregator,
+		startTime:         time.Now(),
+		validate:          validator.New(),
+		autocompleteCache: make(map[string]autocompleteCacheEntry),
+		autocompleteClient: &http.Client{
+			Timeout: 2 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -1163,31 +1188,48 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 
 // fetchAutocompleteSuggestions fetches search suggestions from DuckDuckGo
 func (h *Handler) fetchAutocompleteSuggestions(ctx context.Context, query string) []string {
-	client := &http.Client{Timeout: 2 * time.Second}
+	query = strings.TrimSpace(query)
+	if query == "" || len(query) > maximumAutocompleteQueryBytes {
+		return []string{}
+	}
+	cacheKey := strings.ToLower(query)
+	if suggestions, ok := h.cachedAutocomplete(cacheKey); ok {
+		return suggestions
+	}
 
 	// DuckDuckGo autocomplete API
-	url := fmt.Sprintf("https://duckduckgo.com/ac/?q=%s&type=list", url.QueryEscape(query))
+	apiURL := fmt.Sprintf("https://duckduckgo.com/ac/?q=%s&type=list", url.QueryEscape(query))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return []string{}
 	}
 
 	req.Header.Set("User-Agent", engine.UserAgent)
 
+	client := h.autocompleteClient
+	if client == nil {
+		client = &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return []string{}
 	}
 	defer closeutil.Close(resp.Body)
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return []string{}
 	}
 
 	// DuckDuckGo returns: ["query", ["suggestion1", "suggestion2", ...]]
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maximumAutocompleteResponseBytes+1))
+	if err != nil || len(body) > maximumAutocompleteResponseBytes {
+		return []string{}
+	}
 	var result []interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return []string{}
 	}
 
@@ -1203,16 +1245,76 @@ func (h *Handler) fetchAutocompleteSuggestions(ctx context.Context, query string
 	suggestions := make([]string, 0, len(suggestionsRaw))
 	for _, s := range suggestionsRaw {
 		if str, ok := s.(string); ok {
-			suggestions = append(suggestions, str)
+			str = cleanAutocompleteSuggestion(str)
+			if str != "" {
+				suggestions = append(suggestions, str)
+			}
+			if len(suggestions) == maximumAutocompleteSuggestions {
+				break
+			}
 		}
 	}
 
-	// Limit to 10 suggestions
-	if len(suggestions) > 10 {
-		suggestions = suggestions[:10]
-	}
-
+	h.cacheAutocomplete(cacheKey, suggestions)
 	return suggestions
+}
+
+func cleanAutocompleteSuggestion(suggestion string) string {
+	suggestion = strings.TrimSpace(strings.Map(func(character rune) rune {
+		if character < 0x20 || character == 0x7f {
+			return -1
+		}
+		return character
+	}, suggestion))
+	if len(suggestion) > maximumAutocompleteSuggestionLength {
+		suggestion = suggestion[:maximumAutocompleteSuggestionLength]
+		for !utf8.ValidString(suggestion) {
+			suggestion = suggestion[:len(suggestion)-1]
+		}
+		suggestion = strings.TrimSpace(suggestion)
+	}
+	return suggestion
+}
+
+func (h *Handler) cachedAutocomplete(key string) ([]string, bool) {
+	h.autocompleteMu.RLock()
+	entry, ok := h.autocompleteCache[key]
+	h.autocompleteMu.RUnlock()
+	if !ok || time.Now().After(entry.expiresAt) {
+		return nil, false
+	}
+	return append([]string(nil), entry.suggestions...), true
+}
+
+func (h *Handler) cacheAutocomplete(key string, suggestions []string) {
+	h.autocompleteMu.Lock()
+	defer h.autocompleteMu.Unlock()
+	if h.autocompleteCache == nil {
+		h.autocompleteCache = make(map[string]autocompleteCacheEntry)
+	}
+	now := time.Now()
+	for cachedKey, entry := range h.autocompleteCache {
+		if now.After(entry.expiresAt) {
+			delete(h.autocompleteCache, cachedKey)
+		}
+	}
+	if _, exists := h.autocompleteCache[key]; !exists && len(h.autocompleteCache) >= maximumAutocompleteCacheEntries {
+		oldestKey := ""
+		var oldest time.Time
+		for cachedKey, entry := range h.autocompleteCache {
+			if oldestKey == "" || entry.expiresAt.Before(oldest) {
+				oldestKey, oldest = cachedKey, entry.expiresAt
+			}
+		}
+		delete(h.autocompleteCache, oldestKey)
+	}
+	if len(suggestions) > maximumAutocompleteSuggestions {
+		suggestions = suggestions[:maximumAutocompleteSuggestions]
+	}
+	h.autocompleteCache[key] = autocompleteCacheEntry{
+		suggestions: append([]string(nil), suggestions...),
+		expiresAt:   now.Add(time.Hour),
+	}
 }
 
 func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {

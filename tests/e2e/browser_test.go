@@ -50,6 +50,38 @@ func TestBrowserHomeSearchFlow(t *testing.T) {
 	requireNoFailures(t, pf, "/ -> /search")
 }
 
+func TestBrowserRelatedSearchSuggestions(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	failures := watchForFailures(ctx)
+	query := "browser related fixture"
+	var body string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/api/v1/search/related?q="+url.QueryEscape(query)),
+		chromedp.Text("body", &body, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("load related-search response: %v", err)
+	}
+	assertRelatedSuggestions(t, body, query)
+	requireNoFailures(t, failures, "related-search API response")
+}
+
+func TestBrowserAutocompleteSuggestions(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	failures := watchForFailures(ctx)
+	query := "browser autocomplete"
+	var body string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/autocomplete?q="+url.QueryEscape(query)),
+		chromedp.Text("body", &body, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("load autocomplete response: %v", err)
+	}
+	assertAutocompleteSuggestions(t, body, query)
+	requireNoFailures(t, failures, "autocomplete API response")
+}
+
 func TestBrowserSearchBarWidgetGETForm(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

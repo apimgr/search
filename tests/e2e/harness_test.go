@@ -113,11 +113,64 @@ func assertFullWikipediaFixture(t *testing.T, html string) {
 	}
 }
 
+func assertRelatedSuggestions(t *testing.T, body, query string) {
+	t.Helper()
+	var response struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Query       string   `json:"query"`
+			Suggestions []string `json:"suggestions"`
+			Count       int      `json:"count"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		t.Fatalf("decode related-search response: %v (%s)", err, body)
+	}
+	foundVariation := false
+	for _, suggestion := range response.Data.Suggestions {
+		if suggestion == "what is "+query {
+			foundVariation = true
+			break
+		}
+	}
+	if !response.OK || response.Data.Query != query || response.Data.Count != len(response.Data.Suggestions) || !foundVariation {
+		t.Fatalf("related-search response = %#v, want deterministic query variation for %q", response, query)
+	}
+}
+
+func assertAutocompleteSuggestions(t *testing.T, body, query string) {
+	t.Helper()
+	var response struct {
+		OK   bool     `json:"ok"`
+		Data []string `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		t.Fatalf("decode autocomplete response: %v (%s)", err, body)
+	}
+	want := query + " autocomplete fixture"
+	for _, suggestion := range response.Data {
+		if response.OK && suggestion == want {
+			return
+		}
+	}
+	t.Fatalf("autocomplete response = %#v, want suggestion %q", response, want)
+}
+
 type providerFixtureTransport struct{ fallback http.RoundTripper }
 
 func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	var body string
 	switch request.URL.Host {
+	case "duckduckgo.com":
+		query := request.URL.Query().Get("q")
+		if request.URL.Path != "/ac/" {
+			return transport.fallback.RoundTrip(request)
+		}
+		if request.URL.Query().Get("type") == "list" {
+			body = fmt.Sprintf(`[%q,[%q]]`, query, query+" autocomplete fixture")
+		} else {
+			body = fmt.Sprintf(`[{"phrase":%q}]`, query+" related fixture")
+		}
 	case "api.datamuse.com":
 		if request.URL.Query().Has("sp") {
 			body = `[{"word":"ephemeral","score":1000,"tags":["f:12.34"]}]`
