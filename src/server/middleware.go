@@ -1105,12 +1105,28 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 
 				slog.LogAttrs(r.Context(), slog.LevelError, "PANIC recovered", attrs...)
 
-				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
+				if acceptsJSONError(r) {
+					localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
+					return
+				}
+				writeRecoveryHTML(w, r)
 			}
 		}()
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func acceptsJSONError(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json")
+}
+
+func writeRecoveryHTML(w http.ResponseWriter, r *http.Request) {
+	theme := GetTheme(r)
+	className := GetThemeClass(theme)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusInternalServerError)
+	_, _ = io.WriteString(w, `<!doctype html><html lang="en" class="`+className+`" data-theme-mode="`+theme+`"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Internal Server Error</title><link rel="stylesheet" href="/static/css/common.css"><link rel="stylesheet" href="/static/css/public.css"></head><body><header><nav><a href="/">Search</a> <a href="/server/about">About</a></nav></header><main class="error-page"><h1>Something went wrong</h1><p>The server could not complete this request. Please try again.</p><a href="/">Return to search</a></main></body></html>`)
 }
 
 // RequestID middleware adds a unique request ID (UUID v4 per AI.md)

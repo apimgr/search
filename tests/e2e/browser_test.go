@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
@@ -711,6 +712,29 @@ func TestBrowserThemeToggleChangesComputedStyle(t *testing.T) {
 	requireNoFailures(t, pf, "/ (theme toggle)")
 }
 
+func TestBrowserAutoThemeTracksSystemColorScheme(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var light, dark, updatedLight string
+	if err := chromedp.Run(ctx,
+		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "light"}}),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetCookie("theme", "auto").WithURL(site.URL).WithPath("/").Do(ctx)
+		}),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &light),
+		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "dark"}}),
+		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &dark),
+		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "light"}}),
+		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &updatedLight),
+	); err != nil {
+		t.Fatalf("auto theme color-scheme emulation: %v", err)
+	}
+	if light == dark || light != updatedLight {
+		t.Errorf("auto theme did not follow system scheme and return: light=%q dark=%q light-again=%q", light, dark, updatedLight)
+	}
+}
+
 func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
@@ -1055,6 +1079,43 @@ func TestBrowserResponsiveViewportNoHorizontalScroll(t *testing.T) {
 	requireNoFailures(t, pf, "/ (375x812 viewport)")
 }
 
+func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var overflow, searchWidth, viewportWidth, minTarget float64
+	var navToggle, categoriesAvailable, resultLayout bool
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(375, 812),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.WaitVisible(`.search-form`, chromedp.ByQuery),
+		chromedp.Evaluate(`document.documentElement.scrollWidth - document.documentElement.clientWidth`, &overflow),
+		chromedp.Evaluate(`document.querySelector('.search-form')?.getBoundingClientRect().width || 0`, &searchWidth),
+		chromedp.Evaluate(`document.documentElement.clientWidth`, &viewportWidth),
+		chromedp.Evaluate(`!!document.querySelector('label[for="nav-toggle"]')`, &navToggle),
+		chromedp.Evaluate(`!!document.querySelector('.category-tabs')`, &categoriesAvailable),
+		chromedp.Evaluate(`(() => { const els = Array.from(document.querySelectorAll('.header-mobile label, .search-form button, .category-tab')); const sizes = els.map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0).map(r => Math.min(r.width, r.height)); return sizes.length ? Math.min(...sizes) : 0 })()`, &minTarget),
+		chromedp.Navigate(site.URL+"/search?q=mobile+layout"),
+		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => { const list = document.querySelector('.results-list'); return !!list && getComputedStyle(list).flexDirection !== 'row' })()`, &resultLayout),
+	); err != nil {
+		t.Fatalf("mobile search layout: %v", err)
+	}
+	if overflow > 0 || searchWidth < viewportWidth*0.8 {
+		t.Errorf("mobile layout overflow=%g search width=%g viewport=%g", overflow, searchWidth, viewportWidth)
+	}
+	if !navToggle || !categoriesAvailable {
+		t.Error("mobile header navigation toggle or category navigation is missing")
+	}
+	if minTarget > 0 && minTarget < 44 {
+		t.Errorf("smallest visible interactive target is %gpx, want at least 44px", minTarget)
+	}
+	if !resultLayout {
+		t.Error("mobile results list is missing or laid out horizontally")
+	}
+	requireNoFailures(t, pf, "/search (375x812 mobile layout)")
+}
+
 // TestBrowserErrorPageNoConsoleErrors loads a 404 to make sure the themed
 // error page (PART 16) itself doesn't throw — error pages are frequently
 // undertested because the happy-path crawl never hits them.
@@ -1073,6 +1134,33 @@ func TestBrowserErrorPageNoConsoleErrors(t *testing.T) {
 	// The 404 status itself is asserted at Tier 1 (ssr_test.go); this test's
 	// job is only the console/asset cleanliness of the rendered error page.
 	requireNoFailures(t, pf, "/this-route-does-not-exist (404 page)")
+}
+
+func TestBrowserRecoveredPanicShowsThemedErrorPage(t *testing.T) {
+	site := newPanicTestSite(t)
+	t.Cleanup(site.Close)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var html string
+	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetCookie("theme", "light").WithURL(site.URL).WithPath("/").Do(ctx)
+		}),
+		chromedp.Navigate(site.URL+"/__e2e/panic"),
+		chromedp.WaitVisible(`.error-page`, chromedp.ByQuery),
+		chromedp.OuterHTML("html", &html),
+	); err != nil {
+		t.Fatalf("browser recovery page: %v", err)
+	}
+	for _, marker := range []string{`class="theme-light"`, "Something went wrong", `href="/server/about"`} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("browser recovery page is missing %q", marker)
+		}
+	}
+	if strings.Contains(html, "e2e panic sentinel") || strings.Contains(html, "goroutine ") {
+		t.Fatal("browser recovery page leaked panic details or a stack trace")
+	}
+	requireNoFailures(t, pf, "/__e2e/panic (500 page)")
 }
 
 // TestBrowserInstantAnswersInteract exercises generated instant-answer HTML

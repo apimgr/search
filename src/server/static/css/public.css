@@ -2452,6 +2452,11 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 .category-link {
     padding: 0.4rem 0.75rem;
     font-size: 0.85rem;
+    min-height: var(--touch-target);
+}
+
+.category-tab {
+    min-height: var(--touch-target);
 }
 
 .result-item {

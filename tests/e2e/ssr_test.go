@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"golang.org/x/net/html"
 	"image"
 	"image/color"
 	"image/png"
@@ -461,6 +462,106 @@ func TestSSRNotFoundRendersErrorPage(t *testing.T) {
 	requireStatus(t, resp, http.StatusNotFound)
 	requireHTMLShell(t, body, "404")
 	requireContains(t, body, `href="/"`, "404 page")
+}
+
+func TestSSRRecoveredPanicNegotiatesThemedHTMLAndJSON(t *testing.T) {
+	site := newPanicTestSite(t)
+	t.Cleanup(site.Close)
+	response, err := http.Get(site.URL + "/__e2e/panic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if response.StatusCode != http.StatusInternalServerError || !strings.Contains(response.Header.Get("Content-Type"), "text/html") {
+		t.Fatalf("browser panic response = %d %q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+	for _, marker := range []string{`class="theme-dark"`, `class="error-page"`, "Something went wrong", `href="/"`} {
+		if !strings.Contains(string(body), marker) {
+			t.Errorf("recovered HTML error is missing %q", marker)
+		}
+	}
+	if strings.Contains(string(body), "e2e panic sentinel") || strings.Contains(string(body), "goroutine ") {
+		t.Fatal("recovered HTML error leaked panic details or a stack trace")
+	}
+	request, err := http.NewRequest(http.MethodGet, site.URL+"/__e2e/panic", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusInternalServerError || !strings.Contains(response.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("API panic response = %d %q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+}
+
+func TestSSRInternalLinkCrawlHasNoDeadLinksOrServerErrors(t *testing.T) {
+	s := newSession(t)
+	queue := []string{"/"}
+	visited := make(map[string]bool)
+	for len(queue) > 0 {
+		path := queue[0]
+		queue = queue[1:]
+		if visited[path] {
+			continue
+		}
+		visited[path] = true
+		resp, body := s.get(path)
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode >= http.StatusInternalServerError {
+			t.Errorf("internal link %q returned HTTP %d", path, resp.StatusCode)
+		}
+		if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") || resp.StatusCode >= 400 {
+			continue
+		}
+		base, baseErr := url.Parse(path)
+		if baseErr != nil {
+			t.Errorf("parse crawl base %q: %v", path, baseErr)
+			continue
+		}
+		doc, err := html.Parse(strings.NewReader(body))
+		if err != nil {
+			t.Errorf("parse %q: %v", path, err)
+			continue
+		}
+		var collect func(*html.Node)
+		collect = func(node *html.Node) {
+			if node.Type == html.ElementNode && node.Data == "a" {
+				for _, attr := range node.Attr {
+					if attr.Key != "href" || attr.Val == "" {
+						continue
+					}
+					ref, err := url.Parse(attr.Val)
+					if err != nil || ref.Scheme != "" || ref.Host != "" || ref.Fragment != "" && ref.Path == "" {
+						continue
+					}
+					resolved := base.ResolveReference(ref)
+					resolved.Fragment = ""
+					target := resolved.RequestURI()
+					if resolved.Path == "" {
+						target = "/" + resolved.RawQuery
+					}
+					if strings.HasPrefix(target, "/") && !visited[target] {
+						queue = append(queue, target)
+					}
+				}
+			}
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				collect(child)
+			}
+		}
+		collect(doc)
+		if len(visited)+len(queue) > 500 {
+			t.Fatal("internal link crawl exceeded 500 unique routes; possible unbounded query-link expansion")
+		}
+	}
+	t.Logf("crawled %d internal routes", len(visited))
 }
 
 // TestSSRUnknownWellKnownIs404 checks the RFC 8615 catch-all only answers

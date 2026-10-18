@@ -119,8 +119,12 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 	var body string
 	switch request.URL.Host {
 	case "api.datamuse.com":
-		if request.URL.Query().Has("rel_syn") {
+		if request.URL.Query().Has("sp") {
+			body = `[{"word":"ephemeral","score":1000,"tags":["f:12.34"]}]`
+		} else if request.URL.Query().Has("rel_syn") {
 			body = `[{"word":"joyful","score":1000,"tags":["adj"]},{"word":"cheerful","score":900,"tags":["adj"]}]`
+		} else if request.URL.Query().Has("rel_trg") {
+			body = `[{"word":"quick fix","score":1000,"tags":["n"],"defs":["A prompt and effective solution."]}]`
 		} else {
 			body = `[{"word":"bad","score":1000,"tags":["adj"]},{"word":"poor","score":900,"tags":["adj"]}]`
 		}
@@ -130,7 +134,7 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 		body = `{"en":[{"partOfSpeech":"adjective","language":"English","definitions":[{"definition":"Lasting for a short time."}]},{"partOfSpeech":"noun","language":"English","definitions":[{"definition":"A short-lived thing."}]}]}`
 	case "api.dictionaryapi.dev":
 		if strings.HasSuffix(request.URL.Path, "/happy") {
-			body = `[{"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"feeling or showing pleasure","example":"She felt happy with the result."}]}]}]`
+			body = `[{"meanings":[{"partOfSpeech":"adjective","synonyms":["joyful"],"antonyms":["sad"],"definitions":[{"definition":"feeling or showing pleasure","example":"She felt happy with the result.","synonyms":["cheerful"],"antonyms":["miserable"]}]}]}]`
 		} else {
 			body = `[{"word":"ephemeral","phonetic":"/ɪˈfem.ər.əl/","phonetics":[{"text":"/ɪˈfem.ər.əl/","audio":"https://api.dictionaryapi.dev/media/pronunciations/en/ephemeral-us.mp3"}],"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"Lasting for a short time.","example":"The ephemeral beauty of the sunset."}]}],"origin":"From Greek ephēmeros"},{"word":"ephemeral","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]}],"origin":"From Greek ephēmeros"}]`
 		}
@@ -406,12 +410,16 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		t.Error("country answer is missing fixture country data")
 		return
 	}
-	if typeName == "dict" && (!strings.Contains(answer, "ephemeral") || !strings.Contains(answer, "Lasting for a short time.") || !strings.Contains(answer, "A short-lived thing.")) {
+	if typeName == "dict" && (!strings.Contains(answer, "ephemeral") || !strings.Contains(answer, "Lasting for a short time.") || !strings.Contains(answer, "A short-lived thing.") || !strings.Contains(answer, "Frequency: 12.34 occurrences per million words")) {
 		t.Error("dictionary answer is missing one or more fixture records")
 		return
 	}
-	if typeName == "thesaurus" && (!strings.Contains(answer, "joyful") || !strings.Contains(answer, "bad") || !strings.Contains(answer, "She felt happy with the result.")) {
-		t.Error("thesaurus answer is missing fixture synonyms, antonyms, or usage example")
+	if typeName == "thesaurus" {
+		for _, marker := range []string{"joyful", "bad", "She felt happy with the result.", "adjective", "feeling or showing pleasure", "quick fix", "A prompt and effective solution."} {
+			if !strings.Contains(answer, marker) {
+				t.Errorf("thesaurus answer is missing fixture metadata %q", marker)
+			}
+		}
 		return
 	}
 	if typeName == "wiki" && !strings.Contains(answer, "Python is a high-level programming language.") {
@@ -689,6 +697,19 @@ func newTestSite(t *testing.T) *httptest.Server {
 	})
 
 	return sharedHTTP
+}
+
+func newPanicTestSite(t *testing.T) *httptest.Server {
+	t.Helper()
+	application := newTestSite(t)
+	panicBoundary := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/__e2e/panic" {
+			panic("e2e panic sentinel")
+		}
+		application.Config.Handler.ServeHTTP(w, r)
+	})
+	boundary := server.NewMiddleware(config.DefaultConfig(), nil).Recovery(panicBoundary)
+	return httptest.NewServer(boundary)
 }
 
 // newTrackedSite boots a second application instance with an analytics
