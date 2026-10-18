@@ -4886,6 +4886,37 @@ func TestFormattersPreserveMultilineAndMalformedInputSafely(t *testing.T) {
 	}
 }
 
+func TestPHPBeautifierPreservesHeredocAndNowdocContents(t *testing.T) {
+	tests := []struct {
+		name   string
+		marker string
+		code   string
+	}{
+		{
+			name:   "heredoc interpolation",
+			marker: "  leading  and trailing spaces  \n  $value { remains literal }\nTEXT;",
+			code:   "<?php\n$message=<<<TEXT\n  leading  and trailing spaces  \n  $value { remains literal }\nTEXT;\necho $message;\n?>",
+		},
+		{
+			name:   "nowdoc literal",
+			marker: "  leading  and trailing spaces  \n  $value remains literal\nRAW .",
+			code:   "<?php\n$message=<<<'RAW'\n  leading  and trailing spaces  \n  $value remains literal\nRAW . ' suffix';\necho $message;\n?>",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			answer, err := NewBeautifyHandler().HandleDirectQuery(context.Background(), "php --indent=4 "+test.code)
+			if err != nil {
+				t.Fatal(err)
+			}
+			formatted, ok := answer.Data["output"].(string)
+			if !ok || !strings.Contains(formatted, test.marker) {
+				t.Fatalf("PHP formatter changed heredoc literal %q: %q", test.marker, formatted)
+			}
+		})
+	}
+}
+
 func TestManagerParsesRandomSlang(t *testing.T) {
 	typeAndTerm := NewManager()
 	answerType, term := typeAndTerm.Parse("SlAnG:")

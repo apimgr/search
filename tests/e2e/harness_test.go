@@ -398,6 +398,7 @@ var localDirectAnswerPages = []struct {
 	{"text diff", "/direct/diff/old%7C%7C%7Cnew", "diff"},
 	{"JSON diff", "/direct/diff/%7B%22a%22%3A1%7D%7C%7C%7B%22a%22%3A2%7D", "diff"},
 	{"code formatter", "/direct/beautify/js%20function%20f()%7Breturn%201%7D", "beautify"},
+	{"PHP heredoc formatter", "/direct/beautify/" + url.PathEscape("php <?php\n$message=<<<TEXT\n  leading  and trailing spaces  \nTEXT;\necho $message;\n?>"), "beautify"},
 	{"Allman code formatter", "/direct/beautify/js%20--style=allman%20function%20f()%7Breturn%201%7D", "beautify"},
 	{"compact CSS formatter", "/direct/beautify/css%20--style=compact%20.a%7Bcolor:red%7D", "beautify"},
 	{"lowercase SQL formatter", "/direct/beautify/sql%20--style=lowercase%20SELECT%20ID%20FROM%20Users", "beautify"},
@@ -431,6 +432,10 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	t.Helper()
 	if typeName == "beautify" {
 		switch {
+		case strings.Contains(path, "PHP%20%3C%3Fphp"):
+			if !strings.Contains(answer, "  leading  and trailing spaces  ") {
+				t.Error("PHP heredoc formatter changed the literal's significant spaces")
+			}
 		case strings.Contains(path, "style=allman"):
 			if !strings.Contains(answer, "Style: allman") || !strings.Contains(answer, "function f()\n{") {
 				t.Error("Allman formatter output is missing its style or brace placement")

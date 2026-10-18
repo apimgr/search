@@ -672,20 +672,32 @@ func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*
 		return nil, fmt.Errorf("cannot format invalid JSON")
 	}
 
+	formatCode := code
+	var restorePHPHeredocs func(string) string
+	if lang == "php" {
+		formatCode, restorePHPHeredocs = protectPHPHeredocs(code)
+	}
+
 	// Beautify
-	beautified := beautifyCode(code, lang)
-	beautified, styleErr = applyBeautifyStyle(beautified, code, lang, style)
+	beautified := beautifyCode(formatCode, lang)
+	beautified, styleErr = applyBeautifyStyle(beautified, formatCode, lang, style)
 	if styleErr != nil {
 		return nil, styleErr
 	}
 	if indent != "" {
 		beautified = reindentFormatted(beautified, lang, indent)
 	}
+	if restorePHPHeredocs != nil {
+		beautified = restorePHPHeredocs(beautified)
+	}
 	minified := ""
 	if minify {
-		compact, err := minifyCode(code, lang)
+		compact, err := minifyCode(formatCode, lang)
 		if err != nil {
 			return nil, err
+		}
+		if restorePHPHeredocs != nil {
+			compact = restorePHPHeredocs(compact)
 		}
 		minified = compact
 	}
@@ -1325,6 +1337,141 @@ func beautifyCode(code, lang string) string {
 	default:
 		return code
 	}
+}
+
+var phpHeredocStart = regexp.MustCompile(`^<<<[ \t]*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)"|([A-Za-z_][A-Za-z0-9_]*))[ \t]*\r?\n`)
+
+func protectPHPHeredocs(source string) (string, func(string) string) {
+	var protected []string
+	var masked strings.Builder
+	masked.Grow(len(source))
+	quote := byte(0)
+	escaped := false
+	lineComment := false
+	blockComment := false
+	placeholderPrefix := "__SEARCH_PHP_LITERAL_"
+	for strings.Contains(source, placeholderPrefix) {
+		placeholderPrefix += "_"
+	}
+
+	for index := 0; index < len(source); {
+		current := source[index]
+		if lineComment {
+			masked.WriteByte(current)
+			index++
+			if current == '\n' {
+				lineComment = false
+			}
+			continue
+		}
+		if blockComment {
+			masked.WriteByte(current)
+			index++
+			if current == '*' && index < len(source) && source[index] == '/' {
+				masked.WriteByte(source[index])
+				index++
+				blockComment = false
+			}
+			continue
+		}
+		if quote != 0 {
+			masked.WriteByte(current)
+			index++
+			if escaped {
+				escaped = false
+			} else if current == '\\' {
+				escaped = true
+			} else if current == quote {
+				quote = 0
+			}
+			continue
+		}
+		if current == '/' && index+1 < len(source) {
+			switch source[index+1] {
+			case '/':
+				masked.WriteString("//")
+				index += 2
+				lineComment = true
+				continue
+			case '*':
+				masked.WriteString("/*")
+				index += 2
+				blockComment = true
+				continue
+			}
+		}
+		if current == '#' && (index+1 >= len(source) || source[index+1] != '[') {
+			masked.WriteByte(current)
+			index++
+			lineComment = true
+			continue
+		}
+		if current == '\'' || current == '"' || current == '`' {
+			quote = current
+			masked.WriteByte(current)
+			index++
+			continue
+		}
+		if strings.HasPrefix(source[index:], "<<<") {
+			match := phpHeredocStart.FindStringSubmatch(source[index:])
+			if len(match) > 0 {
+				label := match[1]
+				if label == "" {
+					label = match[2]
+				}
+				if label == "" {
+					label = match[3]
+				}
+				openerEnd := index + len(match[0])
+				literalEnd := phpHeredocEnd(source, openerEnd, label)
+				if literalEnd > openerEnd {
+					placeholder := fmt.Sprintf("%s%06d__", placeholderPrefix, len(protected))
+					protected = append(protected, source[index:literalEnd])
+					masked.WriteString(placeholder)
+					index = literalEnd
+					continue
+				}
+			}
+		}
+		masked.WriteByte(current)
+		index++
+	}
+
+	if len(protected) == 0 {
+		return source, nil
+	}
+	return masked.String(), func(formatted string) string {
+		for index, literal := range protected {
+			placeholder := fmt.Sprintf("%s%06d__", placeholderPrefix, index)
+			formatted = strings.ReplaceAll(formatted, placeholder, literal)
+		}
+		return formatted
+	}
+}
+
+func phpHeredocEnd(source string, start int, label string) int {
+	for lineStart := start; lineStart < len(source); {
+		lineEnd := strings.IndexByte(source[lineStart:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(source)
+		} else {
+			lineEnd += lineStart
+		}
+		line := strings.TrimSuffix(source[lineStart:lineEnd], "\r")
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, label) {
+			tail := strings.TrimSpace(strings.TrimPrefix(trimmed, label))
+			next, _ := utf8.DecodeRuneInString(tail)
+			if tail == "" || (!unicode.IsLetter(next) && !unicode.IsDigit(next) && next != '_') {
+				return lineStart + len(line) - len(strings.TrimLeft(line, " \t")) + len(label)
+			}
+		}
+		if lineEnd == len(source) {
+			break
+		}
+		lineStart = lineEnd + 1
+	}
+	return 0
 }
 
 func countLines(text string) int {
