@@ -396,6 +396,8 @@ The JavaScript beautifier now preserves regular-expression literals, including q
 
 The HTML beautifier now preserves the complete contents of `pre`, `textarea`, `script`, and `style` elements while formatting surrounding markup. Regression coverage checks multiline text, significant spaces, and comparison operators survive unchanged. The package metadata audit also rejects negative lifetime download counts from crates.io and RubyGems.
 
+Thesaurus results now add ABC Thesaurus per-sense register and −2..+2 intensity metadata, with the provider's CC BY-SA 4.0 attribution and link. Requests use the fixed HTTPS provider, reject redirects and non-success responses, cap JSON at 2 MiB, and bound/validate displayed terms and metadata. Offline tests cover attribution, escaping, unsupported values, provider outages, malformed/oversized responses, and redirects; the named all-tier happy-path fixture asserts sourced metadata. Formatter regression cases now cover multiline JavaScript template literals, unmatched JavaScript delimiters, and unterminated SCSS/SQL strings; invalid JSON remains rejected by the answer handler. The direct-answer item remains open for unresolved provider/parser and IDEA coverage.
+
 Action: complete the remaining IDEA.md subfeatures without inventing upstream data; add evidence-backed threat checks; add offline handler-path tests for completed behavior.
 
 ## [ ] Full IDEA.md browser scenario coverage

@@ -4838,6 +4838,54 @@ func TestBeautifyHTMLPreservesRawTextElementContents(t *testing.T) {
 	}
 }
 
+func TestFormattersPreserveMultilineAndMalformedInputSafely(t *testing.T) {
+	tests := []struct {
+		name     string
+		language string
+		source   string
+		markers  []string
+	}{
+		{
+			name:     "javascript template literal",
+			language: "javascript",
+			source:   "const message=`first line\n  significant spaces  \n${value}`;",
+			markers:  []string{"first line\n  significant spaces  \n${value}"},
+		},
+		{
+			name:     "javascript unmatched delimiters",
+			language: "javascript",
+			source:   "function run( { return 'unfinished",
+			markers:  []string{"function run", "unfinished"},
+		},
+		{
+			name:     "stylesheet unterminated string",
+			language: "scss",
+			source:   `.card { content: "unfinished; color: red;`,
+			markers:  []string{`content: "unfinished; color: red;`},
+		},
+		{
+			name:     "SQL unterminated string",
+			language: "sql",
+			source:   "SELECT 'unfinished SELECT",
+			markers:  []string{"'unfinished SELECT"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			formatted := beautifyCode(test.source, test.language)
+			for _, marker := range test.markers {
+				if !strings.Contains(formatted, marker) {
+					t.Errorf("formatter lost %q: %q", marker, formatted)
+				}
+			}
+		})
+	}
+
+	if _, err := NewBeautifyHandler().HandleDirectQuery(context.Background(), `json {"broken":}`); err == nil {
+		t.Fatal("malformed JSON was accepted by the formatter")
+	}
+}
+
 func TestManagerParsesRandomSlang(t *testing.T) {
 	typeAndTerm := NewManager()
 	answerType, term := typeAndTerm.Parse("SlAnG:")
@@ -5256,6 +5304,88 @@ func TestThesaurusPreservesRelatedOnlyResultsAndReportsFailures(t *testing.T) {
 			}
 			if !test.wantFailure || answer.Error != "" || answer.Data["related_available"] != false || !strings.Contains(answer.Content, "Failed to fetch") {
 				t.Fatalf("related-provider failure was not surfaced as a partial answer: %#v", answer)
+			}
+		})
+	}
+}
+
+func TestThesaurusAddsAttributedFormalityAndIntensityMetadata(t *testing.T) {
+	handler := NewThesaurusHandler()
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		status := http.StatusOK
+		body := `[]`
+		switch request.URL.Host {
+		case "abcthesaurus.com":
+			if request.URL.Path != "/api/happy.json" {
+				t.Errorf("ABC Thesaurus request path = %q", request.URL.Path)
+			}
+			body = `{"senses":[{"pos":"adj","gloss":"feeling pleased","synonyms":[{"word":"elated","register":"formal","intensity":2},{"word":"<script>alert(1)</script>","register":"bogus","intensity":9}]}]}`
+		case "api.dictionaryapi.dev":
+			status = http.StatusNotFound
+		}
+		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	answer, err := handler.HandleDirectQuery(context.Background(), "happy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Data["formality_intensity_available"] != true || answer.Data["thesaurus_data_license"] != "CC BY-SA 4.0" {
+		t.Fatalf("ABC metadata availability or license missing: %#v", answer.Data)
+	}
+	for _, marker := range []string{"Formality and intensity", "elated", "formal", "+2 (stronger)", "CC BY-SA 4.0", "abcthesaurus.com"} {
+		if !strings.Contains(answer.Content, marker) {
+			t.Errorf("attributed ABC metadata output missing %q: %s", marker, answer.Content)
+		}
+	}
+	if strings.Contains(answer.Content, "<script>alert") || strings.Contains(answer.Content, "bogus") || strings.Contains(answer.Content, "+9") {
+		t.Fatalf("unsafe or unsupported ABC metadata was rendered: %s", answer.Content)
+	}
+}
+
+func TestThesaurusRetainsRelationsWhenFormalityProviderFails(t *testing.T) {
+	handler := NewThesaurusHandler()
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		status := http.StatusOK
+		body := `[]`
+		if request.URL.Host == "abcthesaurus.com" {
+			status = http.StatusServiceUnavailable
+			body = `private upstream detail`
+		} else if request.URL.Host == "api.datamuse.com" && request.URL.Query().Has("rel_syn") {
+			body = `[{"word":"cheerful","tags":["adj"]}]`
+		} else if request.URL.Host == "api.dictionaryapi.dev" {
+			status = http.StatusNotFound
+		}
+		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	answer, err := handler.HandleDirectQuery(context.Background(), "happy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Data["formality_intensity_available"] != false || !strings.Contains(answer.Content, "cheerful") || !strings.Contains(answer.Content, "Formality and intensity metadata could not be loaded") {
+		t.Fatalf("formality provider failure discarded healthy results: %#v", answer)
+	}
+	if strings.Contains(answer.Content, "private upstream detail") {
+		t.Fatal("raw provider error leaked into the answer")
+	}
+}
+
+func TestFetchABCThesaurusRejectsMalformedAndOversizedResponses(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "redirect", status: http.StatusFound, body: `{"senses":[]}`},
+		{name: "malformed", status: http.StatusOK, body: `{"senses":[`},
+		{name: "oversized", status: http.StatusOK, body: `{"senses":[]}` + strings.Repeat(" ", 2<<20)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler := NewThesaurusHandler()
+			handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: test.status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(test.body)), Request: request}, nil
+			})}
+			if _, err := handler.fetchABCThesaurusSenses(context.Background(), "happy"); err == nil {
+				t.Fatal("invalid provider response was accepted")
 			}
 		})
 	}

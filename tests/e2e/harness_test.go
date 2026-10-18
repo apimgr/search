@@ -128,6 +128,8 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 		} else {
 			body = `[{"word":"bad","score":1000,"tags":["adj"]},{"word":"poor","score":900,"tags":["adj"]}]`
 		}
+	case "abcthesaurus.com":
+		body = `{"word":"happy","license":"CC BY-SA 4.0 — attribution: abcthesaurus.com","senses":[{"pos":"adj","gloss":"feeling or showing pleasure","synonyms":[{"word":"joyful","register":"neutral","intensity":0},{"word":"ecstatic","register":"formal","intensity":2}],"near_synonyms":[{"word":"cheerful","register":"informal","intensity":0}],"antonyms":[{"word":"sad","register":"neutral","intensity":-1}]}]}`
 	case "api.urbandictionary.com":
 		body = `{"list":[{"word":"yeet","definition":"To throw something with force.","example":"She yeeted the ball across the field.","thumbs_up":1200,"thumbs_down":20,"author":"fixture","written_on":"2026-01-01T00:00:00.000Z","permalink":"https://www.urbandictionary.com/define.php?term=yeet"}]}`
 	case "en.wiktionary.org":
@@ -415,7 +417,7 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		return
 	}
 	if typeName == "thesaurus" {
-		for _, marker := range []string{"joyful", "bad", "She felt happy with the result.", "adjective", "feeling or showing pleasure", "quick fix", "A prompt and effective solution."} {
+		for _, marker := range []string{"joyful", "ecstatic", "formal", "+2 (stronger)", "-1 (weaker)", "bad", "She felt happy with the result.", "adjective", "feeling or showing pleasure", "quick fix", "A prompt and effective solution.", "CC BY-SA 4.0"} {
 			if !strings.Contains(answer, marker) {
 				t.Errorf("thesaurus answer is missing fixture metadata %q", marker)
 			}

@@ -50,6 +50,8 @@ Use a `type:term` prefix to open a full-page answer. Common types include `tldr:
 
 `dict:` renders English definitions from the [Wiktionary API](https://en.wiktionary.org/api/rest_v1/), with optional pronunciation and etymology metadata from the [Free Dictionary API](https://dictionaryapi.dev/). It also shows an optional Datamuse estimate based on Google Books Ngrams. Frequency is shown as estimated occurrences per million words. Audio is fetched through `/direct/audio` from the supported HTTPS pronunciation hosts, without following redirects; the proxy accepts only audio media types and bounded response sizes. See the [Datamuse API](https://www.datamuse.com/api/) documentation for frequency data.
 
+`thesaurus:` combines Datamuse synonym, antonym, and related-word results with optional Free Dictionary senses and examples. [ABC Thesaurus](https://abcthesaurus.com/data/) adds sense-level formal/informal register labels and a sourced −2 to +2 intensity scale. Result pages attribute this metadata to ABC Thesaurus and link its CC BY-SA 4.0 license. Provider failures leave other available thesaurus content visible.
+
 The beautifier accepts indentation options before the source, for example `beautify:js --indent=4 function run(){return 1}` or `beautify:json --minify {"ok": true}`. Minification is supported for JavaScript, TypeScript, CSS, HTML, XML, JSON, and PHP; languages without a parser-backed minifier report that the option is unavailable.
 
 ### Open directory search

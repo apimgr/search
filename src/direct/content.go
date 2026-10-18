@@ -751,12 +751,13 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 
 	lang := LangFromContext(ctx)
 	type thesaurusProviderResult struct {
-		name    string
-		entries []thesaurusEntry
-		senses  []thesaurusSense
-		err     error
+		name      string
+		entries   []thesaurusEntry
+		senses    []thesaurusSense
+		abcSenses []abcThesaurusSense
+		err       error
 	}
-	providerResults := make(chan thesaurusProviderResult, 4)
+	providerResults := make(chan thesaurusProviderResult, 5)
 	fetchEntries := func(name, apiURL string) {
 		go func() {
 			entries, err := h.fetchThesaurusEntries(ctx, apiURL)
@@ -774,10 +775,16 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 		senses, err := h.fetchThesaurusSenses(ctx, term)
 		providerResults <- thesaurusProviderResult{name: "senses", senses: senses, err: err}
 	}()
+	go func() {
+		senses, err := h.fetchABCThesaurusSenses(ctx, term)
+		providerResults <- thesaurusProviderResult{name: "abc", abcSenses: senses, err: err}
+	}()
 	var synonymEntries, antonymEntries, relatedEntries []thesaurusEntry
 	var synonymsErr, antonymsErr, relatedErr, sensesErr error
 	var senses []thesaurusSense
-	for range 4 {
+	var abcSenses []abcThesaurusSense
+	var abcErr error
+	for range 5 {
 		result := <-providerResults
 		switch result.name {
 		case "synonyms":
@@ -788,19 +795,21 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 			relatedEntries, relatedErr = result.entries, result.err
 		case "senses":
 			senses, sensesErr = result.senses, result.err
+		case "abc":
+			abcSenses, abcErr = result.abcSenses, result.err
 		}
 	}
 	synonyms := thesaurusEntryWords(synonymEntries)
 	antonyms := thesaurusEntryWords(antonymEntries)
 
-	if synonymsErr != nil && antonymsErr != nil && relatedErr != nil && (sensesErr != nil || len(senses) == 0) {
+	if synonymsErr != nil && antonymsErr != nil && relatedErr != nil && (sensesErr != nil || len(senses) == 0) && (abcErr != nil || len(abcSenses) == 0) {
 		return &Answer{
 			Type: AnswerTypeThesaurus, Term: term, Title: fmt.Sprintf("Thesaurus: %s", term),
 			Description: i18n.T(lang, "direct.failed_to_fetch"),
 			Content:     "<p class=\"error\">Thesaurus data could not be loaded.</p>", Error: "fetch_failed",
 		}, nil
 	}
-	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && sensesErr == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 && len(senses) == 0 {
+	if synonymsErr == nil && antonymsErr == nil && relatedErr == nil && sensesErr == nil && abcErr == nil && len(synonyms) == 0 && len(antonyms) == 0 && len(relatedEntries) == 0 && len(senses) == 0 && len(abcSenses) == 0 {
 		return &Answer{
 			Type:        AnswerTypeThesaurus,
 			Term:        term,
@@ -812,6 +821,7 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	}
 
 	content := formatThesaurusEntriesContent(term, synonymEntries, antonymEntries, relatedEntries, senses)
+	content += formatABCThesaurusContent(abcSenses)
 	if synonymsErr != nil {
 		content += "<p class=\"error\">Synonyms could not be loaded.</p>"
 	}
@@ -824,14 +834,21 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 	if sensesErr != nil {
 		content += fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(i18n.T(lang, "direct.failed_to_fetch")))
 	}
+	if abcErr != nil {
+		content += `<p class="error">Formality and intensity metadata could not be loaded.</p>`
+	}
 	data := map[string]interface{}{
 		"word": term, "synonyms": synonyms, "antonyms": antonyms,
 		"synonym_entries": synonymEntries, "antonym_entries": antonymEntries,
 		"senses":             senses,
 		"related_words":      thesaurusEntryWords(relatedEntries),
 		"synonyms_available": synonymsErr == nil, "antonyms_available": antonymsErr == nil,
-		"related_available": relatedErr == nil,
-		"senses_available":  sensesErr == nil,
+		"related_available":             relatedErr == nil,
+		"senses_available":              sensesErr == nil,
+		"formality_intensity_available": abcErr == nil && len(abcSenses) > 0,
+		"formality_intensity":           abcSenses,
+		"thesaurus_data_license":        "CC BY-SA 4.0",
+		"thesaurus_data_attribution":    "https://abcthesaurus.com/data/",
 	}
 
 	return &Answer{
@@ -840,10 +857,144 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 		Title:       fmt.Sprintf("Thesaurus: %s", term),
 		Description: fmt.Sprintf("Synonyms, antonyms, senses, and usage examples for %s", term),
 		Content:     content,
-		Source:      "Datamuse and Free Dictionary API",
-		SourceURL:   "https://www.datamuse.com/api/",
+		Source:      "ABC Thesaurus, Datamuse, and Free Dictionary API",
+		SourceURL:   "https://abcthesaurus.com/data/",
 		Data:        data,
 	}, nil
+}
+
+type abcThesaurusResponse struct {
+	Senses []abcThesaurusSense `json:"senses"`
+}
+
+type abcThesaurusSense struct {
+	PartOfSpeech string             `json:"pos"`
+	Gloss        string             `json:"gloss"`
+	Synonyms     []abcThesaurusWord `json:"synonyms"`
+	NearSynonyms []abcThesaurusWord `json:"near_synonyms"`
+	Antonyms     []abcThesaurusWord `json:"antonyms"`
+}
+
+type abcThesaurusWord struct {
+	Word      string `json:"word"`
+	Register  string `json:"register"`
+	Intensity *int   `json:"intensity"`
+}
+
+func (h *ThesaurusHandler) fetchABCThesaurusSenses(ctx context.Context, word string) ([]abcThesaurusSense, error) {
+	slug := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(word))), "-")
+	apiURL := "https://abcthesaurus.com/api/" + url.PathEscape(slug) + ".json"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer closeutil.Close(resp.Body)
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("ABC Thesaurus returned HTTP %d", resp.StatusCode)
+	}
+	var response abcThesaurusResponse
+	if err := decodeBoundedJSON(resp.Body, 2<<20, &response); err != nil {
+		return nil, err
+	}
+	if len(response.Senses) > 40 {
+		response.Senses = response.Senses[:40]
+	}
+	for index := range response.Senses {
+		sense := &response.Senses[index]
+		sense.PartOfSpeech = truncateString(strings.TrimSpace(sense.PartOfSpeech), 40)
+		sense.Gloss = truncateString(strings.TrimSpace(sense.Gloss), 1000)
+		sense.Synonyms = cleanABCThesaurusWords(sense.Synonyms)
+		sense.NearSynonyms = cleanABCThesaurusWords(sense.NearSynonyms)
+		sense.Antonyms = cleanABCThesaurusWords(sense.Antonyms)
+	}
+	return response.Senses, nil
+}
+
+func cleanABCThesaurusWords(words []abcThesaurusWord) []abcThesaurusWord {
+	cleaned := make([]abcThesaurusWord, 0, min(len(words), 100))
+	seen := make(map[string]struct{}, min(len(words), 100))
+	for _, item := range words {
+		item.Word = truncateString(strings.TrimSpace(item.Word), 80)
+		key := strings.ToLower(item.Word)
+		if item.Word == "" || strings.ContainsAny(item.Word, "\r\n\t") {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		if !slices.Contains([]string{"neutral", "formal", "informal", "slang", "dated", "literary", "technical"}, item.Register) {
+			item.Register = ""
+		}
+		if item.Intensity != nil && (*item.Intensity < -2 || *item.Intensity > 2) {
+			item.Intensity = nil
+		}
+		cleaned = append(cleaned, item)
+		if len(cleaned) == 100 {
+			break
+		}
+	}
+	return cleaned
+}
+
+func formatABCThesaurusContent(senses []abcThesaurusSense) string {
+	if len(senses) == 0 {
+		return ""
+	}
+	var output strings.Builder
+	output.WriteString(`<section class="thesaurus-usage-metadata"><h2>Formality and intensity</h2>`)
+	for _, sense := range senses {
+		if sense.Gloss == "" && len(sense.Synonyms)+len(sense.NearSynonyms)+len(sense.Antonyms) == 0 {
+			continue
+		}
+		output.WriteString(`<section class="thesaurus-usage-sense">`)
+		if sense.PartOfSpeech != "" {
+			fmt.Fprintf(&output, `<span class="part-of-speech">%s</span> `, escapeHTML(sense.PartOfSpeech))
+		}
+		if sense.Gloss != "" {
+			fmt.Fprintf(&output, `<p>%s</p>`, escapeHTML(sense.Gloss))
+		}
+		writeABCThesaurusRelation(&output, "Synonyms", sense.Synonyms)
+		writeABCThesaurusRelation(&output, "Near synonyms", sense.NearSynonyms)
+		writeABCThesaurusRelation(&output, "Antonyms", sense.Antonyms)
+		output.WriteString(`</section>`)
+	}
+	output.WriteString(`<p class="thesaurus-attribution">Thesaurus data © <a href="https://abcthesaurus.com/" rel="noopener noreferrer">ABC Thesaurus</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="license noopener noreferrer">CC BY-SA 4.0</a>.</p></section>`)
+	return output.String()
+}
+
+func writeABCThesaurusRelation(output *strings.Builder, label string, words []abcThesaurusWord) {
+	if len(words) == 0 {
+		return
+	}
+	fmt.Fprintf(output, `<div class="thesaurus-usage-relation"><strong>%s:</strong> `, escapeHTML(label))
+	for index, item := range words {
+		if index > 0 {
+			output.WriteString(`, `)
+		}
+		fmt.Fprintf(output, `<a href="/direct/thesaurus/%s">%s</a>`, url.PathEscape(item.Word), escapeHTML(item.Word))
+		if item.Register != "" {
+			fmt.Fprintf(output, ` <span class="thesaurus-register">%s</span>`, escapeHTML(item.Register))
+		}
+		if item.Intensity != nil {
+			description := "same intensity"
+			if *item.Intensity < 0 {
+				description = "weaker"
+			} else if *item.Intensity > 0 {
+				description = "stronger"
+			}
+			fmt.Fprintf(output, ` <span class="thesaurus-intensity" aria-label="Intensity %d, %s">%+d (%s)</span>`, *item.Intensity, description, *item.Intensity, description)
+		}
+	}
+	output.WriteString(`</div>`)
 }
 
 type thesaurusEntry struct {
