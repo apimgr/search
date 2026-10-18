@@ -100,7 +100,7 @@ func TestRelatedSearchesProviderResponsesAreBoundedAndValidated(t *testing.T) {
 
 func TestRelatedSearchesBoundAndSanitizeSuggestions(t *testing.T) {
 	var body strings.Builder
-	body.WriteString(`["query",["line\nbreak",`)
+	body.WriteString(`["query",["line\nbreak","line\u0085break",`)
 	for index := range maximumRelatedSuggestions + 2 {
 		if index > 0 {
 			body.WriteByte(',')
@@ -116,7 +116,7 @@ func TestRelatedSearchesBoundAndSanitizeSuggestions(t *testing.T) {
 	if len(suggestions) != maximumRelatedSuggestions {
 		t.Fatalf("suggestion count = %d, want %d", len(suggestions), maximumRelatedSuggestions)
 	}
-	if suggestions[0] != "linebreak" {
+	if suggestions[0] != "linebreak" || suggestions[1] != "linebreak" {
 		t.Fatalf("control characters were not removed from suggestion: %q", suggestions[0])
 	}
 	for _, suggestion := range suggestions {

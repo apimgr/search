@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/apimgr/search/src/version"
@@ -275,7 +276,7 @@ func decodeRelatedResponse(reader io.Reader, destination any) error {
 
 func cleanRelatedSuggestion(suggestion string) string {
 	suggestion = strings.TrimSpace(strings.Map(func(character rune) rune {
-		if character < 0x20 || character == 0x7f {
+		if unicode.IsControl(character) {
 			return -1
 		}
 		return character

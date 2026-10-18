@@ -751,16 +751,16 @@ func TestAutocompleteProviderCachesAndSanitizesSuggestions(t *testing.T) {
 		if request.URL.Query().Get("q") != "test query" {
 			t.Errorf("autocomplete query = %q, want escaped query value", request.URL.Query().Get("q"))
 		}
-		return autocompleteTestResponse(request, http.StatusOK, `["test query",["alpha","line\nbreak",""] ]`), nil
+		return autocompleteTestResponse(request, http.StatusOK, `["test query",["alpha","line\nbreak","line\u0085break",""] ]`), nil
 	})
 
 	first := handler.fetchAutocompleteSuggestions(context.Background(), " test query ")
-	if len(first) != 2 || first[1] != "linebreak" {
+	if len(first) != 3 || first[1] != "linebreak" || first[2] != "linebreak" {
 		t.Fatalf("first suggestions = %q, want sanitized provider values", first)
 	}
 	first[0] = "caller mutation"
 	second := handler.fetchAutocompleteSuggestions(context.Background(), "TEST QUERY")
-	if requests != 1 || len(second) != 2 || second[0] != "alpha" {
+	if requests != 1 || len(second) != 3 || second[0] != "alpha" {
 		t.Fatalf("cached suggestions = %q after %d requests, want immutable one-hour cache", second, requests)
 	}
 	handler.autocompleteMu.Lock()
