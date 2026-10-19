@@ -6125,6 +6125,51 @@
 (function() {
     'use strict';
 
+    function updateChmodCalculator(root) {
+        var principals = [
+            {key: 'u', bits: [4, 2, 1]},
+            {key: 'g', bits: [4, 2, 1]},
+            {key: 'o', bits: [4, 2, 1]}
+        ];
+        var symbolic = '';
+        var digits = '';
+        principals.forEach(function(principal) {
+            var digit = 0;
+            principal.bits.forEach(function(bit) {
+                var input = root.querySelector('.chmod-toggle[data-principal="' + principal.key + '"][data-permission="' + (bit === 4 ? 'read' : bit === 2 ? 'write' : 'execute') + '"]');
+                if (input && input.checked) digit += bit;
+            });
+            digits += String(digit);
+            var digitOutput = root.querySelector('[data-chmod-digit="' + principal.key + '"]');
+            if (digitOutput) digitOutput.textContent = String(digit);
+            symbolic += (digit & 4 ? 'r' : '-') + (digit & 2 ? 'w' : '-') + (digit & 1 ? 'x' : '-');
+        });
+        var octal = root.querySelector('[data-chmod-octal]');
+        var symbolicOutput = root.querySelector('[data-chmod-symbolic]');
+        var command = root.querySelector('[data-chmod-command]');
+        var warning = root.querySelector('[data-chmod-warning]');
+        if (octal) octal.textContent = digits;
+        if (symbolicOutput) symbolicOutput.textContent = symbolic;
+        if (command) command.textContent = 'chmod ' + digits + ' filename';
+        if (warning) warning.hidden = digits !== '777';
+    }
+
+    document.querySelectorAll('[data-chmod-calculator] .chmod-toggle').forEach(function(input) {
+        input.disabled = false;
+    });
+
+    document.addEventListener('change', function(event) {
+        var target = event.target && (event.target.nodeType === 1 ? event.target : event.target.parentElement);
+        var input = target && target.closest('.chmod-toggle');
+        if (!input) return;
+        var root = input.closest('[data-chmod-calculator]');
+        if (root) updateChmodCalculator(root);
+    });
+})();
+
+(function() {
+    'use strict';
+
     function updateTimeline(form, index) {
         var select = form.querySelector('select[name="snapshot_id"]');
         var range = form.querySelector('input[type="range"]');

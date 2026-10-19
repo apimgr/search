@@ -4017,6 +4017,30 @@ func TestChmodHandlerPaths(t *testing.T) {
 	}
 }
 
+func TestChmodGridRendersLiveControlsAndDangerWarning(t *testing.T) {
+	h := NewChmodHandler()
+	for _, tc := range []struct {
+		mode       string
+		wantHidden bool
+	}{
+		{mode: "755", wantHidden: true},
+		{mode: "777", wantHidden: false},
+	} {
+		answer, err := h.HandleDirectQuery(context.Background(), tc.mode)
+		if err != nil {
+			t.Fatalf("HandleDirectQuery(%q): %v", tc.mode, err)
+		}
+		if got := strings.Count(answer.Content, `class="chmod-toggle"`); got != 9 {
+			t.Errorf("chmod %s rendered %d permission controls, want 9", tc.mode, got)
+		}
+		hasWarning := strings.Contains(answer.Content, "data-chmod-warning") && strings.Contains(answer.Content, "unsafe for most files")
+		warningVisible := hasWarning && !strings.Contains(answer.Content, `data-chmod-warning role="status" hidden`)
+		if warningVisible != !tc.wantHidden {
+			t.Errorf("chmod %s warning visible=%t, want %t", tc.mode, warningVisible, !tc.wantHidden)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // beautifyJSON — escaped char path (the \\ branch in string context)
 // ---------------------------------------------------------------------------

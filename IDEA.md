@@ -1015,6 +1015,8 @@ chmod:u+x,g+r
 - Symbolic notation (rwx)
 - Visual permission grid (owner/group/other × read/write/execute)
 - Interactive toggle to modify
+- Changing the permission grid recalculates the octal and symbolic values, copyable command, and security warning immediately
+- Without JavaScript, keep the current values and warnings readable and disable the inactive toggles
 - Explanation of what each permission means
 - Common use cases for this permission set
 - Security warnings (e.g., 777 is dangerous)

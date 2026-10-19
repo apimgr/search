@@ -1172,6 +1172,48 @@ func TestBrowserLocalDirectAnswerFeatures(t *testing.T) {
 	}
 }
 
+func TestBrowserChmodPermissionGridUpdatesOutput(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var octal, symbolic, command string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/direct/chmod/700"),
+		chromedp.WaitVisible(`[data-chmod-calculator]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="g"][data-permission="read"]`, chromedp.ByQuery),
+		chromedp.Text(`[data-chmod-octal]`, &octal, chromedp.ByQuery),
+		chromedp.Text(`[data-chmod-symbolic]`, &symbolic, chromedp.ByQuery),
+		chromedp.Text(`[data-chmod-command]`, &command, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("update chmod grid: %v", err)
+	}
+	if octal != "740" || symbolic != "rwxr-----" || command != "chmod 740 filename" {
+		t.Errorf("chmod grid outputs = octal %q symbolic %q command %q, want 740 rwxr----- chmod 740 filename", octal, symbolic, command)
+	}
+	for _, selector := range []string{
+		`.chmod-toggle[data-principal="g"][data-permission="write"]`,
+		`.chmod-toggle[data-principal="g"][data-permission="execute"]`,
+		`.chmod-toggle[data-principal="o"][data-permission="read"]`,
+		`.chmod-toggle[data-principal="o"][data-permission="write"]`,
+		`.chmod-toggle[data-principal="o"][data-permission="execute"]`,
+	} {
+		if err := chromedp.Run(ctx, chromedp.Click(selector, chromedp.ByQuery)); err != nil {
+			t.Fatalf("enable permission %s: %v", selector, err)
+		}
+	}
+	var warningVisible bool
+	if err := chromedp.Run(ctx,
+		chromedp.Text(`[data-chmod-octal]`, &octal, chromedp.ByQuery),
+		chromedp.Evaluate(`!document.querySelector('[data-chmod-warning]').hidden`, &warningVisible),
+	); err != nil {
+		t.Fatalf("read chmod security warning: %v", err)
+	}
+	if octal != "777" || !warningVisible {
+		t.Errorf("chmod mode = %q with warning visible=%t, want 777 with warning", octal, warningVisible)
+	}
+	requireNoFailures(t, pf, "interactive chmod calculator")
+}
+
 func TestBrowserArchiveTimelineSliderUpdatesSelection(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

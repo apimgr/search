@@ -433,6 +433,13 @@ func TestSSRLocalDirectAnswerFeatures(t *testing.T) {
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, body)
 			assertFormatterHighlighting(t, tc.typeName, tc.path, body)
+			if tc.typeName == "chmod" {
+				for _, marker := range []string{`data-chmod-calculator`, `class="chmod-toggle"`, `data-chmod-octal`, `data-chmod-symbolic`, `data-chmod-command`} {
+					if !strings.Contains(body, marker) {
+						t.Errorf("%s SSR output missing chmod control %q", tc.name, marker)
+					}
+				}
+			}
 			if tc.typeName == "man" {
 				assertManPageControls(t, body)
 			}

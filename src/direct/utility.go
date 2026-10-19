@@ -729,31 +729,44 @@ func symbolicToPerm(s string) int {
 
 func formatChmodContent(octal, symbolic string, owner, group, other int) string {
 	var html strings.Builder
-	html.WriteString("<div class=\"chmod-content\">")
+	html.WriteString("<div class=\"chmod-content\" data-chmod-calculator>")
 	html.WriteString("<h1>chmod Calculator</h1>")
 
 	// Display both formats
 	html.WriteString("<div class=\"chmod-display\">")
-	fmt.Fprintf(&html, "<div class=\"octal\"><span class=\"label\">Octal</span><code>%s</code></div>", octal)
-	fmt.Fprintf(&html, "<div class=\"symbolic\"><span class=\"label\">Symbolic</span><code>%s</code></div>", symbolic)
+	fmt.Fprintf(&html, "<div class=\"octal\"><span class=\"label\">Octal</span><code data-chmod-octal>%s</code></div>", octal)
+	fmt.Fprintf(&html, "<div class=\"symbolic\"><span class=\"label\">Symbolic</span><code data-chmod-symbolic>%s</code></div>", symbolic)
 	html.WriteString("</div>")
+	warningHidden := " hidden"
+	if octal == "777" {
+		warningHidden = ""
+	}
+	fmt.Fprintf(&html, `<p class="chmod-warning" data-chmod-warning role="status"%s>Mode 777 grants everyone full access and is unsafe for most files.</p>`, warningHidden)
 
 	// Permission grid
 	html.WriteString("<h2>Permission Grid</h2>")
 	html.WriteString("<table class=\"chmod-table\">")
-	html.WriteString("<thead><tr><th></th><th>Read (4)</th><th>Write (2)</th><th>Execute (1)</th><th>Value</th></tr></thead>")
+	html.WriteString("<thead><tr><th scope=\"col\">Principal</th><th scope=\"col\">Read (4)</th><th scope=\"col\">Write (2)</th><th scope=\"col\">Execute (1)</th><th scope=\"col\">Value</th></tr></thead>")
 	html.WriteString("<tbody>")
 
 	for _, row := range []struct {
 		name string
+		who  string
 		perm int
-	}{{"Owner", owner}, {"Group", group}, {"Other", other}} {
+	}{{"Owner", "u", owner}, {"Group", "g", group}, {"Other", "o", other}} {
 		html.WriteString("<tr>")
 		fmt.Fprintf(&html, "<td><strong>%s</strong></td>", row.name)
-		fmt.Fprintf(&html, "<td>%s</td>", checkMark(row.perm&4 != 0))
-		fmt.Fprintf(&html, "<td>%s</td>", checkMark(row.perm&2 != 0))
-		fmt.Fprintf(&html, "<td>%s</td>", checkMark(row.perm&1 != 0))
-		fmt.Fprintf(&html, "<td><code>%d</code></td>", row.perm)
+		for _, permission := range []struct {
+			name string
+			bit  int
+		}{{"read", 4}, {"write", 2}, {"execute", 1}} {
+			checked := ""
+			if row.perm&permission.bit != 0 {
+				checked = " checked"
+			}
+			fmt.Fprintf(&html, `<td><input type="checkbox" class="chmod-toggle" data-principal="%s" data-permission="%s" aria-label="%s %s" disabled%s></td>`, row.who, permission.name, row.name, permission.name, checked)
+		}
+		fmt.Fprintf(&html, `<td><code data-chmod-digit="%s">%d</code></td>`, row.who, row.perm)
 		html.WriteString("</tr>")
 	}
 
@@ -761,7 +774,7 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 
 	// Usage
 	html.WriteString("<h2>Usage</h2>")
-	fmt.Fprintf(&html, "<pre><code>chmod %s filename</code></pre>", octal)
+	fmt.Fprintf(&html, "<pre><code data-chmod-command>chmod %s filename</code></pre>", octal)
 	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 
 	// Common permissions
@@ -776,13 +789,6 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 
 	html.WriteString("</div>")
 	return html.String()
-}
-
-func checkMark(enabled bool) string {
-	if enabled {
-		return "✓"
-	}
-	return "✗"
 }
 
 // RegexHandler handles regex:{pattern} queries

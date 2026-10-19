@@ -361,6 +361,7 @@ var localDirectAnswerPages = []struct {
 	{"port reference", "/direct/port/443", "port"},
 	{"cron explainer", "/direct/cron/%2A%2F5%20%2A%20%2A%20%2A%20%2A", "cron"},
 	{"permission calculator", "/direct/chmod/755", "chmod"},
+	{"dangerous permission warning", "/direct/chmod/777", "chmod"},
 	{"timestamp converter", "/direct/timestamp/1704067200", "timestamp"},
 	{"subnet calculator", "/direct/subnet/192.168.1.0%2F24", "subnet"},
 	{"html entity converter", "/direct/html/encode%20%3Cscript%3E", "html"},
@@ -434,6 +435,16 @@ var localDirectAnswerPages = []struct {
 
 func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	t.Helper()
+	if typeName == "chmod" {
+		for _, marker := range []string{"Permission Grid", "Octal", "Symbolic"} {
+			if !strings.Contains(answer, marker) {
+				t.Errorf("chmod answer missing grid content %q", marker)
+			}
+		}
+		if strings.Contains(path, "/777") && !strings.Contains(answer, "unsafe for most files") {
+			t.Error("chmod 777 answer is missing its security warning")
+		}
+	}
 	if strings.Contains(path, "--word%20old") {
 		for _, want := range []string{"old", "new", "Unified diff", "Copy diff", "Original", "Modified"} {
 			if !strings.Contains(answer, want) {

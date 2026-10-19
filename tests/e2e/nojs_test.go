@@ -686,9 +686,11 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 				t.Fatalf("no-JS %s navigation: %v", tc.name, err)
 			}
 			var pageHTML string
+			var chmodControlsDisabled bool
 			if err := chromedp.Run(ctx,
 				chromedp.OuterHTML("html", &pageHTML),
 				chromedp.Evaluate(`document.querySelector('.direct-content')?.innerText || ''`, &answerText),
+				chromedp.Evaluate(`(() => { const controls = [...document.querySelectorAll('.chmod-toggle')]; return controls.length === 9 && controls.every(control => control.disabled); })()`, &chmodControlsDisabled),
 			); err != nil {
 				t.Fatalf("no-JS %s page: %v", tc.name, err)
 			}
@@ -700,6 +702,12 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, answerText)
 			assertFormatterHighlighting(t, tc.typeName, tc.path, pageHTML)
+			if tc.typeName == "chmod" && strings.Count(pageHTML, `class="chmod-toggle"`) != 9 {
+				t.Errorf("no-JS %s rendered %d permission controls, want 9", tc.name, strings.Count(pageHTML, `class="chmod-toggle"`))
+			}
+			if tc.typeName == "chmod" && !chmodControlsDisabled {
+				t.Errorf("no-JS %s did not leave all nine permission controls disabled", tc.name)
+			}
 			if tc.typeName == "man" {
 				assertManPageControls(t, pageHTML)
 			}
