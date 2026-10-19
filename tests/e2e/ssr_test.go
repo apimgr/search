@@ -430,6 +430,7 @@ func TestSSRLocalDirectAnswerFeatures(t *testing.T) {
 				t.Errorf("%s SSR output has no substantial answer content", tc.name)
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, body)
+			assertFormatterHighlighting(t, tc.typeName, tc.path, body)
 			if tc.typeName == "man" {
 				assertManPageControls(t, body)
 			}

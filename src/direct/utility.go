@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/search/src/common/i18n"
 )
@@ -1051,10 +1052,22 @@ func base64URLDecode(s string) ([]byte, error) {
 }
 
 func truncateString(s string, max int) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
+	if max < 0 {
+		max = 0
+	}
 	if len(s) <= max {
 		return s
 	}
-	return s[:max] + "..."
+	cut := 0
+	for cut < len(s) {
+		_, size := utf8.DecodeRuneInString(s[cut:])
+		if cut+size > max {
+			break
+		}
+		cut += size
+	}
+	return s[:cut] + "..."
 }
 
 func formatJWTContent(header, payload string, expired bool, expiresIn string, claims map[string]interface{}) string {

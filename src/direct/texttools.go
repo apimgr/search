@@ -2202,11 +2202,11 @@ func formatBeautifyContent(input, output, lang, indent, style, minified string) 
 	fmt.Fprintf(&html, "<p class=\"formatter-style\">Style: %s</p>", escapeHTML(style))
 
 	html.WriteString("<h2>Formatted Code</h2>")
-	fmt.Fprintf(&html, "<pre class=\"code %s\"><code>%s</code></pre>", escapeHTML(lang), escapeHTML(output))
+	fmt.Fprintf(&html, "<pre class=\"code %s\"><code>%s</code></pre>", escapeHTML(lang), highlightFormattedCode(output, lang))
 	html.WriteString("<button type=\"button\" class=\"copy-btn\">Copy</button>")
 	if minified != "" {
 		html.WriteString("<details class=\"minified-code\"><summary>Minified output</summary>")
-		html.WriteString("<pre><code>" + escapeHTML(minified) + "</code></pre></details>")
+		html.WriteString("<pre><code>" + highlightFormattedCode(minified, lang) + "</code></pre></details>")
 	}
 	html.WriteString("<p class=\"formatter-options\">Options: prefix the source with <code>--indent=2</code>, <code>--indent=4</code>, or <code>--indent=tab</code>. Use <code>--style=allman</code> or <code>--style=kr</code> for JavaScript, TypeScript, and PHP; <code>--style=expanded</code> or <code>--style=compact</code> for CSS, SCSS, LESS, HTML, and XML; <code>--style=pretty</code> or <code>--style=compact</code> for JSON; and <code>--style=uppercase</code> or <code>--style=lowercase</code> for SQL. Python uses <code>pep8</code>. <code>--minify</code> is also available where supported.</p>")
 

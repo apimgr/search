@@ -227,7 +227,7 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 			body = "# curl\n> Transfer data from or to a server.\n\n- Download the contents of a URL:\n`curl {{https://example.com}}`\n"
 		}
 	case "man.cx":
-		body = `{"name":"printf","section":"1","description":"Format and print data","content":"<div class=\"manual\"><h1>NAME</h1><p>printf - format and print data</p><div class=\"section\"><h2>SYNOPSIS</h2><pre><code>printf FORMAT [ARGUMENT]...</code></pre></div><div class=\"section\"><h2>SEE ALSO</h2><p><a href=\"https://man.cx/echo\">echo(1)</a></p></div></div>"}`
+		body = `{"name":"printf","section":"1","description":"Format and print data","content":"<div class=\"manual\"><h1>NAME</h1><p>printf - format and print data</p><div class=\"section\"><h2>SYNOPSIS</h2><pre><code>printf FORMAT [ARGUMENT]...</code></pre></div><div class=\"section\"><h2>SEE ALSO</h2><pre><code>echo \"hi\" --quiet</code></pre><p><a href=\"https://man.cx/echo\">echo(1)</a></p></div></div>"}`
 	case "cheat.sh":
 		body = "Show the current directory:\npwd\n"
 	case "datatracker.ietf.org":
@@ -437,7 +437,8 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 				t.Error("PHP heredoc formatter changed the literal's significant spaces")
 			}
 		case strings.Contains(path, "style=allman"):
-			if !strings.Contains(answer, "Style: allman") || !strings.Contains(answer, "function f()\n{") {
+			plain := stripSyntaxTokens(answer)
+			if !strings.Contains(plain, "Style: allman") || !strings.Contains(plain, "function f()\n{") {
 				t.Error("Allman formatter output is missing its style or brace placement")
 			}
 		case strings.Contains(path, "style=compact"):
@@ -445,7 +446,8 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 				t.Error("compact formatter output is missing its style or contains line breaks")
 			}
 		case strings.Contains(path, "style=lowercase"):
-			if !strings.Contains(answer, "Style: lowercase") || !strings.Contains(answer, "select ID") {
+			plain := stripSyntaxTokens(answer)
+			if !strings.Contains(plain, "Style: lowercase") || !strings.Contains(plain, "select ID") {
 				t.Error("lowercase SQL formatter did not lowercase keywords while preserving identifiers")
 			}
 		}
@@ -566,9 +568,23 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	}
 }
 
+func assertFormatterHighlighting(t *testing.T, typeName, path, markup string) {
+	t.Helper()
+	if typeName == "beautify" && strings.Contains(path, "beautify/js%20function") && (!strings.Contains(markup, `class="syntax-keyword"`) || !strings.Contains(markup, `class="syntax-number"`)) {
+		t.Error("formatted JavaScript is missing syntax highlighting")
+	}
+}
+
+func stripSyntaxTokens(markup string) string {
+	for _, kind := range []string{"keyword", "string", "comment", "number", "tag", "variable"} {
+		markup = strings.ReplaceAll(markup, `<span class="syntax-`+kind+`">`, "")
+	}
+	return strings.ReplaceAll(markup, "</span>", "")
+}
+
 func assertManPageControls(t *testing.T, markup string) {
 	t.Helper()
-	for _, required := range []string{`class="man-toc"`, `aria-label="Manual section"`, `<details class="man-section">`, `data-man-search`, `data-man-copy`, `id="man-see-also-3"`, "echo(1)"} {
+	for _, required := range []string{`class="man-toc"`, `aria-label="Manual section"`, `<details class="man-section">`, `data-man-search`, `data-man-copy`, `id="man-see-also-3"`, `class="man-token-command"`, `class="man-token-string"`, `class="man-token-option"`, "echo(1)"} {
 		if !strings.Contains(markup, required) {
 			t.Errorf("man page missing control or anchor %q: %s", required, markup)
 		}

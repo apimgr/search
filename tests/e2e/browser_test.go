@@ -1145,18 +1145,23 @@ func TestBrowserLocalDirectAnswerFeatures(t *testing.T) {
 				t.Errorf("browser %s answer is empty or incomplete: %q", tc.name, answerText)
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, answerText)
+			assertFormatterHighlighting(t, tc.typeName, tc.path, pageHTML)
 			if tc.typeName == "man" {
 				assertManPageControls(t, pageHTML)
 				var seeAlsoHidden, detailsOpen, detailsCanCollapse bool
+				var modernCopy, fallbackCopy string
 				if err := chromedp.Run(ctx,
 					chromedp.Evaluate(`(() => { const field = document.querySelector('[data-man-search]'); field.value = 'SEE ALSO'; field.dispatchEvent(new Event('input', {bubbles:true})); return document.querySelector('#man-name-1').closest('.man-section').hidden; })()`, &seeAlsoHidden),
 					chromedp.Evaluate(`document.querySelector('#man-see-also-3').closest('details').open`, &detailsOpen),
+					chromedp.Evaluate(`(() => { window.__manCopied = ''; Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText: async text => {window.__manCopied = text;}}}); document.querySelector('#man-see-also-3').closest('details').querySelector('[data-man-copy]').click(); return true; })()`, nil),
+					chromedp.Evaluate(`window.__manCopied`, &modernCopy),
+					chromedp.Evaluate(`(() => { window.__manCopiedFallback = ''; Object.defineProperty(navigator, 'clipboard', {configurable:true, value:undefined}); document.execCommand = command => {window.__manCopiedFallback = document.activeElement.value; return command === 'copy';}; document.querySelector('#man-see-also-3').closest('details').querySelector('[data-man-copy]').click(); return window.__manCopiedFallback; })()`, &fallbackCopy),
 					chromedp.Evaluate(`(() => { const details = document.querySelector('#man-see-also-3').closest('details'); details.querySelector('summary').click(); return !details.open; })()`, &detailsCanCollapse),
 				); err != nil {
 					t.Fatalf("man page controls: %v", err)
 				}
-				if !seeAlsoHidden || !detailsOpen || !detailsCanCollapse {
-					t.Errorf("man page search/collapse behavior = hidden %v, search-open %v, native-collapse %v", seeAlsoHidden, detailsOpen, detailsCanCollapse)
+				if !seeAlsoHidden || !detailsOpen || !detailsCanCollapse || modernCopy != `echo "hi" --quiet` || fallbackCopy != modernCopy {
+					t.Errorf("man page interaction state = hidden %v, search-open %v, native-collapse %v, modern-copy %q, fallback-copy %q", seeAlsoHidden, detailsOpen, detailsCanCollapse, modernCopy, fallbackCopy)
 				}
 			}
 			if strings.Contains(tc.name, "Wikipedia") {

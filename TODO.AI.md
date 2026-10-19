@@ -384,6 +384,10 @@ crates.io and RubyGems now omit malformed negative lifetime download totals as u
 
 npm package details retain valid name/version data when optional description, timestamp, license, repository, README, or dependency fields have malformed types. Invalid optional values are omitted; offline handler coverage exercises the malformed metadata together. PyPI likewise isolates summary, description, license, repository, release timestamp, content type, and requirement fields. Go proxy timestamps, crates.io optional fields, and RubyGems optional details now tolerate malformed types; invalid dependency entries are skipped and repository fallback is deterministic. Offline handler fixtures verify core package identity and valid sibling metadata survive these malformed fields.
 
+npm weekly download metrics now use the shared bounded cache with 24-hour successful values and five-minute unavailable entries; offline tests verify both paths avoid repeating the optional provider request.
+
+Shared text truncation now normalizes invalid UTF-8, never splits a multibyte character, and safely handles negative bounds; direct utility regression cases cover byte-boundary truncation. Continue checking registry parsers for other malformed and incomplete metadata paths.
+
 Wikipedia summary requests now reject non-success status codes and preserve valid article title/extract data when optional description, thumbnail, or page URL metadata has malformed types. Offline transport fixtures cover both malformed optional metadata and provider errors.
 
 The instant dictionary handler now merges every provider record so homographs and additional parts of speech remain visible, caps JSON responses at 1 MiB, and refuses redirects. Regression tests cover merged meanings, oversized bodies, and redirect rejection; the shared deterministic dictionary fixture now includes a second entry so SSR, no-JS, and browser tiers assert both records.
@@ -402,7 +406,9 @@ Thesaurus results now add ABC Thesaurus per-sense register and −2..+2 intensit
 
 PHP formatting now masks heredoc and nowdoc literals before code formatting and restores them after style/indent processing, preserving their exact contents and interpolation syntax. Regression coverage checks both heredoc forms with indentation, Allman style, and minification; continue auditing other malformed and multiline language cases.
 
-Man pages now render a contents index linked to stable heading IDs, native collapsible sections, section 1–8 query links, in-page section search, and copy controls for preformatted examples. Preformatted examples receive escaped syntax styling for command names, flags, variables, and quoted strings. SEE ALSO links remain sanitized and visible. Offline SSR/no-JS/browser scenarios verify the page structure; browser coverage checks search filtering, auto-opening a matching section, and native collapse. Remaining Direct Answers gaps are still being audited.
+Man pages now render a contents index linked to stable heading IDs, native collapsible sections, section 1–8 query links, in-page section search, and copy controls for preformatted examples. Preformatted examples receive escaped syntax styling for command names, flags, variables, and quoted strings; copy works through the Clipboard API with a legacy local fallback. SEE ALSO links remain sanitized and visible. Offline SSR/no-JS/browser scenarios verify the page structure; browser coverage checks search filtering, auto-opening a matching section, native collapse, and both clipboard paths. Remaining Direct Answers gaps are still being audited.
+
+The formatter now syntax-highlights JavaScript/TypeScript, PHP, Python, SQL, CSS/SCSS/LESS, JSON, and HTML/XML code using escaped language-aware tokens. Unit fixtures cover tags, comments, strings, numbers, and keywords; the three-tier direct-answer scenario asserts highlighted output.
 
 Action: complete the remaining IDEA.md subfeatures without inventing upstream data; add evidence-backed threat checks; add offline handler-path tests for completed behavior.
 

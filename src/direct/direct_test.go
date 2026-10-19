@@ -1760,6 +1760,10 @@ func TestTruncateString(t *testing.T) {
 		{"exact_length", "hello", 5, "hello"},
 		{"truncate", "hello world", 8, "hello wo..."},
 		{"empty", "", 5, ""},
+		{"multibyte_boundary", "a🍎b", 4, "a..."},
+		{"multibyte_prefix", "ééx", 3, "é..."},
+		{"invalid_utf8", "abc\xffdef", 4, "abc..."},
+		{"negative_limit", "hello", -1, "..."},
 		// truncateString("hello", 0): len("hello")=5 > 0, so "hello"[:0]+"..." = "..."
 		{"max_0", "hello", 0, "..."},
 	}
@@ -1768,6 +1772,39 @@ func TestTruncateString(t *testing.T) {
 			got := truncateString(tt.input, tt.max)
 			if got != tt.want {
 				t.Errorf("truncateString(%q, %d) = %q, want %q", tt.input, tt.max, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHighlightFormattedCodeEscapesAndHighlightsSupportedLanguages(t *testing.T) {
+	tests := []struct {
+		language string
+		source   string
+		markers  []string
+	}{
+		{"javascript", "function greet(){return \"<script>\"; // note\n}", []string{`class="syntax-keyword">function</span>`, `class="syntax-string">&#34;&lt;script&gt;&#34;</span>`, `class="syntax-comment">// note</span>`}},
+		{"python", "def greet():\n    return '''hello\nworld'''", []string{`class="syntax-keyword">def</span>`, `class="syntax-string">&#39;&#39;&#39;hello`}},
+		{"typescript", `interface User { readonly id: number }`, []string{`class="syntax-keyword">interface</span>`, `class="syntax-keyword">readonly</span>`}},
+		{"php", `<?php ECHO "safe"; ?>`, []string{`class="syntax-keyword">ECHO</span>`, `class="syntax-string">&#34;safe&#34;</span>`}},
+		{"sql", `SELECT name FROM users WHERE id = 12 AND active = true`, []string{`class="syntax-keyword">SELECT</span>`, `class="syntax-number">12</span>`, `class="syntax-keyword">true</span>`}},
+		{"html", `<script title="x">alert(1)</script>`, []string{`class="syntax-tag">&lt;script title=&#34;x&#34;&gt;</span>`, `class="syntax-number">1</span>`}},
+		{"xml", `<node value="safe"/>`, []string{`class="syntax-tag">&lt;node value=&#34;safe&#34;/&gt;</span>`}},
+		{"css", `.card{color:"red";}`, []string{`class="syntax-string">&#34;red&#34;</span>`}},
+		{"scss", `$color: red; .card { color: $color; }`, []string{`class="syntax-variable">$color</span>`}},
+		{"less", `@color: "red";`, []string{`class="syntax-string">&#34;red&#34;</span>`}},
+		{"json", `{"enabled":true,"count":3}`, []string{`class="syntax-string">&#34;enabled&#34;</span>`, `class="syntax-keyword">true</span>`, `class="syntax-number">3</span>`}},
+	}
+	for _, test := range tests {
+		t.Run(test.language, func(t *testing.T) {
+			got := highlightFormattedCode(test.source, test.language)
+			for _, marker := range test.markers {
+				if !strings.Contains(got, marker) {
+					t.Errorf("highlighted %s is missing %q: %s", test.language, marker, got)
+				}
+			}
+			if strings.Contains(got, "<script") {
+				t.Errorf("highlighted %s emitted executable markup: %s", test.language, got)
 			}
 		})
 	}

@@ -671,6 +671,7 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 				t.Errorf("no-JS %s answer is empty or incomplete: %q", tc.name, answerText)
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, answerText)
+			assertFormatterHighlighting(t, tc.typeName, tc.path, pageHTML)
 			if tc.typeName == "man" {
 				assertManPageControls(t, pageHTML)
 			}

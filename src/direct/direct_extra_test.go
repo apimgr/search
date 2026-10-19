@@ -1952,6 +1952,7 @@ func (pypiMetadataTransport) RoundTrip(request *http.Request) (*http.Response, e
 }
 
 func TestPkgHandlerNPMMetadataIsRenderedSafely(t *testing.T) {
+	clearPackageDownloadsCache("npm:sample")
 	handler := NewPkgHandler()
 	handler.client = &http.Client{Transport: npmMetadataTransport{}}
 	answer, err := handler.HandleDirectQuery(context.Background(), "npm/sample")
@@ -1963,6 +1964,63 @@ func TestPkgHandlerNPMMetadataIsRenderedSafely(t *testing.T) {
 	}
 	if !strings.Contains(answer.Content, "1234") || !strings.Contains(answer.Content, "README preview") || !strings.Contains(answer.Content, "&lt;script&gt;") || strings.Contains(answer.Content, "<script>") {
 		t.Fatalf("metadata or escaped README missing from content: %s", answer.Content)
+	}
+}
+
+type npmWeeklyDownloadsTransport struct {
+	requests *int
+	status   int
+}
+
+func (transport npmWeeklyDownloadsTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	*transport.requests++
+	status := transport.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	body := `{"downloads":6789}`
+	if status != http.StatusOK {
+		body = `{}`
+	}
+	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+}
+
+func TestNPMWeeklyDownloadsCacheSuccessAndProviderFailure(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		status        int
+		wantCount     int
+		wantAvailable bool
+	}{
+		{name: "success", wantCount: 6789, wantAvailable: true},
+		{name: "failure is briefly cached", status: http.StatusServiceUnavailable, wantAvailable: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cacheKey := "npm:weekly-cache-" + strings.ReplaceAll(test.name, " ", "-")
+			packageDownloadsCache.Lock()
+			delete(packageDownloadsCache.entries, cacheKey)
+			packageDownloadsCache.Unlock()
+			requests := 0
+			handler := NewPkgHandler()
+			handler.client = &http.Client{Transport: npmWeeklyDownloadsTransport{requests: &requests, status: test.status}}
+			for attempt := 0; attempt < 2; attempt++ {
+				count, err := handler.fetchNPMWeeklyDownloads(context.Background(), strings.TrimPrefix(cacheKey, "npm:"))
+				if test.wantAvailable {
+					if err != nil || count != test.wantCount {
+						t.Fatalf("fetch attempt %d = %d, %v; want %d", attempt+1, count, err, test.wantCount)
+					}
+				} else if err == nil {
+					t.Fatalf("fetch attempt %d unexpectedly succeeded with %d", attempt+1, count)
+				}
+			}
+			if requests != 1 {
+				t.Fatalf("weekly statistics requests = %d, want 1 after caching", requests)
+			}
+			cached, ok, available := cachedPackageDownloads(cacheKey)
+			if !ok || available != test.wantAvailable || test.wantAvailable && cached != test.wantCount {
+				t.Fatalf("cached value = %d, present %v, available %v", cached, ok, available)
+			}
+		})
 	}
 }
 
@@ -1978,6 +2036,7 @@ func (npmMalformedMetadataTransport) RoundTrip(request *http.Request) (*http.Res
 }
 
 func TestPkgHandlerIgnoresMalformedOptionalNpmMetadata(t *testing.T) {
+	clearPackageDownloadsCache("npm:sample")
 	handler := NewPkgHandler()
 	handler.client = &http.Client{Transport: npmMalformedMetadataTransport{}}
 	answer, err := handler.HandleDirectQuery(context.Background(), "npm/sample")
@@ -2096,6 +2155,7 @@ func (npmOptionalFailureTransport) RoundTrip(request *http.Request) (*http.Respo
 }
 
 func TestPkgHandlerKeepsCoreMetadataWhenOptionalNPMStatsFail(t *testing.T) {
+	clearPackageDownloadsCache("npm:sample")
 	handler := NewPkgHandler()
 	handler.client = &http.Client{Transport: npmOptionalFailureTransport{}}
 	answer, err := handler.HandleDirectQuery(context.Background(), "npm/sample")
@@ -2108,6 +2168,12 @@ func TestPkgHandlerKeepsCoreMetadataWhenOptionalNPMStatsFail(t *testing.T) {
 	if !strings.Contains(answer.Content, "1.2.3") || !strings.Contains(answer.Content, "Unavailable") {
 		t.Fatalf("answer did not retain core metadata and explain unavailable stats: %s", answer.Content)
 	}
+}
+
+func clearPackageDownloadsCache(key string) {
+	packageDownloadsCache.Lock()
+	delete(packageDownloadsCache.entries, key)
+	packageDownloadsCache.Unlock()
 }
 
 type packageOptionalFailureTransport struct{}

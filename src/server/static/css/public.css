@@ -7614,7 +7614,14 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 .man-token-variable { color: var(--color-warning-text); }
 .man-token-string { color: var(--color-success); }
 .man-copy-button { margin-block: 0.25rem 0.75rem; }
+.man-copy-buffer { position: fixed; inset-inline-start: -10000px; inset-block-start: 0; }
 .man-content mark { background: var(--color-warning-bg); color: var(--color-text); }
+.syntax-keyword { color: var(--color-primary); font-weight: 650; }
+.syntax-string { color: var(--color-success); }
+.syntax-comment { color: var(--color-muted); font-style: italic; }
+.syntax-number { color: var(--color-info); }
+.syntax-tag { color: var(--color-secondary); }
+.syntax-variable { color: var(--color-warning-text); }
 
 .archive-timeline {
     display: grid;

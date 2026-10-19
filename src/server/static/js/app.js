@@ -4300,11 +4300,34 @@
         var block = button.previousElementSibling;
         var code = block && block.matches('pre') ? block.querySelector('code') : null;
         var text = code ? code.textContent : (block && block.matches('pre') ? block.textContent : '');
-        if (!navigator.clipboard || !navigator.clipboard.writeText) return;
-        navigator.clipboard.writeText(text).then(function () {
+        var legacyCopy = function () {
+            var buffer = document.createElement('textarea');
+            buffer.className = 'man-copy-buffer';
+            buffer.value = text;
+            buffer.setAttribute('aria-hidden', 'true');
+            buffer.tabIndex = -1;
+            document.body.appendChild(buffer);
+            buffer.select();
+            var copied = false;
+            try { copied = document.execCommand('copy'); } catch (error) {}
+            buffer.remove();
+            return copied;
+        };
+        var copyPromise;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                copyPromise = navigator.clipboard.writeText(text).then(function () { return true; }).catch(legacyCopy);
+            } catch (error) {
+                copyPromise = Promise.resolve(legacyCopy());
+            }
+        } else {
+            copyPromise = Promise.resolve(legacyCopy());
+        }
+        copyPromise.then(function (copied) {
+            if (!copied) return;
             button.textContent = 'Copied';
             window.setTimeout(function () { button.textContent = 'Copy'; }, 1500);
-        }).catch(function () {});
+        });
     });
 })();
 

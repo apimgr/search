@@ -1262,8 +1262,8 @@ type PkgHandler struct {
 
 var packageDownloadsCache = struct {
 	sync.Mutex
-	entries map[string]pypiDownloadCacheEntry
-}{entries: make(map[string]pypiDownloadCacheEntry)}
+	entries map[string]packageDownloadCacheEntry
+}{entries: make(map[string]packageDownloadCacheEntry)}
 
 var packageReadmeCache = struct {
 	sync.Mutex
@@ -1275,8 +1275,9 @@ type packageReadmeCacheEntry struct {
 	expiresAt time.Time
 }
 
-type pypiDownloadCacheEntry struct {
+type packageDownloadCacheEntry struct {
 	weeklyDownloads int
+	available       bool
 	expiresAt       time.Time
 }
 
@@ -1419,13 +1420,9 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 	_ = json.Unmarshal(pkg.Repository, &npmRepository)
 	repository := ""
 	decodeOptionalJSONString(npmRepository.URL, &repository)
-	var downloads struct {
-		Downloads *int `json:"downloads"`
-	}
-	weeklyDownloads := interface{}(nil)
-	downloadURL := "https://api.npmjs.org/downloads/point/last-week/" + url.PathEscape(name)
-	if err := h.fetchPackageJSON(ctx, downloadURL, &downloads); err == nil && downloads.Downloads != nil && *downloads.Downloads >= 0 {
-		weeklyDownloads = *downloads.Downloads
+	var weeklyDownloads interface{}
+	if count, err := h.fetchNPMWeeklyDownloads(ctx, name); err == nil {
+		weeklyDownloads = count
 	}
 	var npmVersions map[string]struct {
 		Dependencies json.RawMessage `json:"dependencies"`
@@ -1462,6 +1459,32 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 		SourceURL:   fmt.Sprintf("https://www.npmjs.com/package/%s", url.PathEscape(name)),
 		Data:        data,
 	}, nil
+}
+
+func (h *PkgHandler) fetchNPMWeeklyDownloads(ctx context.Context, name string) (int, error) {
+	cacheKey := "npm:" + strings.ToLower(strings.TrimSpace(name))
+	if count, cached, available := cachedPackageDownloads(cacheKey); cached {
+		if available {
+			return count, nil
+		}
+		return 0, fmt.Errorf("npm weekly download statistics are temporarily unavailable")
+	}
+	var response struct {
+		Downloads *int `json:"downloads"`
+	}
+	apiURL := "https://api.npmjs.org/downloads/point/last-week/" + url.PathEscape(name)
+	if err := h.fetchPackageJSON(ctx, apiURL, &response); err != nil {
+		if ctx.Err() == nil {
+			cachePackageDownloadFailure(cacheKey)
+		}
+		return 0, err
+	}
+	if response.Downloads == nil || *response.Downloads < 0 {
+		cachePackageDownloadFailure(cacheKey)
+		return 0, fmt.Errorf("npm weekly download count is invalid")
+	}
+	cachePackageDownloads(cacheKey, *response.Downloads)
+	return *response.Downloads, nil
 }
 
 func decodeOptionalJSONString(raw json.RawMessage, destination *string) {
@@ -1628,8 +1651,11 @@ func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error
 
 func (h *PkgHandler) fetchPyPIWeeklyDownloads(ctx context.Context, name string) (int, error) {
 	cacheKey := "pypi:" + strings.ToLower(strings.TrimSpace(name))
-	if cached, ok := cachedPackageDownloads(cacheKey); ok {
-		return cached, nil
+	if cached, ok, available := cachedPackageDownloads(cacheKey); ok {
+		if available {
+			return cached, nil
+		}
+		return 0, fmt.Errorf("PyPI weekly download statistics are temporarily unavailable")
 	}
 
 	apiURL := "https://pypistats.org/api/packages/" + url.PathEscape(name) + "/recent?period=week"
@@ -1639,23 +1665,46 @@ func (h *PkgHandler) fetchPyPIWeeklyDownloads(ctx context.Context, name string) 
 		} `json:"data"`
 	}
 	if err := h.fetchPackageJSON(ctx, apiURL, &response); err != nil {
+		if ctx.Err() == nil {
+			cachePackageDownloadFailure(cacheKey)
+		}
 		return 0, err
 	}
 	if response.Data.LastWeek == nil || *response.Data.LastWeek < 0 {
+		cachePackageDownloadFailure(cacheKey)
 		return 0, fmt.Errorf("PyPI Stats returned no weekly download count")
 	}
 	cachePackageDownloads(cacheKey, *response.Data.LastWeek)
 	return *response.Data.LastWeek, nil
 }
 
-func cachedPackageDownloads(cacheKey string) (int, bool) {
+func cachedPackageDownloads(cacheKey string) (int, bool, bool) {
 	packageDownloadsCache.Lock()
 	defer packageDownloadsCache.Unlock()
 	entry, ok := packageDownloadsCache.entries[cacheKey]
-	return entry.weeklyDownloads, ok && time.Now().Before(entry.expiresAt)
+	if !ok {
+		return 0, false, false
+	}
+	if !time.Now().Before(entry.expiresAt) {
+		delete(packageDownloadsCache.entries, cacheKey)
+		return 0, false, false
+	}
+	return entry.weeklyDownloads, true, entry.available
 }
 
 func cachePackageDownloads(cacheKey string, weeklyDownloads int) {
+	storePackageDownloads(cacheKey, packageDownloadCacheEntry{
+		weeklyDownloads: weeklyDownloads,
+		available:       true,
+		expiresAt:       time.Now().Add(24 * time.Hour),
+	})
+}
+
+func cachePackageDownloadFailure(cacheKey string) {
+	storePackageDownloads(cacheKey, packageDownloadCacheEntry{expiresAt: time.Now().Add(5 * time.Minute)})
+}
+
+func storePackageDownloads(cacheKey string, entry packageDownloadCacheEntry) {
 	packageDownloadsCache.Lock()
 	defer packageDownloadsCache.Unlock()
 	now := time.Now()
@@ -1664,7 +1713,7 @@ func cachePackageDownloads(cacheKey string, weeklyDownloads int) {
 			delete(packageDownloadsCache.entries, key)
 		}
 	}
-	if len(packageDownloadsCache.entries) >= 500 {
+	if _, exists := packageDownloadsCache.entries[cacheKey]; !exists && len(packageDownloadsCache.entries) >= 500 {
 		var oldestKey string
 		var oldestExpiry time.Time
 		for key, entry := range packageDownloadsCache.entries {
@@ -1675,7 +1724,7 @@ func cachePackageDownloads(cacheKey string, weeklyDownloads int) {
 		}
 		delete(packageDownloadsCache.entries, oldestKey)
 	}
-	packageDownloadsCache.entries[cacheKey] = pypiDownloadCacheEntry{weeklyDownloads: weeklyDownloads, expiresAt: now.Add(24 * time.Hour)}
+	packageDownloadsCache.entries[cacheKey] = entry
 }
 
 func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) {
@@ -1868,8 +1917,11 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 
 func (h *PkgHandler) fetchCratesWeeklyDownloads(ctx context.Context, name string) (int64, error) {
 	cacheKey := "crates:" + strings.ToLower(strings.TrimSpace(name))
-	if cached, ok := cachedPackageDownloads(cacheKey); ok {
-		return int64(cached), nil
+	if cached, ok, available := cachedPackageDownloads(cacheKey); ok {
+		if available {
+			return int64(cached), nil
+		}
+		return 0, fmt.Errorf("crates.io weekly download statistics are temporarily unavailable")
 	}
 	type dailyDownloads struct {
 		Downloads int64  `json:"downloads"`
@@ -1883,6 +1935,9 @@ func (h *PkgHandler) fetchCratesWeeklyDownloads(ctx context.Context, name string
 	}
 	apiURL := "https://crates.io/api/v1/crates/" + url.PathEscape(name) + "/downloads"
 	if err := h.fetchPackageJSON(ctx, apiURL, &response); err != nil {
+		if ctx.Err() == nil {
+			cachePackageDownloadFailure(cacheKey)
+		}
 		return 0, err
 	}
 	today := time.Now().UTC().Truncate(24 * time.Hour)
@@ -1896,12 +1951,14 @@ func (h *PkgHandler) fetchCratesWeeklyDownloads(ctx context.Context, name string
 			continue
 		}
 		if daily.Downloads < 0 || daily.Downloads > int64(^uint64(0)>>1)-total {
+			cachePackageDownloadFailure(cacheKey)
 			return 0, fmt.Errorf("crates.io weekly download count is invalid")
 		}
 		total += daily.Downloads
 		includedDays++
 	}
 	if includedDays == 0 {
+		cachePackageDownloadFailure(cacheKey)
 		return 0, fmt.Errorf("crates.io returned no recent download data")
 	}
 	if total > int64(^uint(0)>>1) {
