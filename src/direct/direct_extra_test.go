@@ -5105,6 +5105,12 @@ func TestBeautifyHTMLPreservesRawTextElementContents(t *testing.T) {
 	if formatted == source {
 		t.Fatal("HTML input was not formatted")
 	}
+
+	collision := "<div>HTMLRAWTEXTBLOCK0PLACEHOLDER</div><pre>raw</pre>"
+	formatted = beautifyHTML(collision)
+	if !strings.Contains(formatted, "HTMLRAWTEXTBLOCK0PLACEHOLDER") || !strings.Contains(formatted, "<pre>raw</pre>") {
+		t.Errorf("formatter changed ordinary text that matched its raw-text marker: %q", formatted)
+	}
 }
 
 func TestFormattersPreserveMultilineAndMalformedInputSafely(t *testing.T) {

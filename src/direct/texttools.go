@@ -1920,20 +1920,31 @@ func beautifyHTML(code string) string {
 	}
 
 	formatted := strings.TrimSpace(result.String())
-	for index, block := range preserved {
-		formatted = strings.ReplaceAll(formatted, htmlRawTextPlaceholder(index), block)
+	for _, block := range preserved {
+		formatted = strings.ReplaceAll(formatted, block.placeholder, block.content)
 	}
 	return formatted
 }
 
 var htmlRawTextBlockPattern = regexp.MustCompile(`(?is)<(?:pre|textarea|script|style)\b[^>]*>.*?</(?:pre|textarea|script|style)\s*>`)
 
-func preserveHTMLRawText(source string) (string, []string) {
+type htmlRawTextBlock struct {
+	placeholder string
+	content     string
+}
+
+func preserveHTMLRawText(source string) (string, []htmlRawTextBlock) {
 	blocks := htmlRawTextBlockPattern.FindAllString(source, -1)
+	preserved := make([]htmlRawTextBlock, 0, len(blocks))
 	for index, block := range blocks {
-		source = strings.Replace(source, block, htmlRawTextPlaceholder(index), 1)
+		placeholder := htmlRawTextPlaceholder(index)
+		for strings.Contains(source, placeholder) {
+			placeholder += "X"
+		}
+		source = strings.Replace(source, block, placeholder, 1)
+		preserved = append(preserved, htmlRawTextBlock{placeholder: placeholder, content: block})
 	}
-	return source, blocks
+	return source, preserved
 }
 
 func htmlRawTextPlaceholder(index int) string {

@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -402,6 +403,7 @@ var localDirectAnswerPages = []struct {
 	{"JSON diff", "/direct/diff/%7B%22a%22%3A1%7D%7C%7C%7B%22a%22%3A2%7D", "diff"},
 	{"code formatter", "/direct/beautify/js%20function%20f()%7Breturn%201%7D", "beautify"},
 	{"JSON empty container formatter", "/direct/beautify/" + url.PathEscape(`json {"empty":{},"list":[]}`), "beautify"},
+	{"HTML formatter raw-text marker collision", "/direct/beautify/" + url.PathEscape("html <div>HTMLRAWTEXTBLOCK0PLACEHOLDER</div><pre>raw</pre>"), "beautify"},
 	{"PHP heredoc formatter", "/direct/beautify/" + url.PathEscape("php <?php\n$message=<<<TEXT\n  leading  and trailing spaces  \nTEXT;\necho $message;\n?>"), "beautify"},
 	{"Python escaped triple-quoted formatter", "/direct/beautify/" + url.PathEscape("python def render():\n    value = \"\"\"alpha \\\"\"\" beta\n  tail \"\"\"\n    return value"), "beautify"},
 	{"Allman code formatter", "/direct/beautify/js%20--style=allman%20function%20f()%7Breturn%201%7D", "beautify"},
@@ -464,6 +466,11 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		case strings.Contains(path, "PHP%20%3C%3Fphp"):
 			if !strings.Contains(answer, "  leading  and trailing spaces  ") {
 				t.Error("PHP heredoc formatter changed the literal's significant spaces")
+			}
+		case strings.Contains(path, "HTMLRAWTEXTBLOCK0PLACEHOLDER"):
+			plain := html.UnescapeString(stripSyntaxTokens(answer))
+			if !strings.Contains(plain, "HTMLRAWTEXTBLOCK0PLACEHOLDER") || !strings.Contains(plain, "<pre>raw</pre>") {
+				t.Errorf("HTML formatter corrupted text matching its internal marker: %s", plain)
 			}
 		case strings.Contains(path, "Python%20escaped%20triple"):
 			plain := stripSyntaxTokens(answer)
