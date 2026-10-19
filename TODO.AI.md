@@ -398,7 +398,7 @@ The HTML beautifier now preserves the complete contents of `pre`, `textarea`, `s
 
 Thesaurus results now add ABC Thesaurus per-sense register and −2..+2 intensity metadata, with the provider's CC BY-SA 4.0 attribution and link. Requests use the fixed HTTPS provider, reject redirects and non-success responses, cap JSON at 2 MiB, and bound/validate displayed terms and metadata. Offline tests cover attribution, escaping, unsupported values, provider outages, malformed/oversized responses, and redirects; the named all-tier happy-path fixture asserts sourced metadata. Formatter regression cases now cover multiline JavaScript template literals, unmatched JavaScript delimiters, and unterminated SCSS/SQL strings; invalid JSON remains rejected by the answer handler. The direct-answer item remains open for unresolved provider/parser and IDEA coverage.
 
-PHP formatting now masks heredoc and nowdoc literals before code formatting and restores them after style/indent processing, preserving their exact contents and interpolation syntax. Regression coverage checks both heredoc forms with explicit indentation; continue auditing other malformed and multiline language cases.
+PHP formatting now masks heredoc and nowdoc literals before code formatting and restores them after style/indent processing, preserving their exact contents and interpolation syntax. Regression coverage checks both heredoc forms with indentation, Allman style, and minification; continue auditing other malformed and multiline language cases.
 
 Action: complete the remaining IDEA.md subfeatures without inventing upstream data; add evidence-backed threat checks; add offline handler-path tests for completed behavior.
 
