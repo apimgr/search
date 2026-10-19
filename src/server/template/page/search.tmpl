@@ -104,7 +104,7 @@
     {{/* Video Grid Layout */}}
     <div class="video-results" id="results-container">
         {{range .Results}}
-        <div class="video-result" data-video-embed="{{.EmbedURL}}" data-video-duration="{{.Duration}}">
+        <div class="video-result" data-video-embed="{{.EmbedURL}}" data-video-preview-url="{{.PreviewURL}}" data-video-duration="{{.Duration}}">
             <a href="{{.URL}}" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">
                 <div class="video-thumbnail-container">
                     {{if .Thumbnail}}

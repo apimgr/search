@@ -105,6 +105,8 @@ type Result struct {
 	ViewCount int64 `json:"view_count,omitempty" xml:"-"`
 	// Privacy-enhanced embed URL for video results when a provider supplies one.
 	EmbedURL string `json:"embed_url,omitempty" xml:"-"`
+	// Same-origin WebM/MP4 preview clip when a provider supplies one.
+	PreviewURL string `json:"preview_url,omitempty" xml:"-"`
 	// File size in bytes
 	FileSize int64 `json:"file_size,omitempty" xml:"-"`
 	// File extension

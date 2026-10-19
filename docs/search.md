@@ -38,7 +38,7 @@ Search autocomplete uses DuckDuckGo suggestions. The related-search API combines
 
 Weather answers show current conditions and a five-day outlook from Open-Meteo. In Preferences, the weather widget can follow the global units preference or use a metric/imperial override. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.
 
-Video results keep their proxied static thumbnails until a same-origin WebM/MP4 preview clip is available. **Video previews** can be disabled in Preferences to avoid loading clips on hover or touch.
+Video results keep their proxied static thumbnails when no same-origin WebM/MP4 preview clip is available. Eligible clips load on hover or touch and can be disabled in Preferences. Third-party embeds are not used for previews.
 
 URL safety answers report related domains only when a one-edit lookalike is present in a configured local domain blacklist. Reputation providers that cannot verify a result remain Unknown.
 

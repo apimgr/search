@@ -862,56 +862,46 @@ func TestBrowserDisabledVideoPreviewsSkipPreviewSetup(t *testing.T) {
 	}
 }
 
-func TestBrowserMobileVideoPreviewSeeksOnSwipe(t *testing.T) {
+func TestBrowserVideoPreviewFallsBackWithoutLocalClip(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
-	var capturedSource string
-	var progressWidth string
-	var progressValue string
-	var seekMessage string
-	var seekOrigin string
+	var previewVisible bool
+	var localPreviewState string
 	if err := chromedp.Run(ctx,
-		chromedp.EmulateViewport(375, 812),
 		chromedp.Navigate(site.URL),
 		chromedp.Evaluate(`(() => {
-            Object.defineProperty(HTMLIFrameElement.prototype, 'src', {configurable:true, get(){return this.dataset.capturedSrc || ''}, set(value){this.dataset.capturedSrc = value;}});
             const result = document.createElement('article');
             result.className = 'video-result';
             result.dataset.videoEmbed = 'https://www.youtube-nocookie.com/embed/abc123XYZ_9';
             result.dataset.videoDuration = '120';
-            result.innerHTML = '<a class="video-thumbnail-link" href="https://youtube.com/watch?v=abc123XYZ_9"><div class="video-thumbnail-container" style="width:300px;height:169px"><img class="video-thumbnail"></div></a><h3 class="video-title">Fixture clip</h3>';
+            result.dataset.videoPreviewUrl = 'https://media.example.test/clip.mp4';
+            result.innerHTML = '<div class="video-thumbnail-container"><img class="video-thumbnail" alt="Static fallback"></div><h3 class="video-title">Fixture clip</h3>';
             document.body.appendChild(result);
+            window.__videoPreviewAccepted = window.VideoPreview.show(result);
         })()`, nil),
-		chromedp.Click(`.video-thumbnail-link`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#video-preview-container.visible.inline iframe`, chromedp.ByQuery),
-		chromedp.Evaluate(`(() => {
-            const frame = document.querySelector('#video-preview-container iframe');
-            frame.contentWindow.postMessage = function(message, origin) { window.__seekMessage = {message, origin}; };
-            const target = document.querySelector('.video-result');
-            const box = target.querySelector('.video-thumbnail-container').getBoundingClientRect();
-            const touch = x => new Touch({identifier:1, target, clientX:x, clientY:box.top + 20});
-            target.dispatchEvent(new TouchEvent('touchstart', {bubbles:true, cancelable:true, touches:[touch(box.left + 20)]}));
-            target.dispatchEvent(new TouchEvent('touchmove', {bubbles:true, cancelable:true, touches:[touch(box.left + box.width * 0.75)]}));
-            target.dispatchEvent(new TouchEvent('touchend', {bubbles:true, cancelable:true, touches:[]}));
-			return {src:frame.src, width:document.querySelector('.video-preview-progress span').style.width, value:document.querySelector('.video-preview-progress').getAttribute('aria-valuenow'), message:window.__seekMessage.message, origin:window.__seekMessage.origin};
-        })()`, &struct {
-			Source  *string `json:"src"`
-			Width   *string `json:"width"`
-			Value   *string `json:"value"`
-			Message *string `json:"message"`
-			Origin  *string `json:"origin"`
-		}{Source: &capturedSource, Width: &progressWidth, Value: &progressValue, Message: &seekMessage, Origin: &seekOrigin}),
+		chromedp.Evaluate(`window.__videoPreviewAccepted && !!document.querySelector('#video-preview-container.visible')`, &previewVisible),
 	); err != nil {
-		t.Fatalf("mobile video preview swipe: %v", err)
+		t.Fatalf("video preview fallback behavior: %v", err)
 	}
-	if !strings.Contains(capturedSource, "autoplay=1") || !strings.Contains(capturedSource, "mute=1") || !strings.Contains(capturedSource, "end=10") {
-		t.Errorf("preview iframe source %q is missing privacy or short-preview settings", capturedSource)
+	if previewVisible {
+		t.Error("preview without a same-origin WebM/MP4 clip did not fall back to the static thumbnail")
 	}
-	if progressWidth != "75%" || progressValue != "90" {
-		t.Errorf("swipe progress width=%q value=%q, want 75%% and 90 seconds", progressWidth, progressValue)
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`(() => {
+        HTMLMediaElement.prototype.play = function() { return Promise.resolve(); };
+        const result = document.createElement('article');
+        result.className = 'video-result';
+        result.dataset.videoPreviewUrl = new URL('/fixtures/preview.webm', location.href).href;
+        result.dataset.videoDuration = '90';
+        result.innerHTML = '<div class="video-thumbnail-container"></div><h3 class="video-title">Local clip</h3>';
+        document.body.appendChild(result);
+        const accepted = window.VideoPreview.show(result);
+        const video = document.querySelector('#video-preview-container video');
+        return [accepted, video && video.src.startsWith(location.origin), video && video.muted, !!document.querySelector('#video-preview-container iframe')].join(':');
+    })()`, &localPreviewState)); err != nil {
+		t.Fatalf("same-origin video preview setup: %v", err)
 	}
-	if !strings.Contains(seekMessage, `"func":"seekTo"`) || seekOrigin != "https://www.youtube-nocookie.com" {
-		t.Errorf("swipe did not seek the privacy-enhanced player safely: message=%q origin=%q", seekMessage, seekOrigin)
+	if localPreviewState != "true:true:true:false" {
+		t.Errorf("same-origin clip preview state = %q, want accepted/local/muted/no iframe", localPreviewState)
 	}
 }
 

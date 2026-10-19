@@ -1802,6 +1802,7 @@ Interactive video thumbnails without leaving search results:
 **Privacy & Fallback Behavior**:
 - Thumbnails proxied for privacy (same image proxy as search results)
 - Preview clips loaded on demand, not preloaded
+- Preview clips must be provider-supplied same-origin WebM/MP4 URLs; third-party embed URLs are not preview clips
 - Falls back to static thumbnail if video preview unavailable
 - Respects user preference to disable previews (bandwidth/privacy)
 

@@ -1949,7 +1949,7 @@
             if (category === 'videos') {
                 var durationStr = result.duration ? formatDuration(result.duration) : '';
                 var viewCountStr = result.view_count ? formatViewCount(result.view_count) + ' views' : '';
-                return '<div class="video-result" data-video-embed="' + escapeHtmlLocal(result.embed_url || '') + '" data-video-duration="' + escapeHtmlLocal(result.duration || 0) + '">' +
+                return '<div class="video-result" data-video-embed="' + escapeHtmlLocal(result.embed_url || '') + '" data-video-preview-url="' + escapeHtmlLocal(result.preview_url || '') + '" data-video-duration="' + escapeHtmlLocal(result.duration || 0) + '">' +
                     '<a href="' + escapeHtmlLocal(result.url) + '" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">' +
                     '<div class="video-thumbnail-container">' +
                     (result.thumbnail
@@ -6226,15 +6226,9 @@
     }
 
     function showVideoPreview(videoResult) {
-        var embedUrl = videoResult.dataset.videoEmbed;
-        var parsedPreview;
-        try {
-            parsedPreview = new URL(embedUrl);
-        } catch (e) {
-            return;
-        }
-        if (parsedPreview.protocol !== 'https:' || parsedPreview.hostname !== 'www.youtube-nocookie.com' || parsedPreview.port || parsedPreview.username || parsedPreview.password || !/^\/embed\/[A-Za-z0-9_-]{6,20}$/.test(parsedPreview.pathname)) return;
-
+        var parsedPreview = getVideoPreviewURL(videoResult);
+        if (!parsedPreview) return false;
+        var previewURL = parsedPreview.href;
         activePreview = videoResult;
 
         // Position the preview
@@ -6252,41 +6246,45 @@
             previewContainer.style.top = (window.innerHeight - 190) + 'px';
         }
 
-        var frameURL = new URL(parsedPreview.href);
-        frameURL.searchParams.set('autoplay', '1');
-        frameURL.searchParams.set('mute', '1');
-        frameURL.searchParams.set('playsinline', '1');
-        frameURL.searchParams.set('controls', '0');
-        frameURL.searchParams.set('enablejsapi', '1');
-        frameURL.searchParams.set('origin', window.location.origin);
-        frameURL.searchParams.set('start', '0');
-        frameURL.searchParams.set('end', String(Math.min(10, Math.max(5, Number(videoResult.dataset.videoDuration) || 8))));
-
-        var frame = document.createElement('iframe');
-        frame.src = frameURL.href;
-        frame.title = videoResult.querySelector('.video-title') ? videoResult.querySelector('.video-title').textContent.trim() : 'Video preview';
-        frame.allow = 'autoplay; encrypted-media; picture-in-picture';
-        frame.setAttribute('allowfullscreen', '');
-        frame.referrerPolicy = 'strict-origin-when-cross-origin';
-        frame.className = 'video-preview-frame';
-        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
-        frame.addEventListener('load', function() {
-            if (activePreview === videoResult) seekFrame(frame, parsedPreview.origin, Number(frame.dataset.seekSeconds) || 0);
-        }, { once: true });
+        var video = document.createElement('video');
+        video.src = previewURL;
+        video.muted = true;
+        video.autoplay = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.preload = 'none';
+        video.title = videoResult.querySelector('.video-title') ? videoResult.querySelector('.video-title').textContent.trim() : 'Video preview';
+        video.className = 'video-preview-video';
         var progress = document.createElement('div');
         progress.className = 'video-preview-progress';
         progress.setAttribute('role', 'progressbar');
         progress.setAttribute('aria-label', 'Video preview position');
         progress.setAttribute('aria-valuemin', '0');
-        progress.setAttribute('aria-valuemax', String(Math.max(1, Number(videoResult.dataset.videoDuration) || 8)));
+        progress.setAttribute('aria-valuemax', String(Math.max(1, Math.min(10, Number(videoResult.dataset.videoDuration) || 8))));
         progress.setAttribute('aria-valuenow', '0');
         var progressFill = document.createElement('span');
         progress.appendChild(progressFill);
-        previewContainer.replaceChildren(frame, progress);
-        previewContainer.dataset.embedOrigin = parsedPreview.origin;
+        previewContainer.replaceChildren(video, progress);
+        video.addEventListener('timeupdate', function() {
+            if (activePreview === videoResult) updatePreviewPosition(videoResult, video.currentTime, false);
+        });
 
         previewContainer.classList.add('visible');
         previewContainer.setAttribute('aria-hidden', 'false');
+        video.play().catch(function() {});
+        return true;
+    }
+
+    function getVideoPreviewURL(videoResult) {
+        if (!videoResult || !videoResult.dataset.videoPreviewUrl) return null;
+        var parsedPreview;
+        try {
+            parsedPreview = new URL(videoResult.dataset.videoPreviewUrl, window.location.href);
+        } catch (e) {
+            return null;
+        }
+        if (parsedPreview.origin !== window.location.origin || parsedPreview.username || parsedPreview.password || !/\.(?:mp4|webm)$/i.test(parsedPreview.pathname)) return null;
+        return parsedPreview;
     }
 
     function hideVideoPreview() {
@@ -6304,7 +6302,7 @@
     // Touch handling for mobile swipe scrubbing
     function handleTouchStart(e) {
         var videoResult = window.closestFrom(e.target, '.video-result, .video-item, [data-video-id]');
-        if (!videoResult || !videoResult.dataset.videoEmbed || !e.touches.length) return;
+        if (!getVideoPreviewURL(videoResult) || !e.touches.length) return;
         scrubStartX = e.touches[0].clientX;
         scrubResult = videoResult;
         scrubMoved = false;
@@ -6316,10 +6314,10 @@
         if (Math.abs(deltaX) < 8) return;
         e.preventDefault();
         scrubMoved = true;
-        var duration = Math.max(1, Number(scrubResult.dataset.videoDuration) || 8);
+        var duration = Math.max(1, Math.min(10, Number(scrubResult.dataset.videoDuration) || 8));
         var bounds = scrubResult.querySelector('.video-thumbnail-container').getBoundingClientRect();
         var progress = Math.min(1, Math.max(0, (e.touches[0].clientX - bounds.left) / bounds.width));
-        updatePreviewPosition(scrubResult, progress * duration);
+        updatePreviewPosition(scrubResult, progress * duration, true);
     }
 
     function handleTouchEnd(e) {
@@ -6329,29 +6327,24 @@
         scrubMoved = false;
     }
 
-    function updatePreviewPosition(videoResult, seconds) {
+    function updatePreviewPosition(videoResult, seconds, seek) {
         if (!activePreview || activePreview !== videoResult || !previewContainer) return;
-        var frame = previewContainer.querySelector('iframe');
+        var video = previewContainer.querySelector('video');
         var progress = previewContainer.querySelector('.video-preview-progress');
-        if (!frame || !progress) return;
-        var duration = Math.max(1, Number(videoResult.dataset.videoDuration) || 8);
+        if (!video || !progress) return;
+        var duration = Math.max(1, Math.min(10, Number(video.duration) || Number(videoResult.dataset.videoDuration) || 8));
         var current = Math.min(duration, Math.max(0, seconds));
         var percent = current / duration * 100;
         progress.firstElementChild.style.width = percent + '%';
         progress.setAttribute('aria-valuenow', String(Math.round(current)));
-        frame.dataset.seekSeconds = String(current);
-        seekFrame(frame, previewContainer.dataset.embedOrigin, current);
-    }
-
-    function seekFrame(frame, origin, seconds) {
-        frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [seconds, true] }), origin);
+        if (seek) video.currentTime = current;
     }
 
     document.addEventListener('click', function(event) {
         var target = event.target && event.target.nodeType === 1 ? event.target : event.target.parentElement;
         var link = target && target.closest('.video-thumbnail-link');
         var result = link && link.closest('.video-result');
-        if (!result || !isTouchDevice || !result.dataset.videoEmbed) return;
+        if (!result || !isTouchDevice || !getVideoPreviewURL(result)) return;
         if (Date.now() < suppressClickUntil) {
             event.preventDefault();
             return;

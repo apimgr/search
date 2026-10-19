@@ -110,10 +110,10 @@ are signed same-origin `/image-proxy` URLs; clients should render those values
 directly instead of loading the upstream image hosts.
 
 Video results also include `duration` (seconds), `view_count`, `author`, and
-`embed_url` when YouTube supplies the corresponding metadata. The embed URL is
-metadata for clients; video preview playback still requires an actual provider
-clip URL, and results fall back to their static thumbnails when none is
-available.
+`embed_url` when YouTube supplies the corresponding metadata. `preview_url` is
+available only when a provider supplies a same-origin WebM/MP4 clip. Clients
+must reject external preview URLs and retain the static thumbnail when no
+eligible clip is present.
 
 ### Suggestions
 
