@@ -271,7 +271,17 @@
     "recent_searches": "Letzte Suchanfragen",
     "weather_units": "Einheiten des Wetter-Widgets",
     "weather_units_global": "Globale Einstellung verwenden",
-    "video_previews": "Videovorschauen"
+    "video_previews": "Videovorschauen",
+    "custom_css_heading": "Eigenes CSS",
+    "custom_css_help": "Füge CSS-Überschreibungen für diesen Browser hinzu. Das Stylesheet wird lokal gespeichert und beeinflusst keine anderen Besucher.",
+    "custom_css_label": "Stylesheet",
+    "custom_css_limit": "Bis zu 4.096 Zeichen. Eigenes CSS wird in Präferenzexporte aufgenommen.",
+    "custom_css_save": "CSS speichern",
+    "custom_css_clear": "CSS löschen",
+    "custom_css_saved": "Eigenes CSS wurde für diesen Browser gespeichert.",
+    "custom_css_too_long": "Das eigene CSS ist zu lang.",
+    "custom_css_storage_error": "Eigenes CSS konnte in diesem Browser nicht gespeichert werden.",
+    "custom_css_cleared": "Eigenes CSS wurde gelöscht."
   },
   "nav": {
     "home": "Startseite",

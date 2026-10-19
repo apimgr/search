@@ -271,7 +271,17 @@
     "recent_searches": "عمليات البحث الأخيرة",
     "weather_units": "وحدات أداة الطقس",
     "weather_units_global": "استخدم التفضيل العام",
-    "video_previews": "معاينات الفيديو"
+    "video_previews": "معاينات الفيديو",
+    "custom_css_heading": "CSS مخصص",
+    "custom_css_help": "أضف تجاوزات CSS لهذا المتصفح. تُحفظ ورقة الأنماط محليًا ولا تؤثر في الزوار الآخرين.",
+    "custom_css_label": "ورقة الأنماط",
+    "custom_css_limit": "حتى ٤٬٠٩٦ حرفًا. يُضمّن CSS المخصص في ملفات تصدير التفضيلات.",
+    "custom_css_save": "حفظ CSS",
+    "custom_css_clear": "مسح CSS",
+    "custom_css_saved": "تم حفظ CSS المخصص لهذا المتصفح.",
+    "custom_css_too_long": "CSS المخصص طويل جدًا.",
+    "custom_css_storage_error": "تعذر حفظ CSS المخصص في هذا المتصفح.",
+    "custom_css_cleared": "تم مسح CSS المخصص."
   },
   "nav": {
     "home": "الرئيسية",

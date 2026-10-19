@@ -8043,6 +8043,33 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.preferences-page #custom-css {
+    display: block;
+    width: 100%;
+    min-height: 16rem;
+    padding: var(--space-3) var(--space-4);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.preferences-page #custom-css:focus-visible {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-bg);
+    outline: none;
+}
+
+.preferences-page #custom-css-help {
+    display: block;
+    color: var(--color-muted);
+    margin-top: var(--space-2);
+}
+
 .preferences-form .form-group input:focus,
 .preferences-form .form-group select:focus {
     border-color: var(--color-primary);

@@ -859,6 +859,52 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	requireNoFailures(t, pf, "language preference save and localized homepage")
 }
 
+func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var firstValue, importedValue, savedCSS, exportedCSS string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.WaitVisible(`#custom-css`, chromedp.ByQuery),
+		chromedp.SetValue(`#custom-css`, `:root { --custom-css-fixture: "saved"; }`, chromedp.ByQuery),
+		chromedp.Click(`#save-custom-css`, chromedp.ByQuery),
+		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &firstValue),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &savedCSS),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Evaluate(`(() => {
+			const OriginalBlob = window.Blob;
+			window.Blob = class extends OriginalBlob {
+				constructor(parts, options) {
+					super(parts, options);
+					window.__exportedPreferences = parts.join('');
+				}
+			};
+		})()`, nil),
+		chromedp.Click(`#export-prefs`, chromedp.ByQuery),
+		chromedp.Evaluate(`JSON.parse(window.__exportedPreferences).custom_css`, &exportedCSS),
+		chromedp.Evaluate(`(() => {
+			const payload = JSON.stringify({custom_css: ':root { --custom-css-fixture: "imported"; }'});
+			const file = new File([payload], 'preferences.json', {type: 'application/json'});
+			const transfer = new DataTransfer();
+			transfer.items.add(file);
+			const input = document.querySelector('#import-file');
+			input.files = transfer.files;
+			input.dispatchEvent(new Event('change', {bubbles: true}));
+			return true;
+		})()`, nil),
+		chromedp.Sleep(150*time.Millisecond),
+		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &importedValue),
+	); err != nil {
+		t.Fatalf("custom CSS preference flow: %v", err)
+	}
+	if firstValue != `"saved"` || savedCSS != `"saved"` || exportedCSS != `:root { --custom-css-fixture: "saved"; }` || importedValue != `"imported"` {
+		t.Errorf("custom CSS values after save, reload, export, and import = %q, %q, %q, %q", firstValue, savedCSS, exportedCSS, importedValue)
+	}
+	requireNoFailures(t, pf, "custom CSS preference save and import")
+}
+
 func TestBrowserDisabledVideoPreviewsSkipPreviewSetup(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

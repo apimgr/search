@@ -29,6 +29,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Keyboard Navigation: Vim-style shortcuts for power users (j/k, /, Enter)
 - Mobile Friendly: Responsive design that works on all devices
 - Dark, Light, and Auto Themes: Choose the theme, font size, results density, and accent color in Preferences
+- Custom CSS: Save a browser-local stylesheet override and include it in preference exports/imports
 - File-only Configuration: All settings in `server.yml`; no admin web UI
 - Multi-Category Search: Web, images, videos, news, maps, files, music, science, IT, and social
 - Built-in SSL: Let's Encrypt integration for automatic HTTPS

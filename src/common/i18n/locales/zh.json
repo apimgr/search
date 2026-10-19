@@ -271,7 +271,17 @@
     "recent_searches": "最近搜索",
     "weather_units": "天气小组件单位",
     "weather_units_global": "使用全局偏好",
-    "video_previews": "视频预览"
+    "video_previews": "视频预览",
+    "custom_css_heading": "自定义 CSS",
+    "custom_css_help": "为此浏览器添加 CSS 覆盖。样式表保存在本地，不会影响其他访问者。",
+    "custom_css_label": "样式表",
+    "custom_css_limit": "最多 4,096 个字符。自定义 CSS 会包含在偏好设置导出中。",
+    "custom_css_save": "保存 CSS",
+    "custom_css_clear": "清除 CSS",
+    "custom_css_saved": "自定义 CSS 已保存在此浏览器中。",
+    "custom_css_too_long": "自定义 CSS 太长。",
+    "custom_css_storage_error": "无法在此浏览器中保存自定义 CSS。",
+    "custom_css_cleared": "自定义 CSS 已清除。"
   },
   "nav": {
     "home": "首页",

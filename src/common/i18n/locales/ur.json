@@ -271,7 +271,17 @@
     "recent_searches": "حالیہ تلاشیں",
     "weather_units": "موسم ویجیٹ کی اکائیاں",
     "weather_units_global": "عالمی ترجیح استعمال کریں",
-    "video_previews": "ویڈیو پیش نظارے"
+    "video_previews": "ویڈیو پیش نظارے",
+    "custom_css_heading": "حسب ضرورت CSS",
+    "custom_css_help": "اس براؤزر کے لیے CSS تبدیلیاں شامل کریں۔ اسٹائل شیٹ مقامی طور پر محفوظ ہوتی ہے اور دوسرے صارفین پر اثر نہیں ڈالتی۔",
+    "custom_css_label": "اسٹائل شیٹ",
+    "custom_css_limit": "زیادہ سے زیادہ 4,096 حروف۔ حسب ضرورت CSS ترجیحات کی برآمد میں شامل ہے۔",
+    "custom_css_save": "CSS محفوظ کریں",
+    "custom_css_clear": "CSS صاف کریں",
+    "custom_css_saved": "حسب ضرورت CSS اس براؤزر میں محفوظ ہو گئی۔",
+    "custom_css_too_long": "حسب ضرورت CSS بہت طویل ہے۔",
+    "custom_css_storage_error": "اس براؤزر میں حسب ضرورت CSS محفوظ نہیں ہو سکی۔",
+    "custom_css_cleared": "حسب ضرورت CSS صاف ہو گئی۔"
   },
   "nav": {
     "home": "ہوم",

@@ -271,7 +271,17 @@
     "recent_searches": "חיפושים אחרונים",
     "weather_units": "יחידות יישומון מזג האוויר",
     "weather_units_global": "שימוש בהעדפה הכללית",
-    "video_previews": "תצוגות מקדימות של סרטונים"
+    "video_previews": "תצוגות מקדימות של סרטונים",
+    "custom_css_heading": "CSS מותאם אישית",
+    "custom_css_help": "הוסיפו כללי CSS לדפדפן הזה. גיליון הסגנונות נשמר מקומית ואינו משפיע על מבקרים אחרים.",
+    "custom_css_label": "גיליון סגנונות",
+    "custom_css_limit": "עד 4,096 תווים. CSS מותאם אישית נכלל בייצוא ההעדפות.",
+    "custom_css_save": "שמירת CSS",
+    "custom_css_clear": "ניקוי CSS",
+    "custom_css_saved": "ה-CSS המותאם אישית נשמר בדפדפן הזה.",
+    "custom_css_too_long": "ה-CSS המותאם אישית ארוך מדי.",
+    "custom_css_storage_error": "לא ניתן לשמור CSS מותאם אישית בדפדפן הזה.",
+    "custom_css_cleared": "ה-CSS המותאם אישית נוקה."
   },
   "nav": {
     "home": "דף הבית",

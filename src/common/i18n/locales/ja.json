@@ -271,7 +271,17 @@
     "recent_searches": "最近の検索",
     "weather_units": "天気ウィジェットの単位",
     "weather_units_global": "全体設定を使用",
-    "video_previews": "動画プレビュー"
+    "video_previews": "動画プレビュー",
+    "custom_css_heading": "カスタム CSS",
+    "custom_css_help": "このブラウザー用の CSS 上書きを追加します。スタイルシートはローカルに保存され、他の訪問者には影響しません。",
+    "custom_css_label": "スタイルシート",
+    "custom_css_limit": "最大 4,096 文字。カスタム CSS は設定のエクスポートに含まれます。",
+    "custom_css_save": "CSS を保存",
+    "custom_css_clear": "CSS を消去",
+    "custom_css_saved": "カスタム CSS をこのブラウザーに保存しました。",
+    "custom_css_too_long": "カスタム CSS が長すぎます。",
+    "custom_css_storage_error": "このブラウザーにカスタム CSS を保存できませんでした。",
+    "custom_css_cleared": "カスタム CSS を消去しました。"
   },
   "nav": {
     "home": "ホーム",

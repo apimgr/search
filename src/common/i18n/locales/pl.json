@@ -271,7 +271,17 @@
     "recent_searches": "Ostatnie wyszukiwania",
     "weather_units": "Jednostki widżetu pogody",
     "weather_units_global": "Użyj ustawienia globalnego",
-    "video_previews": "Podgląd wideo"
+    "video_previews": "Podgląd wideo",
+    "custom_css_heading": "Własny CSS",
+    "custom_css_help": "Dodaj reguły CSS dla tej przeglądarki. Arkusz stylów jest zapisywany lokalnie i nie wpływa na innych użytkowników.",
+    "custom_css_label": "Arkusz stylów",
+    "custom_css_limit": "Maksymalnie 4096 znaków. Własny CSS jest dołączany do eksportu preferencji.",
+    "custom_css_save": "Zapisz CSS",
+    "custom_css_clear": "Wyczyść CSS",
+    "custom_css_saved": "Własny CSS zapisano w tej przeglądarce.",
+    "custom_css_too_long": "Własny CSS jest za długi.",
+    "custom_css_storage_error": "Nie udało się zapisać własnego CSS w tej przeglądarce.",
+    "custom_css_cleared": "Własny CSS wyczyszczono."
   },
   "nav": {
     "home": "Strona główna",

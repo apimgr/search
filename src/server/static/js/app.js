@@ -10,6 +10,8 @@
     // ========================================================================
     const SEARCH_HISTORY_KEY = 'search_history';
     const SEARCH_HISTORY_LIMIT = 20;
+    const CUSTOM_CSS_KEY = 'search_custom_css';
+    const CUSTOM_CSS_LIMIT = 4096;
     const THEMES = ['dark', 'light', 'auto'];
     let clientTranslations = null;
 
@@ -27,6 +29,30 @@
 
     function normalizeThemePreference(theme) {
         return THEMES.includes(theme) ? theme : 'dark';
+    }
+
+    function applyCustomCSS(css) {
+        var style = document.getElementById('search-custom-css');
+        if (!css || typeof css !== 'string' || css.length > CUSTOM_CSS_LIMIT) {
+            if (style) style.remove();
+            return;
+        }
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'search-custom-css';
+            document.head.appendChild(style);
+        }
+        style.textContent = css;
+    }
+
+    function loadCustomCSS() {
+        try {
+            var css = localStorage.getItem(CUSTOM_CSS_KEY) || '';
+            applyCustomCSS(css);
+            return css.length <= CUSTOM_CSS_LIMIT ? css : '';
+        } catch (e) {
+            return '';
+        }
     }
 
     function getClientLanguage() {
@@ -3120,6 +3146,7 @@
                 var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
                 var saveHistoryCheckbox = document.getElementById('save-history');
                 var videoPreviewsCheckbox = document.getElementById('video-previews');
+                var customCSSInput = document.getElementById('custom-css');
 
                 if (themeSelect) themeSelect.value = getPreferredTheme();
                 if (langSelect) langSelect.value = prefs.lang;
@@ -3135,6 +3162,7 @@
                     var videoPreviewCookie = document.cookie.split('; ').find(function(item) { return item.indexOf('search_pref_video_previews=') === 0; });
                     videoPreviewsCheckbox.checked = !videoPreviewCookie || decodeURIComponent(videoPreviewCookie.split('=').slice(1).join('=')) !== '0';
                 }
+                if (customCSSInput) customCSSInput.value = loadCustomCSS();
             } catch (e) {
                 console.error('Failed to load preferences:', e);
             }
@@ -3339,6 +3367,35 @@
                 return;
             }
 
+            if (e.target.id === 'save-custom-css') {
+                var cssInput = document.getElementById('custom-css');
+                var cssStatus = document.getElementById('custom-css-status');
+                var css = cssInput ? cssInput.value : '';
+                if (css.length > CUSTOM_CSS_LIMIT) {
+                    if (cssStatus) cssStatus.textContent = t('preferences.custom_css_too_long', 'Custom CSS is too long.');
+                    return;
+                }
+                try {
+                    if (css.trim()) localStorage.setItem(CUSTOM_CSS_KEY, css);
+                    else localStorage.removeItem(CUSTOM_CSS_KEY);
+                    applyCustomCSS(css);
+                    if (cssStatus) cssStatus.textContent = t('preferences.custom_css_saved', 'Custom CSS saved for this browser.');
+                } catch (error) {
+                    if (cssStatus) cssStatus.textContent = t('preferences.custom_css_storage_error', 'Custom CSS could not be saved in this browser.');
+                }
+                return;
+            }
+
+            if (e.target.id === 'clear-custom-css') {
+                localStorage.removeItem(CUSTOM_CSS_KEY);
+                applyCustomCSS('');
+                var cssInput = document.getElementById('custom-css');
+                var cssStatus = document.getElementById('custom-css-status');
+                if (cssInput) cssInput.value = '';
+                if (cssStatus) cssStatus.textContent = t('preferences.custom_css_cleared', 'Custom CSS cleared.');
+                return;
+            }
+
             // Category filter buttons
             if (e.target.matches('.filter-btn')) {
                 document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -3380,6 +3437,7 @@
                 var data = {
                     preferences: getStoredSearchPreferences(),
                     custom_bangs: JSON.parse(localStorage.getItem(BANGS_KEY) || '[]'),
+                    custom_css: loadCustomCSS(),
                     search_history: readSearchHistory(),
                     exported_at: new Date().toISOString()
                 };
@@ -3468,6 +3526,8 @@
                     ['theme', 'lang', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_widget_weather_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density', 'search_pref_accent_color'].forEach(function(name) { clearCookie(name); });
                     localStorage.removeItem(BANGS_KEY);
                     localStorage.removeItem(SEARCH_HISTORY_KEY);
+                    localStorage.removeItem(CUSTOM_CSS_KEY);
+                    applyCustomCSS('');
                     // Clear per-widget settings
                     for (var i = localStorage.length - 1; i >= 0; i--) {
                         var key = localStorage.key(i);
@@ -3551,6 +3611,12 @@
                         if (data.preferences && typeof data.preferences === 'object' && !Array.isArray(data.preferences)) writeSearchPreferences(data.preferences);
                         if (Array.isArray(data.custom_bangs)) {
                             localStorage.setItem(BANGS_KEY, JSON.stringify(data.custom_bangs));
+                        }
+                        if (typeof data.custom_css === 'string') {
+                            if (data.custom_css.length > CUSTOM_CSS_LIMIT) throw new Error('custom CSS exceeds the supported limit');
+                            if (data.custom_css) localStorage.setItem(CUSTOM_CSS_KEY, data.custom_css);
+                            else localStorage.removeItem(CUSTOM_CSS_KEY);
+                            applyCustomCSS(data.custom_css);
                         }
                         var importedPreferences = data.preferences || getStoredSearchPreferences();
                         if (importedPreferences.save_history === false) {
@@ -4208,6 +4274,7 @@
     function init() {
         loadClientTranslations();
         applyTheme(getActiveSearchPreferences().theme || getPreferredTheme());
+        loadCustomCSS();
         applySearchPreferencesToForms();
         initLanguageSelector();
         initFlashMessages();

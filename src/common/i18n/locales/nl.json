@@ -271,7 +271,17 @@
     "recent_searches": "Recente zoekopdrachten",
     "weather_units": "Eenheden van de weerwidget",
     "weather_units_global": "Globale voorkeur gebruiken",
-    "video_previews": "Videovoorbeelden"
+    "video_previews": "Videovoorbeelden",
+    "custom_css_heading": "Aangepaste CSS",
+    "custom_css_help": "Voeg CSS-aanpassingen toe voor deze browser. Het stijlblad wordt lokaal opgeslagen en heeft geen invloed op andere bezoekers.",
+    "custom_css_label": "Stijlblad",
+    "custom_css_limit": "Maximaal 4.096 tekens. Aangepaste CSS wordt opgenomen in exports van voorkeuren.",
+    "custom_css_save": "CSS opslaan",
+    "custom_css_clear": "CSS wissen",
+    "custom_css_saved": "Aangepaste CSS opgeslagen voor deze browser.",
+    "custom_css_too_long": "De aangepaste CSS is te lang.",
+    "custom_css_storage_error": "Aangepaste CSS kon niet in deze browser worden opgeslagen.",
+    "custom_css_cleared": "Aangepaste CSS gewist."
   },
   "nav": {
     "home": "Home",

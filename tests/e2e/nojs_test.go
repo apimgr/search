@@ -526,6 +526,11 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	if videoPreviewsEnabled {
 		t.Errorf("no-JS video preview preference did not persist as disabled")
 	}
+	for _, marker := range []string{`id="custom-css"`, `id="save-custom-css"`, `id="clear-custom-css"`} {
+		if !strings.Contains(preferencesHTML, marker) {
+			t.Errorf("no-JS preferences page omitted custom CSS control %q", marker)
+		}
+	}
 }
 
 func TestNoJSCookieConsentSettingsSaveFromPreferences(t *testing.T) {

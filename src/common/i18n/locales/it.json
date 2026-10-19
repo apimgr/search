@@ -271,7 +271,17 @@
     "recent_searches": "Ricerche recenti",
     "weather_units": "Unità del widget meteo",
     "weather_units_global": "Usa la preferenza globale",
-    "video_previews": "Anteprime video"
+    "video_previews": "Anteprime video",
+    "custom_css_heading": "CSS personalizzato",
+    "custom_css_help": "Aggiungi regole CSS per questo browser. Il foglio di stile viene salvato localmente e non influisce sugli altri visitatori.",
+    "custom_css_label": "Foglio di stile",
+    "custom_css_limit": "Fino a 4.096 caratteri. Il CSS personalizzato viene incluso nelle esportazioni delle preferenze.",
+    "custom_css_save": "Salva CSS",
+    "custom_css_clear": "Cancella CSS",
+    "custom_css_saved": "CSS personalizzato salvato in questo browser.",
+    "custom_css_too_long": "Il CSS personalizzato è troppo lungo.",
+    "custom_css_storage_error": "Impossibile salvare il CSS personalizzato in questo browser.",
+    "custom_css_cleared": "CSS personalizzato cancellato."
   },
   "nav": {
     "home": "Home",

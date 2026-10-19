@@ -271,7 +271,17 @@
     "recent_searches": "جستجوهای اخیر",
     "weather_units": "واحدهای ابزارک آب‌وهوا",
     "weather_units_global": "استفاده از ترجیح کلی",
-    "video_previews": "پیش‌نمایش ویدئو"
+    "video_previews": "پیش‌نمایش ویدئو",
+    "custom_css_heading": "CSS سفارشی",
+    "custom_css_help": "قواعد CSS را برای این مرورگر اضافه کنید. شیوه‌نامه محلی ذخیره می‌شود و بر بازدیدکنندگان دیگر اثر ندارد.",
+    "custom_css_label": "شیوه‌نامه",
+    "custom_css_limit": "حداکثر ۴۰۹۶ نویسه. CSS سفارشی در خروجی تنظیمات گنجانده می‌شود.",
+    "custom_css_save": "ذخیره CSS",
+    "custom_css_clear": "پاک‌کردن CSS",
+    "custom_css_saved": "CSS سفارشی برای این مرورگر ذخیره شد.",
+    "custom_css_too_long": "CSS سفارشی بیش از حد طولانی است.",
+    "custom_css_storage_error": "ذخیره CSS سفارشی در این مرورگر ممکن نشد.",
+    "custom_css_cleared": "CSS سفارشی پاک شد."
   },
   "nav": {
     "home": "خانه",

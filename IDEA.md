@@ -1758,7 +1758,7 @@ s         → Open settings
 #### Theming & Customization
 
 - **Built-in Themes**: Dark (Dracula), Light, Auto (system preference)
-- **Custom CSS**: User-provided stylesheet override
+- **Custom CSS**: User-provided stylesheet override stored in this browser's local storage and included in preference file exports/imports; limited to 4,096 characters
 - **Font Size**: Small, medium, large
 - **Results Density**: Compact, comfortable, spacious
 - **Accent Color**: Customizable highlight color

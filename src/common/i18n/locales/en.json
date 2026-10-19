@@ -271,7 +271,17 @@
     "recent_searches": "Recent searches",
     "weather_units": "Weather widget units",
     "weather_units_global": "Use global preference",
-    "video_previews": "Video previews"
+    "video_previews": "Video previews",
+    "custom_css_heading": "Custom CSS",
+    "custom_css_help": "Add CSS overrides for this browser. The stylesheet is stored locally and does not affect other visitors.",
+    "custom_css_label": "Stylesheet",
+    "custom_css_limit": "Up to 4,096 characters. Custom CSS is included in preference exports.",
+    "custom_css_save": "Save CSS",
+    "custom_css_clear": "Clear CSS",
+    "custom_css_saved": "Custom CSS saved for this browser.",
+    "custom_css_too_long": "Custom CSS is too long.",
+    "custom_css_storage_error": "Custom CSS could not be saved in this browser.",
+    "custom_css_cleared": "Custom CSS cleared."
   },
   "nav": {
     "home": "Home",

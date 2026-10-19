@@ -67,6 +67,9 @@ func TestSSRInteractivePagesCarryTheirForms(t *testing.T) {
 			requireStatus(t, resp, http.StatusOK)
 			requireContains(t, body, "<form", tc.path)
 			requireContains(t, body, tc.formAction, tc.path)
+			if tc.path == "/server/preferences" {
+				requireContains(t, body, `id="custom-css"`, tc.path)
+			}
 			if tc.path == "/server/contact" && strings.Contains(body, `name="captcha_id"`) {
 				t.Fatal("initial contact form should not require CAPTCHA before a failed attempt")
 			}
