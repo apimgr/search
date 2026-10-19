@@ -1757,13 +1757,8 @@ func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) 
 		}
 	}
 	var popularity interface{}
-	var packageInfo struct {
-		ImportedByCounts struct {
-			Packages int `json:"packages"`
-		} `json:"importedByCounts"`
-	}
-	if err := h.fetchPackageJSON(ctx, goPackageInfoURL(name), &packageInfo); err == nil && packageInfo.ImportedByCounts.Packages >= 0 {
-		popularity = packageInfo.ImportedByCounts.Packages
+	if count, err := h.fetchGoPopularity(ctx, name); err == nil {
+		popularity = count
 	}
 	var readmePreview interface{}
 	var license interface{}
@@ -1789,6 +1784,33 @@ func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) 
 	return &Answer{Type: AnswerTypePkg, Term: name, Title: name, Description: "Go module " + name,
 		Content: formatPkgContentWithDetails(LangFromContext(ctx), "go", name, "Go module", pkg.Version, "", "go get "+name, data), Source: "Go Module Proxy",
 		SourceURL: "https://pkg.go.dev/" + name, Data: data}, nil
+}
+
+func (h *PkgHandler) fetchGoPopularity(ctx context.Context, modulePath string) (int, error) {
+	cacheKey := "go-popularity:" + strings.ToLower(strings.TrimSpace(modulePath))
+	if count, cached, available := cachedPackageDownloads(cacheKey); cached {
+		if available {
+			return count, nil
+		}
+		return 0, fmt.Errorf("go module popularity is temporarily unavailable")
+	}
+	var response struct {
+		ImportedByCounts struct {
+			Packages *int `json:"packages"`
+		} `json:"importedByCounts"`
+	}
+	if err := h.fetchPackageJSON(ctx, goPackageInfoURL(modulePath), &response); err != nil {
+		if ctx.Err() == nil {
+			cachePackageDownloadFailure(cacheKey)
+		}
+		return 0, err
+	}
+	if response.ImportedByCounts.Packages == nil || *response.ImportedByCounts.Packages < 0 {
+		cachePackageDownloadFailure(cacheKey)
+		return 0, fmt.Errorf("go module popularity count is invalid")
+	}
+	cachePackageDownloads(cacheKey, *response.ImportedByCounts.Packages)
+	return *response.ImportedByCounts.Packages, nil
 }
 
 func goPackageInfoURL(modulePath string) string {

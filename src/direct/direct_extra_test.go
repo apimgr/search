@@ -2118,6 +2118,8 @@ type malformedOptionalRegistryMetadataTransport struct{}
 func (malformedOptionalRegistryMetadataTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	status, body := http.StatusBadGateway, `{}`
 	switch {
+	case request.URL.Host == "pkg.go.dev":
+		status, body = http.StatusOK, `{"importedByCounts":{"packages":"many"}}`
 	case request.URL.Host == "proxy.golang.org" && strings.HasSuffix(request.URL.Path, "/@latest"):
 		status, body = http.StatusOK, `{"Version":"v1.2.3","Time":{}}`
 	case request.URL.Host == "crates.io" && request.URL.Path == "/api/v1/crates/sample":
@@ -2131,6 +2133,7 @@ func (malformedOptionalRegistryMetadataTransport) RoundTrip(request *http.Reques
 func TestPkgHandlersIgnoreMalformedOptionalGoCratesAndRubyGemMetadata(t *testing.T) {
 	packageDownloadsCache.Lock()
 	delete(packageDownloadsCache.entries, "crates:sample")
+	delete(packageDownloadsCache.entries, "go-popularity:example.com/sample")
 	packageDownloadsCache.Unlock()
 	tests := []struct {
 		name, term, version string
@@ -2152,6 +2155,9 @@ func TestPkgHandlersIgnoreMalformedOptionalGoCratesAndRubyGemMetadata(t *testing
 			}
 			if answer.Data["updated"] != nil {
 				t.Errorf("malformed update metadata was retained: %#v", answer.Data["updated"])
+			}
+			if test.name == "Go module" && answer.Data["popularity"] != nil {
+				t.Errorf("unavailable pkg.go.dev popularity was reported: %#v", answer.Data["popularity"])
 			}
 			if test.name == "crates.io" && (answer.Data["downloads"] != nil || answer.Data["license"] != nil || answer.Data["repository"] != nil) {
 				t.Errorf("malformed crate metadata was retained: %#v", answer.Data)
@@ -2467,6 +2473,9 @@ func TestGoModuleReadmePreview(t *testing.T) {
 }
 
 func TestGoPackageIncludesDirectDependencyCount(t *testing.T) {
+	packageDownloadsCache.Lock()
+	delete(packageDownloadsCache.entries, "go-popularity:example.com/upper")
+	packageDownloadsCache.Unlock()
 	handler := NewPkgHandler()
 	handler.client = &http.Client{Transport: goModuleMetadataTransport{}}
 	answer, err := handler.fetchGo(context.Background(), "example.com/upper")
@@ -2500,6 +2509,63 @@ func TestPackageFormatterFallsBackToLabeledPopularityCounts(t *testing.T) {
 	})
 	if !strings.Contains(importPopularity, "Known importing packages") || !strings.Contains(importPopularity, "42") {
 		t.Fatalf("import popularity was missing or mislabeled: %s", importPopularity)
+	}
+}
+
+type goPopularityTransport struct {
+	body     string
+	requests int
+}
+
+func (transport *goPopularityTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	transport.requests++
+	return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(transport.body)), Request: request}, nil
+}
+
+func TestGoPopularityRequiresAValidCountAndCachesResults(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing count", body: `{"importedByCounts":{}}`},
+		{name: "malformed count", body: `{"importedByCounts":{"packages":"many"}}`},
+		{name: "negative count", body: `{"importedByCounts":{"packages":-1}}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cacheKey := "go-popularity:example.com/invalid"
+			packageDownloadsCache.Lock()
+			delete(packageDownloadsCache.entries, cacheKey)
+			packageDownloadsCache.Unlock()
+			transport := &goPopularityTransport{body: test.body}
+			handler := NewPkgHandler()
+			handler.client = &http.Client{Transport: transport}
+			if _, err := handler.fetchGoPopularity(context.Background(), "example.com/invalid"); err == nil {
+				t.Fatal("invalid popularity count unexpectedly succeeded")
+			}
+			if _, cached, available := cachedPackageDownloads(cacheKey); !cached || available {
+				t.Fatalf("invalid count was not short-cached as unavailable: cached=%v available=%v", cached, available)
+			}
+			if _, err := handler.fetchGoPopularity(context.Background(), "example.com/invalid"); err == nil || transport.requests != 1 {
+				t.Fatalf("failure cache miss: error=%v requests=%d", err, transport.requests)
+			}
+		})
+	}
+
+	cacheKey := "go-popularity:example.com/valid"
+	packageDownloadsCache.Lock()
+	delete(packageDownloadsCache.entries, cacheKey)
+	packageDownloadsCache.Unlock()
+	transport := &goPopularityTransport{body: `{"importedByCounts":{"packages":7}}`}
+	handler := NewPkgHandler()
+	handler.client = &http.Client{Transport: transport}
+	for attempt := 0; attempt < 2; attempt++ {
+		count, err := handler.fetchGoPopularity(context.Background(), "example.com/valid")
+		if err != nil || count != 7 {
+			t.Fatalf("fetch attempt %d = %d, %v; want 7, nil", attempt+1, count, err)
+		}
+	}
+	if transport.requests != 1 {
+		t.Fatalf("popularity requests = %d, want one cached request", transport.requests)
 	}
 }
 
