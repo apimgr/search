@@ -117,6 +117,9 @@ func (h *WikiHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	decodeOptionalJSONString(article.Extract, &extract)
 	decodeOptionalJSONString(article.ExtractHTML, &extractHTML)
 	decodeOptionalJSONString(article.Description, &description)
+	if strings.TrimSpace(sanitizeManHTML(extractHTML)) == "" && strings.TrimSpace(extract) != "" {
+		extractHTML = "<p>" + escapeHTML(extract) + "</p>"
+	}
 	var thumbnailMetadata struct {
 		Source json.RawMessage `json:"source"`
 	}
@@ -414,10 +417,9 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	}
 	var wiktionary map[string][]struct {
 		PartOfSpeech string `json:"partOfSpeech"`
-		Language     string `json:"language"`
 		Definitions  []struct {
-			Definition string   `json:"definition"`
-			Examples   []string `json:"examples"`
+			Definition string          `json:"definition"`
+			Examples   json.RawMessage `json:"examples"`
 		} `json:"definitions"`
 	}
 	if err := decodeBoundedJSON(resp.Body, 2<<20, &wiktionary); err != nil {
@@ -464,8 +466,9 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 				continue
 			}
 			example := ""
-			if len(definition.Examples) > 0 {
-				example = htmlText(definition.Examples[0])
+			var examples []string
+			if json.Unmarshal(definition.Examples, &examples) == nil && len(examples) > 0 {
+				example = htmlText(examples[0])
 			}
 			meaning.Definitions = append(meaning.Definitions, struct {
 				Definition string   `json:"definition"`

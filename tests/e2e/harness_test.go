@@ -191,7 +191,7 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 		if strings.HasSuffix(request.URL.Path, "/happy") {
 			body = `[{"meanings":[{"partOfSpeech":"adjective","synonyms":["joyful"],"antonyms":["sad"],"definitions":[{"definition":"feeling or showing pleasure","example":"She felt happy with the result.","synonyms":["cheerful"],"antonyms":["miserable"]}]}]}]`
 		} else {
-			body = `[{"word":"ephemeral","phonetic":"/ɪˈfem.ər.əl/","phonetics":[{"text":"/ɪˈfem.ər.əl/","audio":"https://api.dictionaryapi.dev/media/pronunciations/en/ephemeral-us.mp3"}],"meanings":[{"partOfSpeech":"adjective","definitions":[{"definition":"Lasting for a short time.","example":"The ephemeral beauty of the sunset."}]}],"origin":"From Greek ephēmeros"},{"word":"ephemeral","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]}],"origin":"From Greek ephēmeros"}]`
+			body = `[{"word":"ephemeral","phonetic":"/ɪˈfem.ər.əl/","phonetics":[{"text":"/ɪˈfem.ər.əl/","audio":"https://api.dictionaryapi.dev/media/pronunciations/en/ephemeral-us.mp3"}],"meanings":[{"partOfSpeech":"adjective","synonyms":["fleeting"],"antonyms":["permanent"],"definitions":[{"definition":"Lasting for a short time.","example":"The ephemeral beauty of the sunset."}]}],"origin":"From Greek ephēmeros"},{"word":"ephemeral","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]}],"origin":"From Greek ephēmeros"}]`
 		}
 	case "geocoding-api.open-meteo.com":
 		body = `{"results":[{"name":"Tokyo","latitude":35.68,"longitude":139.69,"country":"Japan","admin1":"Tokyo"}]}`
@@ -498,8 +498,22 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		t.Error("country answer is missing fixture country data")
 		return
 	}
-	if typeName == "dict" && (!strings.Contains(answer, "ephemeral") || !strings.Contains(answer, "Lasting for a short time.") || !strings.Contains(answer, "A short-lived thing.") || !strings.Contains(answer, "Frequency: 12.34 occurrences per million words")) {
-		t.Error("dictionary answer is missing one or more fixture records")
+	if typeName == "dict" {
+		for _, marker := range []string{
+			"ephemeral",
+			"/ɪˈfem.ər.əl/",
+			"Lasting for a short time.",
+			"The ephemeral beauty of the sunset.",
+			"A short-lived thing.",
+			"From Greek ephēmeros",
+			"Frequency: 12.34 occurrences per million words",
+			"Synonyms:",
+			"Antonyms:",
+		} {
+			if !strings.Contains(answer, marker) {
+				t.Errorf("dictionary answer is missing fixture metadata %q", marker)
+			}
+		}
 		return
 	}
 	if typeName == "thesaurus" {

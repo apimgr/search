@@ -1856,6 +1856,25 @@ func TestWikiHandlerKeepsSummaryWhenOptionalMetadataIsMalformed(t *testing.T) {
 	}
 }
 
+func TestWikiHandlerFallsBackToPlainExtractWhenHTMLIsUnavailable(t *testing.T) {
+	for _, extractHTML := range []string{`{}`, `"<script>alert(1)</script>"`} {
+		t.Run(extractHTML, func(t *testing.T) {
+			handler := NewWikiHandler()
+			handler.client = &http.Client{Transport: wikiSummaryTransport{
+				status: http.StatusOK,
+				body:   `{"title":"Python","extract":"A <script>safe</script> summary","extract_html":` + extractHTML + `}`,
+			}}
+			answer, err := handler.HandleDirectQuery(context.Background(), "Python")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(answer.Content, "A &lt;script&gt;safe&lt;/script&gt; summary") || strings.Contains(answer.Content, "<script>") {
+				t.Fatalf("plain Wikipedia extract was not safely rendered as a fallback: %s", answer.Content)
+			}
+		})
+	}
+}
+
 func TestWikiHandlerRejectsRegistryServerErrors(t *testing.T) {
 	handler := NewWikiHandler()
 	handler.client = &http.Client{Transport: wikiSummaryTransport{status: http.StatusServiceUnavailable, body: `{"title":"Python"}`}}
@@ -4976,9 +4995,10 @@ func TestBeautifyJavaScriptFormatsCode(t *testing.T) {
 }
 
 func TestPythonFormatterAndMinifierPreserveMultilineStringContents(t *testing.T) {
-	source := "def render():\n    message = \"\"\"first line\n  leading and trailing spaces  \nsecond line\"\"\"\n    return message"
+	source := "def render():\n    message = \"\"\"first line  \n  leading and trailing spaces  \nsecond line\"\"\"\n    return message"
 	formatted := beautifyPython(source)
 	for _, literalLine := range []string{
+		`message = """first line  `,
 		"  leading and trailing spaces  ",
 		"second line\"\"\"",
 	} {
@@ -4991,7 +5011,7 @@ func TestPythonFormatterAndMinifierPreserveMultilineStringContents(t *testing.T)
 	}
 
 	minified := minifyPythonSource(source)
-	if !strings.Contains(minified, "\n  leading and trailing spaces  \n") {
+	if !strings.Contains(minified, `message = """first line  `+"\n") || !strings.Contains(minified, "\n  leading and trailing spaces  \n") {
 		t.Errorf("minifier changed multiline string content: %q", minified)
 	}
 }
@@ -5724,6 +5744,24 @@ func TestDictionaryKeepsWiktionaryDefinitionsWhenEnrichmentProvidersFail(t *test
 	}
 	if !strings.Contains(answer.Content, "A resilient definition.") || answer.Source != "Wiktionary API" {
 		t.Fatalf("Wiktionary definition was lost when enrichment failed: %#v", answer)
+	}
+}
+
+func TestDictionaryKeepsDefinitionsWhenOptionalWiktionaryFieldsAreMalformed(t *testing.T) {
+	handler := NewDictHandler()
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		body := `[]`
+		if request.URL.Host == "en.wiktionary.org" {
+			body = `{"en":[{"partOfSpeech":"noun","language":[],"definitions":[{"definition":"A sound primary definition.","examples":{}}]}]}`
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	answer, err := handler.HandleDirectQuery(context.Background(), "resilience")
+	if err != nil {
+		t.Fatalf("malformed optional Wiktionary fields discarded the definition: %v", err)
+	}
+	if !strings.Contains(answer.Content, "A sound primary definition.") || answer.Error != "" {
+		t.Fatalf("primary definition missing after optional metadata failure: %#v", answer)
 	}
 }
 

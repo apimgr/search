@@ -1042,7 +1042,10 @@ func minifyPythonSource(source string) string {
 	var tripleQuote byte
 	for _, line := range lines {
 		if tripleQuote == 0 {
-			line = strings.TrimRight(stripPythonComment(line, &tripleQuote), " \t")
+			line = stripPythonComment(line, &tripleQuote)
+			if tripleQuote == 0 {
+				line = strings.TrimRight(line, " \t")
+			}
 			if strings.TrimSpace(line) == "" {
 				continue
 			}
@@ -1554,6 +1557,10 @@ func beautifyPython(code string) string {
 		}
 		formatted = append(formatted, strings.Repeat("    ", level)+trimmed)
 		continuationDepth = pythonDelimiterDepth(trimmed, continuationDepth, &tripleQuote)
+		if tripleQuote != 0 {
+			trailing := line[len(strings.TrimRight(line, " \t")):]
+			formatted[len(formatted)-1] += trailing
+		}
 		if continuationDepth == 0 && tripleQuote == 0 && strings.HasSuffix(trimmed, ":") {
 			indentLevel++
 		}

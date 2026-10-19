@@ -390,6 +390,10 @@ Shared text truncation now normalizes invalid UTF-8, never splits a multibyte ch
 
 Wikipedia summary requests now reject non-success status codes and preserve valid article title/extract data when optional description, thumbnail, or page URL metadata has malformed types. Offline transport fixtures cover both malformed optional metadata and provider errors.
 
+Provider parser review found two remaining optional-field failures: Wikipedia no longer loses a valid plain extract when sanitized HTML is absent or unusable, and malformed Wiktionary language/example metadata no longer discards valid definitions. Offline regression fixtures cover both fallback paths.
+
+The dictionary SSR/no-JavaScript/browser fixture now asserts IPA pronunciation, per-definition examples, etymology, frequency, synonyms, antonyms, and all parts of speech. The full Go suite passes at 73.4% coverage and the full three-tier browser E2E suite passes; the direct-answer audit remains open for remaining provider/parser and product-field gaps.
+
 The instant dictionary handler now merges every provider record so homographs and additional parts of speech remain visible, caps JSON responses at 1 MiB, and refuses redirects. Regression tests cover merged meanings, oversized bodies, and redirect rejection; the shared deterministic dictionary fixture now includes a second entry so SSR, no-JS, and browser tiers assert both records.
 
 Archive selection now uses a stable capture identity derived from the source and capture metadata, and sorts tied timestamps deterministically. The native selector submits that identity so captures from separate archives at the same timestamp cannot select the wrong response; the range slider remains progressive enhancement. Added collision coverage and updated browser/no-JS flows. Dictionary and thesaurus clients now refuse redirects; dictionary responses also reject non-success statuses before parsing provider bodies. Direct/server tests and all three archive timeline tiers pass. Thesaurus formality/intensity metadata is complete; provider-parser cases remain under audit.
@@ -407,6 +411,8 @@ Thesaurus results now add ABC Thesaurus per-sense register and −2..+2 intensit
 PHP formatting now masks heredoc and nowdoc literals before code formatting and restores them after style/indent processing, preserving their exact contents and interpolation syntax. Regression coverage checks both heredoc forms with indentation, Allman style, and minification; continue auditing other malformed and multiline language cases.
 
 Python beautification and minification now treat escaped quote characters inside triple-quoted strings as string content, preventing an escaped delimiter from ending the protected span early. Unit coverage verifies both output paths preserve the escaped delimiter and following multiline text; the new named SSR/no-JS/browser fixture exercises the formatted output in all tiers.
+
+Python formatter/minifier checks now also preserve trailing spaces on the opening line of a multiline triple-quoted value, which were previously trimmed before the parser entered the protected-string state.
 
 Man pages now render a contents index linked to stable heading IDs, native collapsible sections, section 1–8 query links, in-page section search, and copy controls for preformatted examples. Preformatted examples receive escaped syntax styling for command names, flags, variables, and quoted strings; copy works through the Clipboard API with a legacy local fallback. SEE ALSO links remain sanitized and visible. Offline SSR/no-JS/browser scenarios verify the page structure; browser coverage checks search filtering, auto-opening a matching section, native collapse, and both clipboard paths. Remaining Direct Answers gaps are still being audited.
 
