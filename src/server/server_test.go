@@ -2989,6 +2989,32 @@ func TestHandlePreferencesSave(t *testing.T) {
 	}
 }
 
+func TestPreferencesExposeCookieAndCCPAControls(t *testing.T) {
+	server := newTestServer(t)
+	originalSold := server.config.Server.Privacy.Data.Sold
+	server.config.Server.Privacy.Data.Sold = true
+	defer func() { server.config.Server.Privacy.Data.Sold = originalSold }()
+
+	request := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+	response := httptest.NewRecorder()
+	server.handlePreferences(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("preferences status = %d, want %d", response.Code, http.StatusOK)
+	}
+	for _, marker := range []string{
+		`id="cookie-preferences-form"`,
+		`action="/server/consent"`,
+		`id="consent-preferences"`,
+		`id="consent-analytics"`,
+		`action="/server/ccpa"`,
+		`name="action" value="opt-out"`,
+	} {
+		if !strings.Contains(response.Body.String(), marker) {
+			t.Errorf("preferences page is missing consent control %q", marker)
+		}
+	}
+}
+
 func TestHandleGeneralPreferencesSavePersistsLocalVideoPreviewPreference(t *testing.T) {
 	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
 	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("search_pref_video_previews_present=1&search_pref_video_previews=0"))

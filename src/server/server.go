@@ -1050,6 +1050,8 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	consent := consentFromRequest(r)
 	if consent != nil {
 		data.HasConsentCookie = true
+		data.ConsentPreferences = consent.Preferences
+		data.ConsentAnalytics = consent.Analytics
 	}
 	// Analytics injection is gated on the same consent, per AI.md PART 16:
 	// no valid analytics consent means no third-party script in the page.

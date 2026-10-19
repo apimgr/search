@@ -503,7 +503,9 @@ type PageData struct {
 	CCPAOptedOut bool
 	// HasConsentCookie is true when the request carries a valid cookie_consent cookie
 	// — when true the server skips rendering the cookie banner in the template.
-	HasConsentCookie bool
+	HasConsentCookie   bool
+	ConsentPreferences bool
+	ConsentAnalytics   bool
 	// TrackingHTML is the analytics snippet for this request, or empty when
 	// server.tracking is unset or the visitor has not consented to analytics
 	// (AI.md PART 16). Rendered in <head>; empty means no third-party script.

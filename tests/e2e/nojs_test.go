@@ -515,6 +515,30 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	}
 }
 
+func TestNoJSCookieConsentSettingsSaveFromPreferences(t *testing.T) {
+	site := newTestSite(t)
+	var preferencesHTML string
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx,
+		emulation.SetScriptExecutionDisabled(true),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.WaitVisible(`#cookie-preferences-form`, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#consent-preferences').checked = true`, nil),
+		chromedp.Evaluate(`document.querySelector('#consent-analytics').checked = false`, nil),
+		chromedp.Click(`#save-cookie-preferences`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#cookie-preferences-form`, chromedp.ByQuery),
+		chromedp.OuterHTML("html", &preferencesHTML),
+	); err != nil {
+		t.Fatalf("no-JS cookie consent settings save: %v", err)
+	}
+	if !strings.Contains(preferencesHTML, `id="consent-preferences" name="preferences" value="true" role="switch" aria-checked="true" checked`) {
+		t.Errorf("saved preference-cookie consent is not checked: %s", snippet(preferencesHTML, `id="consent-preferences"`))
+	}
+	if !strings.Contains(preferencesHTML, `id="consent-analytics" name="analytics" value="true" role="switch" aria-checked="false"`) {
+		t.Errorf("saved analytics consent is not unchecked: %s", snippet(preferencesHTML, `id="consent-analytics"`))
+	}
+}
+
 func TestNoJSMobilePreferencesTriggerNavigatesToFullSettings(t *testing.T) {
 	site := newTestSite(t)
 	var pageURL string

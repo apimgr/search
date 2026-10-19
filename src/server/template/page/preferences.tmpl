@@ -5,6 +5,62 @@
         <p class="subtitle">{{t "preferences.subtitle"}}</p>
     </header>
 
+    <section class="preferences-section" aria-labelledby="cookie-preferences-heading">
+        <h2 id="cookie-preferences-heading">{{t "privacy.cookies_heading"}}</h2>
+        <p>{{t "privacy.cookies_intro"}}</p>
+        <form action="/server/consent" method="POST" id="cookie-preferences-form" class="preferences-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="return_to" value="{{.RequestPath}}">
+            <input type="hidden" name="choice" value="save">
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="checkbox" checked disabled aria-label="{{t "privacy.session_cookie_label"}}">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">{{t "privacy.session_cookie_label"}} ({{t "common.enabled"}})</span>
+                </label>
+                <p>{{t "privacy.session_cookie_description"}}</p>
+            </div>
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="checkbox" id="consent-preferences" name="preferences" value="true" role="switch" aria-checked="{{if .ConsentPreferences}}true{{else}}false{{end}}" {{if .ConsentPreferences}}checked{{end}}>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">{{t "privacy.preference_cookie_label"}}</span>
+                </label>
+                <p>{{t "privacy.preference_cookie_description"}}</p>
+            </div>
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="checkbox" id="consent-analytics" name="analytics" value="true" role="switch" aria-checked="{{if .ConsentAnalytics}}true{{else}}false{{end}}" {{if .ConsentAnalytics}}checked{{end}}>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">{{t "privacy.analytics_heading"}}</span>
+                </label>
+                <p>{{if .Config.Server.Tracking.Type}}{{t "privacy.analytics_provider" .Config.Server.Tracking.Type}}{{else}}{{t "privacy.analytics_none"}}{{end}}</p>
+            </div>
+            <button type="submit" class="btn" id="save-cookie-preferences">{{t "common.save"}}</button>
+        </form>
+    </section>
+
+    <section class="preferences-section ccpa-section" aria-labelledby="ccpa-preferences-heading">
+        <h2 id="ccpa-preferences-heading">{{t "privacy.ccpa_opt_out_heading"}}</h2>
+        {{if .DataSold}}
+        <p>{{t "privacy.ccpa_opt_out_description"}}</p>
+        {{if .CCPAOptedOut}}<p class="ccpa-status">{{t "privacy.ccpa_opt_out_status_active"}}</p>{{end}}
+        <form method="post" action="/server/ccpa">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="return_to" value="{{.RequestPath}}">
+            {{if .CCPAOptedOut}}
+            <input type="hidden" name="action" value="opt-in">
+            <button type="submit" class="btn">{{t "privacy.ccpa_opt_in_button"}}</button>
+            {{else}}
+            <input type="hidden" name="action" value="opt-out">
+            <button type="submit" class="btn btn-decline">{{t "privacy.ccpa_opt_out_button"}}</button>
+            {{end}}
+        </form>
+        {{else}}
+        <p>{{t "privacy.ccpa_no_sell_notice"}}</p>
+        {{end}}
+    </section>
+
     <div class="preferences-section">
         <h2>{{t "preferences.general_settings"}}</h2>
         <form action="/server/preferences" method="POST" id="general-settings" class="preferences-form">

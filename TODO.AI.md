@@ -437,6 +437,8 @@ Custom bang browser coverage now creates a custom shortcut in Preferences, rejec
 
 Language switching now has named assertions in all three tiers: `/?lang=de` changes SSR strings, the no-JS preferences form saves German and renders the translated homepage, and the full-JS preferences flow does the same through the actual preference UI. The HTTP-only E2E fixture strips `upgrade-insecure-requests` from its CSP so its browser fetches remain on the test listener's HTTP scheme; the three language scenarios pass together.
 
+Cookie-category consent controls and the CCPA opt-out control are now reachable from `/server/preferences`, alongside the existing banner and privacy page paths. The category form uses the existing consent endpoint and submits natively without JavaScript. SSR coverage checks the CCPA control when data sharing is configured, and the no-JS browser tier saves and reloads preference/analytics selections. The full three-tier E2E suite passes.
+
 Keyboard-shortcut coverage checks the help table in SSR and no-JS and exercises every IDEA.md shortcut in the browser tier: `/` search focus, Escape clear/unfocus, `s` preferences, `?` help open/close, `j/k` result selection, Enter/`o` same-tab opening, `O` safe new-tab opening, `h/l` pagination, `gg`/`G` first/last result selection, `1-9` quick jumps, and `t` theme cycling. The shortcut implementation and help text agree with IDEA.md.
 
 SSR E2E now verifies a built-in `!g` bang preserves the query and redirects to the selected search engine.

@@ -326,7 +326,7 @@ server:
 
 - No third-party tracking by default
 - No ads; clean result links with tracking params stripped
-- Preferences stored client-side (localStorage + portable `?prefs=` links)
+- Preferences stored in client-side cookies with portable `/server/preferences/import` links
 - Optional image proxy
 - Full Tor support with per-engine routing and stream isolation
 
