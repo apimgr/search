@@ -467,6 +467,47 @@ func TestBrowserInfiniteScrollPreservesSearchFilters(t *testing.T) {
 	requireNoFailures(t, pf, "infinite-scroll filter preservation")
 }
 
+func TestBrowserInfiniteScrollVideoResultsRetainPreviewMetadata(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	document := fmt.Sprintf(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Video search fixture</title></head><body><div class="search-results-page" data-query="video fixture" data-category="videos" data-page="1" data-per-page="1" data-safe-search="1"></div><div class="results-list" id="results-container"></div><div id="scroll-trigger"></div><div id="loading-indicator" class="hidden"></div><div id="end-indicator" class="hidden"></div><script src="%s/static/js/app.js"></script></body></html>`, site.URL)
+	fixture := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/" {
+			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprintln(writer, document)
+			return
+		}
+		if request.URL.Path != "/api/v1/search" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = fmt.Fprintln(writer, `{"ok":true,"data":{"results":[{"title":"Loaded fixture video","url":"https://youtube.com/watch?v=abc123XYZ_9","description":"Video loaded by infinite scroll","engine":"fixture","duration":120,"embed_url":"https://www.youtube-nocookie.com/embed/abc123XYZ_9"}],"pagination":{"page":2,"limit":1,"total":2,"pages":2}}}`)
+	}))
+	t.Cleanup(fixture.Close)
+	var embedURL, duration string
+	steps := []struct {
+		name   string
+		action chromedp.Action
+	}{
+		{name: "navigate to video fixture", action: chromedp.Navigate(fixture.URL)},
+		{name: "trigger infinite scroll", action: chromedp.Evaluate(`document.querySelector('#scroll-trigger').scrollIntoView()`, nil)},
+		{name: "wait for paginated video card", action: chromedp.WaitVisible(`.video-result[data-video-embed]`, chromedp.ByQuery)},
+		{name: "read video embed", action: chromedp.Evaluate(`document.querySelector('.video-result').dataset.videoEmbed`, &embedURL)},
+		{name: "read video duration", action: chromedp.Evaluate(`document.querySelector('.video-result').dataset.videoDuration`, &duration)},
+	}
+	for _, step := range steps {
+		if err := chromedp.Run(ctx, step.action); err != nil {
+			t.Fatalf("%s: %v", step.name, err)
+		}
+	}
+	if embedURL != "https://www.youtube-nocookie.com/embed/abc123XYZ_9" || duration != "120" {
+		t.Errorf("paginated video metadata embed=%q duration=%q", embedURL, duration)
+	}
+	requireNoFailures(t, pf, "infinite-scroll video metadata")
+}
+
 func TestBrowserSearchHistoryIsLocalAndClearable(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

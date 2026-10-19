@@ -1938,7 +1938,7 @@
             if (category === 'videos') {
                 var durationStr = result.duration ? formatDuration(result.duration) : '';
                 var viewCountStr = result.view_count ? formatViewCount(result.view_count) + ' views' : '';
-                return '<div class="video-result">' +
+                return '<div class="video-result" data-video-embed="' + escapeHtmlLocal(result.embed_url || '') + '" data-video-duration="' + escapeHtmlLocal(result.duration || 0) + '">' +
                     '<a href="' + escapeHtmlLocal(result.url) + '" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">' +
                     '<div class="video-thumbnail-container">' +
                     (result.thumbnail
