@@ -33,6 +33,34 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
+type nilAnswerHandler struct{}
+
+func (*nilAnswerHandler) Type() AnswerType { return "nil-answer-test" }
+func (*nilAnswerHandler) HandleDirectQuery(context.Context, string) (*Answer, error) {
+	return nil, nil
+}
+
+func TestManagerRegisterIgnoresTypedNilHandler(t *testing.T) {
+	manager := NewManager()
+	var handler *nilAnswerHandler
+	manager.Register(handler)
+	if _, ok := manager.GetHandler("nil-answer-test"); ok {
+		t.Fatal("typed-nil handler was registered")
+	}
+}
+
+func TestManagerProcessTypeHandlesNilAnswer(t *testing.T) {
+	manager := NewManager()
+	manager.Register(&nilAnswerHandler{})
+	answer, err := manager.ProcessType(context.Background(), "nil-answer-test", "term")
+	if err == nil {
+		t.Fatal("ProcessType() error = nil, want nil-answer failure")
+	}
+	if answer == nil || answer.Error != "handler_error" {
+		t.Fatalf("ProcessType() answer = %#v, want handler error answer", answer)
+	}
+}
+
 func TestParse(t *testing.T) {
 	m := NewManager()
 

@@ -93,7 +93,9 @@ func (f *StocksFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 			symbols[i] = strings.TrimSpace(strings.ToUpper(symbols[i]))
 		}
 	} else {
-		symbols = f.config.DefaultSymbols
+		if f.config != nil {
+			symbols = f.config.DefaultSymbols
+		}
 	}
 
 	if len(symbols) == 0 {

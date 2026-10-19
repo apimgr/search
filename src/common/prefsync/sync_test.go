@@ -92,6 +92,29 @@ func TestExportCanonicalIncludesOnlyPreferences(t *testing.T) {
 	}
 }
 
+func TestEnginePreferenceCookiesCanBeExportedAndImported(t *testing.T) {
+	value := "AQIDBA"
+	request := httptest.NewRequest(http.MethodGet, "/server/preferences/export", nil)
+	request.AddCookie(&http.Cookie{Name: "search_pref_engines", Value: value})
+	request.AddCookie(&http.Cookie{Name: "search_pref_engine_order", Value: value})
+	state, fullURL, code := Export(request, "search", "en", []string{"en"})
+	if state.Prefs["engines"] != value || state.Prefs["engine_order"] != value || fullURL == "" || code == "" {
+		t.Fatalf("exported engine preference state=%#v url=%q code=%q", state.Prefs, fullURL, code)
+	}
+	parsed, err := url.Parse(fullURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Query().Get("search_pref_engines") != value || parsed.Query().Get("search_pref_engine_order") != value {
+		t.Fatalf("engine preferences missing from sync URL: %s", parsed.RawQuery)
+	}
+	importRequest := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_engines=AQIDBA&search_pref_engine_order=AQIDBA", nil)
+	result := Import(importRequest, "search", "en", []string{"en"})
+	if result.State.Prefs["engines"] != value || result.State.Prefs["engine_order"] != value {
+		t.Fatalf("engine preference cookies did not round-trip through sync: %#v", result.State.Prefs)
+	}
+}
+
 func TestImportValidatesVisualPreferences(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=large&search_pref_results_density=spacious&search_pref_accent_color=%23ABCDEF", nil)
 	result := Import(req, "search", "en", testLanguages)

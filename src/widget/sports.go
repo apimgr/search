@@ -2,7 +2,6 @@ package widget
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -464,7 +463,10 @@ func (f *SportsFetcher) fetchLiveScores(ctx context.Context, leagueFilter string
 
 // fetchDefaultGames fetches games from default configured leagues
 func (f *SportsFetcher) fetchDefaultGames(ctx context.Context) (*SportsData, error) {
-	defaultLeagues := f.config.DefaultLeagues
+	var defaultLeagues []string
+	if f.config != nil {
+		defaultLeagues = f.config.DefaultLeagues
+	}
 	if len(defaultLeagues) == 0 {
 		defaultLeagues = []string{"NFL", "NBA", "MLB", "NHL"}
 	}
@@ -636,7 +638,7 @@ func (f *SportsFetcher) doRequest(ctx context.Context, apiURL string, target int
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	return json.NewDecoder(resp.Body).Decode(target)
+	return decodeWidgetJSON(resp.Body, target)
 }
 
 // convertEvent converts a TheSportsDB event to our GameData structure

@@ -2,7 +2,6 @@ package widget
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -101,7 +100,7 @@ func (f *DictionaryFetcher) Fetch(ctx context.Context, params map[string]string)
 		} `json:"meanings"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &results); err != nil {
 		return nil, err
 	}
 

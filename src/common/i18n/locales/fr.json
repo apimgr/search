@@ -281,7 +281,10 @@
     "custom_css_saved": "Le CSS personnalisé est enregistré dans ce navigateur.",
     "custom_css_too_long": "Le CSS personnalisé est trop long.",
     "custom_css_storage_error": "Impossible d’enregistrer le CSS personnalisé dans ce navigateur.",
-    "custom_css_cleared": "Le CSS personnalisé a été effacé."
+    "custom_css_cleared": "Le CSS personnalisé a été effacé.",
+    "engines_help": "Choisissez les moteurs de recherche pour chaque catégorie. Les moteurs désactivés par l’opérateur restent indisponibles.",
+    "engine_operator_disabled": "Désactivé par l’opérateur",
+    "engines_order_help": "Faites glisser les moteurs pour modifier leur ordre de priorité."
   },
   "nav": {
     "home": "Accueil",

@@ -5,7 +5,15 @@
         <p class="subtitle">{{t "preferences.subtitle"}}</p>
     </header>
 
-    <section class="preferences-section" aria-labelledby="cookie-preferences-heading">
+    <nav class="preferences-tabs" role="tablist" aria-label="{{t "preferences.title"}}" hidden>
+        <button type="button" role="tab" id="preferences-tab-general" aria-selected="true" data-preferences-tab="general">{{t "preferences.general"}}</button>
+        <button type="button" role="tab" id="preferences-tab-interface" aria-selected="false" data-preferences-tab="interface" tabindex="-1">{{t "preferences.interface"}}</button>
+        <button type="button" role="tab" id="preferences-tab-privacy" aria-selected="false" data-preferences-tab="privacy" tabindex="-1">{{t "preferences.privacy"}}</button>
+        <button type="button" role="tab" id="preferences-tab-engines" aria-selected="false" data-preferences-tab="engines" tabindex="-1">{{t "preferences.engines_tab"}}</button>
+        <button type="button" role="tab" id="preferences-tab-data" aria-selected="false" data-preferences-tab="data" tabindex="-1">{{t "preferences.data"}}</button>
+    </nav>
+
+    <section class="preferences-section" data-preference-tab="privacy" aria-labelledby="cookie-preferences-heading">
         <h2 id="cookie-preferences-heading">{{t "privacy.cookies_heading"}}</h2>
         <p>{{t "privacy.cookies_intro"}}</p>
         <form action="/server/consent" method="POST" id="cookie-preferences-form" class="preferences-form">
@@ -40,7 +48,7 @@
         </form>
     </section>
 
-    <section class="preferences-section ccpa-section" aria-labelledby="ccpa-preferences-heading">
+    <section class="preferences-section ccpa-section" data-preference-tab="privacy" aria-labelledby="ccpa-preferences-heading">
         <h2 id="ccpa-preferences-heading">{{t "privacy.ccpa_opt_out_heading"}}</h2>
         {{if .DataSold}}
         <p>{{t "privacy.ccpa_opt_out_description"}}</p>
@@ -61,8 +69,8 @@
         {{end}}
     </section>
 
-    <div class="preferences-section">
-        <h2>{{t "preferences.general_settings"}}</h2>
+    <div class="preferences-section" id="preferences-settings-section">
+        <h2 id="preferences-general-heading">{{t "preferences.general_settings"}}</h2>
         <form action="/server/preferences" method="POST" id="general-settings" class="preferences-form">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="form-group">
@@ -213,7 +221,32 @@
         </form>
     </div>
 
-    <section class="preferences-section" aria-labelledby="custom-css-heading">
+    <section class="preferences-section" data-preference-tab="engines" aria-labelledby="engine-preferences-heading">
+        <h2 id="engine-preferences-heading">{{t "preferences.engines_tab"}}</h2>
+        <p class="help-text">{{t "preferences.engines_help"}}</p>
+        <input type="hidden" name="search_pref_engines_present" value="1" form="general-settings">
+        <input type="hidden" name="search_pref_engine_order_present" value="1" form="general-settings">
+        <input type="hidden" name="search_pref_engine_order" id="search-pref-engine-order" value="{{.Data.engineOrder}}" form="general-settings">
+        <p class="help-text">{{t "preferences.engines_order_help"}}</p>
+        <div class="engine-preference-list" id="engine-preference-list">
+            {{range .Data.preferenceEngines}}
+            {{$engineID := .ID}}{{$engineEnabled := .Enabled}}
+            <fieldset class="engine-preference-item" data-engine-id="{{.ID}}" draggable="{{if .Enabled}}true{{else}}false{{end}}">
+                <legend>{{.Name}}{{if not .Enabled}} ({{t "preferences.engine_operator_disabled"}}){{end}}</legend>
+                <div class="engine-preference-categories">
+                    {{range .Categories}}
+                    <label class="engine-preference-category">
+                        <input type="checkbox" name="search_pref_engine" value="{{$engineID}}:{{.ID}}" form="general-settings" {{if .Checked}}checked{{end}} {{if not $engineEnabled}}disabled{{end}}>
+                        <span>{{t (printf "search.categories.%s" .ID)}}</span>
+                    </label>
+                    {{end}}
+                </div>
+            </fieldset>
+            {{end}}
+        </div>
+    </section>
+
+    <section class="preferences-section" data-preference-tab="interface" aria-labelledby="custom-css-heading">
         <h2 id="custom-css-heading">{{t "preferences.custom_css_heading"}}</h2>
         <p class="help-text">{{t "preferences.custom_css_help"}}</p>
         <label for="custom-css">{{t "preferences.custom_css_label"}}</label>
@@ -226,7 +259,7 @@
         <p class="help-text" id="custom-css-status" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="preferences-section" aria-labelledby="owner-tokens-heading">
+    <section class="preferences-section" data-preference-tab="data" aria-labelledby="owner-tokens-heading">
         <h2 id="owner-tokens-heading">Tokens</h2>
         {{with index .Data "ownerTokenMessage"}}<p role="status">{{.}}</p>{{end}}
         {{with index .Data "ownerTokenRevealed"}}
@@ -278,7 +311,7 @@
         {{end}}
     </section>
 
-    <div class="preferences-section">
+    <div class="preferences-section" data-preference-tab="interface">
         <h2>{{t "preferences.search_bangs_heading"}}</h2>
         <p class="help-text">
             {{t "preferences.search_bangs_help_prefix"}} <code>!g</code> {{t "preferences.search_bangs_help_google"}},
@@ -308,7 +341,7 @@
         </div>
     </div>
 
-    <div class="preferences-section">
+    <div class="preferences-section" data-preference-tab="interface">
         <h2>{{t "preferences.homepage_widgets_heading"}}</h2>
         <p class="help-text">{{t "preferences.homepage_widgets_help"}}</p>
 
@@ -404,7 +437,7 @@
         </p>
     </div>
 
-    <div class="preferences-section">
+    <div class="preferences-section" data-preference-tab="interface">
         <h2>{{t "preferences.custom_bangs_heading"}}</h2>
         <p class="help-text">{{t "preferences.custom_bangs_help"}}</p>
 
@@ -437,7 +470,7 @@
         </form>
     </div>
 
-    <div class="preferences-section">
+    <div class="preferences-section" data-preference-tab="interface">
         <h2>{{t "preferences.add_to_browser_heading"}}</h2>
         <p class="help-text">{{t "preferences.add_to_browser_help"}}</p>
 
@@ -457,7 +490,7 @@
         </div>
     </div>
 
-    <div class="preferences-section">
+    <div class="preferences-section" data-preference-tab="data">
         <h2>{{t "preferences.data_management_heading"}}</h2>
         <p class="help-text">{{t "preferences.data_management_help"}}</p>
         <div class="data-actions">
@@ -468,7 +501,7 @@
         <input type="file" id="import-file" accept=".json" class="hidden">
     </div>
 
-    <div class="preferences-section">
+    <div class="preferences-section" data-preference-tab="data">
         <h2>{{t "preferences.sync_heading"}}</h2>
         <p class="help-text">{{t "preferences.sync_help"}}</p>
 

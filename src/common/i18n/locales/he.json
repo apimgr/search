@@ -281,7 +281,10 @@
     "custom_css_saved": "ה-CSS המותאם אישית נשמר בדפדפן הזה.",
     "custom_css_too_long": "ה-CSS המותאם אישית ארוך מדי.",
     "custom_css_storage_error": "לא ניתן לשמור CSS מותאם אישית בדפדפן הזה.",
-    "custom_css_cleared": "ה-CSS המותאם אישית נוקה."
+    "custom_css_cleared": "ה-CSS המותאם אישית נוקה.",
+    "engines_help": "בחרו מנועי חיפוש לכל קטגוריה. מנועים שהמפעיל השבית לא יהיו זמינים.",
+    "engine_operator_disabled": "הושבת על ידי המפעיל",
+    "engines_order_help": "גררו מנועים כדי לשנות את סדר העדיפויות שלהם."
   },
   "nav": {
     "home": "דף הבית",

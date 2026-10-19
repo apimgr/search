@@ -657,7 +657,7 @@ func (a *Aggregator) generateCacheKey(query *model.Query) string {
 		query.Language + "|" +
 		query.Region + "|" +
 		string(query.SortBy) + "|" +
-		query.TimeRange
+		query.TimeRange + "|" + strings.Join(query.Engines, ",") + "|" + strings.Join(query.ExcludeEngines, ",")
 
 	hash := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(hash[:16])

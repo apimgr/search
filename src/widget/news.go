@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -101,7 +100,12 @@ func (f *NewsFetcher) CacheDuration() time.Duration {
 
 // Fetch fetches news from configured RSS feeds
 func (f *NewsFetcher) Fetch(ctx context.Context, params map[string]string) (*WidgetData, error) {
-	sources := f.config.Sources
+	var sources []string
+	maxItems := 0
+	if f.config != nil {
+		sources = f.config.Sources
+		maxItems = f.config.MaxItems
+	}
 	if len(sources) == 0 {
 		// Default news sources
 		sources = []string{
@@ -110,7 +114,6 @@ func (f *NewsFetcher) Fetch(ctx context.Context, params map[string]string) (*Wid
 		}
 	}
 
-	maxItems := f.config.MaxItems
 	if maxItems <= 0 {
 		maxItems = 10
 	}
@@ -177,7 +180,7 @@ func (f *NewsFetcher) fetchFeed(ctx context.Context, feedURL string) ([]NewsItem
 
 	// Read the body once and try both formats against the buffered bytes,
 	// avoiding a redundant second fetch and the double Close that caused.
-	body, err := io.ReadAll(resp.Body)
+	body, err := readWidgetProviderResponse(resp.Body)
 	if err != nil {
 		return nil, err
 	}

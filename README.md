@@ -20,8 +20,11 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Privacy First: No third-party analytics by default, consent-aware preferences, self-hosted data control
 - Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
 - Portable Preferences: Save settings locally, export/import them, or share them with portable `prefs` links
+- Search Engine Preferences: Select engines per search category and drag to set their priority
+- Tabbed Preferences: Manage general, interface, privacy, engine, and data settings with keyboard-accessible tabs
 - Search Alerts: Accountless alerts with email verification plus private RSS and webhook delivery
 - Embeddable Search Bar: Native HTML form snippet that works without JavaScript or third-party embeds ([integration guide](docs/integrations.md#search-bar-widget))
+- Browser Search: OpenSearch description and a copyable, customizable browser search URL
 - Fast and Efficient: Written in Go with concurrent engine queries
 - Multiple Engines: Aggregate results from Google, Bing, DuckDuckGo, and more
 - Instant Answers: Calculator, unit/currency converter, weather, dictionary, and more

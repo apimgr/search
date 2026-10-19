@@ -281,7 +281,10 @@
     "custom_css_saved": "自定义 CSS 已保存在此浏览器中。",
     "custom_css_too_long": "自定义 CSS 太长。",
     "custom_css_storage_error": "无法在此浏览器中保存自定义 CSS。",
-    "custom_css_cleared": "自定义 CSS 已清除。"
+    "custom_css_cleared": "自定义 CSS 已清除。",
+    "engines_help": "为每个类别选择搜索引擎。管理员禁用的引擎仍不可用。",
+    "engine_operator_disabled": "管理员已禁用",
+    "engines_order_help": "拖动引擎以更改其优先顺序。"
   },
   "nav": {
     "home": "首页",

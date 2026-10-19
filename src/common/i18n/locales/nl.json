@@ -281,7 +281,10 @@
     "custom_css_saved": "Aangepaste CSS opgeslagen voor deze browser.",
     "custom_css_too_long": "De aangepaste CSS is te lang.",
     "custom_css_storage_error": "Aangepaste CSS kon niet in deze browser worden opgeslagen.",
-    "custom_css_cleared": "Aangepaste CSS gewist."
+    "custom_css_cleared": "Aangepaste CSS gewist.",
+    "engines_help": "Kies zoekmachines per categorie. Door de beheerder uitgeschakelde zoekmachines blijven niet beschikbaar.",
+    "engine_operator_disabled": "Uitgeschakeld door beheerder",
+    "engines_order_help": "Sleep zoekmachines om hun prioriteitsvolgorde te wijzigen."
   },
   "nav": {
     "home": "Home",

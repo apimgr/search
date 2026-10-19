@@ -281,7 +281,10 @@
     "custom_css_saved": "حسب ضرورت CSS اس براؤزر میں محفوظ ہو گئی۔",
     "custom_css_too_long": "حسب ضرورت CSS بہت طویل ہے۔",
     "custom_css_storage_error": "اس براؤزر میں حسب ضرورت CSS محفوظ نہیں ہو سکی۔",
-    "custom_css_cleared": "حسب ضرورت CSS صاف ہو گئی۔"
+    "custom_css_cleared": "حسب ضرورت CSS صاف ہو گئی۔",
+    "engines_help": "ہر زمرے کے لیے تلاش کے انجن منتخب کریں۔ منتظم کے غیر فعال کردہ انجن دستیاب نہیں ہوں گے۔",
+    "engine_operator_disabled": "منتظم نے غیر فعال کیا",
+    "engines_order_help": "ترجیحی ترتیب بدلنے کے لیے انجن کھینچیں۔"
   },
   "nav": {
     "home": "ہوم",

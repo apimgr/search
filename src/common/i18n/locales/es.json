@@ -281,7 +281,10 @@
     "custom_css_saved": "CSS personalizado guardado en este navegador.",
     "custom_css_too_long": "El CSS personalizado es demasiado largo.",
     "custom_css_storage_error": "No se pudo guardar el CSS personalizado en este navegador.",
-    "custom_css_cleared": "CSS personalizado borrado."
+    "custom_css_cleared": "CSS personalizado borrado.",
+    "engines_help": "Elige motores de búsqueda para cada categoría. Los motores desactivados por el operador no estarán disponibles.",
+    "engine_operator_disabled": "Desactivado por el operador",
+    "engines_order_help": "Arrastra los motores para cambiar su orden de prioridad."
   },
   "nav": {
     "home": "Inicio",

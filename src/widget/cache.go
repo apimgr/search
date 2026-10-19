@@ -14,6 +14,7 @@ type CacheItem struct {
 // Cache provides thread-safe caching for widget data
 type Cache struct {
 	mu    sync.RWMutex
+	close sync.Once
 	items map[string]*CacheItem
 	stop  chan struct{}
 }
@@ -33,12 +34,7 @@ func NewCache() *Cache {
 
 // Close stops the cleanup goroutine
 func (c *Cache) Close() {
-	select {
-	case <-c.stop:
-		// Already closed
-	default:
-		close(c.stop)
-	}
+	c.close.Do(func() { close(c.stop) })
 }
 
 // Get retrieves an item from the cache

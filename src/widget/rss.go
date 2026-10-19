@@ -1,10 +1,12 @@
 package widget
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -37,9 +39,7 @@ type RSSItemData struct {
 // NewRSSFetcher creates a new RSS fetcher
 func NewRSSFetcher(cfg *config.RSSWidgetConfig) *RSSFetcher {
 	return &RSSFetcher{
-		client: &http.Client{
-			Timeout: 15 * time.Second,
-		},
+		client: newWidgetPublicHTTPClient(15 * time.Second),
 		config: cfg,
 	}
 }
@@ -72,7 +72,12 @@ func (f *RSSFetcher) Fetch(ctx context.Context, params map[string]string) (*Widg
 	}
 
 	// Limit number of feeds
-	maxFeeds := f.config.MaxFeeds
+	maxFeeds := 0
+	maxItems := 0
+	if f.config != nil {
+		maxFeeds = f.config.MaxFeeds
+		maxItems = f.config.MaxItems
+	}
 	if maxFeeds <= 0 {
 		maxFeeds = 5
 	}
@@ -80,7 +85,6 @@ func (f *RSSFetcher) Fetch(ctx context.Context, params map[string]string) (*Widg
 		feeds = feeds[:maxFeeds]
 	}
 
-	maxItems := f.config.MaxItems
 	if maxItems <= 0 {
 		maxItems = 10
 	}
@@ -144,6 +148,10 @@ func (f *RSSFetcher) Fetch(ctx context.Context, params map[string]string) (*Widg
 
 // fetchSingleFeed fetches and parses a single RSS/Atom feed
 func (f *RSSFetcher) fetchSingleFeed(ctx context.Context, feedURL string) ([]RSSItemData, error) {
+	parsedURL, err := url.Parse(feedURL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Hostname() == "" || parsedURL.User != nil {
+		return nil, fmt.Errorf("feed URL must use HTTP or HTTPS and must not contain user information")
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
 	if err != nil {
 		return nil, err
@@ -164,24 +172,16 @@ func (f *RSSFetcher) fetchSingleFeed(ctx context.Context, feedURL string) ([]RSS
 
 	// Try parsing as RSS
 	var rssFeed RSSFeed
-	decoder := xml.NewDecoder(resp.Body)
-	if err := decoder.Decode(&rssFeed); err == nil && len(rssFeed.Channel.Items) > 0 {
-		return f.convertRSSItems(rssFeed.Channel), nil
-	}
-
-	// Retry and try Atom format
-	closeutil.Close(resp.Body)
-	req, _ = http.NewRequestWithContext(ctx, "GET", feedURL, nil)
-	req.Header.Set("User-Agent", version.BrowserUserAgent)
-	resp, err = f.client.Do(req)
+	body, err := readWidgetProviderResponse(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	defer closeutil.Close(resp.Body)
+	if err := xml.NewDecoder(bytes.NewReader(body)).Decode(&rssFeed); err == nil && len(rssFeed.Channel.Items) > 0 {
+		return f.convertRSSItems(rssFeed.Channel), nil
+	}
 
 	var atomFeed AtomFeed
-	decoder = xml.NewDecoder(resp.Body)
-	if err := decoder.Decode(&atomFeed); err == nil && len(atomFeed.Entries) > 0 {
+	if err := xml.NewDecoder(bytes.NewReader(body)).Decode(&atomFeed); err == nil && len(atomFeed.Entries) > 0 {
 		return f.convertAtomEntries(atomFeed), nil
 	}
 

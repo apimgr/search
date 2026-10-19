@@ -20,6 +20,7 @@ import (
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 )
 
 // TestBrowserHomeSearchFlow drives the real JS-enhanced search box end to
@@ -241,6 +242,7 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	}
 	runStage("create preferences",
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
 	)
 	runStage("store custom shortcut",
 		chromedp.SetValue(`#bang-shortcut`, "fixture", chromedp.ByQuery),
@@ -269,7 +271,7 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.SendKeys(`#searchQuery`, "!", chromedp.ByQuery),
 		chromedp.Sleep(500*time.Millisecond),
-		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.innerText || ''`, &autocompleteText),
+		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.textContent || ''`, &autocompleteText),
 	)
 	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
 		t.Fatalf("custom bang suggestion for ! = %q", autocompleteText)
@@ -277,7 +279,7 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	runStage("filter autocomplete by shortcut",
 		chromedp.SendKeys(`#searchQuery`, "fixture", chromedp.ByQuery),
 		chromedp.Sleep(500*time.Millisecond),
-		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.innerText || ''`, &autocompleteText),
+		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.textContent || ''`, &autocompleteText),
 	)
 	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
 		t.Fatalf("custom bang shortcut autocomplete suggestion = %q", autocompleteText)
@@ -379,6 +381,7 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 			return nil
 		}),
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Click(`#copy-sync-prefs`, chromedp.ByQuery),
 		chromedp.Poll(`document.querySelector('#sync-url').value.length > 0`, nil, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 	); err != nil {
@@ -399,11 +402,13 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	if err := chromedp.Run(receiver,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.SetValue(`#sync-paste`, syncURL, chromedp.ByQuery),
 		chromedp.Click(`#apply-sync-prefs`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
 		chromedp.OuterHTML("html", &homepage),
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#infinite-scroll').checked`, &infiniteScrollEnabled),
 	); err != nil {
 		t.Fatalf("import preferences on receiver device: %v", err)
@@ -672,9 +677,11 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		chromedp.WaitVisible(".owner-token-issued .token-value", chromedp.ByQuery),
 		chromedp.Text(".owner-token-issued .token-value", &primary, chromedp.ByQuery),
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] input[name=name]`, "browser-linked", chromedp.ByQuery),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] select[name=expires_at]`, "7d", chromedp.ByQuery),
 		chromedp.Click(`form[action="/server/preferences/tokens"] button[type=submit]`, chromedp.ByQuery),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &linked, chromedp.ByQuery),
 	); err != nil {
@@ -686,9 +693,11 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	var linkedName string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] input[name=name]`, "browser-renamed", chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] select[name=expires_at]`, "30d", chromedp.ByQuery),
 		chromedp.Click(`.owner-token-item form[action$="/update"] button[type=submit]`, chromedp.ByQuery),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(`.owner-token-item h4`, chromedp.ByQuery),
 		chromedp.Text(`.owner-token-item h4`, &linkedName, chromedp.ByQuery),
 	); err != nil {
@@ -699,6 +708,7 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Click(`.owner-token-item form[action$="/reveal"] button`, chromedp.ByQuery),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &status, chromedp.ByQuery),
 	); err != nil {
@@ -709,7 +719,9 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Click(`.owner-token-item form[action$="/rotate"] button`, chromedp.ByQuery),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
 	); err != nil {
@@ -720,8 +732,10 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Evaluate(`window.confirm = () => true`, nil),
 		chromedp.Click(`.owner-token-item form[action$="/revoke"] button`, chromedp.ByQuery),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
 		chromedp.Text(`.owner-token-item p`, &status, chromedp.ByQuery),
 	); err != nil {
@@ -831,6 +845,7 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
+		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
 		chromedp.SetValue(`#font-size`, "small", chromedp.ByQuery),
 		chromedp.SetValue(`#results-density`, "spacious", chromedp.ByQuery),
 		chromedp.SetValue(`#accent-color`, "#a1b2c3", chromedp.ByQuery),
@@ -866,6 +881,7 @@ func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
 	var firstValue, importedValue, savedCSS, exportedCSS string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#custom-css`, chromedp.ByQuery),
 		chromedp.SetValue(`#custom-css`, `:root { --custom-css-fixture: "saved"; }`, chromedp.ByQuery),
 		chromedp.Click(`#save-custom-css`, chromedp.ByQuery),
@@ -873,6 +889,7 @@ func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &savedCSS),
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => {
 			const OriginalBlob = window.Blob;
 			window.Blob = class extends OriginalBlob {
@@ -903,6 +920,114 @@ func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
 		t.Errorf("custom CSS values after save, reload, export, and import = %q, %q, %q, %q", firstValue, savedCSS, exportedCSS, importedValue)
 	}
 	requireNoFailures(t, pf, "custom CSS preference save and import")
+}
+
+func TestBrowserOpenSearchCanBeCopiedFromPreferences(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var copiedURL, displayedURL string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
+		chromedp.SetValue(`#custom-engine-name`, "Fixture Search", chromedp.ByQuery),
+		chromedp.Evaluate(`Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: value => { window.__copiedOpenSearchURL = value; return Promise.resolve(); }}})`, nil),
+		chromedp.Click(`#copy-opensearch`, chromedp.ByQuery),
+		chromedp.Poll(`typeof window.__copiedOpenSearchURL === 'string'`, nil, chromedp.WithPollingInterval(20*time.Millisecond), chromedp.WithPollingTimeout(2*time.Second)),
+		chromedp.Evaluate(`window.__copiedOpenSearchURL`, &copiedURL),
+		chromedp.Text(`#opensearch-url`, &displayedURL, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("copy OpenSearch URL from preferences: %v", err)
+	}
+	wantURL := site.URL + "/opensearch.xml?name=Fixture%20Search"
+	if copiedURL != wantURL || displayedURL != wantURL {
+		t.Fatalf("OpenSearch URLs: copied=%q displayed=%q, want %q", copiedURL, displayedURL, wantURL)
+	}
+	requireNoFailures(t, pf, "OpenSearch browser integration")
+}
+
+func TestBrowserEnginePreferencesPersistSelectionAndPriority(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var state string
+	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Evaluate(`String(document.querySelector('#preferences-tab-general').getAttribute('aria-selected') === 'true' && document.querySelector('#engine-preference-list').closest('[data-preference-tab]').hidden)`, &state),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			if state != "true" {
+				return fmt.Errorf("preferences tabs did not start on General with Engines hidden: %s", state)
+			}
+			return nil
+		}),
+		chromedp.Click(`#preferences-tab-general`, chromedp.ByQuery),
+		chromedp.KeyEvent(kb.ArrowRight),
+		chromedp.Evaluate(`String(document.querySelector('#preferences-tab-interface').getAttribute('aria-selected') === 'true')`, &state),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			if state != "true" {
+				return fmt.Errorf("right-arrow did not select the next preferences tab: %s", state)
+			}
+			return nil
+		}),
+		chromedp.Click(`#preferences-tab-engines`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#engine-preference-list`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => {
+			const list = document.querySelector('#engine-preference-list');
+			const items = Array.from(list.querySelectorAll('.engine-preference-item'));
+			const source = items.find(item => item.getAttribute('draggable') === 'true');
+			const target = items.slice().reverse().find(item => item !== source && item.getAttribute('draggable') === 'true');
+			const checkbox = source && source.querySelector('input[name="search_pref_engine"][value$=":general"]:not(:disabled)');
+			if (!source || !target || !checkbox) return 'missing-engine-control';
+			list.querySelectorAll('input[name="search_pref_engine"][value$=":general"]').forEach(input => { input.checked = false; });
+			checkbox.checked = true;
+			const before = items.map(item => item.dataset.engineId).join(',');
+			const transfer = new DataTransfer();
+			source.dispatchEvent(new DragEvent('dragstart', {bubbles: true, dataTransfer: transfer}));
+			const bounds = target.getBoundingClientRect();
+			target.dispatchEvent(new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: transfer, clientY: bounds.bottom + 1}));
+			target.dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: transfer}));
+			source.dispatchEvent(new DragEvent('dragend', {bubbles: true, dataTransfer: transfer}));
+			return JSON.stringify({before, after: document.querySelector('#search-pref-engine-order').value, selected: source.dataset.engineId});
+		})()`, &state),
+	); err != nil {
+		t.Fatalf("configure engine preferences: %v", err)
+	}
+	if state == "missing-engine-control" {
+		t.Fatal("preferences page did not render enabled engine category and drag controls")
+	}
+	var configured struct {
+		Before   string `json:"before"`
+		After    string `json:"after"`
+		Selected string `json:"selected"`
+	}
+	if err := json.Unmarshal([]byte(state), &configured); err != nil {
+		t.Fatalf("decode engine preferences state %q: %v", state, err)
+	}
+	if configured.Before == configured.After {
+		t.Fatalf("drag reorder did not update the engine priority form value: %s", state)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-engines`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#engine-preference-list`, chromedp.ByQuery),
+		chromedp.Evaluate(`JSON.stringify({order: document.querySelector('#search-pref-engine-order').value, selected: Array.from(document.querySelectorAll('input[name="search_pref_engine"][value$=":general"]:checked')).map(input => input.value.split(':')[0])})`, &state),
+	); err != nil {
+		t.Fatalf("reload saved engine preferences: %v", err)
+	}
+	var saved struct {
+		Order    string   `json:"order"`
+		Selected []string `json:"selected"`
+	}
+	if err := json.Unmarshal([]byte(state), &saved); err != nil {
+		t.Fatalf("decode saved engine preferences %q: %v", state, err)
+	}
+	if saved.Order != configured.After || len(saved.Selected) != 1 || saved.Selected[0] != configured.Selected {
+		t.Fatalf("saved engine preferences = %#v, want order %q and only %q selected", saved, configured.After, configured.Selected)
+	}
+	requireNoFailures(t, pf, "engine preferences and priority ordering")
 }
 
 func TestBrowserDisabledVideoPreviewsSkipPreviewSetup(t *testing.T) {
@@ -1556,6 +1681,7 @@ func TestBrowserSearchHistoryImportRespectsOptOut(t *testing.T) {
 	var stored string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#export-prefs`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => {
 			const payload = JSON.stringify({preferences: {save_history: false}, search_history: [{query: "must be removed", category: "general"}]});

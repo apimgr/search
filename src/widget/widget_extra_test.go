@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,20 @@ func TestCacheClose(t *testing.T) {
 
 	// Double-close should not panic
 	c.Close()
+}
+
+func TestCacheCloseConcurrent(t *testing.T) {
+	c := NewCache()
+	const callers = 16
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			c.Close()
+		}()
+	}
+	wg.Wait()
 }
 
 func TestManagerClose(t *testing.T) {

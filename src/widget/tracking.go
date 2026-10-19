@@ -501,7 +501,7 @@ func (f *TrackingFetcher) fetchLiveTracking(ctx context.Context, trackingNumber,
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &apiResp); err != nil {
 		return nil, err
 	}
 

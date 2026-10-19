@@ -281,7 +281,10 @@
     "custom_css_saved": "Własny CSS zapisano w tej przeglądarce.",
     "custom_css_too_long": "Własny CSS jest za długi.",
     "custom_css_storage_error": "Nie udało się zapisać własnego CSS w tej przeglądarce.",
-    "custom_css_cleared": "Własny CSS wyczyszczono."
+    "custom_css_cleared": "Własny CSS wyczyszczono.",
+    "engines_help": "Wybierz wyszukiwarki dla każdej kategorii. Wyszukiwarki wyłączone przez operatora pozostają niedostępne.",
+    "engine_operator_disabled": "Wyłączone przez operatora",
+    "engines_order_help": "Przeciągnij wyszukiwarki, aby zmienić ich kolejność priorytetów."
   },
   "nav": {
     "home": "Strona główna",

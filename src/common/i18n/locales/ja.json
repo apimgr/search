@@ -281,7 +281,10 @@
     "custom_css_saved": "カスタム CSS をこのブラウザーに保存しました。",
     "custom_css_too_long": "カスタム CSS が長すぎます。",
     "custom_css_storage_error": "このブラウザーにカスタム CSS を保存できませんでした。",
-    "custom_css_cleared": "カスタム CSS を消去しました。"
+    "custom_css_cleared": "カスタム CSS を消去しました。",
+    "engines_help": "カテゴリごとに検索エンジンを選択します。運用者が無効にしたエンジンは使用できません。",
+    "engine_operator_disabled": "運用者により無効",
+    "engines_order_help": "エンジンをドラッグして優先順位を変更します。"
   },
   "nav": {
     "home": "ホーム",

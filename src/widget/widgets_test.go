@@ -139,6 +139,20 @@ func TestNewManagerNilConfig(t *testing.T) {
 	}
 }
 
+func TestDecodeWidgetJSONBoundsProviderResponse(t *testing.T) {
+	var value map[string]string
+	if err := decodeWidgetJSON(strings.NewReader(`{"key":"value"}`), &value); err != nil {
+		t.Fatalf("decodeWidgetJSON(valid): %v", err)
+	}
+	if value["key"] != "value" {
+		t.Fatalf("decoded value = %#v", value)
+	}
+	oversized := strings.Repeat(" ", maxWidgetProviderResponseBytes+1)
+	if err := decodeWidgetJSON(strings.NewReader(oversized), &value); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("decodeWidgetJSON(oversized) error = %v, want size-limit error", err)
+	}
+}
+
 func TestManagerGetWidget(t *testing.T) {
 	m := NewManager(&config.WidgetsConfig{Enabled: true})
 
@@ -353,6 +367,17 @@ func TestManagerRegisterFetcher(t *testing.T) {
 	}
 }
 
+func TestManagerRegisterFetcherIgnoresTypedNil(t *testing.T) {
+	m := NewManager(nil)
+	var fetcher *mockFetcher
+	m.RegisterFetcher(fetcher)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.fetchers) != 0 {
+		t.Fatalf("typed-nil fetcher was registered: %#v", m.fetchers)
+	}
+}
+
 func TestManagerFetchWidgetData(t *testing.T) {
 	m := NewManager(&config.WidgetsConfig{Enabled: true})
 
@@ -456,14 +481,43 @@ func TestManagerBuildCacheKey(t *testing.T) {
 	m := NewManager(&config.WidgetsConfig{Enabled: true})
 
 	key := m.buildCacheKey(WidgetWeather, nil)
-	if key != "weather" {
-		t.Errorf("Cache key = %q, want %q", key, "weather")
+	if key != "7:weather0:" {
+		t.Errorf("Cache key = %q, want %q", key, "7:weather0:")
 	}
 
 	params := map[string]string{"location": "NYC"}
 	key2 := m.buildCacheKey(WidgetWeather, params)
-	if key2 != "weather:location=NYC" {
-		t.Errorf("Cache key = %q, want %q", key2, "weather:location=NYC")
+	if key2 != "7:weather1:8:location3:NYC" {
+		t.Errorf("Cache key = %q, want %q", key2, "7:weather1:8:location3:NYC")
+	}
+}
+
+func TestManagerBuildCacheKeyCannotCollideAcrossParameterMaps(t *testing.T) {
+	m := NewManager(nil)
+	first := m.buildCacheKey(WidgetWeather, map[string]string{"a": "x:b=y"})
+	second := m.buildCacheKey(WidgetWeather, map[string]string{"a": "x", "b": "y"})
+	if first == second {
+		t.Fatalf("distinct parameter maps share cache key %q", first)
+	}
+}
+
+type nilResultFetcher struct{}
+
+func (nilResultFetcher) Fetch(context.Context, map[string]string) (*WidgetData, error) {
+	return nil, nil
+}
+func (nilResultFetcher) CacheDuration() time.Duration { return time.Minute }
+func (nilResultFetcher) WidgetType() WidgetType       { return WidgetWeather }
+
+func TestManagerFetchWidgetDataHandlesNilFetcherResult(t *testing.T) {
+	m := NewManager(nil)
+	m.RegisterFetcher(nilResultFetcher{})
+	data, err := m.FetchWidgetData(context.Background(), WidgetWeather, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data == nil || data.Error != "widget returned no data" {
+		t.Fatalf("FetchWidgetData() = %#v, want a no-data error", data)
 	}
 }
 

@@ -1565,6 +1565,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// Perform search
 	query := model.NewQuery(queryStr)
 	query.Category = model.ParseCategory(category)
+	query.Engines = s.selectedEngineNames(r, query.Category)
 	query.Page = page
 	query.PerPage = perPage
 	query.SafeSearch = safeSearch

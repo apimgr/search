@@ -2,12 +2,42 @@ package widget
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/config"
 )
+
+const maxWidgetProviderResponseBytes = 8 << 20
+
+func decodeWidgetJSON(reader io.Reader, destination any) error {
+	body, err := readWidgetProviderResponse(reader)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, destination); err != nil {
+		return fmt.Errorf("decode provider response: %w", err)
+	}
+	return nil
+}
+
+func readWidgetProviderResponse(reader io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxWidgetProviderResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read provider response: %w", err)
+	}
+	if len(body) > maxWidgetProviderResponseBytes {
+		return nil, fmt.Errorf("provider response exceeds %d bytes", maxWidgetProviderResponseBytes)
+	}
+	return body, nil
+}
 
 // WidgetType represents the type of widget
 type WidgetType string
@@ -143,6 +173,16 @@ func (m *Manager) registerWidgets() {
 
 // RegisterFetcher registers a data fetcher for a widget type
 func (m *Manager) RegisterFetcher(fetcher Fetcher) {
+	if fetcher == nil {
+		return
+	}
+	value := reflect.ValueOf(fetcher)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.fetchers[fetcher.WidgetType()] = fetcher
@@ -206,8 +246,10 @@ func (m *Manager) FetchWidgetData(ctx context.Context, widgetType WidgetType, pa
 
 	// Check cache first
 	cacheKey := m.buildCacheKey(widgetType, params)
-	if cached, ok := m.cache.Get(cacheKey); ok {
-		return cached, nil
+	if m.cache != nil {
+		if cached, ok := m.cache.Get(cacheKey); ok {
+			return cached, nil
+		}
 	}
 
 	// Fetch fresh data
@@ -219,9 +261,15 @@ func (m *Manager) FetchWidgetData(ctx context.Context, widgetType WidgetType, pa
 			UpdatedAt: time.Now(),
 		}, nil
 	}
+	if data == nil {
+		return &WidgetData{Type: widgetType, Error: "widget returned no data", UpdatedAt: time.Now()}, nil
+	}
+	data.Type = widgetType
 
 	// Cache the result
-	m.cache.Set(cacheKey, data, fetcher.CacheDuration())
+	if m.cache != nil {
+		m.cache.Set(cacheKey, data, fetcher.CacheDuration())
+	}
 
 	return data, nil
 }
@@ -237,11 +285,23 @@ func (m *Manager) buildCacheKey(widgetType WidgetType, params map[string]string)
 	}
 	sort.Strings(keys)
 
-	key := string(widgetType)
+	var key strings.Builder
+	widgetName := string(widgetType)
+	key.WriteString(strconv.Itoa(len(widgetName)))
+	key.WriteByte(':')
+	key.WriteString(widgetName)
+	key.WriteString(strconv.Itoa(len(keys)))
+	key.WriteByte(':')
 	for _, k := range keys {
-		key += ":" + k + "=" + params[k]
+		value := params[k]
+		key.WriteString(strconv.Itoa(len(k)))
+		key.WriteByte(':')
+		key.WriteString(k)
+		key.WriteString(strconv.Itoa(len(value)))
+		key.WriteByte(':')
+		key.WriteString(value)
 	}
-	return key
+	return key.String()
 }
 
 // GetConfig returns the widgets configuration

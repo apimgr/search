@@ -254,9 +254,11 @@ func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra
 
 	// Get all available bangs for display
 	data.Data = map[string]interface{}{
-		"bangs":      s.bangManager.GetAll(),
-		"categories": s.bangManager.GetCategories(),
-		"builtins":   s.bangManager.GetBuiltins(),
+		"bangs":             s.bangManager.GetAll(),
+		"categories":        s.bangManager.GetCategories(),
+		"builtins":          s.bangManager.GetBuiltins(),
+		"preferenceEngines": s.enginePreferenceRows(r),
+		"engineOrder":       engineOrderValue(s.registry, r),
 	}
 	pageValues := data.Data.(map[string]interface{})
 	for key, value := range extra {
@@ -451,6 +453,15 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 			})
 			values.Del("search_pref_video_previews")
 			values.Del("search_pref_video_previews_present")
+		}
+		if values.Has("search_pref_engines_present") {
+			values.Set(enginePreferenceCookie, encodeEnginePreferenceMask(s.registry, values["search_pref_engine"]))
+			values.Del("search_pref_engine")
+			values.Del("search_pref_engines_present")
+		}
+		if values.Has("search_pref_engine_order_present") {
+			values.Set(engineOrderPreferenceCookie, encodeEngineOrder(s.registry, strings.Split(values.Get(engineOrderPreferenceCookie), ",")))
+			values.Del("search_pref_engine_order_present")
 		}
 		clone := r.Clone(r.Context())
 		urlCopy := *r.URL

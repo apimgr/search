@@ -281,7 +281,10 @@
     "custom_css_saved": "Eigenes CSS wurde für diesen Browser gespeichert.",
     "custom_css_too_long": "Das eigene CSS ist zu lang.",
     "custom_css_storage_error": "Eigenes CSS konnte in diesem Browser nicht gespeichert werden.",
-    "custom_css_cleared": "Eigenes CSS wurde gelöscht."
+    "custom_css_cleared": "Eigenes CSS wurde gelöscht.",
+    "engines_help": "Wähle Suchmaschinen pro Kategorie aus. Vom Betreiber deaktivierte Suchmaschinen bleiben nicht verfügbar.",
+    "engine_operator_disabled": "Vom Betreiber deaktiviert",
+    "engines_order_help": "Ziehe die Suchmaschinen, um ihre Priorität zu ändern."
   },
   "nav": {
     "home": "Startseite",

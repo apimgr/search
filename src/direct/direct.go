@@ -2,6 +2,8 @@ package direct
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -353,9 +355,17 @@ func NewManager() *Manager {
 
 // Register adds a handler to the manager
 func (m *Manager) Register(h Handler) {
-	if h != nil {
-		m.handlers[h.Type()] = h
+	if h == nil {
+		return
 	}
+	value := reflect.ValueOf(h)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return
+		}
+	}
+	m.handlers[h.Type()] = h
 }
 
 func (m *Manager) SetDirectorySearcher(searcher DirectorySearcher) {
@@ -444,6 +454,17 @@ func (m *Manager) ProcessType(ctx context.Context, answerType AnswerType, term s
 
 	answer, err := handler.HandleDirectQuery(ctx, term)
 	if err != nil {
+		return &Answer{
+			Type:      answerType,
+			Term:      term,
+			Title:     i18n.T(lang, "direct.error_title"),
+			Content:   err.Error(),
+			Error:     "handler_error",
+			Timestamp: time.Now(),
+		}, err
+	}
+	if answer == nil {
+		err := errors.New("direct answer handler returned no answer")
 		return &Answer{
 			Type:      answerType,
 			Term:      term,

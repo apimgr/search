@@ -93,7 +93,9 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 			coins[i] = strings.TrimSpace(strings.ToLower(coins[i]))
 		}
 	} else {
-		coins = f.config.DefaultCoins
+		if f.config != nil {
+			coins = f.config.DefaultCoins
+		}
 	}
 
 	if len(coins) == 0 {
@@ -103,7 +105,9 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 	// Get currency
 	currency := params["currency"]
 	if currency == "" {
-		currency = f.config.Currency
+		if f.config != nil {
+			currency = f.config.Currency
+		}
 	}
 	if currency == "" {
 		currency = "usd"

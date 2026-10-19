@@ -478,6 +478,8 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 
 	var html string
 	var preferencesHTML string
+	var enginePreferencesState string
+	var engineExpectedFirst string
 	var videoPreviewsEnabled bool
 	ctx := newBrowserContext(t)
 	if err := chromedp.Run(ctx,
@@ -492,6 +494,7 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
 		chromedp.SetValue(`#weather-units`, "metric", chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked = false`, nil),
+		chromedp.Evaluate(`(() => { const controls = Array.from(document.querySelectorAll('input[name="search_pref_engine"][value$=":general"]')); controls.forEach(input => { input.checked = false; }); if (controls[0]) controls[0].checked = true; const rows = Array.from(document.querySelectorAll('.engine-preference-item')).map(row => row.dataset.engineId).reverse(); document.querySelector('#search-pref-engine-order').value = rows.join(','); return rows[0] || ''; })()`, &engineExpectedFirst),
 		chromedp.Evaluate(`document.querySelector('#widget-toggles input[name="widget"][value="clock"]').checked = false`, nil),
 		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
 		chromedp.WaitVisible(`body`, chromedp.ByQuery),
@@ -500,6 +503,7 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.OuterHTML("html", &preferencesHTML),
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked`, &videoPreviewsEnabled),
+		chromedp.Evaluate(`JSON.stringify({selected: Array.from(document.querySelectorAll('input[name="search_pref_engine"][value$=":general"]:checked')).map(input => input.value.split(':')[0]), order: Array.from(document.querySelectorAll('.engine-preference-item')).map(row => row.dataset.engineId)})`, &enginePreferencesState),
 	); err != nil {
 		t.Fatalf("no-JS preferences round trip: %v", err)
 	}
@@ -525,6 +529,16 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	}
 	if videoPreviewsEnabled {
 		t.Errorf("no-JS video preview preference did not persist as disabled")
+	}
+	var enginePreferences struct {
+		Selected []string `json:"selected"`
+		Order    []string `json:"order"`
+	}
+	if err := json.Unmarshal([]byte(enginePreferencesState), &enginePreferences); err != nil {
+		t.Fatalf("decode no-JS engine preferences %q: %v", enginePreferencesState, err)
+	}
+	if len(enginePreferences.Selected) != 1 || len(enginePreferences.Order) == 0 || enginePreferences.Order[0] != engineExpectedFirst {
+		t.Errorf("no-JS engine selection/order did not persist: %#v", enginePreferences)
 	}
 	for _, marker := range []string{`id="custom-css"`, `id="save-custom-css"`, `id="clear-custom-css"`} {
 		if !strings.Contains(preferencesHTML, marker) {

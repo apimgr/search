@@ -474,7 +474,7 @@ func (f *WikipediaFetcher) fetchArticleSummary(ctx context.Context, title, lang 
 		} `json:"content_urls"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &result); err != nil {
 		return nil, err
 	}
 
@@ -533,7 +533,7 @@ func (f *WikipediaFetcher) searchAndFetch(ctx context.Context, query, lang strin
 		} `json:"query"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &searchResult); err != nil {
 		return nil, err
 	}
 
@@ -582,7 +582,7 @@ func (f *WikipediaFetcher) fetchRelatedArticles(ctx context.Context, title, lang
 		} `json:"query"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&linksResult); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &linksResult); err != nil {
 		return nil, err
 	}
 

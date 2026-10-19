@@ -281,7 +281,10 @@
     "custom_css_saved": "Custom CSS saved for this browser.",
     "custom_css_too_long": "Custom CSS is too long.",
     "custom_css_storage_error": "Custom CSS could not be saved in this browser.",
-    "custom_css_cleared": "Custom CSS cleared."
+    "custom_css_cleared": "Custom CSS cleared.",
+    "engines_help": "Choose search engines for each category. Engines disabled by the operator remain unavailable.",
+    "engine_operator_disabled": "Disabled by operator",
+    "engines_order_help": "Drag engines to change their priority order."
   },
   "nav": {
     "home": "Home",

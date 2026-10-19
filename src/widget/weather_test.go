@@ -148,6 +148,52 @@ func TestWeatherFetcherFetchValidation(t *testing.T) {
 			t.Errorf("WidgetData.Error = %q, want %q", data.Error, "invalid longitude")
 		}
 	})
+
+	t.Run("nil config defaults without panicking", func(t *testing.T) {
+		f := NewWeatherFetcher(nil)
+		data, err := f.Fetch(context.Background(), map[string]string{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if data.Error != "no city specified" {
+			t.Fatalf("Fetch() error = %q, want no city specified", data.Error)
+		}
+	})
+
+	for _, test := range []struct {
+		name string
+		lat  string
+		lon  string
+	}{
+		{name: "trailing latitude data", lat: "10junk", lon: "20"},
+		{name: "latitude out of range", lat: "90.01", lon: "20"},
+		{name: "infinite latitude", lat: "+Inf", lon: "20"},
+		{name: "missing longitude", lat: "10"},
+		{name: "longitude out of range", lat: "10", lon: "180.01"},
+		{name: "NaN longitude", lat: "10", lon: "NaN"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := NewWeatherFetcher(&config.WeatherWidgetConfig{})
+			data, err := f.Fetch(context.Background(), map[string]string{"lat": test.lat, "lon": test.lon})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if data.Error == "" {
+				t.Fatal("Fetch() accepted invalid coordinates")
+			}
+		})
+	}
+
+	t.Run("rejects unsupported units", func(t *testing.T) {
+		f := NewWeatherFetcher(nil)
+		data, err := f.Fetch(context.Background(), map[string]string{"units": "kelvin"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if data.Error != "invalid units" {
+			t.Fatalf("Fetch() error = %q, want invalid units", data.Error)
+		}
+	})
 }
 
 type weatherRoundTripper func(*http.Request) (*http.Response, error)

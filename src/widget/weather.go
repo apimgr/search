@@ -2,10 +2,11 @@ package widget
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,10 +158,15 @@ func (f *WeatherFetcher) CacheDuration() time.Duration {
 func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*WidgetData, error) {
 	units := params["units"]
 	if units == "" {
-		units = f.config.Units
+		if f.config != nil {
+			units = f.config.Units
+		}
 	}
 	if units == "" {
 		units = "imperial"
+	}
+	if units != "metric" && units != "imperial" {
+		return &WidgetData{Type: WidgetWeather, Error: "invalid units", UpdatedAt: time.Now()}, nil
 	}
 
 	var lat, lon float64
@@ -168,15 +174,18 @@ func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*
 	var err error
 
 	// Check if lat/lon coordinates are provided (from browser geolocation)
-	if params["lat"] != "" && params["lon"] != "" {
-		if _, err := fmt.Sscanf(params["lat"], "%f", &lat); err != nil {
+	if params["lat"] != "" || params["lon"] != "" {
+		var err error
+		lat, err = strconv.ParseFloat(params["lat"], 64)
+		if err != nil || math.IsNaN(lat) || math.IsInf(lat, 0) || lat < -90 || lat > 90 {
 			return &WidgetData{
 				Type:      WidgetWeather,
 				Error:     "invalid latitude",
 				UpdatedAt: time.Now(),
 			}, nil
 		}
-		if _, err := fmt.Sscanf(params["lon"], "%f", &lon); err != nil {
+		lon, err = strconv.ParseFloat(params["lon"], 64)
+		if err != nil || math.IsNaN(lon) || math.IsInf(lon, 0) || lon < -180 || lon > 180 {
 			return &WidgetData{
 				Type:      WidgetWeather,
 				Error:     "invalid longitude",
@@ -192,7 +201,9 @@ func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*
 		// Fall back to city name geocoding
 		city := params["city"]
 		if city == "" {
-			city = f.config.DefaultCity
+			if f.config != nil {
+				city = f.config.DefaultCity
+			}
 		}
 		if city == "" {
 			return &WidgetData{
@@ -273,7 +284,7 @@ func (f *WeatherFetcher) reverseGeocode(ctx context.Context, lat, lon float64) (
 	}
 
 	var nomResp NominatimResponse
-	if err := json.NewDecoder(resp.Body).Decode(&nomResp); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &nomResp); err != nil {
 		return fmt.Sprintf("%.2f, %.2f", lat, lon), nil
 	}
 
@@ -354,7 +365,7 @@ func (f *WeatherFetcher) geocodeCity(ctx context.Context, city string) (float64,
 	}
 
 	var geoResp GeocodingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&geoResp); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &geoResp); err != nil {
 		return 0, 0, "", err
 	}
 
@@ -423,7 +434,7 @@ func (f *WeatherFetcher) fetchWeather(ctx context.Context, lat, lon float64, uni
 	}
 
 	var weatherResp OpenMeteoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&weatherResp); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &weatherResp); err != nil {
 		return nil, err
 	}
 

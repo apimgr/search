@@ -212,6 +212,13 @@ func validPref(key, value string) bool {
 	if key == "accent_color" {
 		return ValidAccentColor(value)
 	}
+	if key == "engines" || key == "engine_order" {
+		if len(value) == 0 || len(value) > 64 {
+			return false
+		}
+		_, err := base64.RawURLEncoding.DecodeString(value)
+		return err == nil
+	}
 	options, ok := preferenceEnums[key]
 	return ok && options[value]
 }

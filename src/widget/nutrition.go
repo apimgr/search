@@ -199,7 +199,7 @@ func (f *NutritionFetcher) fetchFromUSDA(ctx context.Context, foodItem string) (
 	}
 
 	var result usdaSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &result); err != nil {
 		return nil, err
 	}
 
@@ -379,7 +379,7 @@ func (f *NutritionFetcher) fetchFromOpenFoodFacts(ctx context.Context, foodItem 
 		Count json.Number `json:"count"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeWidgetJSON(resp.Body, &result); err != nil {
 		return nil, err
 	}
 

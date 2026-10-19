@@ -281,7 +281,10 @@
     "custom_css_saved": "CSS سفارشی برای این مرورگر ذخیره شد.",
     "custom_css_too_long": "CSS سفارشی بیش از حد طولانی است.",
     "custom_css_storage_error": "ذخیره CSS سفارشی در این مرورگر ممکن نشد.",
-    "custom_css_cleared": "CSS سفارشی پاک شد."
+    "custom_css_cleared": "CSS سفارشی پاک شد.",
+    "engines_help": "موتورهای جست‌وجو را برای هر دسته انتخاب کنید. موتورهای غیرفعال‌شده توسط مدیر در دسترس نیستند.",
+    "engine_operator_disabled": "غیرفعال‌شده توسط مدیر",
+    "engines_order_help": "برای تغییر ترتیب اولویت، موتورهای جست‌وجو را بکشید."
   },
   "nav": {
     "home": "خانه",

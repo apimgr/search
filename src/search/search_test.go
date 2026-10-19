@@ -318,16 +318,26 @@ func TestAggregatorGenerateCacheKey(t *testing.T) {
 	query1 := &model.Query{Text: "test", Category: model.CategoryGeneral, Language: "en"}
 	query2 := &model.Query{Text: "test", Category: model.CategoryGeneral, Language: "en"}
 	query3 := &model.Query{Text: "different", Category: model.CategoryGeneral, Language: "en"}
+	query4 := &model.Query{Text: "test", Category: model.CategoryGeneral, Language: "en", Engines: []string{"DuckDuckGo"}}
+	query5 := &model.Query{Text: "test", Category: model.CategoryGeneral, Language: "en", ExcludeEngines: []string{"Google"}}
 
 	key1 := agg.generateCacheKey(query1)
 	key2 := agg.generateCacheKey(query2)
 	key3 := agg.generateCacheKey(query3)
+	key4 := agg.generateCacheKey(query4)
+	key5 := agg.generateCacheKey(query5)
 
 	if key1 != key2 {
 		t.Error("Same queries should produce same cache key")
 	}
 	if key1 == key3 {
 		t.Error("Different queries should produce different cache keys")
+	}
+	if key1 == key4 {
+		t.Error("Different engine selections should produce different cache keys")
+	}
+	if key1 == key5 {
+		t.Error("Different excluded-engine selections should produce different cache keys")
 	}
 }
 

@@ -761,7 +761,7 @@ func TestSSRThemeRendersDarkByDefault(t *testing.T) {
 
 	resp, body := s.get("/")
 	requireStatus(t, resp, http.StatusOK)
-	requireContains(t, body, `class="theme-dark"`, "default theme")
+	requireContains(t, body, `class="theme-dark `, "default theme")
 	requireContains(t, body, `data-theme-mode="dark"`, "default theme")
 }
 
@@ -794,7 +794,7 @@ func TestSSRThemePersistsAcrossRequest(t *testing.T) {
 	// The session jar must now hold the theme cookie, and the next render
 	// must come back light.
 	_, body := s.get("/")
-	requireContains(t, body, `class="theme-light"`, "theme after POST /theme")
+	requireContains(t, body, `class="theme-light `, "theme after POST /theme")
 }
 
 // mustPost performs a form POST and returns the response, discarding the body.

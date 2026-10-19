@@ -281,7 +281,10 @@
     "custom_css_saved": "تم حفظ CSS المخصص لهذا المتصفح.",
     "custom_css_too_long": "CSS المخصص طويل جدًا.",
     "custom_css_storage_error": "تعذر حفظ CSS المخصص في هذا المتصفح.",
-    "custom_css_cleared": "تم مسح CSS المخصص."
+    "custom_css_cleared": "تم مسح CSS المخصص.",
+    "engines_help": "اختر محركات البحث لكل فئة. تظل المحركات التي عطّلها المشغّل غير متاحة.",
+    "engine_operator_disabled": "معطّل من المشغّل",
+    "engines_order_help": "اسحب المحركات لتغيير ترتيب الأولوية."
   },
   "nav": {
     "home": "الرئيسية",
