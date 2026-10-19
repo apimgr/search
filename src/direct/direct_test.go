@@ -2217,6 +2217,37 @@ func TestSimpleDiff(t *testing.T) {
 	}
 }
 
+func TestAlignedDiffAndDisplayOptions(t *testing.T) {
+	oldHTML, newHTML := inlineWordDiff("keep old & safe", "keep new & safe")
+	if oldHTML != "keep <del>old</del> &amp; safe" || newHTML != "keep <ins>new</ins> &amp; safe" {
+		t.Fatalf("word highlighting failed or did not escape input: %q %q", oldHTML, newHTML)
+	}
+	diff := alignedDiff("first\nkeep\nlast", "first\ninserted\nkeep\nlast", false)
+	if len(diff) != 4 || diff[1].Type != "add" || diff[2].Type != "same" || diff[2].OldLine != 2 || diff[2].NewLine != 3 {
+		t.Fatalf("insertion alignment/line numbers incorrect: %#v", diff)
+	}
+	ignored := alignedDiff("a  b", "a b", true)
+	if len(ignored) != 1 || ignored[0].Type != "same" {
+		t.Fatalf("whitespace-insensitive comparison failed: %#v", ignored)
+	}
+	answer, err := NewDiffHandler().HandleDirectQuery(context.Background(), "--word old|||new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<del>old</del>", "<ins>new</ins>", "Unified diff", "Copy diff", "line-number", "changed"} {
+		if !strings.Contains(answer.Content, want) {
+			t.Errorf("diff content missing %q", want)
+		}
+	}
+	answer, err = NewDiffHandler().HandleDirectQuery(context.Background(), "--unified old|||new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(answer.Content, "unified-diff") || strings.Contains(answer.Content, "diff-table") || !strings.Contains(answer.Content, "@@ -1,1 +1,1 @@") {
+		t.Error("unified mode did not render the unified view")
+	}
+}
+
 // --- RulesHandler ---
 
 func TestRulesHandlerDirect(t *testing.T) {

@@ -4996,6 +4996,17 @@ func TestPythonFormatterAndMinifierPreserveMultilineStringContents(t *testing.T)
 	}
 }
 
+func TestPythonFormatterAndMinifierPreserveEscapedTripleQuotes(t *testing.T) {
+	source := "def render():\n    value = \"\"\"alpha \\\"\"\" beta\n  tail \"\"\"\n    return value"
+	formatted := beautifyPython(source)
+	minified := minifyPythonSource(source)
+	for label, output := range map[string]string{"formatter": formatted, "minifier": minified} {
+		if !strings.Contains(output, `alpha \""" beta`) || !strings.Contains(output, "  tail \"\"\"") {
+			t.Errorf("%s changed escaped triple-quoted content: %q", label, output)
+		}
+	}
+}
+
 func TestBeautifySupportsAdditionalIDEALanguagesAndLineCounts(t *testing.T) {
 	python := beautifyCode("def greet():\nprint('hello')", "python")
 	if !strings.Contains(python, "def greet():\n    print('hello')") {

@@ -1193,6 +1193,57 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     display: none;
 }
 
+.diff-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-block: 1rem;
+}
+
+.diff-options a {
+    display: inline-flex;
+    min-height: var(--touch-target, 44px);
+    align-items: center;
+    padding-inline: 0.5rem;
+}
+
+.diff-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.diff-table td {
+    overflow-wrap: anywhere;
+    vertical-align: top;
+    white-space: pre-wrap;
+}
+
+.diff-table .line-number {
+    display: inline-block;
+    min-width: 2.5em;
+    margin-inline-end: 0.5rem;
+    color: var(--color-muted);
+    text-align: end;
+    user-select: none;
+}
+
+.diff-table tr.removed td,
+.unified-diff del {
+    background: var(--color-error-bg);
+}
+
+.diff-table tr.added td,
+.unified-diff ins {
+    background: var(--color-success-bg);
+}
+
+.unified-diff {
+    overflow-x: auto;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
 /* Copied feedback text is always visible, including on mobile - per AI.md PART 16 */
 .copy-btn.copied .copy-text {
     display: inline;

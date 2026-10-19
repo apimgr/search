@@ -396,9 +396,12 @@ var localDirectAnswerPages = []struct {
 	{"JWT decoder", "/direct/jwt/eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.c2ln", "jwt"},
 	{"ISO timestamp converter", "/direct/timestamp/2024-01-01T00%3A00%3A00Z", "timestamp"},
 	{"text diff", "/direct/diff/old%7C%7C%7Cnew", "diff"},
+	{"word-level text diff", "/direct/diff/--word%20old%7C%7C%7Cnew", "diff"},
+	{"unified text diff", "/direct/diff/--unified%20old%7C%7C%7Cnew", "diff"},
 	{"JSON diff", "/direct/diff/%7B%22a%22%3A1%7D%7C%7C%7B%22a%22%3A2%7D", "diff"},
 	{"code formatter", "/direct/beautify/js%20function%20f()%7Breturn%201%7D", "beautify"},
 	{"PHP heredoc formatter", "/direct/beautify/" + url.PathEscape("php <?php\n$message=<<<TEXT\n  leading  and trailing spaces  \nTEXT;\necho $message;\n?>"), "beautify"},
+	{"Python escaped triple-quoted formatter", "/direct/beautify/" + url.PathEscape("python def render():\n    value = \"\"\"alpha \\\"\"\" beta\n  tail \"\"\"\n    return value"), "beautify"},
 	{"Allman code formatter", "/direct/beautify/js%20--style=allman%20function%20f()%7Breturn%201%7D", "beautify"},
 	{"compact CSS formatter", "/direct/beautify/css%20--style=compact%20.a%7Bcolor:red%7D", "beautify"},
 	{"lowercase SQL formatter", "/direct/beautify/sql%20--style=lowercase%20SELECT%20ID%20FROM%20Users", "beautify"},
@@ -430,11 +433,30 @@ var localDirectAnswerPages = []struct {
 
 func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	t.Helper()
+	if strings.Contains(path, "--word%20old") {
+		for _, want := range []string{"old", "new", "Unified diff", "Copy diff", "Original", "Modified"} {
+			if !strings.Contains(answer, want) {
+				t.Errorf("text diff missing %q", want)
+			}
+		}
+	}
+	if strings.Contains(path, "--unified%20old") {
+		for _, want := range []string{"--- Original", "+++ Modified", "@@ -1,1 +1,1 @@", "-old", "+new"} {
+			if !strings.Contains(answer, want) {
+				t.Errorf("unified text diff missing %q", want)
+			}
+		}
+	}
 	if typeName == "beautify" {
 		switch {
 		case strings.Contains(path, "PHP%20%3C%3Fphp"):
 			if !strings.Contains(answer, "  leading  and trailing spaces  ") {
 				t.Error("PHP heredoc formatter changed the literal's significant spaces")
+			}
+		case strings.Contains(path, "Python%20escaped%20triple"):
+			plain := stripSyntaxTokens(answer)
+			if !strings.Contains(plain, `alpha \""" beta`) || !strings.Contains(plain, "  tail \"\"\"") {
+				t.Error("Python formatter changed escaped multiline string contents")
 			}
 		case strings.Contains(path, "style=allman"):
 			plain := stripSyntaxTokens(answer)

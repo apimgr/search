@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1059,6 +1060,13 @@ func stripPythonComment(line string, tripleQuote *byte) string {
 	for index := 0; index < len(line); index++ {
 		character := line[index]
 		if *tripleQuote != 0 {
+			if character == '\\' {
+				index++
+				if index < len(line) {
+					index++
+				}
+				continue
+			}
 			if character == *tripleQuote && index+2 < len(line) && line[index+1] == character && line[index+2] == character {
 				*tripleQuote = 0
 				index += 2
@@ -1561,6 +1569,14 @@ func pythonDelimiterDepth(line string, depth int, tripleQuote *rune) int {
 	for index := 0; index < len(line); {
 		character, width := utf8.DecodeRuneInString(line[index:])
 		if *tripleQuote != 0 {
+			if character == '\\' {
+				index += width
+				if index < len(line) {
+					_, escapedWidth := utf8.DecodeRuneInString(line[index:])
+					index += escapedWidth
+				}
+				continue
+			}
 			quote := string(*tripleQuote) + string(*tripleQuote) + string(*tripleQuote)
 			if strings.HasPrefix(line[index:], quote) {
 				*tripleQuote = 0
@@ -2233,7 +2249,18 @@ func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return nil, fmt.Errorf("two texts required (separated by |||)")
 	}
 
-	// Split by ||| separator
+	wordLevel := strings.HasPrefix(term, "--word ")
+	ignoreWhitespace := strings.HasPrefix(term, "--ignore-whitespace ")
+	unified := strings.HasPrefix(term, "--unified ")
+	if wordLevel {
+		term = strings.TrimSpace(strings.TrimPrefix(term, "--word "))
+	}
+	if ignoreWhitespace {
+		term = strings.TrimSpace(strings.TrimPrefix(term, "--ignore-whitespace "))
+	}
+	if unified {
+		term = strings.TrimSpace(strings.TrimPrefix(term, "--unified "))
+	}
 	parts := strings.Split(term, "|||")
 	if len(parts) != 2 {
 		return &Answer{
@@ -2249,13 +2276,14 @@ func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	text1 := strings.TrimSpace(parts[0])
 	text2 := strings.TrimSpace(parts[1])
 
-	// Simple diff
-	diff := simpleDiff(text1, text2)
+	diff := alignedDiff(text1, text2, ignoreWhitespace)
 
 	data := map[string]interface{}{
-		"text1": text1,
-		"text2": text2,
-		"diff":  diff,
+		"text1":             text1,
+		"text2":             text2,
+		"diff":              diff,
+		"word_level":        wordLevel,
+		"ignore_whitespace": ignoreWhitespace,
 	}
 
 	return &Answer{
@@ -2263,7 +2291,7 @@ func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Term:        truncateString(term, 50),
 		Title:       i18n.T(uiLang, "direct.text_diff_title"),
 		Description: i18n.T(uiLang, "direct.comparison_of_two_texts"),
-		Content:     formatDiffContent(text1, text2, diff),
+		Content:     formatDiffContentOptions(text1, text2, diff, wordLevel, ignoreWhitespace, unified),
 		Source:      "Diff Tool",
 		Data:        data,
 	}, nil
@@ -2271,8 +2299,54 @@ func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 
 type diffLine struct {
 	// "same", "add", "remove"
-	Type string
-	Text string
+	Type    string
+	Text    string
+	OldLine int
+	NewLine int
+}
+
+const maxDiffCells = 1_000_000
+
+func alignedDiff(text1, text2 string, ignoreWhitespace bool) []diffLine {
+	a, b := strings.Split(text1, "\n"), strings.Split(text2, "\n")
+	if len(a) > maxDiffCells/len(b) {
+		return simpleDiff(text1, text2)
+	}
+	key := func(s string) string {
+		if ignoreWhitespace {
+			return strings.Join(strings.Fields(s), "")
+		}
+		return s
+	}
+	cols := len(b) + 1
+	dp := make([]int, (len(a)+1)*cols)
+	for i := len(a) - 1; i >= 0; i-- {
+		for j := len(b) - 1; j >= 0; j-- {
+			if key(a[i]) == key(b[j]) {
+				dp[i*cols+j] = dp[(i+1)*cols+j+1] + 1
+			} else if dp[(i+1)*cols+j] >= dp[i*cols+j+1] {
+				dp[i*cols+j] = dp[(i+1)*cols+j]
+			} else {
+				dp[i*cols+j] = dp[i*cols+j+1]
+			}
+		}
+	}
+	var out []diffLine
+	i, j := 0, 0
+	for i < len(a) || j < len(b) {
+		if i < len(a) && j < len(b) && key(a[i]) == key(b[j]) {
+			out = append(out, diffLine{Type: "same", Text: a[i], OldLine: i + 1, NewLine: j + 1})
+			i++
+			j++
+		} else if i < len(a) && (j == len(b) || dp[(i+1)*cols+j] >= dp[i*cols+j+1]) {
+			out = append(out, diffLine{Type: "remove", Text: a[i], OldLine: i + 1})
+			i++
+		} else {
+			out = append(out, diffLine{Type: "add", Text: b[j], NewLine: j + 1})
+			j++
+		}
+	}
+	return out
 }
 
 func simpleDiff(text1, text2 string) []diffLine {
@@ -2288,22 +2362,15 @@ func simpleDiff(text1, text2 string) []diffLine {
 	}
 
 	for i := 0; i < max; i++ {
-		var l1, l2 string
-		if i < len(lines1) {
-			l1 = lines1[i]
-		}
-		if i < len(lines2) {
-			l2 = lines2[i]
-		}
-
-		if l1 == l2 {
-			result = append(result, diffLine{"same", l1})
+		if i < len(lines1) && i < len(lines2) && lines1[i] == lines2[i] {
+			l1 := lines1[i]
+			result = append(result, diffLine{Type: "same", Text: l1, OldLine: i + 1, NewLine: i + 1})
 		} else {
-			if l1 != "" {
-				result = append(result, diffLine{"remove", l1})
+			if i < len(lines1) {
+				result = append(result, diffLine{Type: "remove", Text: lines1[i], OldLine: i + 1})
 			}
-			if l2 != "" {
-				result = append(result, diffLine{"add", l2})
+			if i < len(lines2) {
+				result = append(result, diffLine{Type: "add", Text: lines2[i], NewLine: i + 1})
 			}
 		}
 	}
@@ -2311,14 +2378,17 @@ func simpleDiff(text1, text2 string) []diffLine {
 	return result
 }
 
-func formatDiffContent(text1, text2 string, diff []diffLine) string {
+func formatDiffContentOptions(text1, text2 string, diff []diffLine, wordLevel, ignoreWhitespace, unified bool) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"diff-content\">")
 	html.WriteString("<h1>Text Diff</h1>")
+	query := func(flag string) string { return url.QueryEscape("diff:" + flag + text1 + "|||" + text2) }
+	fmt.Fprintf(&html, "<nav class=\"diff-options\"><a href=\"/?q=%s\">Side by side</a> <a href=\"/?q=%s\">Unified</a> <a href=\"/?q=%s\">Word-level</a> <a href=\"/?q=%s\">Ignore whitespace</a></nav>", query(""), query("--unified "), query("--word "), query("--ignore-whitespace "))
 
 	// Statistics
 	added := 0
 	removed := 0
+	changed := 0
 	for _, d := range diff {
 		switch d.Type {
 		case "add":
@@ -2327,28 +2397,127 @@ func formatDiffContent(text1, text2 string, diff []diffLine) string {
 			removed++
 		}
 	}
-	fmt.Fprintf(&html, "<p>+%d additions, -%d removals</p>", added, removed)
+	for i := 0; i+1 < len(diff); i++ {
+		if diff[i].Type == "remove" && diff[i+1].Type == "add" {
+			changed++
+			i++
+		}
+	}
+	fmt.Fprintf(&html, "<p class=\"diff-stats\">+%d additions, -%d removals, %d changed</p>", added, removed, changed)
+	var copyOutput strings.Builder
+	for _, line := range diff {
+		prefix := "  "
+		if line.Type == "add" {
+			prefix = "+ "
+		}
+		if line.Type == "remove" {
+			prefix = "- "
+		}
+		copyOutput.WriteString(prefix + line.Text + "\n")
+	}
+	fmt.Fprintf(&html, "<button type=\"button\" class=\"copy-btn\" data-copy=\"%s\"><span class=\"copy-text\">Copy diff</span></button>", escapeHTML(copyOutput.String()))
+	language := detectLanguage(text1 + "\n" + text2)
+	contentFor := func(text string) string {
+		if language == "unknown" {
+			return escapeHTML(text)
+		}
+		return highlightFormattedCode(text, language)
+	}
 
+	if unified {
+		html.WriteString("<pre class=\"unified-diff\"><code>")
+		writeUnifiedDiff(&html, text1, text2, diff, contentFor)
+		html.WriteString("</code></pre></div>")
+		return html.String()
+	}
 	// Side by side
 	html.WriteString("<div class=\"diff-view\">")
 	html.WriteString("<table class=\"diff-table\">")
 	html.WriteString("<thead><tr><th>Original</th><th>Modified</th></tr></thead>")
 	html.WriteString("<tbody>")
 
-	for _, d := range diff {
+	for i := 0; i < len(diff); i++ {
+		d := diff[i]
 		switch d.Type {
 		case "same":
-			fmt.Fprintf(&html, "<tr><td>%s</td><td>%s</td></tr>", escapeHTML(d.Text), escapeHTML(d.Text))
+			fmt.Fprintf(&html, "<tr><td><span class=\"line-number\">%d</span>%s</td><td><span class=\"line-number\">%d</span>%s</td></tr>", d.OldLine, contentFor(d.Text), d.NewLine, contentFor(d.Text))
 		case "remove":
-			fmt.Fprintf(&html, "<tr class=\"removed\"><td class=\"removed\">%s</td><td></td></tr>", escapeHTML(d.Text))
+			if wordLevel && i+1 < len(diff) && diff[i+1].Type == "add" {
+				oldText, newText := inlineWordDiff(d.Text, diff[i+1].Text)
+				fmt.Fprintf(&html, "<tr class=\"changed\"><td class=\"removed\"><span class=\"line-number\">%d</span>%s</td><td class=\"added\"><span class=\"line-number\">%d</span>%s</td></tr>", d.OldLine, oldText, diff[i+1].NewLine, newText)
+				i++
+				continue
+			}
+			content := contentFor(d.Text)
+			if wordLevel {
+				content = "<del>" + content + "</del>"
+			}
+			fmt.Fprintf(&html, "<tr class=\"removed\"><td class=\"removed\"><span class=\"line-number\">%d</span>%s</td><td></td></tr>", d.OldLine, content)
 		case "add":
-			fmt.Fprintf(&html, "<tr class=\"added\"><td></td><td class=\"added\">%s</td></tr>", escapeHTML(d.Text))
+			content := contentFor(d.Text)
+			if wordLevel {
+				content = "<ins>" + content + "</ins>"
+			}
+			fmt.Fprintf(&html, "<tr class=\"added\"><td></td><td class=\"added\"><span class=\"line-number\">%d</span>%s</td></tr>", d.NewLine, content)
 		}
 	}
 
 	html.WriteString("</tbody></table>")
 	html.WriteString("</div>")
+	html.WriteString("<h2>Unified diff</h2><pre class=\"unified-diff\"><code>")
+	writeUnifiedDiff(&html, text1, text2, diff, contentFor)
+	html.WriteString("</code></pre>")
 
 	html.WriteString("</div>")
 	return html.String()
+}
+
+func writeUnifiedDiff(html *strings.Builder, text1, text2 string, diff []diffLine, formatLine func(string) string) {
+	oldLines, newLines := strings.Split(text1, "\n"), strings.Split(text2, "\n")
+	fmt.Fprintf(html, "--- Original\n+++ Modified\n@@ -1,%d +1,%d @@\n", len(oldLines), len(newLines))
+	for _, line := range diff {
+		prefix := " "
+		if line.Type == "add" {
+			prefix = "+"
+		}
+		if line.Type == "remove" {
+			prefix = "-"
+		}
+		fmt.Fprintf(html, "%s%s\n", prefix, formatLine(line.Text))
+	}
+}
+
+func inlineWordDiff(oldText, newText string) (string, string) {
+	oldTokens, newTokens := diffWordTokens(oldText), diffWordTokens(newText)
+	prefix := 0
+	for prefix < len(oldTokens) && prefix < len(newTokens) && oldTokens[prefix] == newTokens[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(oldTokens)-prefix && suffix < len(newTokens)-prefix && oldTokens[len(oldTokens)-1-suffix] == newTokens[len(newTokens)-1-suffix] {
+		suffix++
+	}
+	oldHTML := escapeHTML(strings.Join(oldTokens[:prefix], "")) + "<del>" + escapeHTML(strings.Join(oldTokens[prefix:len(oldTokens)-suffix], "")) + "</del>" + escapeHTML(strings.Join(oldTokens[len(oldTokens)-suffix:], ""))
+	newHTML := escapeHTML(strings.Join(newTokens[:prefix], "")) + "<ins>" + escapeHTML(strings.Join(newTokens[prefix:len(newTokens)-suffix], "")) + "</ins>" + escapeHTML(strings.Join(newTokens[len(newTokens)-suffix:], ""))
+	return oldHTML, newHTML
+}
+
+func diffWordTokens(text string) []string {
+	runes := []rune(text)
+	var tokens []string
+	for start := 0; start < len(runes); {
+		kind := unicode.IsSpace(runes[start])
+		end := start + 1
+		for end < len(runes) && unicode.IsSpace(runes[end]) == kind {
+			end++
+		}
+		if !kind {
+			for end < len(runes) && !unicode.IsSpace(runes[end]) {
+				end++
+			}
+		}
+		tokens = append(tokens, string(runes[start:end]))
+		start = end
+	}
+	return tokens
 }

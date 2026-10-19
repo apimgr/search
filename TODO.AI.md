@@ -406,9 +406,13 @@ Thesaurus results now add ABC Thesaurus per-sense register and −2..+2 intensit
 
 PHP formatting now masks heredoc and nowdoc literals before code formatting and restores them after style/indent processing, preserving their exact contents and interpolation syntax. Regression coverage checks both heredoc forms with indentation, Allman style, and minification; continue auditing other malformed and multiline language cases.
 
+Python beautification and minification now treat escaped quote characters inside triple-quoted strings as string content, preventing an escaped delimiter from ending the protected span early. Unit coverage verifies both output paths preserve the escaped delimiter and following multiline text; the new named SSR/no-JS/browser fixture exercises the formatted output in all tiers.
+
 Man pages now render a contents index linked to stable heading IDs, native collapsible sections, section 1–8 query links, in-page section search, and copy controls for preformatted examples. Preformatted examples receive escaped syntax styling for command names, flags, variables, and quoted strings; copy works through the Clipboard API with a legacy local fallback. SEE ALSO links remain sanitized and visible. Offline SSR/no-JS/browser scenarios verify the page structure; browser coverage checks search filtering, auto-opening a matching section, native collapse, and both clipboard paths. Remaining Direct Answers gaps are still being audited.
 
 The formatter now syntax-highlights JavaScript/TypeScript, PHP, Python, SQL, CSS/SCSS/LESS, JSON, and HTML/XML code using escaped language-aware tokens. Unit fixtures cover tags, comments, strings, numbers, and keywords; the three-tier direct-answer scenario asserts highlighted output.
+
+Text diffs now align inserted and removed lines with a bounded LCS algorithm, report original and modified line numbers and edit counts, and support unified output, escaped inline word highlighting, whitespace-insensitive comparison, copy controls, and language-aware syntax highlighting. Unit and three-tier E2E coverage checks insertion alignment, line numbering, option rendering, and highlighted changes.
 
 Action: complete the remaining IDEA.md subfeatures without inventing upstream data; add evidence-backed threat checks; add offline handler-path tests for completed behavior.
 
