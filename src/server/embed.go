@@ -525,6 +525,9 @@ type PageData struct {
 // correct selected/checked state without requiring JavaScript.
 type GeneralPrefs struct {
 	Theme             string
+	FontSize          string
+	ResultsDensity    string
+	AccentColor       string
 	DefaultCategory   string
 	SafeSearch        string
 	Units             string

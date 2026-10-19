@@ -77,3 +77,5 @@ Use `qr:https://example.com` to generate a QR code. The options form supports si
 ## Local search history
 
 Recent searches are kept in this browser's `localStorage`; Search does not send the history list to the server. The homepage shows recent queries as links. Disable **Save search history** in Preferences to stop recording and clear the stored list, or use **Clear history** to remove it at any time. When history saving is enabled, it is included in the downloadable preferences export and restored from that file's import. Importing preferences with history disabled clears imported history. History is not included in cross-device preference URLs.
+
+Preferences also let you choose small, medium, or large text; compact, comfortable, or spacious result spacing; and a custom accent color. These appearance choices are stored in browser cookies, rendered by the server, and included in portable preference links.

@@ -302,8 +302,9 @@
 
     function applyTheme(theme) {
         var resolved = resolveTheme(theme);
-        // Per AI.md PART 16: replace className entirely; also set data-theme-mode for transitions
-        document.documentElement.className = 'theme-' + resolved;
+        // Preserve independent appearance classes while switching the theme.
+        document.documentElement.classList.remove('theme-dark', 'theme-light', 'theme-auto');
+        document.documentElement.classList.add('theme-' + resolved);
         document.documentElement.setAttribute('data-theme-mode', theme);
     }
 
@@ -526,7 +527,8 @@
             ['theme', 'lang', 'search_widgets', 'search_pref_category', 'search_pref_safe_search',
                 'search_pref_results_per_page', 'search_pref_units', 'search_pref_new_tab',
                 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history',
-                'search_pref_video_previews', 'search_widget_weather_units', 'preferencesEnabled'].forEach(clearCookie);
+                'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density',
+                'search_pref_accent_color', 'search_widget_weather_units', 'preferencesEnabled'].forEach(clearCookie);
         }
         var banner = document.getElementById('cookie-consent');
         if (banner) banner.remove();
@@ -3141,6 +3143,9 @@
         // Save preferences to cookies and keep history records client-side.
         function savePreferences() {
             var themeSelect = document.getElementById('theme');
+            var fontSizeSelect = document.getElementById('font-size');
+            var resultsDensitySelect = document.getElementById('results-density');
+            var accentColorInput = document.getElementById('accent-color');
             var langSelect = document.getElementById('lang');
             var unitsSelect = document.getElementById('units');
             var weatherUnitsSelect = document.getElementById('weather-units');
@@ -3155,6 +3160,9 @@
 
             var prefs = {
                 theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'dark',
+                font_size: fontSizeSelect && ['small', 'medium', 'large'].indexOf(fontSizeSelect.value) !== -1 ? fontSizeSelect.value : 'medium',
+                results_density: resultsDensitySelect && ['compact', 'comfortable', 'spacious'].indexOf(resultsDensitySelect.value) !== -1 ? resultsDensitySelect.value : 'comfortable',
+                accent_color: accentColorInput && /^#[0-9a-f]{6}$/i.test(accentColorInput.value) ? accentColorInput.value : '#8250df',
                 lang: langSelect ? langSelect.value : getClientLanguage(),
                 units: unitsSelect && unitsSelect.value === 'metric' ? 'metric' : 'imperial',
                 weather_units: weatherUnitsSelect && ['auto', 'metric', 'imperial'].indexOf(weatherUnitsSelect.value) !== -1 ? weatherUnitsSelect.value : 'auto',
@@ -3171,6 +3179,9 @@
             if (!prefs.save_history) localStorage.removeItem(SEARCH_HISTORY_KEY);
             setCookie('theme', prefs.theme, 31536000);
             setCookie('lang', prefs.lang, 31536000);
+            setCookie('search_pref_font_size', prefs.font_size, 31536000);
+            setCookie('search_pref_results_density', prefs.results_density, 31536000);
+            setCookie('search_pref_accent_color', prefs.accent_color, 31536000);
             setUnitsCookie(prefs.units);
             setCookie('search_widget_weather_units', prefs.weather_units, 31536000);
             setCookie('search_pref_category', prefs.default_category, 31536000);
@@ -3218,6 +3229,9 @@
             }
             params.append('theme', prefs.theme);
             params.append('lang', prefs.lang);
+            params.append('search_pref_font_size', prefs.font_size);
+            params.append('search_pref_results_density', prefs.results_density);
+            params.append('search_pref_accent_color', prefs.accent_color);
             params.append('search_pref_units', prefs.units);
             params.append('search_widget_weather_units', prefs.weather_units);
             params.append('search_pref_category', prefs.default_category);
@@ -3451,7 +3465,7 @@
                     danger: true
                 }).then(function(confirmed) {
                     if (!confirmed) return;
-                    ['theme', 'lang', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_widget_weather_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews'].forEach(function(name) { clearCookie(name); });
+                    ['theme', 'lang', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_widget_weather_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density', 'search_pref_accent_color'].forEach(function(name) { clearCookie(name); });
                     localStorage.removeItem(BANGS_KEY);
                     localStorage.removeItem(SEARCH_HISTORY_KEY);
                     // Clear per-widget settings

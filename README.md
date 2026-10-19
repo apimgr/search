@@ -28,7 +28,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Bang Shortcuts: Quick redirects like `!g`, `!w`, `!gh` for fast searching
 - Keyboard Navigation: Vim-style shortcuts for power users (j/k, /, Enter)
 - Mobile Friendly: Responsive design that works on all devices
-- Dark and Light Themes: Modern interface with dark (Dracula) and light themes
+- Dark, Light, and Auto Themes: Choose the theme, font size, results density, and accent color in Preferences
 - File-only Configuration: All settings in `server.yml`; no admin web UI
 - Multi-Category Search: Web, images, videos, news, maps, files, music, science, IT, and social
 - Built-in SSL: Let's Encrypt integration for automatic HTTPS

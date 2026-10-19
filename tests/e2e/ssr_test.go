@@ -111,6 +111,25 @@ func TestSSRPublicPagesRender(t *testing.T) {
 	}
 }
 
+func TestSSRVisualPreferencesApplyToPageAndSettings(t *testing.T) {
+	s := newSession(t)
+	addPreferences := func(request *http.Request) {
+		request.AddCookie(&http.Cookie{Name: "search_pref_font_size", Value: "large"})
+		request.AddCookie(&http.Cookie{Name: "search_pref_results_density", Value: "compact"})
+		request.AddCookie(&http.Cookie{Name: "search_pref_accent_color", Value: "#123abc"})
+	}
+	resp, home := s.get("/", addPreferences)
+	requireStatus(t, resp, http.StatusOK)
+	for _, marker := range []string{`font-size-large`, `results-density-compact`, `style="--color-accent: #123abc; --color-primary: #123abc"`} {
+		requireContains(t, home, marker, "SSR visual preferences")
+	}
+	resp, settings := s.get("/server/preferences", addPreferences)
+	requireStatus(t, resp, http.StatusOK)
+	for _, marker := range []string{`value="large" selected`, `value="compact" selected`, `id="accent-color" name="search_pref_accent_color" value="#123abc"`} {
+		requireContains(t, settings, marker, "SSR visual preferences settings")
+	}
+}
+
 func TestSSRKeyboardShortcutGuideMatchesSupportedActions(t *testing.T) {
 	s := newSession(t)
 	resp, body := s.get("/server/help")
@@ -236,6 +255,9 @@ func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 			{Name: "lang", Value: "de"},
 			{Name: "search_pref_category", Value: "images"},
 			{Name: "search_pref_infinite_scroll", Value: "0"},
+			{Name: "search_pref_font_size", Value: "large"},
+			{Name: "search_pref_results_density", Value: "compact"},
+			{Name: "search_pref_accent_color", Value: "#123abc"},
 		} {
 			request.AddCookie(cookie)
 		}
@@ -253,7 +275,7 @@ func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
 		t.Fatalf("decode preference export: %v", err)
 	}
-	if envelope.Data.Theme != "light" || envelope.Data.Lang != "de" || envelope.Data.Prefs["category"] != "images" || envelope.Data.Prefs["infinite_scroll"] != "0" {
+	if envelope.Data.Theme != "light" || envelope.Data.Lang != "de" || envelope.Data.Prefs["category"] != "images" || envelope.Data.Prefs["infinite_scroll"] != "0" || envelope.Data.Prefs["font_size"] != "large" || envelope.Data.Prefs["results_density"] != "compact" || envelope.Data.Prefs["accent_color"] != "#123abc" {
 		t.Fatalf("preference export omitted allowed values: %#v", envelope.Data)
 	}
 	if !strings.Contains(envelope.Data.URL, "/server/preferences/import?") || envelope.Data.Code == "" {
@@ -266,6 +288,9 @@ func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 	requireContains(t, preferences, `value="light" selected`, "imported theme")
 	requireContains(t, preferences, `value="de" selected`, "imported language")
 	requireContains(t, preferences, `value="images" selected`, "imported category")
+	requireContains(t, preferences, `value="large" selected`, "imported font size")
+	requireContains(t, preferences, `value="compact" selected`, "imported results density")
+	requireContains(t, preferences, `value="#123abc"`, "imported accent color")
 }
 
 // TestSSRDirectAnswers renders the direct-answer pages. Only pure-computation

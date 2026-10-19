@@ -1730,6 +1730,22 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     gap: 1rem;
 }
 
+.results-density-compact .results-list {
+    gap: 0.5rem;
+}
+
+.results-density-spacious .results-list {
+    gap: 1.5rem;
+}
+
+.results-density-compact .result-item {
+    padding: 0.75rem;
+}
+
+.results-density-spacious .result-item {
+    padding: 1.75rem;
+}
+
 .result-item {
     background-color: var(--color-bg-active);
     border-radius: 12px;

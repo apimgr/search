@@ -1298,6 +1298,7 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 			"search_pref_category", "search_pref_safe_search", "search_pref_results_per_page",
 			"search_pref_units", "search_pref_new_tab", "search_pref_infinite_scroll",
 			"search_pref_keyboard_shortcuts", "search_pref_save_history", "search_pref_video_previews",
+			"search_pref_font_size", "search_pref_results_density", "search_pref_accent_color",
 		} {
 			http.SetCookie(w, &http.Cookie{
 				Name: name, Value: "", Path: "/", MaxAge: -1,

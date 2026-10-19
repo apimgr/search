@@ -295,6 +295,14 @@ html {
     scroll-behavior: smooth;
 }
 
+html.font-size-small {
+    font-size: 14px;
+}
+
+html.font-size-large {
+    font-size: 18px;
+}
+
 body {
     font-family: var(--font-sans);
     background-color: var(--color-bg);

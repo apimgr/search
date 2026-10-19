@@ -157,6 +157,9 @@ Per AI.md "Cross-device preference sync", `theme`, `lang`, and the validated Sea
 | `units` | `metric`, `imperial` |
 | `new_tab`, `infinite_scroll`, `keyboard_shortcuts` | `0`, `1` |
 | `save_history` | `0`, `1` |
+| `font_size` | `small`, `medium`, `large` |
+| `results_density` | `compact`, `comfortable`, `spacious` |
+| `accent_color` | six-digit hexadecimal color (`#RRGGBB`) |
 
 **Use Cases:**
 - **Sync URL**: `https://search.example.com/server/preferences/import?theme=dark&lang=fr`
@@ -1759,6 +1762,7 @@ s         → Open settings
 - **Font Size**: Small, medium, large
 - **Results Density**: Compact, comfortable, spacious
 - **Accent Color**: Customizable highlight color
+- Appearance preferences are stored in `search_pref_font_size`, `search_pref_results_density`, and `search_pref_accent_color` cookies. Font size and density accept the listed values; accent color is a six-digit hexadecimal color. Invalid cookie/import values fall back to the default. Values render in SSR, save through the native preferences form, and transfer through preference sync.
 - **Logo Customization**: Admin can set custom logo/branding
 
 #### Filtering & Refinement

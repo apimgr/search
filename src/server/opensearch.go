@@ -326,6 +326,8 @@ var validResultsPerPage = map[string]bool{
 func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 	prefs := GeneralPrefs{
 		Theme:             "dark",
+		FontSize:          "medium",
+		ResultsDensity:    "comfortable",
 		DefaultCategory:   "general",
 		SafeSearch:        "1",
 		Units:             "imperial",
@@ -343,6 +345,15 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 		case "dark", "light", "auto":
 			prefs.Theme = c.Value
 		}
+	}
+	if c, err := r.Cookie("search_pref_font_size"); err == nil && (c.Value == "small" || c.Value == "medium" || c.Value == "large") {
+		prefs.FontSize = c.Value
+	}
+	if c, err := r.Cookie("search_pref_results_density"); err == nil && (c.Value == "compact" || c.Value == "comfortable" || c.Value == "spacious") {
+		prefs.ResultsDensity = c.Value
+	}
+	if c, err := r.Cookie("search_pref_accent_color"); err == nil && prefsync.ValidAccentColor(c.Value) {
+		prefs.AccentColor = c.Value
 	}
 	if c, err := r.Cookie("search_pref_units"); err == nil {
 		if c.Value == "metric" || c.Value == "imperial" {

@@ -70,22 +70,38 @@ func TestExportCanonicalIncludesOnlyPreferences(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "lang", Value: "de"})
 	req.AddCookie(&http.Cookie{Name: "search_pref_units", Value: "metric"})
 	req.AddCookie(&http.Cookie{Name: "search_pref_save_history", Value: "0"})
+	req.AddCookie(&http.Cookie{Name: "search_pref_font_size", Value: "large"})
+	req.AddCookie(&http.Cookie{Name: "search_pref_results_density", Value: "compact"})
+	req.AddCookie(&http.Cookie{Name: "search_pref_accent_color", Value: "#a1b2c3"})
 	req.AddCookie(&http.Cookie{Name: "search_pref_video_previews", Value: "0"})
 	req.AddCookie(&http.Cookie{Name: "cookie_consent", Value: "secret"})
 	state, fullURL, code := Export(req, "search", "en", testLanguages)
-	if state.Theme != "light" || state.Lang != "de" || state.Prefs["units"] != "metric" || state.Prefs["save_history"] != "0" {
+	if state.Theme != "light" || state.Lang != "de" || state.Prefs["units"] != "metric" || state.Prefs["save_history"] != "0" || state.Prefs["font_size"] != "large" || state.Prefs["results_density"] != "compact" || state.Prefs["accent_color"] != "#a1b2c3" {
 		t.Fatalf("state=%#v", state)
 	}
 	parsed, err := url.Parse(fullURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Query().Get("search_pref_units") != "metric" || parsed.Query().Get("search_pref_save_history") != "0" || parsed.Query().Get("search_pref_video_previews") != "" || parsed.Query().Get("cookie_consent") != "" {
+	if parsed.Query().Get("search_pref_units") != "metric" || parsed.Query().Get("search_pref_save_history") != "0" || parsed.Query().Get("search_pref_font_size") != "large" || parsed.Query().Get("search_pref_results_density") != "compact" || parsed.Query().Get("search_pref_accent_color") != "#a1b2c3" || parsed.Query().Get("search_pref_video_previews") != "" || parsed.Query().Get("cookie_consent") != "" {
 		t.Fatalf("query=%s", parsed.RawQuery)
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(code)
 	if err != nil || string(decoded) != parsed.RawQuery {
 		t.Fatalf("code decode=%q err=%v query=%q", decoded, err, parsed.RawQuery)
+	}
+}
+
+func TestImportValidatesVisualPreferences(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=large&search_pref_results_density=spacious&search_pref_accent_color=%23ABCDEF", nil)
+	result := Import(req, "search", "en", testLanguages)
+	if result.State.Prefs["font_size"] != "large" || result.State.Prefs["results_density"] != "spacious" || result.State.Prefs["accent_color"] != "#ABCDEF" {
+		t.Fatalf("valid values not imported: %#v", result.State.Prefs)
+	}
+	invalid := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=huge&search_pref_results_density=tight&search_pref_accent_color=red", nil)
+	result = Import(invalid, "search", "en", testLanguages)
+	if len(result.State.Prefs) != 0 || !contains(result.Ignored, "search_pref_font_size") || !contains(result.Ignored, "search_pref_results_density") || !contains(result.Ignored, "search_pref_accent_color") {
+		t.Fatalf("invalid visual values were not rejected: %#v", result)
 	}
 }
 

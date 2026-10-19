@@ -545,6 +545,29 @@ func TestResolveGeneralPrefsSaveHistoryCookie(t *testing.T) {
 	}
 }
 
+func TestResolveGeneralPrefsAppearanceCookies(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+	defaults := resolveGeneralPrefs(req)
+	if defaults.FontSize != "medium" || defaults.ResultsDensity != "comfortable" || defaults.AccentColor != "" {
+		t.Fatalf("appearance defaults = %#v", defaults)
+	}
+	req.AddCookie(&http.Cookie{Name: "search_pref_font_size", Value: "large"})
+	req.AddCookie(&http.Cookie{Name: "search_pref_results_density", Value: "compact"})
+	req.AddCookie(&http.Cookie{Name: "search_pref_accent_color", Value: "#12aBcF"})
+	prefs := resolveGeneralPrefs(req)
+	if prefs.FontSize != "large" || prefs.ResultsDensity != "compact" || prefs.AccentColor != "#12aBcF" {
+		t.Fatalf("appearance cookies were not resolved: %#v", prefs)
+	}
+	invalid := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+	invalid.AddCookie(&http.Cookie{Name: "search_pref_font_size", Value: "giant"})
+	invalid.AddCookie(&http.Cookie{Name: "search_pref_results_density", Value: "tight"})
+	invalid.AddCookie(&http.Cookie{Name: "search_pref_accent_color", Value: "red; color: blue"})
+	prefs = resolveGeneralPrefs(invalid)
+	if prefs.FontSize != "medium" || prefs.ResultsDensity != "comfortable" || prefs.AccentColor != "" {
+		t.Fatalf("invalid appearance cookies were accepted: %#v", prefs)
+	}
+}
+
 func TestResolveGeneralPrefsVideoPreviewCookie(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

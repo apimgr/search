@@ -75,6 +75,29 @@
             </div>
 
             <div class="form-group">
+                <label for="font-size">Font Size</label>
+                <select id="font-size" name="search_pref_font_size">
+                    <option value="small" {{if eq .Prefs.FontSize "small"}}selected{{end}}>Small</option>
+                    <option value="medium" {{if eq .Prefs.FontSize "medium"}}selected{{end}}>Medium</option>
+                    <option value="large" {{if eq .Prefs.FontSize "large"}}selected{{end}}>Large</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="results-density">Results Density</label>
+                <select id="results-density" name="search_pref_results_density">
+                    <option value="compact" {{if eq .Prefs.ResultsDensity "compact"}}selected{{end}}>Compact</option>
+                    <option value="comfortable" {{if eq .Prefs.ResultsDensity "comfortable"}}selected{{end}}>Comfortable</option>
+                    <option value="spacious" {{if eq .Prefs.ResultsDensity "spacious"}}selected{{end}}>Spacious</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="accent-color">Accent Color</label>
+                <input type="color" id="accent-color" name="search_pref_accent_color" value="{{if .Prefs.AccentColor}}{{.Prefs.AccentColor}}{{else}}#8250df{{end}}">
+            </div>
+
+            <div class="form-group">
                 <label for="lang">Language</label>
                 <select id="lang" name="lang">
                     {{range .AvailableLanguages}}<option value="{{.Code}}" {{if eq $.Lang .Code}}selected{{end}}>{{.NativeName}}</option>{{end}}

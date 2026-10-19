@@ -486,6 +486,9 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#theme`, "light", chromedp.ByQuery),
+		chromedp.SetValue(`#font-size`, "large", chromedp.ByQuery),
+		chromedp.SetValue(`#results-density`, "compact", chromedp.ByQuery),
+		chromedp.SetValue(`#accent-color`, "#123abc", chromedp.ByQuery),
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
 		chromedp.SetValue(`#weather-units`, "metric", chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked = false`, nil),
@@ -506,11 +509,19 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	if !strings.Contains(html, `class="theme-light`) {
 		t.Errorf("no-JS saved theme did not persist to homepage")
 	}
+	if !strings.Contains(html, `font-size-large results-density-compact`) || !strings.Contains(html, `style="--color-accent: #123abc; --color-primary: #123abc"`) {
+		t.Errorf("no-JS visual preferences did not persist to homepage: %s", snippet(html, `<html`))
+	}
 	if !strings.Contains(html, `<html lang="de"`) || !strings.Contains(html, `aria-label="Suchen"`) {
 		t.Errorf("no-JS saved language did not localize the homepage: %s", snippet(html, `<html`))
 	}
 	if !strings.Contains(preferencesHTML, `id="weather-units"`) || !strings.Contains(preferencesHTML, `value="metric" selected`) {
 		t.Errorf("no-JS weather unit override did not persist: %s", snippet(preferencesHTML, `id="weather-units"`))
+	}
+	for _, marker := range []string{`id="font-size"`, `value="large" selected`, `id="results-density"`, `value="compact" selected`, `id="accent-color" name="search_pref_accent_color" value="#123abc"`} {
+		if !strings.Contains(preferencesHTML, marker) {
+			t.Errorf("no-JS visual preference did not persist; missing %q", marker)
+		}
 	}
 	if videoPreviewsEnabled {
 		t.Errorf("no-JS video preview preference did not persist as disabled")
@@ -560,7 +571,7 @@ func TestNoJSMobilePreferencesTriggerNavigatesToFullSettings(t *testing.T) {
 func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
-	code := base64.RawURLEncoding.EncodeToString([]byte("theme=light&lang=de&search_pref_category=images&search_pref_infinite_scroll=0"))
+	code := base64.RawURLEncoding.EncodeToString([]byte("theme=light&lang=de&search_pref_category=images&search_pref_infinite_scroll=0&search_pref_font_size=large&search_pref_results_density=compact&search_pref_accent_color=%23123abc"))
 	var homepage, preferencePage string
 	var infiniteScrollEnabled bool
 	if err := chromedp.Run(ctx,
@@ -580,6 +591,11 @@ func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 	}
 	if !strings.Contains(homepage, `class="theme-light`) || !strings.Contains(homepage, `<html lang="de"`) {
 		t.Fatalf("imported theme/language were not applied on the receiving device: %s", snippet(homepage, `<html`))
+	}
+	for _, marker := range []string{`font-size-large`, `results-density-compact`, `--color-accent: #123abc`} {
+		if !strings.Contains(homepage, marker) {
+			t.Errorf("no-JS sync did not apply visual preference %q: %s", marker, snippet(homepage, `<html`))
+		}
 	}
 	if infiniteScrollEnabled || !strings.Contains(preferencePage, `value="images" selected`) {
 		t.Fatalf("imported search settings did not persist: infinite_scroll=%v", infiniteScrollEnabled)

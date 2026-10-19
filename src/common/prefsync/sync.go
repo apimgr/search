@@ -24,6 +24,8 @@ var preferenceEnums = map[string]map[string]bool{
 	"infinite_scroll":    {"0": true, "1": true},
 	"keyboard_shortcuts": {"0": true, "1": true},
 	"save_history":       {"0": true, "1": true},
+	"font_size":          {"small": true, "medium": true, "large": true},
+	"results_density":    {"compact": true, "comfortable": true, "spacious": true},
 }
 
 type State struct {
@@ -207,8 +209,23 @@ func Apply(w http.ResponseWriter, r *http.Request, projectName string, result Im
 func validTheme(value string) bool { return value == "dark" || value == "light" || value == "auto" }
 
 func validPref(key, value string) bool {
+	if key == "accent_color" {
+		return ValidAccentColor(value)
+	}
 	options, ok := preferenceEnums[key]
 	return ok && options[value]
+}
+
+func ValidAccentColor(value string) bool {
+	if len(value) != 7 || value[0] != '#' {
+		return false
+	}
+	for _, digit := range value[1:] {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", digit) {
+			return false
+		}
+	}
+	return true
 }
 
 func canonicalLanguage(value string, supported []string) string {

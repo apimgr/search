@@ -368,6 +368,9 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 				{"lang", "de"},
 				{"search_pref_category", "images"},
 				{"search_pref_infinite_scroll", "0"},
+				{"search_pref_font_size", "large"},
+				{"search_pref_results_density", "compact"},
+				{"search_pref_accent_color", "#456def"},
 			} {
 				if err := network.SetCookie(cookie.name, cookie.value).WithURL(site.URL).WithPath("/").Do(ctx); err != nil {
 					return err
@@ -405,8 +408,13 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	); err != nil {
 		t.Fatalf("import preferences on receiver device: %v", err)
 	}
-	if !strings.Contains(homepage, `class="theme-light`) || !strings.Contains(homepage, `<html lang="de"`) {
+	if !strings.Contains(homepage, "theme-light") || !strings.Contains(homepage, `<html lang="de"`) {
 		t.Errorf("receiver did not apply imported theme and language: %s", snippet(homepage, `<html`))
+	}
+	for _, marker := range []string{`font-size-large`, `results-density-compact`, `--color-accent: #456def`} {
+		if !strings.Contains(homepage, marker) {
+			t.Errorf("receiver did not apply imported visual preference %q: %s", marker, snippet(homepage, `<html`))
+		}
 	}
 	if infiniteScrollEnabled {
 		t.Error("receiver did not apply disabled infinite-scroll preference")
@@ -816,13 +824,16 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
-	var language, searchLabel string
+	var language, searchLabel, visualClass, accentStyle, fontSize string
 	var videoPreviewsEnabled bool
 	if err := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
+		chromedp.SetValue(`#font-size`, "small", chromedp.ByQuery),
+		chromedp.SetValue(`#results-density`, "spacious", chromedp.ByQuery),
+		chromedp.SetValue(`#accent-color`, "#a1b2c3", chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked = false`, nil),
 		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
@@ -830,6 +841,9 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('#searchQuery').getAttribute('aria-label')`, &searchLabel),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked`, &videoPreviewsEnabled),
+		chromedp.Evaluate(`document.documentElement.className`, &visualClass),
+		chromedp.Evaluate(`document.documentElement.style.getPropertyValue('--color-primary').trim()`, &accentStyle),
+		chromedp.Evaluate(`getComputedStyle(document.documentElement).fontSize`, &fontSize),
 	); err != nil {
 		t.Fatalf("save language preference in browser: %v", err)
 	}
@@ -838,6 +852,9 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	}
 	if videoPreviewsEnabled {
 		t.Fatal("JavaScript preferences save did not persist the disabled video preview preference")
+	}
+	if !strings.Contains(visualClass, "font-size-small") || !strings.Contains(visualClass, "results-density-spacious") || accentStyle != "#a1b2c3" || fontSize != "14px" {
+		t.Fatalf("JavaScript visual preferences did not persist: class=%q accent=%q font_size=%q", visualClass, accentStyle, fontSize)
 	}
 	requireNoFailures(t, pf, "language preference save and localized homepage")
 }

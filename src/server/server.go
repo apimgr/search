@@ -1018,6 +1018,7 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	}
 	data.ThemeMode = themeMode
 	data.Theme = themeMode
+	data.Prefs = resolveGeneralPrefs(r)
 	data.PrefsQuery = prefsQuery
 	// CSRF token needed by the no-JS theme-switch form in the header partial, which
 	// renders on every page that uses newPageData. Issues the csrf_token cookie
