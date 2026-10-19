@@ -1960,6 +1960,34 @@ func TestPkgHandlerPyPIMetadataIsRenderedSafely(t *testing.T) {
 	}
 }
 
+type pypiMalformedMetadataTransport struct{}
+
+func (pypiMalformedMetadataTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	body := `{"info":{"name":"sample","version":"1.2.3","summary":{},"description":[],"license":{},"project_urls":{"repository":{},"Repository":"https://github.com/example/sample"},"project_url":false,"home_page":{},"requires_dist":["one>=1",{}," ","two>=2"],"description_content_type":[]},"releases":{"1.2.3":[{"upload_time_iso_8601":{}}]}}`
+	if request.URL.Host == "pypistats.org" {
+		return &http.Response{StatusCode: http.StatusBadGateway, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`)), Request: request}, nil
+	}
+	return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+}
+
+func TestPkgHandlerIgnoresMalformedOptionalPyPIMetadata(t *testing.T) {
+	packageDownloadsCache.Lock()
+	delete(packageDownloadsCache.entries, "pypi:sample")
+	packageDownloadsCache.Unlock()
+	handler := NewPkgHandler()
+	handler.client = &http.Client{Transport: pypiMalformedMetadataTransport{}}
+	answer, err := handler.HandleDirectQuery(context.Background(), "pypi/sample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Data["name"] != "sample" || answer.Data["version"] != "1.2.3" {
+		t.Fatalf("malformed optional metadata discarded package identity: %#v", answer.Data)
+	}
+	if answer.Data["repository"] != "https://github.com/example/sample" || answer.Data["dependencies"] != 2 || answer.Data["license"] != nil || answer.Data["updated"] != nil {
+		t.Fatalf("malformed optional metadata was not isolated: %#v", answer.Data)
+	}
+}
+
 type npmOptionalFailureTransport struct{}
 
 func (npmOptionalFailureTransport) RoundTrip(request *http.Request) (*http.Response, error) {

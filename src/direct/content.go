@@ -1492,20 +1492,18 @@ func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error
 
 	var pkg struct {
 		Info struct {
-			Name            string            `json:"name"`
-			Summary         string            `json:"summary"`
-			Description     string            `json:"description"`
-			Version         string            `json:"version"`
-			License         string            `json:"license"`
-			ProjectURLs     map[string]string `json:"project_urls"`
-			ProjectURL      string            `json:"project_url"`
-			Homepage        string            `json:"home_page"`
-			RequiresDist    []string          `json:"requires_dist"`
-			DescriptionType string            `json:"description_content_type"`
+			Name            string          `json:"name"`
+			Version         string          `json:"version"`
+			Summary         json.RawMessage `json:"summary"`
+			Description     json.RawMessage `json:"description"`
+			License         json.RawMessage `json:"license"`
+			ProjectURLs     json.RawMessage `json:"project_urls"`
+			ProjectURL      json.RawMessage `json:"project_url"`
+			Homepage        json.RawMessage `json:"home_page"`
+			RequiresDist    json.RawMessage `json:"requires_dist"`
+			DescriptionType json.RawMessage `json:"description_content_type"`
 		} `json:"info"`
-		Releases map[string][]struct {
-			UploadTime string `json:"upload_time_iso_8601"`
-		} `json:"releases"`
+		Releases json.RawMessage `json:"releases"`
 	}
 
 	if err := decodeBoundedJSON(resp.Body, 4<<20, &pkg); err != nil {
@@ -1515,52 +1513,95 @@ func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error
 		return nil, fmt.Errorf("PyPI returned incomplete package metadata")
 	}
 
+	var summary, description, license, projectURL, homepage, descriptionType string
+	decodeOptionalJSONString(pkg.Info.Summary, &summary)
+	decodeOptionalJSONString(pkg.Info.Description, &description)
+	decodeOptionalJSONString(pkg.Info.License, &license)
+	decodeOptionalJSONString(pkg.Info.ProjectURL, &projectURL)
+	decodeOptionalJSONString(pkg.Info.Homepage, &homepage)
+	decodeOptionalJSONString(pkg.Info.DescriptionType, &descriptionType)
+	var projectURLs map[string]json.RawMessage
+	_ = json.Unmarshal(pkg.Info.ProjectURLs, &projectURLs)
+	projectURLKeys := make([]string, 0, len(projectURLs))
+	for key := range projectURLs {
+		projectURLKeys = append(projectURLKeys, key)
+	}
+	slices.Sort(projectURLKeys)
 	repository := ""
-	for key, value := range pkg.Info.ProjectURLs {
-		if strings.EqualFold(key, "repository") || strings.EqualFold(key, "source") || strings.EqualFold(key, "source code") {
-			repository = value
+	for _, preferredKey := range []string{"repository", "source", "source code"} {
+		for _, key := range projectURLKeys {
+			rawValue := projectURLs[key]
+			if strings.EqualFold(key, preferredKey) {
+				decodeOptionalJSONString(rawValue, &repository)
+				if repository != "" {
+					break
+				}
+			}
+		}
+		if repository != "" {
 			break
 		}
 	}
 	if repository == "" {
-		repository = pkg.Info.ProjectURL
+		repository = projectURL
 	}
 	if repository == "" {
-		repository = pkg.Info.Homepage
+		repository = homepage
 	}
 	var updated interface{}
-	if releaseTimestamps := pkg.Releases[pkg.Info.Version]; len(releaseTimestamps) > 0 && releaseTimestamps[0].UploadTime != "" {
-		updated = releaseTimestamps[0].UploadTime
+	var releases map[string]json.RawMessage
+	_ = json.Unmarshal(pkg.Releases, &releases)
+	var releaseTimestamps []json.RawMessage
+	if json.Unmarshal(releases[pkg.Info.Version], &releaseTimestamps) == nil && len(releaseTimestamps) > 0 {
+		var release struct {
+			UploadTime json.RawMessage `json:"upload_time_iso_8601"`
+		}
+		if json.Unmarshal(releaseTimestamps[0], &release) == nil {
+			var uploadTime string
+			decodeOptionalJSONString(release.UploadTime, &uploadTime)
+			if uploadTime != "" {
+				updated = uploadTime
+			}
+		}
 	}
 	var dependencies interface{}
-	if pkg.Info.RequiresDist != nil {
-		dependencies = len(pkg.Info.RequiresDist)
+	var requirements []json.RawMessage
+	if json.Unmarshal(pkg.Info.RequiresDist, &requirements) == nil && len(requirements) > 0 {
+		validCount := 0
+		for _, requirement := range requirements {
+			var value string
+			decodeOptionalJSONString(requirement, &value)
+			if strings.TrimSpace(value) != "" {
+				validCount++
+			}
+		}
+		dependencies = validCount
 	}
-	readmePreview := truncateString(strings.TrimSpace(pkg.Info.Description), 2000)
+	readmePreview := truncateString(strings.TrimSpace(description), 2000)
 	var weeklyDownloads interface{}
 	if count, err := h.fetchPyPIWeeklyDownloads(ctx, pkg.Info.Name); err == nil {
 		weeklyDownloads = count
 	}
 	data := map[string]interface{}{
 		"name":             pkg.Info.Name,
-		"description":      pkg.Info.Summary,
+		"description":      summary,
 		"version":          pkg.Info.Version,
-		"license":          pkg.Info.License,
+		"license":          packageOptionalString(license),
 		"registry":         "pypi",
 		"weekly_downloads": weeklyDownloads,
 		"dependencies":     dependencies,
 		"updated":          updated,
 		"repository":       repository,
 		"readme_preview":   readmePreview,
-		"description_type": pkg.Info.DescriptionType,
+		"description_type": packageOptionalString(descriptionType),
 	}
 
 	return &Answer{
 		Type:        AnswerTypePkg,
 		Term:        name,
 		Title:       pkg.Info.Name,
-		Description: pkg.Info.Summary,
-		Content:     formatPkgContentWithDetails(lang, "pypi", pkg.Info.Name, pkg.Info.Summary, pkg.Info.Version, pkg.Info.License, "pip install "+pkg.Info.Name, data),
+		Description: summary,
+		Content:     formatPkgContentWithDetails(lang, "pypi", pkg.Info.Name, summary, pkg.Info.Version, license, "pip install "+pkg.Info.Name, data),
 		Source:      "PyPI",
 		SourceURL:   fmt.Sprintf("https://pypi.org/project/%s/", url.PathEscape(name)),
 		Data:        data,
