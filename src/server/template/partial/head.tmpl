@@ -23,6 +23,9 @@
 <link rel="icon" href="{{.Config.Server.Branding.Favicon}}">
 {{else}}
 <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/img/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="icon" href="/static/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/static/img/favicon-48.png" type="image/png" sizes="48x48">
 {{end}}
 
 {{/* OpenSearch - enables "Add to browser" functionality */}}
@@ -33,12 +36,14 @@
 {{/* PWA Manifest - per AI.md PART 16: PWA Support */}}
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#282a36">
-<link rel="apple-touch-icon" href="/static/img/icon-192.svg">
+<link rel="apple-touch-icon" href="/static/img/icon-180.png" sizes="180x180">
 
 {{/* iOS-specific PWA meta tags - per AI.md PART 16: iOS-Specific Considerations */}}
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="{{.Config.Server.Title}}">
+<link rel="apple-touch-startup-image" href="/static/splash/iphone-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/static/splash/iphone-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
 
 {{/* Per AI.md: Load order: common → components → public/admin */}}
 <link rel="stylesheet" href="/static/css/common.css">

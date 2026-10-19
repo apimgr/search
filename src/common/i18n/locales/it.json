@@ -1973,7 +1973,12 @@
     "update_available": "È disponibile una nuova versione",
     "update_now": "Aggiorna ora",
     "update_later": "Più tardi",
-    "offline": "Sei offline. Alcune funzionalità potrebbero non essere disponibili."
+    "offline": "Sei offline. Alcune funzionalità potrebbero non essere disponibili.",
+    "install": "Installa app",
+    "install_title": "Aggiungi Search alla schermata Home",
+    "ios_share": "Tocca il pulsante Condividi in Safari.",
+    "ios_add_to_home": "Seleziona “Aggiungi alla schermata Home”.",
+    "ios_add": "Tocca “Aggiungi” in alto a destra."
   },
   "email": {
     "common": {

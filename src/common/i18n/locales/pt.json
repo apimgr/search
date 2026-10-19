@@ -1973,7 +1973,12 @@
     "update_available": "Uma nova versão está disponível",
     "update_now": "Atualizar agora",
     "update_later": "Mais tarde",
-    "offline": "Você está offline. Alguns recursos podem estar indisponíveis."
+    "offline": "Você está offline. Alguns recursos podem estar indisponíveis.",
+    "install": "Instalar aplicativo",
+    "install_title": "Adicione Search à tela de início",
+    "ios_share": "Toque em Compartilhar no Safari.",
+    "ios_add_to_home": "Selecione “Adicionar à Tela de Início”.",
+    "ios_add": "Toque em “Adicionar” no canto superior direito."
   },
   "email": {
     "common": {

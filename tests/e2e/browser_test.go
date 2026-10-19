@@ -51,6 +51,82 @@ func TestBrowserHomeSearchFlow(t *testing.T) {
 	requireNoFailures(t, pf, "/ -> /search")
 }
 
+func TestBrowserServiceWorkerServesOfflineFallback(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var controlled bool
+	var body string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Poll(`navigator.serviceWorker.controller !== null`, &controlled,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(10*time.Second)),
+		network.Enable(),
+		network.OverrideNetworkState(true, 0, -1, -1),
+		chromedp.Navigate(site.URL+"/__e2e/offline-navigation"),
+		chromedp.Text("body", &body, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("service worker offline navigation: %v", err)
+	}
+	if !controlled {
+		t.Fatal("page did not become controlled by the service worker")
+	}
+	if !strings.Contains(body, "You are offline") {
+		t.Errorf("offline navigation body = %q, want the offline fallback page", body)
+	}
+}
+
+func TestBrowserIOSInstallInstructions(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	failures := watchForFailures(ctx)
+	var dialogText string
+	userAgent := "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+	if err := chromedp.Run(ctx,
+		emulation.SetUserAgentOverride(userAgent),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.WaitVisible(`button[data-pwa-install]`, chromedp.ByQuery),
+		chromedp.Click(`button[data-pwa-install]:not([hidden])`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('#pwa-install-dialog').open`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(2*time.Second)),
+		chromedp.Text(`#pwa-install-dialog`, &dialogText, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("show iOS install instructions: %v", err)
+	}
+	for _, text := range []string{"Safari", "Home Screen"} {
+		if !strings.Contains(dialogText, text) {
+			t.Errorf("iOS install dialog does not contain %q: %s", text, dialogText)
+		}
+	}
+	requireNoFailures(t, failures, "iOS install instructions")
+}
+
+func TestBrowserInstallPromptControl(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	failures := watchForFailures(ctx)
+	var eventWasPrevented bool
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(`(() => {
+			const event = new Event('beforeinstallprompt', {cancelable: true});
+			event.prompt = () => Promise.resolve();
+			event.userChoice = Promise.resolve({outcome: 'accepted'});
+			window.dispatchEvent(event);
+			return event.defaultPrevented;
+		})()`, &eventWasPrevented),
+		chromedp.WaitVisible(`button[data-pwa-install]`, chromedp.ByQuery),
+		chromedp.Click(`button[data-pwa-install]:not([hidden])`, chromedp.ByQuery),
+		chromedp.Poll(`Array.from(document.querySelectorAll('[data-pwa-install]')).every(button => button.hidden)`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(2*time.Second)),
+	); err != nil {
+		t.Fatalf("use native install prompt control: %v", err)
+	}
+	if !eventWasPrevented {
+		t.Error("beforeinstallprompt was not prevented for the custom install button")
+	}
+	requireNoFailures(t, failures, "native install prompt control")
+}
+
 func TestBrowserRelatedSearchSuggestions(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)

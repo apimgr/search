@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1284" height="2778" viewBox="0 0 1284 2778">
+  <rect width="1284" height="2778" fill="#282a36"/>
+  <g transform="translate(391.5 1034) scale(5)">
+    <circle cx="40" cy="40" r="28" fill="none" stroke="#bd93f9" stroke-width="8"/>
+    <line x1="60" y1="60" x2="90" y2="90" stroke="#bd93f9" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="642" y="1608" text-anchor="middle" fill="#f8f8f2" font-family="sans-serif" font-size="88" font-weight="600">Search</text>
+</svg>

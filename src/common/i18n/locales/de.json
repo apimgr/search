@@ -1973,7 +1973,12 @@
     "update_available": "Eine neue Version ist verfügbar",
     "update_now": "Jetzt aktualisieren",
     "update_later": "Später",
-    "offline": "Sie sind offline. Einige Funktionen sind möglicherweise nicht verfügbar."
+    "offline": "Sie sind offline. Einige Funktionen sind möglicherweise nicht verfügbar.",
+    "install": "App installieren",
+    "install_title": "Search zum Home-Bildschirm hinzufügen",
+    "ios_share": "Tippen Sie in Safari auf „Teilen“.",
+    "ios_add_to_home": "Wählen Sie „Zum Home-Bildschirm“.",
+    "ios_add": "Tippen Sie oben rechts auf „Hinzufügen“."
   },
   "email": {
     "common": {

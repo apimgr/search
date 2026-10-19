@@ -1973,7 +1973,12 @@
     "update_available": "Dostępna jest nowa wersja",
     "update_now": "Zaktualizuj teraz",
     "update_later": "Później",
-    "offline": "Jesteś offline. Niektóre funkcje mogą być niedostępne."
+    "offline": "Jesteś offline. Niektóre funkcje mogą być niedostępne.",
+    "install": "Zainstaluj aplikację",
+    "install_title": "Dodaj Search do ekranu początkowego",
+    "ios_share": "Stuknij przycisk Udostępnij w Safari.",
+    "ios_add_to_home": "Wybierz „Do ekranu początkowego”.",
+    "ios_add": "Stuknij „Dodaj” w prawym górnym rogu."
   },
   "email": {
     "common": {

@@ -82,6 +82,34 @@
     text-decoration: none;
 }
 
+.pwa-install-button[hidden] {
+    display: none;
+}
+
+.pwa-install-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+    max-width: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+.pwa-install-dialog::backdrop {
+    background: var(--color-overlay-strong);
+}
+
+.pwa-install-dialog ol {
+    display: grid;
+    gap: var(--space-3);
+    padding-inline-start: var(--space-6);
+}
+
+.pwa-install-dialog li img {
+    vertical-align: middle;
+}
+
 /* Legacy .user-icon kept for backwards compat */
 .user-icon {
     display: flex;

@@ -27,6 +27,17 @@
 
     {{/* Public navigation */}}
     {{template "public/nav" .}}
+    <dialog class="pwa-install-dialog" id="pwa-install-dialog" aria-labelledby="pwa-install-title">
+        <header class="mobile-preferences-header">
+            <h2 id="pwa-install-title">{{t "pwa.install_title"}}</h2>
+            <form method="dialog"><button type="submit" class="btn-secondary" aria-label="{{t "common.close"}}">×</button></form>
+        </header>
+        <ol>
+            <li>{{t "pwa.ios_share"}} <img src="/static/img/ios-share.svg" width="20" height="20" alt="{{t "pwa.ios_share"}}"></li>
+            <li>{{t "pwa.ios_add_to_home"}}</li>
+            <li>{{t "pwa.ios_add"}}</li>
+        </ol>
+    </dialog>
     <main id="main-content" class="main-content" role="main">
         {{/* Flash messages */}}
         {{if .Flash}}

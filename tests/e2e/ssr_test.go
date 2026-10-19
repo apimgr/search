@@ -109,6 +109,7 @@ func TestSSRPublicPagesRender(t *testing.T) {
 			requireContains(t, body, `<meta charset="UTF-8">`, tc.path)
 			requireContains(t, body, `name="viewport"`, tc.path)
 			requireContains(t, body, `rel="manifest" href="/manifest.json"`, tc.path)
+			requireContains(t, body, `apple-touch-startup-image`, tc.path)
 			requireContains(t, body, tc.contains, tc.path)
 		})
 	}
@@ -660,6 +661,24 @@ func TestSSROperatorPagesRequireToken(t *testing.T) {
 // real defect.
 func TestSSRPWAAndWellKnownAssets(t *testing.T) {
 	s := newSession(t)
+	pngSizes := map[string]image.Point{
+		"/static/img/favicon-16.png":          {X: 16, Y: 16},
+		"/static/img/favicon-32.png":          {X: 32, Y: 32},
+		"/static/img/favicon-48.png":          {X: 48, Y: 48},
+		"/static/img/icon-72.png":             {X: 72, Y: 72},
+		"/static/img/icon-96.png":             {X: 96, Y: 96},
+		"/static/img/icon-128.png":            {X: 128, Y: 128},
+		"/static/img/icon-144.png":            {X: 144, Y: 144},
+		"/static/img/icon-152.png":            {X: 152, Y: 152},
+		"/static/img/icon-180.png":            {X: 180, Y: 180},
+		"/static/img/icon-192.png":            {X: 192, Y: 192},
+		"/static/img/icon-384.png":            {X: 384, Y: 384},
+		"/static/img/icon-512.png":            {X: 512, Y: 512},
+		"/static/img/icon-maskable-192.png":   {X: 192, Y: 192},
+		"/static/img/icon-maskable-512.png":   {X: 512, Y: 512},
+		"/static/splash/iphone-1179x2556.png": {X: 1179, Y: 2556},
+		"/static/splash/iphone-1284x2778.png": {X: 1284, Y: 2778},
+	}
 
 	cases := []struct {
 		path        string
@@ -669,7 +688,23 @@ func TestSSRPWAAndWellKnownAssets(t *testing.T) {
 		// The manifest content type is the spec-mandated
 		// application/manifest+json, not application/json; a browser refuses
 		// to install the PWA when it is wrong.
-		{"/manifest.json", "application/manifest+json", `"name"`},
+		{"/manifest.json", "application/manifest+json", `"/static/img/icon-maskable-512.png"`},
+		{"/static/splash/iphone-1179x2556.png", "image/png", ""},
+		{"/static/splash/iphone-1284x2778.png", "image/png", ""},
+		{"/static/img/favicon-16.png", "image/png", ""},
+		{"/static/img/favicon-32.png", "image/png", ""},
+		{"/static/img/favicon-48.png", "image/png", ""},
+		{"/static/img/icon-72.png", "image/png", ""},
+		{"/static/img/icon-96.png", "image/png", ""},
+		{"/static/img/icon-128.png", "image/png", ""},
+		{"/static/img/icon-144.png", "image/png", ""},
+		{"/static/img/icon-152.png", "image/png", ""},
+		{"/static/img/icon-180.png", "image/png", ""},
+		{"/static/img/icon-192.png", "image/png", ""},
+		{"/static/img/icon-384.png", "image/png", ""},
+		{"/static/img/icon-512.png", "image/png", ""},
+		{"/static/img/icon-maskable-192.png", "image/png", ""},
+		{"/static/img/icon-maskable-512.png", "image/png", ""},
 		{"/sw.js", "javascript", ""},
 		{"/robots.txt", "text/plain", "User-agent:"},
 		{"/sitemap.xml", "xml", "<urlset"},
@@ -691,6 +726,15 @@ func TestSSRPWAAndWellKnownAssets(t *testing.T) {
 			}
 			if tc.contains != "" {
 				requireContains(t, body, tc.contains, tc.path)
+			}
+			if expected, ok := pngSizes[tc.path]; ok {
+				config, err := png.DecodeConfig(bytes.NewReader([]byte(body)))
+				if err != nil {
+					t.Fatalf("GET %s is not a decodable PNG: %v", tc.path, err)
+				}
+				if config.Width != expected.X || config.Height != expected.Y {
+					t.Errorf("GET %s image size = %dx%d, want %dx%d", tc.path, config.Width, config.Height, expected.X, expected.Y)
+				}
 			}
 			if len(body) == 0 {
 				t.Errorf("GET %s returned an empty body", tc.path)

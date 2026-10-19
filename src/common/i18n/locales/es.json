@@ -1973,7 +1973,12 @@
     "update_available": "Hay una nueva versión disponible",
     "update_now": "Actualizar ahora",
     "update_later": "Más tarde",
-    "offline": "Estás sin conexión. Es posible que algunas funciones no estén disponibles."
+    "offline": "Estás sin conexión. Es posible que algunas funciones no estén disponibles.",
+    "install": "Instalar aplicación",
+    "install_title": "Añade Search a tu pantalla de inicio",
+    "ios_share": "Toca el botón Compartir en Safari.",
+    "ios_add_to_home": "Selecciona «Añadir a pantalla de inicio».",
+    "ios_add": "Toca «Añadir» en la esquina superior derecha."
   },
   "email": {
     "common": {

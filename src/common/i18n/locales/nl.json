@@ -1973,7 +1973,12 @@
     "update_available": "Er is een nieuwe versie beschikbaar",
     "update_now": "Nu bijwerken",
     "update_later": "Later",
-    "offline": "Je bent offline. Sommige functies zijn mogelijk niet beschikbaar."
+    "offline": "Je bent offline. Sommige functies zijn mogelijk niet beschikbaar.",
+    "install": "App installeren",
+    "install_title": "Search aan je beginscherm toevoegen",
+    "ios_share": "Tik in Safari op de Deel-knop.",
+    "ios_add_to_home": "Kies ‘Zet op beginscherm’.",
+    "ios_add": "Tik rechtsboven op ‘Voeg toe’."
   },
   "email": {
     "common": {

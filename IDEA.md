@@ -1786,7 +1786,7 @@ s         → Open settings
 #### Browser Integration
 
 - **OpenSearch**: Add as browser search engine
-- **PWA Support**: Install as standalone app
+- **PWA Support**: Install Search as a standalone app on supported platforms, with platform-specific home-screen setup, icons, and an offline fallback page
 - **Browser Extension**: Quick search from any page (future)
 - **Search Bar Widget**: Embeddable search box for other sites
 

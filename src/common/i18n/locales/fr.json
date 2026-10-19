@@ -1973,7 +1973,12 @@
     "update_available": "Une nouvelle version est disponible",
     "update_now": "Mettre à jour maintenant",
     "update_later": "Plus tard",
-    "offline": "Vous êtes hors ligne. Certaines fonctionnalités peuvent être indisponibles."
+    "offline": "Vous êtes hors ligne. Certaines fonctionnalités peuvent être indisponibles.",
+    "install": "Installer l’application",
+    "install_title": "Ajouter Search à l’écran d’accueil",
+    "ios_share": "Touchez le bouton Partager dans Safari.",
+    "ios_add_to_home": "Choisissez « Sur l’écran d’accueil ».",
+    "ios_add": "Touchez « Ajouter » en haut à droite."
   },
   "email": {
     "common": {

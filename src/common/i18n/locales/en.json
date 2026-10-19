@@ -1973,7 +1973,12 @@
     "update_available": "A new version is available",
     "update_now": "Update Now",
     "update_later": "Later",
-    "offline": "You are offline. Some features may be unavailable."
+    "offline": "You are offline. Some features may be unavailable.",
+    "install": "Install app",
+    "install_title": "Install Search on your Home Screen",
+    "ios_share": "Tap the Share button in Safari.",
+    "ios_add_to_home": "Select ‘Add to Home Screen.’",
+    "ios_add": "Tap ‘Add’ in the top right."
   },
   "email": {
     "common": {

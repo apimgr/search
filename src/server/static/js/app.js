@@ -2569,6 +2569,17 @@
             return;
         }
 
+        if (isIOSDevice()) {
+            showInstallButton();
+            document.querySelectorAll('[data-pwa-install]').forEach(function(btn) {
+                btn.addEventListener('click', showIOSInstallInstructions);
+            });
+        } else {
+            document.querySelectorAll('[data-pwa-install]').forEach(function(btn) {
+                btn.addEventListener('click', installApp);
+            });
+        }
+
         window.addEventListener('beforeinstallprompt', function(event) {
             // Prevent the automatic mini-infobar; show custom UI instead
             event.preventDefault();
@@ -2581,10 +2592,18 @@
             hideInstallButton();
         });
 
-        // Delegate clicks so any [data-pwa-install] control triggers the prompt
-        document.querySelectorAll('[data-pwa-install]').forEach(function(btn) {
-            btn.addEventListener('click', installApp);
-        });
+    }
+
+    function isIOSDevice() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    function showIOSInstallInstructions() {
+        var dialog = document.getElementById('pwa-install-dialog');
+        if (dialog && !dialog.open && typeof dialog.showModal === 'function') {
+            dialog.showModal();
+        }
     }
 
     function isInstalledPWA() {
