@@ -94,41 +94,56 @@ func (h *WikiHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		// Try search instead
 		return h.searchWikipedia(ctx, term)
 	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("wikipedia returned HTTP %d", resp.StatusCode)
+	}
 
 	var article struct {
-		Title        string `json:"title"`
-		DisplayTitle string `json:"displaytitle"`
-		Extract      string `json:"extract"`
-		ExtractHTML  string `json:"extract_html"`
-		Description  string `json:"description"`
-		Thumbnail    struct {
-			Source string `json:"source"`
-			Width  int    `json:"width"`
-			Height int    `json:"height"`
-		} `json:"thumbnail"`
-		ContentURLs struct {
-			Desktop struct {
-				Page string `json:"page"`
-			} `json:"desktop"`
-		} `json:"content_urls"`
+		Title       string          `json:"title"`
+		Extract     json.RawMessage `json:"extract"`
+		ExtractHTML json.RawMessage `json:"extract_html"`
+		Description json.RawMessage `json:"description"`
+		Thumbnail   json.RawMessage `json:"thumbnail"`
+		ContentURLs json.RawMessage `json:"content_urls"`
 	}
 
 	if err := decodeBoundedJSON(resp.Body, 2<<20, &article); err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(article.Title) == "" {
+		return nil, fmt.Errorf("wikipedia returned incomplete article metadata")
+	}
+	var extract, extractHTML, description string
+	decodeOptionalJSONString(article.Extract, &extract)
+	decodeOptionalJSONString(article.ExtractHTML, &extractHTML)
+	decodeOptionalJSONString(article.Description, &description)
+	var thumbnailMetadata struct {
+		Source json.RawMessage `json:"source"`
+	}
+	_ = json.Unmarshal(article.Thumbnail, &thumbnailMetadata)
+	var thumbnailURL string
+	decodeOptionalJSONString(thumbnailMetadata.Source, &thumbnailURL)
+	var contentURLs struct {
+		Desktop json.RawMessage `json:"desktop"`
+	}
+	_ = json.Unmarshal(article.ContentURLs, &contentURLs)
+	var desktopURLs struct {
+		Page json.RawMessage `json:"page"`
+	}
+	_ = json.Unmarshal(contentURLs.Desktop, &desktopURLs)
+	var pageURL string
+	decodeOptionalJSONString(desktopURLs.Page, &pageURL)
 
-	pageURL := article.ContentURLs.Desktop.Page
 	if !validWikipediaURL(pageURL) {
 		pageURL = fmt.Sprintf("https://%s.wikipedia.org/wiki/%s", lang, url.PathEscape(article.Title))
 	}
-	thumbnailURL := article.Thumbnail.Source
 	if !validWikipediaThumbnailURL(thumbnailURL) {
 		thumbnailURL = ""
 	}
 	data := map[string]interface{}{
 		"title":       article.Title,
-		"extract":     article.Extract,
-		"description": article.Description,
+		"extract":     extract,
+		"description": description,
 		"url":         pageURL,
 	}
 
@@ -155,8 +170,8 @@ func (h *WikiHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Type:        AnswerTypeWiki,
 		Term:        term,
 		Title:       article.Title,
-		Description: article.Description,
-		Content:     formatWikiContent(article.Title, article.ExtractHTML, thumbnailURL, pageURL, renderDetails),
+		Description: description,
+		Content:     formatWikiContent(article.Title, extractHTML, thumbnailURL, pageURL, renderDetails),
 		Source:      "Wikipedia",
 		SourceURL:   pageURL,
 		Data:        data,
@@ -179,6 +194,9 @@ func (h *WikiHandler) searchWikipedia(ctx context.Context, term string) (*Answer
 		return nil, err
 	}
 	defer closeutil.Close(resp.Body)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("wikipedia search returned HTTP %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Query struct {

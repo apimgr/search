@@ -1817,6 +1817,45 @@ func TestFormatWikiContentNoThumbnail(t *testing.T) {
 	}
 }
 
+type wikiSummaryTransport struct {
+	status int
+	body   string
+}
+
+func (transport wikiSummaryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	status, body := http.StatusBadGateway, `{}`
+	if strings.Contains(request.URL.Path, "/api/rest_v1/page/summary/") {
+		status, body = transport.status, transport.body
+	}
+	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+}
+
+func TestWikiHandlerKeepsSummaryWhenOptionalMetadataIsMalformed(t *testing.T) {
+	handler := NewWikiHandler()
+	handler.client = &http.Client{Transport: wikiSummaryTransport{
+		status: http.StatusOK,
+		body:   `{"title":"Python","extract":"A language summary","extract_html":"<p>A language summary</p>","description":[],"thumbnail":{"source":{},"width":"bad","height":[]},"content_urls":{"desktop":[]}}`,
+	}}
+	answer, err := handler.HandleDirectQuery(context.Background(), "Python")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Title != "Python" || answer.Data["extract"] != "A language summary" || answer.Description != "" {
+		t.Fatalf("malformed optional metadata discarded Wikipedia summary: %#v", answer)
+	}
+	if answer.SourceURL != "https://en.wikipedia.org/wiki/Python" || strings.Contains(answer.Content, "thumbnail") {
+		t.Fatalf("invalid optional links or images were retained: %#v", answer)
+	}
+}
+
+func TestWikiHandlerRejectsRegistryServerErrors(t *testing.T) {
+	handler := NewWikiHandler()
+	handler.client = &http.Client{Transport: wikiSummaryTransport{status: http.StatusServiceUnavailable, body: `{"title":"Python"}`}}
+	if answer, err := handler.HandleDirectQuery(context.Background(), "Python"); err == nil || answer != nil {
+		t.Fatalf("Wikipedia server error returned answer=%#v, error=%v", answer, err)
+	}
+}
+
 func TestFormatThesaurusContent(t *testing.T) {
 	synonyms := []string{"fast", "quick", "speedy"}
 	antonyms := []string{"slow", "sluggish"}
