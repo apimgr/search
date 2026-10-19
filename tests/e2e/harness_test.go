@@ -243,6 +243,8 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 		} else {
 			body = `{"Version":"v5.0.0","Time":"2026-10-01T00:00:00Z"}`
 		}
+	case "pkg.go.dev":
+		body = `{"modulePath":"github.com/go-chi/chi","path":"github.com/go-chi/chi","importedByCounts":{"packages":124,"modules":58}}`
 	case "crates.io":
 		switch request.URL.Path {
 		case "/api/v1/crates/serde":
@@ -460,6 +462,9 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 				t.Errorf("unified text diff missing %q", want)
 			}
 		}
+	}
+	if strings.Contains(path, "/direct/pkg/go%2Fgithub.com%2Fgo-chi%2Fchi") && (!strings.Contains(answer, "Known importing packages") || !strings.Contains(answer, "124")) {
+		t.Error("Go module popularity is missing or mislabeled")
 	}
 	if typeName == "beautify" {
 		switch {

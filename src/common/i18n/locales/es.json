@@ -1198,6 +1198,8 @@
     "word_not_found": "Word not found",
     "yaml_error_title": "YAML Error",
     "pkg_weekly_downloads": "Descargas semanales",
+    "pkg_popularity": "Paquetes que lo importan",
+    "pkg_total_downloads": "Descargas totales",
     "pkg_dependencies": "Dependencias",
     "pkg_last_updated": "Última actualización",
     "pkg_repository": "Repositorio",

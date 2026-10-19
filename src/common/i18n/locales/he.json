@@ -1198,6 +1198,8 @@
     "word_not_found": "Word not found",
     "yaml_error_title": "YAML Error",
     "pkg_weekly_downloads": "הורדות שבועיות",
+    "pkg_popularity": "חבילות ידועות שמייבאות אותו",
+    "pkg_total_downloads": "סך ההורדות",
     "pkg_dependencies": "תלויות",
     "pkg_last_updated": "עודכן לאחרונה",
     "pkg_repository": "מאגר",

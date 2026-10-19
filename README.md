@@ -46,7 +46,7 @@ golang AND NOT java
 (privacy OR security) AND "search engine"
 ```
 
-Direct answers start with a prefix. For example, `directory:linux iso type:documents min-size:10M after:2024-01-01 site:edu` searches for open directory listings and filters their file previews. Each discovered listing shows its server and estimated file count; **Scan directory** loads up to 500 entries from that listing.
+Direct answers start with a prefix. For example, `directory:linux iso type:documents min-size:10M after:2024-01-01 site:edu` searches for open directory listings and filters their file previews. Each discovered listing shows its server and estimated file count; **Scan directory** loads up to 500 entries from that listing. Package answers (`pkg:chi`, `pkg:npm/lodash`) show weekly downloads when available, or a clearly labeled provider-supported popularity measure.
 
 ## Production
 

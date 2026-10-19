@@ -1198,6 +1198,8 @@
     "word_not_found": "Word not found",
     "yaml_error_title": "YAML Error",
     "pkg_weekly_downloads": "週間ダウンロード数",
+    "pkg_popularity": "既知のインポート元パッケージ数",
+    "pkg_total_downloads": "累計ダウンロード数",
     "pkg_dependencies": "依存関係",
     "pkg_last_updated": "最終更新",
     "pkg_repository": "リポジトリ",

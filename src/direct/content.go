@@ -1756,6 +1756,15 @@ func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) 
 			dependencies = directDependencies
 		}
 	}
+	var popularity interface{}
+	var packageInfo struct {
+		ImportedByCounts struct {
+			Packages int `json:"packages"`
+		} `json:"importedByCounts"`
+	}
+	if err := h.fetchPackageJSON(ctx, goPackageInfoURL(name), &packageInfo); err == nil && packageInfo.ImportedByCounts.Packages >= 0 {
+		popularity = packageInfo.ImportedByCounts.Packages
+	}
 	var readmePreview interface{}
 	var license interface{}
 	var archive []byte
@@ -1774,12 +1783,20 @@ func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) 
 	decodeOptionalJSONString(pkg.Time, &updated)
 	data := map[string]interface{}{
 		"name": name, "version": pkg.Version, "updated": packageOptionalString(updated), "registry": "go",
-		"license": license, "weekly_downloads": nil, "dependencies": dependencies,
+		"license": license, "weekly_downloads": nil, "popularity": popularity, "dependencies": dependencies,
 		"repository": repository, "readme_preview": readmePreview,
 	}
 	return &Answer{Type: AnswerTypePkg, Term: name, Title: name, Description: "Go module " + name,
 		Content: formatPkgContentWithDetails(LangFromContext(ctx), "go", name, "Go module", pkg.Version, "", "go get "+name, data), Source: "Go Module Proxy",
 		SourceURL: "https://pkg.go.dev/" + name, Data: data}, nil
+}
+
+func goPackageInfoURL(modulePath string) string {
+	segments := strings.Split(strings.Trim(modulePath, "/"), "/")
+	for index, segment := range segments {
+		segments[index] = url.PathEscape(segment)
+	}
+	return "https://pkg.go.dev/v1/package/" + strings.Join(segments, "/") + "?imported-by-counts=true"
 }
 
 func goModuleRepository(modulePath string) interface{} {
@@ -2314,16 +2331,31 @@ func formatPkgContentWithDetails(lang, registry, name, description, version, lic
 	} else if details["license"] == nil || details["license"] == "" {
 		fmt.Fprintf(&html, "<dt>License</dt><dd>%s</dd>", escapeHTML(i18n.T(lang, "direct.pkg_unavailable")))
 	}
+	popularity := details["weekly_downloads"]
+	popularityLabel := i18n.T(lang, "direct.pkg_weekly_downloads")
+	if popularity == nil {
+		if value, ok := details["popularity"]; ok && value != nil {
+			popularity = value
+			popularityLabel = i18n.T(lang, "direct.pkg_popularity")
+		} else if value, ok := details["downloads"]; ok && value != nil {
+			popularity = value
+			popularityLabel = i18n.T(lang, "direct.pkg_total_downloads")
+		}
+	}
 	for _, field := range []struct {
 		key   string
 		label string
 	}{
-		{"weekly_downloads", i18n.T(lang, "direct.pkg_weekly_downloads")},
+		{"popularity", popularityLabel},
 		{"dependencies", i18n.T(lang, "direct.pkg_dependencies")},
 		{"updated", i18n.T(lang, "direct.pkg_last_updated")},
 		{"repository", i18n.T(lang, "direct.pkg_repository")},
 	} {
 		value, ok := details[field.key]
+		if field.key == "popularity" {
+			value = popularity
+			ok = true
+		}
 		if !ok {
 			continue
 		}

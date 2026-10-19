@@ -746,7 +746,7 @@ pkg:go-chi/chi
 **Displays**:
 - Package name, description, version
 - Installation command (npm, pip, go get, etc.)
-- Weekly downloads / popularity
+- Weekly downloads when available, otherwise a clearly labeled provider-supported popularity measure such as known importing packages or lifetime downloads
 - License
 - Dependencies count
 - Last updated

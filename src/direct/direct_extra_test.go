@@ -2406,6 +2406,9 @@ type goModuleMetadataTransport struct{}
 
 func (goModuleMetadataTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	body := `{"Version":"v1.2.3","Time":"2026-01-01T00:00:00Z"}`
+	if request.URL.Host == "pkg.go.dev" {
+		body = `{"modulePath":"example.com/upper","path":"example.com/upper","importedByCounts":{"packages":42,"modules":17}}`
+	}
 	if strings.HasSuffix(request.URL.Path, ".zip") {
 		var archive bytes.Buffer
 		writer := zip.NewWriter(&archive)
@@ -2476,8 +2479,27 @@ func TestGoPackageIncludesDirectDependencyCount(t *testing.T) {
 	if answer.Data["license"] != "MIT" {
 		t.Fatalf("module metadata omitted the SPDX license from its archive: %#v", answer.Data)
 	}
+	if answer.Data["popularity"] != 42 || !strings.Contains(answer.Content, "Known importing packages") {
+		t.Fatalf("module popularity is missing or mislabeled: data=%#v content=%s", answer.Data, answer.Content)
+	}
 	if !strings.Contains(answer.Content, "Dependencies") || !strings.Contains(answer.Content, "2") {
 		t.Fatalf("dependency count missing from formatted content: %s", answer.Content)
+	}
+}
+
+func TestPackageFormatterFallsBackToLabeledPopularityCounts(t *testing.T) {
+	totalDownloads := formatPkgContentWithDetails("en", "RubyGems", "sample", "A package", "1.2.3", "MIT", "gem install sample", map[string]interface{}{
+		"downloads": 1234, "weekly_downloads": nil,
+	})
+	if !strings.Contains(totalDownloads, "Total downloads") || !strings.Contains(totalDownloads, "1234") || strings.Contains(totalDownloads, "Weekly downloads") {
+		t.Fatalf("lifetime downloads were missing or mislabeled: %s", totalDownloads)
+	}
+
+	importPopularity := formatPkgContentWithDetails("en", "Go", "example.com/sample", "A module", "v1.2.3", "MIT", "go get example.com/sample", map[string]interface{}{
+		"popularity": 42, "weekly_downloads": nil,
+	})
+	if !strings.Contains(importPopularity, "Known importing packages") || !strings.Contains(importPopularity, "42") {
+		t.Fatalf("import popularity was missing or mislabeled: %s", importPopularity)
 	}
 }
 

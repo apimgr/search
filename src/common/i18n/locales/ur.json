@@ -1198,6 +1198,8 @@
     "word_not_found": "Word not found",
     "yaml_error_title": "YAML Error",
     "pkg_weekly_downloads": "ہفتہ وار ڈاؤن لوڈز",
+    "pkg_popularity": "معلوم پیکیجز جو اسے امپورٹ کرتے ہیں",
+    "pkg_total_downloads": "کل ڈاؤن لوڈز",
     "pkg_dependencies": "انحصار",
     "pkg_last_updated": "آخری تازہ کاری",
     "pkg_repository": "ریپوزٹری",

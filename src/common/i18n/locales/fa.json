@@ -1198,6 +1198,8 @@
     "word_not_found": "Word not found",
     "yaml_error_title": "YAML Error",
     "pkg_weekly_downloads": "بارگیری هفتگی",
+    "pkg_popularity": "بسته‌های شناخته‌شدهٔ واردکننده",
+    "pkg_total_downloads": "مجموع بارگیری‌ها",
     "pkg_dependencies": "وابستگی‌ها",
     "pkg_last_updated": "آخرین به‌روزرسانی",
     "pkg_repository": "مخزن",

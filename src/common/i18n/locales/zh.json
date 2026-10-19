@@ -1198,6 +1198,8 @@
     "word_not_found": "Word not found",
     "yaml_error_title": "YAML Error",
     "pkg_weekly_downloads": "每周下载量",
+    "pkg_popularity": "已知引用此包的包数",
+    "pkg_total_downloads": "总下载量",
     "pkg_dependencies": "依赖项",
     "pkg_last_updated": "最近更新",
     "pkg_repository": "代码仓库",
