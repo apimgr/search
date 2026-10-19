@@ -1686,6 +1686,23 @@ func appendDirectoryFilterParams(query string, parameters url.Values) string {
 
 // handleDirect handles direct answer requests
 // URL format: /direct/{type}/{term}
+func chmodModeFromQuery(query url.Values) string {
+	var mode strings.Builder
+	for _, principal := range []string{"owner", "group", "other"} {
+		digit := 0
+		for _, permission := range []struct {
+			name string
+			bit  int
+		}{{"read", 4}, {"write", 2}, {"execute", 1}} {
+			if query.Get(principal+"_"+permission.name) == "1" {
+				digit += permission.bit
+			}
+		}
+		mode.WriteByte(byte('0' + digit))
+	}
+	return mode.String()
+}
+
 func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		s.handleError(w, r, http.StatusMethodNotAllowed, i18n.RequestString(r, "errors.method_not_allowed_title"), i18n.RequestString(r, "errors.method_not_allowed_message"))
@@ -1712,11 +1729,14 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	var term string
 	var err error
 	if len(parts) < 2 || parts[1] == "" {
-		if answerType != direct.AnswerTypeQR {
+		if answerType == direct.AnswerTypeChmod && r.URL.Query().Get("grid") == "1" {
+			term = chmodModeFromQuery(r.URL.Query())
+		} else if answerType != direct.AnswerTypeQR {
 			s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.invalid_request_direct"))
 			return
+		} else {
+			term = r.URL.Query().Get("url")
 		}
-		term = r.URL.Query().Get("url")
 	} else {
 		term, err = url.PathUnescape(parts[1])
 		if err != nil {

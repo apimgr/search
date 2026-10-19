@@ -582,10 +582,10 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	relativeMode := false
 
 	// Try to parse as octal
-	if len(term) == 3 || len(term) == 4 {
+	if len(term) == 3 || (len(term) == 4 && term[0] == '0') {
 		octal := term
 		if len(term) == 4 {
-			// Skip special bits for now
+			// A leading zero only marks the conventional four-digit form.
 			octal = term[1:]
 		}
 		if n, err := strconv.ParseInt(octal, 8, 32); err == nil && n >= 0 && n <= 0777 {
@@ -606,8 +606,8 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	}
 
 	// Try to parse as symbolic (rwxrwxrwx)
-	if symbolic == "" && len(term) == 9 {
-		symbolic = strings.ToLower(term)
+	if symbolic == "" && isValidSymbolicMode(term) {
+		symbolic = term
 		owner = symbolicToPerm(symbolic[0:3])
 		group = symbolicToPerm(symbolic[3:6])
 		other = symbolicToPerm(symbolic[6:9])
@@ -651,6 +651,20 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		Source:      "chmod Calculator",
 		Data:        data,
 	}, nil
+}
+
+func isValidSymbolicMode(mode string) bool {
+	if len(mode) != 9 {
+		return false
+	}
+	for index, expected := range []byte{'r', 'w', 'x'} {
+		for start := index; start < len(mode); start += 3 {
+			if mode[start] != expected && mode[start] != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func applyRelativeChmod(expression string, current [3]int) ([3]int, bool) {
@@ -745,15 +759,18 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 
 	// Permission grid
 	html.WriteString("<h2>Permission Grid</h2>")
+	html.WriteString(`<form action="/direct/chmod" method="get" class="chmod-form">`)
+	html.WriteString(`<input type="hidden" name="grid" value="1">`)
 	html.WriteString("<table class=\"chmod-table\">")
 	html.WriteString("<thead><tr><th scope=\"col\">Principal</th><th scope=\"col\">Read (4)</th><th scope=\"col\">Write (2)</th><th scope=\"col\">Execute (1)</th><th scope=\"col\">Value</th></tr></thead>")
 	html.WriteString("<tbody>")
 
 	for _, row := range []struct {
-		name string
-		who  string
-		perm int
-	}{{"Owner", "u", owner}, {"Group", "g", group}, {"Other", "o", other}} {
+		name  string
+		who   string
+		field string
+		perm  int
+	}{{"Owner", "u", "owner", owner}, {"Group", "g", "group", group}, {"Other", "o", "other", other}} {
 		html.WriteString("<tr>")
 		fmt.Fprintf(&html, "<td><strong>%s</strong></td>", row.name)
 		for _, permission := range []struct {
@@ -764,13 +781,14 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 			if row.perm&permission.bit != 0 {
 				checked = " checked"
 			}
-			fmt.Fprintf(&html, `<td><input type="checkbox" class="chmod-toggle" data-principal="%s" data-permission="%s" aria-label="%s %s" disabled%s></td>`, row.who, permission.name, row.name, permission.name, checked)
+			fmt.Fprintf(&html, `<td><input type="checkbox" class="chmod-toggle" name="%s_%s" value="1" data-principal="%s" data-permission="%s" aria-label="%s %s"%s></td>`, row.field, permission.name, row.who, permission.name, row.name, permission.name, checked)
 		}
 		fmt.Fprintf(&html, `<td><code data-chmod-digit="%s">%d</code></td>`, row.who, row.perm)
 		html.WriteString("</tr>")
 	}
 
 	html.WriteString("</tbody></table>")
+	html.WriteString(`<button type="submit" class="btn chmod-submit">Update permissions</button></form>`)
 
 	// Usage
 	html.WriteString("<h2>Usage</h2>")

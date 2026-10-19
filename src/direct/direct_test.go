@@ -1372,12 +1372,17 @@ func TestChmodHandlerEdgeCases(t *testing.T) {
 	}{
 		{"octal_3digit", "755", false, ""},
 		{"octal_4digit", "0755", false, ""},
+		{"unsupported_setuid_bit", "4755", false, "invalid_permissions"},
+		{"invalid_four_digit_octal_prefix", "8755", false, "invalid_permissions"},
 		{"octal_644", "644", false, ""},
 		{"octal_777", "777", false, ""},
 		{"symbolic_9char", "rwxr-xr-x", false, ""},
 		{"symbolic_rw", "rw-r--r--", false, ""},
 		{"invalid_octal_999", "999", false, "invalid_permissions"},
 		{"invalid_text", "badperm", false, "invalid_permissions"},
+		{"invalid_symbolic_character", "abcabcabc", false, "invalid_permissions"},
+		{"invalid_symbolic_position", "rwxrwr-x-", false, "invalid_permissions"},
+		{"unsupported_symbolic_case", "RWXR-XR-X", false, "invalid_permissions"},
 		// empty input returns (nil, error) — not an Answer with an error field
 		{"empty", "", true, ""},
 		{"too_short_symbolic", "rwx", false, "invalid_permissions"},

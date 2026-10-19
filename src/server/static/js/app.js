@@ -6120,7 +6120,7 @@
 
 
 // ============================================================================
-// ARCHIVE TIMELINE (progressive enhancement for the native snapshot form)
+// CHMOD CALCULATOR (progressive enhancement for the native permission form)
 // ============================================================================
 (function() {
     'use strict';
@@ -6154,10 +6154,6 @@
         if (warning) warning.hidden = digits !== '777';
     }
 
-    document.querySelectorAll('[data-chmod-calculator] .chmod-toggle').forEach(function(input) {
-        input.disabled = false;
-    });
-
     document.addEventListener('change', function(event) {
         var target = event.target && (event.target.nodeType === 1 ? event.target : event.target.parentElement);
         var input = target && target.closest('.chmod-toggle');
@@ -6167,6 +6163,9 @@
     });
 })();
 
+// ============================================================================
+// ARCHIVE TIMELINE (progressive enhancement for the native snapshot form)
+// ============================================================================
 (function() {
     'use strict';
 

@@ -686,11 +686,13 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 				t.Fatalf("no-JS %s navigation: %v", tc.name, err)
 			}
 			var pageHTML string
-			var chmodControlsDisabled bool
+			var chmodFormAction string
+			var chmodSubmitPresent bool
 			if err := chromedp.Run(ctx,
 				chromedp.OuterHTML("html", &pageHTML),
 				chromedp.Evaluate(`document.querySelector('.direct-content')?.innerText || ''`, &answerText),
-				chromedp.Evaluate(`(() => { const controls = [...document.querySelectorAll('.chmod-toggle')]; return controls.length === 9 && controls.every(control => control.disabled); })()`, &chmodControlsDisabled),
+				chromedp.Evaluate(`document.querySelector('.chmod-form')?.getAttribute('action') || ''`, &chmodFormAction),
+				chromedp.Evaluate(`!!document.querySelector('.chmod-submit')`, &chmodSubmitPresent),
 			); err != nil {
 				t.Fatalf("no-JS %s page: %v", tc.name, err)
 			}
@@ -705,8 +707,8 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 			if tc.typeName == "chmod" && strings.Count(pageHTML, `class="chmod-toggle"`) != 9 {
 				t.Errorf("no-JS %s rendered %d permission controls, want 9", tc.name, strings.Count(pageHTML, `class="chmod-toggle"`))
 			}
-			if tc.typeName == "chmod" && !chmodControlsDisabled {
-				t.Errorf("no-JS %s did not leave all nine permission controls disabled", tc.name)
+			if tc.typeName == "chmod" && (chmodFormAction != "/direct/chmod" || !chmodSubmitPresent) {
+				t.Errorf("no-JS %s is missing its native permission update form", tc.name)
 			}
 			if tc.typeName == "man" {
 				assertManPageControls(t, pageHTML)
@@ -718,6 +720,50 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNoJSChmodPermissionFormSubmits(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx,
+		emulation.SetScriptExecutionDisabled(true),
+		chromedp.Navigate(site.URL+"/direct/chmod/700"),
+		chromedp.WaitVisible(`.chmod-form`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="g"][data-permission="read"]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-submit`, chromedp.ByQuery),
+		chromedp.WaitVisible(`[data-chmod-calculator]`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("submit no-JS chmod form: %v", err)
+	}
+	var octal, symbolic, command, pageURL string
+	if err := chromedp.Run(ctx,
+		chromedp.Text(`[data-chmod-octal]`, &octal, chromedp.ByQuery),
+		chromedp.Text(`[data-chmod-symbolic]`, &symbolic, chromedp.ByQuery),
+		chromedp.Text(`[data-chmod-command]`, &command, chromedp.ByQuery),
+		chromedp.Location(&pageURL),
+	); err != nil {
+		t.Fatalf("read no-JS chmod result: %v", err)
+	}
+	if octal != "740" || symbolic != "rwxr-----" || command != "chmod 740 filename" || !strings.Contains(pageURL, "grid=1") {
+		t.Errorf("no-JS chmod result = %q, %q, %q at %q; want 740, rwxr-----, chmod 740 filename, and grid query", octal, symbolic, command, pageURL)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/direct/chmod/740"),
+		chromedp.WaitVisible(`.chmod-form`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="g"][data-permission="write"]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="g"][data-permission="execute"]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="o"][data-permission="read"]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="o"][data-permission="write"]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-toggle[data-principal="o"][data-permission="execute"]`, chromedp.ByQuery),
+		chromedp.Click(`.chmod-submit`, chromedp.ByQuery),
+		chromedp.WaitVisible(`[data-chmod-warning]`, chromedp.ByQuery),
+		chromedp.Text(`[data-chmod-octal]`, &octal, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("submit dangerous no-JS chmod mode: %v", err)
+	}
+	if octal != "777" {
+		t.Errorf("no-JS chmod form produced mode %q, want 777 with warning", octal)
 	}
 }
 

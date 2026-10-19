@@ -1324,6 +1324,16 @@ func TestRenderDirectAnswerFallbackLocalizesLabels(t *testing.T) {
 	}
 }
 
+func TestChmodModeFromQuery(t *testing.T) {
+	query, err := url.ParseQuery("grid=1&owner_read=1&owner_write=1&owner_execute=1&group_read=1&other_execute=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := chmodModeFromQuery(query), "741"; got != want {
+		t.Errorf("chmodModeFromQuery() = %q, want %q", got, want)
+	}
+}
+
 func TestSetTheme(t *testing.T) {
 	tests := []struct {
 		theme     string

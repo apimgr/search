@@ -1012,11 +1012,12 @@ chmod:u+x,g+r
 ```
 **Displays**:
 - Numeric notation (octal)
-- Symbolic notation (rwx)
+- Accept standard three-digit modes and a zero-prefixed four-digit form; reject nonzero special bits rather than silently dropping them
+- Symbolic notation (rwx), validating each permission character in its position
 - Visual permission grid (owner/group/other × read/write/execute)
 - Interactive toggle to modify
 - Changing the permission grid recalculates the octal and symbolic values, copyable command, and security warning immediately
-- Without JavaScript, keep the current values and warnings readable and disable the inactive toggles
+- Without JavaScript, submit changed permissions through a native GET form and render the updated values and warnings
 - Explanation of what each permission means
 - Common use cases for this permission set
 - Security warnings (e.g., 777 is dangerous)
