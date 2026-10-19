@@ -408,49 +408,51 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		return
 	}
 	values := r.Form
-	weatherUnits := values.Get("search_widget_weather_units")
-	if weatherUnits != "auto" && weatherUnits != "metric" && weatherUnits != "imperial" {
-		weatherUnits = "auto"
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name: "search_widget_weather_units", Value: weatherUnits, Path: "/",
-		MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode,
-	})
-	for _, key := range []string{"new_tab", "infinite_scroll", "keyboard_shortcuts", "save_history"} {
-		name := "search_pref_" + key
-		if values.Has(name + "_present") {
-			if values.Get(name) == "1" {
-				values.Set(name, "1")
-			} else {
-				values.Set(name, "0")
-			}
-			values.Del(name + "_present")
+	if CanSetPreferenceCookie(r) {
+		weatherUnits := values.Get("search_widget_weather_units")
+		if weatherUnits != "auto" && weatherUnits != "metric" && weatherUnits != "imperial" {
+			weatherUnits = "auto"
 		}
-	}
-	if values.Has("search_pref_video_previews_present") {
-		videoPreviews := "0"
-		if values.Get("search_pref_video_previews") == "1" {
-			videoPreviews = "1"
-		}
-		secure := strings.HasPrefix(strings.ToLower(httputil.BuildURL(r, "/")), "https://")
 		http.SetCookie(w, &http.Cookie{
-			Name: "search_pref_video_previews", Value: videoPreviews, Path: "/",
-			MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode, Secure: secure,
+			Name: "search_widget_weather_units", Value: weatherUnits, Path: "/",
+			MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode,
 		})
-		values.Del("search_pref_video_previews")
-		values.Del("search_pref_video_previews_present")
-	}
-	clone := r.Clone(r.Context())
-	urlCopy := *r.URL
-	urlCopy.RawQuery = values.Encode()
-	clone.URL = &urlCopy
-	mgr := s.getI18nManager()
-	result := prefsync.Import(clone, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
-	prefsync.Apply(w, r, "search", result)
+		for _, key := range []string{"new_tab", "infinite_scroll", "keyboard_shortcuts", "save_history"} {
+			name := "search_pref_" + key
+			if values.Has(name + "_present") {
+				if values.Get(name) == "1" {
+					values.Set(name, "1")
+				} else {
+					values.Set(name, "0")
+				}
+				values.Del(name + "_present")
+			}
+		}
+		if values.Has("search_pref_video_previews_present") {
+			videoPreviews := "0"
+			if values.Get("search_pref_video_previews") == "1" {
+				videoPreviews = "1"
+			}
+			secure := strings.HasPrefix(strings.ToLower(httputil.BuildURL(r, "/")), "https://")
+			http.SetCookie(w, &http.Cookie{
+				Name: "search_pref_video_previews", Value: videoPreviews, Path: "/",
+				MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode, Secure: secure,
+			})
+			values.Del("search_pref_video_previews")
+			values.Del("search_pref_video_previews_present")
+		}
+		clone := r.Clone(r.Context())
+		urlCopy := *r.URL
+		urlCopy.RawQuery = values.Encode()
+		clone.URL = &urlCopy
+		mgr := s.getI18nManager()
+		result := prefsync.Import(clone, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
+		prefsync.Apply(w, r, "search", result)
 
-	// Widget checkboxes use form="general-settings" so they submit in this
-	// same request instead of needing their own form/button/route.
-	setWidgetCookie(w, r.Form["widget"])
+		// Widget checkboxes use form="general-settings" so they submit in this
+		// same request instead of needing their own form/button/route.
+		setWidgetCookie(w, r.Form["widget"])
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Location", preferenceRedirect(r))
 	w.WriteHeader(http.StatusSeeOther)
@@ -503,7 +505,9 @@ func (s *Server) handleWidgetOrderSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setWidgetCookie(w, r.Form["widget"])
+	if CanSetPreferenceCookie(r) {
+		setWidgetCookie(w, r.Form["widget"])
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -360,6 +360,9 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	source := newBrowserContext(t)
 	if err := chromedp.Run(source,
 		chromedp.ActionFunc(func(ctx context.Context) error {
+			if err := grantPreferenceConsent(ctx, site.URL); err != nil {
+				return err
+			}
 			for _, cookie := range []struct{ name, value string }{
 				{"theme", "light"},
 				{"lang", "de"},
@@ -391,6 +394,7 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	var homepage string
 	var infiniteScrollEnabled bool
 	if err := chromedp.Run(receiver,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.SetValue(`#sync-paste`, syncURL, chromedp.ByQuery),
 		chromedp.Click(`#apply-sync-prefs`, chromedp.ByQuery),
@@ -815,6 +819,7 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	var language, searchLabel string
 	var videoPreviewsEnabled bool
 	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
@@ -918,6 +923,7 @@ func TestBrowserHomepageWidgets(t *testing.T) {
 	pf := watchForFailures(ctx)
 	var state string
 	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.WaitVisible(`#widget-grid [data-widget="clock"] .widget-collapse`, chromedp.ByQuery),
 		chromedp.Click(`#widget-grid [data-widget="clock"] .widget-collapse`, chromedp.ByQuery),
@@ -963,6 +969,7 @@ func TestBrowserHomepageWidgetReorderPersists(t *testing.T) {
 	pf := watchForFailures(ctx)
 	var initialJSON, reorderedJSON, storedOrder, persistedJSON string
 	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.WaitVisible(`#widget-grid [data-widget]`, chromedp.ByQuery),
 		chromedp.Evaluate(`JSON.stringify(Array.from(document.querySelectorAll('#widget-grid [data-widget]'), function(widget) { return widget.dataset.widget; }))`, &initialJSON),

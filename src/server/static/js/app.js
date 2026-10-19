@@ -81,14 +81,22 @@
         document.cookie = name + '=; path=/; max-age=0; SameSite=Lax';
     }
 
+    function isPreferenceCookie(name) {
+        return name === 'theme' || name === 'lang' || name === 'search_widgets' ||
+            name.indexOf('search_pref_') === 0 || name.indexOf('search_widget_') === 0;
+    }
+
+    function canStorePreferenceCookies() {
+        var consent = readConsentCookie();
+        return !!(consent && consent.preferences === true);
+    }
+
     function setCookie(name, value, maxAgeSeconds) {
+        if (isPreferenceCookie(name) && !canStorePreferenceCookies()) return;
         document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + maxAgeSeconds + '; SameSite=Lax' + (window.location.protocol === 'https:' ? '; Secure' : '');
     }
 
-    // Ensure the theme cookie is set. Theme is a strictly necessary cookie
-    // (server reads it to render pages) and is always persisted regardless
-    // of the user's analytics consent choice. Does not touch cookie_consent
-    // (that's the active consent cookie per AI.md PART 16, not legacy).
+    // Ensure the theme cookie is set only after the visitor allows preferences.
     function syncThemeCookiePreference(theme) {
         var selectedTheme = normalizeThemePreference(theme || '');
         if (!selectedTheme) {
@@ -301,7 +309,7 @@
 
     function setTheme(theme) {
         applyTheme(theme);
-        document.cookie = 'theme=' + encodeURIComponent(theme) + '; path=/; max-age=31536000; SameSite=Lax';
+        setCookie('theme', theme, 31536000);
     }
 
     // No-op: icon display is now fully CSS-driven via [data-theme-mode] attribute
@@ -514,15 +522,18 @@
     // ========================================================================
     function saveAndApplyConsent(consent) {
         writeConsentCookie(consent);
+        if (!consent.preferences) {
+            ['theme', 'lang', 'search_widgets', 'search_pref_category', 'search_pref_safe_search',
+                'search_pref_results_per_page', 'search_pref_units', 'search_pref_new_tab',
+                'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history',
+                'search_pref_video_previews', 'search_widget_weather_units', 'preferencesEnabled'].forEach(clearCookie);
+        }
         var banner = document.getElementById('cookie-consent');
         if (banner) banner.remove();
         applyConsent(consent);
     }
 
     function applyConsent(consent) {
-        if (consent.preferences) {
-            document.cookie = 'preferencesEnabled=true; path=/; max-age=31536000';
-        }
         if (consent.analytics) {
             loadTracking();
         }
@@ -3158,7 +3169,7 @@
             };
 
             if (!prefs.save_history) localStorage.removeItem(SEARCH_HISTORY_KEY);
-            document.cookie = 'theme=' + encodeURIComponent(prefs.theme) + '; path=/; max-age=31536000; SameSite=Lax';
+            setCookie('theme', prefs.theme, 31536000);
             setCookie('lang', prefs.lang, 31536000);
             setUnitsCookie(prefs.units);
             setCookie('search_widget_weather_units', prefs.weather_units, 31536000);

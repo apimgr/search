@@ -227,6 +227,7 @@ func TestSSRAutocompleteSuggestions(t *testing.T) {
 
 func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 	s := newSession(t)
+	grantSessionPreferenceConsent(t, s)
 	response, body := s.get("/server/preferences/export", func(request *http.Request) {
 		request.Header.Set("Accept", "application/json")
 		for _, cookie := range []*http.Cookie{
@@ -744,6 +745,7 @@ func TestSSRLanguageQueryChangesRenderedStrings(t *testing.T) {
 // the redirect must be a 303 so the browser replays as GET.
 func TestSSRThemePersistsAcrossRequest(t *testing.T) {
 	s := newSession(t).withoutRedirects()
+	grantSessionPreferenceConsent(t, s)
 
 	token, _ := s.csrfTokenFor("/")
 

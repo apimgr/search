@@ -105,6 +105,27 @@ func TestConsentFromRequestNilRequest(t *testing.T) {
 	}
 }
 
+func TestCanSetPreferenceCookie(t *testing.T) {
+	tests := []struct {
+		name string
+		r    *http.Request
+		want bool
+	}{
+		{name: "missing consent", r: httptest.NewRequest(http.MethodGet, "/", nil)},
+		{name: "declined", r: consentRequest(t, false, false)},
+		{name: "analytics only", r: consentRequest(t, true, false)},
+		{name: "preferences allowed", r: consentRequest(t, false, true), want: true},
+		{name: "nil request", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CanSetPreferenceCookie(tt.r); got != tt.want {
+				t.Errorf("CanSetPreferenceCookie() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCheckTrackingAllowed(t *testing.T) {
 	// Built directly rather than via NewServer: NewServer registers
 	// Prometheus collectors on the default registry, so constructing more

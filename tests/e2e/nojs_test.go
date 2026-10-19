@@ -457,6 +457,7 @@ func TestNoJSThemeFormAppliesWithoutScript(t *testing.T) {
 	site := newTestSite(t)
 
 	html := runNoJS(t,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.WaitVisible(`#header-theme-select`, chromedp.ByQuery),
 		chromedp.SetValue(`#header-theme-select`, "light", chromedp.ByQuery),
@@ -481,6 +482,7 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	ctx := newBrowserContext(t)
 	if err := chromedp.Run(ctx,
 		emulation.SetScriptExecutionDisabled(true),
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#theme`, "light", chromedp.ByQuery),
@@ -521,6 +523,7 @@ func TestNoJSCookieConsentSettingsSaveFromPreferences(t *testing.T) {
 	ctx := newBrowserContext(t)
 	if err := chromedp.Run(ctx,
 		emulation.SetScriptExecutionDisabled(true),
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#cookie-preferences-form`, chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#consent-preferences').checked = true`, nil),
@@ -562,6 +565,7 @@ func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 	var infiniteScrollEnabled bool
 	if err := chromedp.Run(ctx,
 		emulation.SetScriptExecutionDisabled(true),
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.SetValue(`#sync-paste`, code, chromedp.ByQuery),
 		chromedp.Click(`#apply-sync-prefs`, chromedp.ByQuery),

@@ -944,6 +944,16 @@ func newSession(t *testing.T) *session {
 	}
 }
 
+func grantSessionPreferenceConsent(t *testing.T, s *session) {
+	t.Helper()
+	base, err := url.Parse(s.baseURL)
+	if err != nil {
+		t.Fatalf("parse session base URL: %v", err)
+	}
+	value := url.PathEscape(`{"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}`)
+	s.client.Jar.SetCookies(base, []*http.Cookie{{Name: "cookie_consent", Value: value, Path: "/"}})
+}
+
 // newTrackedSession is newSession bound to the analytics-configured site, with
 // its own cookie jar so a consent decision here never leaks into another test.
 func newTrackedSession(t *testing.T) *session {

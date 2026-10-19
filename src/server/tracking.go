@@ -46,6 +46,13 @@ func consentFromRequest(r *http.Request) *ConsentCookie {
 	return parseConsentJSON(raw)
 }
 
+// CanSetPreferenceCookie reports whether this request explicitly allows UI
+// preference cookies. Missing, malformed, or declined consent never grants it.
+func CanSetPreferenceCookie(r *http.Request) bool {
+	consent := consentFromRequest(r)
+	return consent != nil && consent.Preferences
+}
+
 // parseConsentJSON decodes a consent cookie payload. The essential flag is
 // forced true on a successful parse: essential cookies are required for the app
 // to function and can never be switched off (AI.md PART 16 cookie categories).

@@ -120,7 +120,9 @@ func (s *Server) handleThemeSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SetTheme(w, r.FormValue("theme"))
+	if CanSetPreferenceCookie(r) {
+		SetTheme(w, r.FormValue("theme"))
+	}
 
 	redirectTo := "/"
 	if p := r.FormValue("redirect"); strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") {

@@ -213,6 +213,27 @@ func TestConsentCookieCarriesSecure(t *testing.T) {
 	}
 }
 
+func TestConsentWithdrawalExpiresPreferenceCookies(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodPost, "/server/consent", nil)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Body = newBody("choice=decline")
+	w := httptest.NewRecorder()
+	s.handleConsent(w, r)
+
+	expired := make(map[string]bool)
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.MaxAge < 0 {
+			expired[cookie.Name] = true
+		}
+	}
+	for _, name := range []string{"theme", "lang", "search_widgets", "search_pref_units", "search_pref_video_previews", "search_widget_weather_units"} {
+		if !expired[name] {
+			t.Errorf("preference cookie %q was not expired after consent withdrawal", name)
+		}
+	}
+}
+
 // TestCookieSecureResolution checks the three branches of the setting that now
 // governs every consent cookie.
 func TestCookieSecureResolution(t *testing.T) {

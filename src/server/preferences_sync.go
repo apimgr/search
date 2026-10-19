@@ -35,7 +35,9 @@ func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request)
 func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request) {
 	mgr := s.getI18nManager()
 	result := prefsync.Import(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
-	prefsync.Apply(w, r, "search", result)
+	if CanSetPreferenceCookie(r) {
+		prefsync.Apply(w, r, "search", result)
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Location", preferenceRedirect(r))
 	w.WriteHeader(http.StatusSeeOther)

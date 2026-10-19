@@ -3019,6 +3019,7 @@ func TestHandleGeneralPreferencesSavePersistsLocalVideoPreviewPreference(t *test
 	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
 	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("search_pref_video_previews_present=1&search_pref_video_previews=0"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(&http.Cookie{Name: "cookie_consent", Value: url.PathEscape(`{"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}`)})
 	response := httptest.NewRecorder()
 	server.handleGeneralPreferencesSave(response, request)
 
