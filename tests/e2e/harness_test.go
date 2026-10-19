@@ -400,6 +400,7 @@ var localDirectAnswerPages = []struct {
 	{"unified text diff", "/direct/diff/--unified%20old%7C%7C%7Cnew", "diff"},
 	{"JSON diff", "/direct/diff/%7B%22a%22%3A1%7D%7C%7C%7B%22a%22%3A2%7D", "diff"},
 	{"code formatter", "/direct/beautify/js%20function%20f()%7Breturn%201%7D", "beautify"},
+	{"JSON empty container formatter", "/direct/beautify/" + url.PathEscape(`json {"empty":{},"list":[]}`), "beautify"},
 	{"PHP heredoc formatter", "/direct/beautify/" + url.PathEscape("php <?php\n$message=<<<TEXT\n  leading  and trailing spaces  \nTEXT;\necho $message;\n?>"), "beautify"},
 	{"Python escaped triple-quoted formatter", "/direct/beautify/" + url.PathEscape("python def render():\n    value = \"\"\"alpha \\\"\"\" beta\n  tail \"\"\"\n    return value"), "beautify"},
 	{"Allman code formatter", "/direct/beautify/js%20--style=allman%20function%20f()%7Breturn%201%7D", "beautify"},

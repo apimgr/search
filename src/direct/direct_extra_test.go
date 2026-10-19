@@ -4032,6 +4032,17 @@ func TestBeautifyJSONEscapedChars(t *testing.T) {
 	}
 }
 
+func TestBeautifyJSONEmptyContainers(t *testing.T) {
+	for input, want := range map[string]string{
+		`{"empty":{},"list":[]}`:           "{\n  \"empty\": {},\n  \"list\": []\n}",
+		`{"text":"brace } and bracket ]"}`: "{\n  \"text\": \"brace } and bracket ]\"\n}",
+	} {
+		if got := beautifyJSON(input); got != want {
+			t.Errorf("beautifyJSON(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // analyzeRegex — cover the \d, \w, \s branches
 // ---------------------------------------------------------------------------

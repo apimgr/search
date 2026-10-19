@@ -1,6 +1,7 @@
 package direct
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1880,63 +1881,10 @@ func scanJavaScriptRegex(code string, start int) int {
 }
 
 func beautifyJSON(code string) string {
-	// Simple JSON beautification
-	var result strings.Builder
-	indent := 0
-	inString := false
-	escaped := false
-
-	for _, r := range code {
-		if escaped {
-			result.WriteRune(r)
-			escaped = false
-			continue
-		}
-
-		if r == '\\' && inString {
-			result.WriteRune(r)
-			escaped = true
-			continue
-		}
-
-		if r == '"' {
-			inString = !inString
-			result.WriteRune(r)
-			continue
-		}
-
-		if inString {
-			result.WriteRune(r)
-			continue
-		}
-
-		switch r {
-		case '{', '[':
-			result.WriteRune(r)
-			indent++
-			result.WriteRune('\n')
-			result.WriteString(strings.Repeat("  ", indent))
-		case '}', ']':
-			if indent > 0 {
-				indent--
-			}
-			result.WriteRune('\n')
-			result.WriteString(strings.Repeat("  ", indent))
-			result.WriteRune(r)
-		case ',':
-			result.WriteRune(r)
-			result.WriteRune('\n')
-			result.WriteString(strings.Repeat("  ", indent))
-		case ':':
-			result.WriteRune(r)
-			result.WriteRune(' ')
-		case ' ', '\n', '\t':
-			// Skip whitespace
-		default:
-			result.WriteRune(r)
-		}
+	var result bytes.Buffer
+	if err := json.Indent(&result, []byte(code), "", "  "); err != nil {
+		return code
 	}
-
 	return result.String()
 }
 
