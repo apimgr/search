@@ -7600,6 +7600,22 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     padding: 15px;
 }
 
+.man-search-label { display: grid; gap: 0.35rem; max-width: 30rem; margin-block: 1rem; }
+.man-search-label input { padding: 0.55rem; border: 1px solid var(--color-border); border-radius: 0.35rem; }
+.man-toc, .man-sections { margin-block: 1rem; padding: 0.9rem 1rem; border: 1px solid var(--color-border); border-radius: 0.45rem; }
+.man-toc ol { columns: 2; margin-block: 0.5rem 0; }
+.man-sections a { display: inline-block; padding-inline: 0.3rem; }
+.man-section { margin-block: 0.75rem; padding: 0.85rem; border: 1px solid var(--color-border); border-radius: 0.4rem; }
+.man-section summary { cursor: pointer; font-weight: 650; }
+.man-section-body { padding-top: 0.5rem; }
+.man-section pre { overflow-x: auto; padding: 0.8rem; background: var(--color-code-bg); border-radius: 0.35rem; }
+.man-token-command { color: var(--color-primary); font-weight: 700; }
+.man-token-option { color: var(--color-info); }
+.man-token-variable { color: var(--color-warning-text); }
+.man-token-string { color: var(--color-success); }
+.man-copy-button { margin-block: 0.25rem 0.75rem; }
+.man-content mark { background: var(--color-warning-bg); color: var(--color-text); }
+
 .archive-timeline {
     display: grid;
     gap: 0.65rem;

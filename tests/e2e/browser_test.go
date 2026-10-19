@@ -1145,6 +1145,20 @@ func TestBrowserLocalDirectAnswerFeatures(t *testing.T) {
 				t.Errorf("browser %s answer is empty or incomplete: %q", tc.name, answerText)
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, answerText)
+			if tc.typeName == "man" {
+				assertManPageControls(t, pageHTML)
+				var seeAlsoHidden, detailsOpen, detailsCanCollapse bool
+				if err := chromedp.Run(ctx,
+					chromedp.Evaluate(`(() => { const field = document.querySelector('[data-man-search]'); field.value = 'SEE ALSO'; field.dispatchEvent(new Event('input', {bubbles:true})); return document.querySelector('#man-name-1').closest('.man-section').hidden; })()`, &seeAlsoHidden),
+					chromedp.Evaluate(`document.querySelector('#man-see-also-3').closest('details').open`, &detailsOpen),
+					chromedp.Evaluate(`(() => { const details = document.querySelector('#man-see-also-3').closest('details'); details.querySelector('summary').click(); return !details.open; })()`, &detailsCanCollapse),
+				); err != nil {
+					t.Fatalf("man page controls: %v", err)
+				}
+				if !seeAlsoHidden || !detailsOpen || !detailsCanCollapse {
+					t.Errorf("man page search/collapse behavior = hidden %v, search-open %v, native-collapse %v", seeAlsoHidden, detailsOpen, detailsCanCollapse)
+				}
+			}
 			if strings.Contains(tc.name, "Wikipedia") {
 				assertFullWikipediaFixture(t, pageHTML)
 				if strings.Contains(tc.name, "localized") && !strings.Contains(pageHTML, `value="de" selected`) {

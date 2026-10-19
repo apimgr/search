@@ -227,7 +227,7 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 			body = "# curl\n> Transfer data from or to a server.\n\n- Download the contents of a URL:\n`curl {{https://example.com}}`\n"
 		}
 	case "man.cx":
-		body = `{"name":"printf","section":"1","description":"Format and print data","content":"NAME\nprintf - format and print data\n\nSYNOPSIS\nprintf FORMAT [ARGUMENT]..."}`
+		body = `{"name":"printf","section":"1","description":"Format and print data","content":"<div class=\"manual\"><h1>NAME</h1><p>printf - format and print data</p><div class=\"section\"><h2>SYNOPSIS</h2><pre><code>printf FORMAT [ARGUMENT]...</code></pre></div><div class=\"section\"><h2>SEE ALSO</h2><p><a href=\"https://man.cx/echo\">echo(1)</a></p></div></div>"}`
 	case "cheat.sh":
 		body = "Show the current directory:\npwd\n"
 	case "datatracker.ietf.org":
@@ -454,8 +454,12 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		t.Error("tldr answer is missing fixture command or description")
 		return
 	}
-	if typeName == "man" && (!strings.Contains(answer, "printf") || !strings.Contains(answer, "format and print data")) {
-		t.Error("man answer is missing fixture page content")
+	if typeName == "man" {
+		for _, required := range []string{"printf", "format and print data", "SYNOPSIS"} {
+			if !strings.Contains(answer, required) {
+				t.Errorf("man answer missing %q", required)
+			}
+		}
 		return
 	}
 	if typeName == "cheat" && (!strings.Contains(answer, "pwd") || !strings.Contains(answer, "current directory")) {
@@ -559,6 +563,15 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	}
 	if !strings.Contains(answer, name) || !strings.Contains(answer, version) {
 		t.Errorf("package answer is missing fixture name %q or version %q", name, version)
+	}
+}
+
+func assertManPageControls(t *testing.T, markup string) {
+	t.Helper()
+	for _, required := range []string{`class="man-toc"`, `aria-label="Manual section"`, `<details class="man-section">`, `data-man-search`, `data-man-copy`, `id="man-see-also-3"`, "echo(1)"} {
+		if !strings.Contains(markup, required) {
+			t.Errorf("man page missing control or anchor %q: %s", required, markup)
+		}
 	}
 }
 

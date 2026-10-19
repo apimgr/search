@@ -2218,8 +2218,20 @@ func TestManContentSanitizesProviderHTML(t *testing.T) {
 	credentialURL := (&url.URL{Scheme: "https", User: url.UserPassword("test-user", "test-password"), Host: "example.test"}).String()
 	providerHTML := `<h1>man page</h1><script>alert(1)</script><a href="javascript:alert(1)">unsafe</a><a href="` + html.EscapeString(credentialURL) + `">credential link</a><a href="https://example.test">safe</a>`
 	formatted := formatManPage(providerHTML)
-	if strings.Contains(formatted, "<script>") || strings.Contains(formatted, "javascript:") || strings.Contains(formatted, "test-user") || !strings.Contains(formatted, "credential link") || !strings.Contains(formatted, "<h1>man page</h1>") || !strings.Contains(formatted, `href="https://example.test"`) {
+	if strings.Contains(formatted, "<script>") || strings.Contains(formatted, "javascript:") || strings.Contains(formatted, "test-user") || !strings.Contains(formatted, "credential link") || !strings.Contains(formatted, "man page</h1>") || !strings.Contains(formatted, `href="https://example.test"`) {
 		t.Fatalf("provider HTML was not safely sanitized: %s", formatted)
+	}
+}
+
+func TestManPageIncludesNavigationSearchAndCollapsibleSections(t *testing.T) {
+	content := formatManPage(`<div class="manual"><h1>printf</h1><p>Usage</p><div class="section"><h2>DESCRIPTION</h2><p>Print text</p></div><div class="section"><h2>SEE ALSO</h2><pre><code>echo "hi" --quiet</code></pre></div></div>`, "printf.3")
+	for _, expected := range []string{`class="man-toc"`, `aria-label="Manual section"`, `/?q=man%3Aprintf.1`, `data-man-search`, `<details class="man-section">`, `<summary id="man-see-also-3">SEE ALSO</summary>`, `data-man-copy`, `class="man-token-command">echo</span>`, `class="man-token-string">&#34;hi&#34;</span>`, `class="man-token-option">--quiet</span>`} {
+		if !strings.Contains(content, expected) {
+			t.Errorf("man page missing %q: %s", expected, content)
+		}
+	}
+	if strings.Contains(content, `<script`) {
+		t.Fatalf("man page output contains executable provider markup: %s", content)
 	}
 }
 
@@ -2242,7 +2254,7 @@ func TestManHandlerSanitizesAPIHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer.Content, "<h1>printf</h1>") || strings.Contains(answer.Content, "<script>") || strings.Contains(answer.Content, "javascript:") {
+	if !strings.Contains(answer.Content, "<h1 id=") || !strings.Contains(answer.Content, "printf</h1>") || strings.Contains(answer.Content, "<script>") || strings.Contains(answer.Content, "javascript:") {
 		t.Fatalf("unexpected sanitized man page: %s", answer.Content)
 	}
 }

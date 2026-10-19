@@ -4281,6 +4281,33 @@
 
 })();
 
+(function () {
+    'use strict';
+    document.addEventListener('input', function (event) {
+        var field = event.target;
+        if (!field.matches('[data-man-search]')) return;
+        var query = field.value.trim().toLocaleLowerCase();
+        var content = field.closest('.man-content');
+        content.querySelectorAll('.man-section').forEach(function (section) {
+            var matches = !query || section.textContent.toLocaleLowerCase().includes(query);
+            section.hidden = !matches;
+            if (matches && section.tagName === 'DETAILS' && query) section.open = true;
+        });
+    });
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-man-copy]');
+        if (!button) return;
+        var block = button.previousElementSibling;
+        var code = block && block.matches('pre') ? block.querySelector('code') : null;
+        var text = code ? code.textContent : (block && block.matches('pre') ? block.textContent : '');
+        if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+        navigator.clipboard.writeText(text).then(function () {
+            button.textContent = 'Copied';
+            window.setTimeout(function () { button.textContent = 'Copy'; }, 1500);
+        }).catch(function () {});
+    });
+})();
+
 
 // ============================================================================
 // WIDGET MANAGER (separate IIFE to maintain encapsulation)

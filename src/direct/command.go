@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -213,7 +214,7 @@ func (h *ManHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		Term:        term,
 		Title:       fmt.Sprintf("man %s(%s)", data.Name, data.Section),
 		Description: data.Description,
-		Content:     formatManPage(data.Content),
+		Content:     formatManPage(data.Content, term),
 		Source:      "man.cx",
 		SourceURL:   fmt.Sprintf("https://man.cx/%s", url.PathEscape(term)),
 		Data: map[string]interface{}{
@@ -282,15 +283,178 @@ func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*A
 		Term:        term,
 		Title:       fmt.Sprintf("man %s", page),
 		Description: fmt.Sprintf("Manual page for %s", page),
-		Content:     extractManContent(string(content)),
+		Content:     formatManPage(extractManContent(string(content)), term),
 		Source:      "man.cx",
 		SourceURL:   manURL,
 	}, nil
 }
 
 // formatManPage formats man page content as HTML
-func formatManPage(content string) string {
-	return "<div class=\"man-content\">" + sanitizeManHTML(content) + "</div>"
+func formatManPage(content string, terms ...string) string {
+	safe := sanitizeManHTML(content)
+	document, err := xhtml.Parse(strings.NewReader("<main>" + safe + "</main>"))
+	if err != nil {
+		return "<div class=\"man-content\">" + safe + "</div>"
+	}
+	var main *xhtml.Node
+	var findMain func(*xhtml.Node)
+	findMain = func(node *xhtml.Node) {
+		if main != nil {
+			return
+		}
+		if node.Type == xhtml.ElementNode && node.Data == "main" {
+			main = node
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			findMain(child)
+		}
+	}
+	findMain(document)
+	if main == nil {
+		return "<div class=\"man-content\">" + safe + "</div>"
+	}
+	flattenManContainers(main)
+	var sections []manSection
+	var preamble []*xhtml.Node
+	var current *manSection
+	for child := main.FirstChild; child != nil; {
+		next := child.NextSibling
+		if child.Type == xhtml.ElementNode && manHeadingPattern.MatchString(child.Data) {
+			title := strings.TrimSpace(manNodeText(child))
+			if title != "" {
+				id := manSectionID(title, len(sections)+1)
+				attrs := child.Attr[:0]
+				for _, attr := range child.Attr {
+					if attr.Key != "id" {
+						attrs = append(attrs, attr)
+					}
+				}
+				child.Attr = append(attrs, xhtml.Attribute{Key: "id", Val: id})
+				sections = append(sections, manSection{id: id, title: title})
+				current = &sections[len(sections)-1]
+			}
+		}
+		if current != nil {
+			detachNode(child)
+			current.nodes = append(current.nodes, child)
+		} else {
+			detachNode(child)
+			preamble = append(preamble, child)
+		}
+		child = next
+	}
+	if len(sections) == 0 {
+		return "<div class=\"man-content\"><label class=\"man-search-label\">Search this page <input type=\"search\" data-man-search></label>" + safe + "</div>"
+	}
+	var out strings.Builder
+	term := ""
+	if len(terms) > 0 {
+		term = terms[0]
+	}
+	out.WriteString("<div class=\"man-content\"><label class=\"man-search-label\">Search this page <input type=\"search\" data-man-search></label><nav class=\"man-toc\" aria-label=\"Manual page contents\"><strong>Contents</strong><ol>")
+	for _, section := range sections {
+		fmt.Fprintf(&out, "<li><a href=\"#%s\">%s</a></li>", html.EscapeString(section.id), html.EscapeString(section.title))
+	}
+	out.WriteString("</ol></nav>")
+	page := term
+	if index := strings.LastIndex(page, "."); index > 0 {
+		page = page[:index]
+	}
+	if page != "" {
+		out.WriteString("<nav class=\"man-sections\" aria-label=\"Manual section\"><strong>Sections:</strong>")
+		for section := 1; section <= 8; section++ {
+			query := "man:" + page + "." + fmt.Sprint(section)
+			fmt.Fprintf(&out, " <a href=\"/?q=%s\">%d</a>", url.QueryEscape(query), section)
+		}
+		out.WriteString("</nav>")
+	}
+	out.WriteString("<div class=\"man-sections-content\">")
+	if len(preamble) > 0 {
+		out.WriteString("<div class=\"man-preamble\">")
+		for _, node := range preamble {
+			renderSafeManNode(&out, node)
+		}
+		out.WriteString("</div>")
+	}
+	for i, section := range sections {
+		if i == 0 {
+			out.WriteString("<section class=\"man-section\">")
+		} else {
+			fmt.Fprintf(&out, "<details class=\"man-section\"><summary id=\"%s\">%s</summary><div class=\"man-section-body\">", html.EscapeString(section.id), html.EscapeString(section.title))
+		}
+		for j, node := range section.nodes {
+			if i > 0 && j == 0 && node.Type == xhtml.ElementNode && manHeadingPattern.MatchString(node.Data) {
+				continue
+			}
+			renderSafeManNode(&out, node)
+		}
+		if i == 0 {
+			out.WriteString("</section>")
+		} else {
+			out.WriteString("</div></details>")
+		}
+	}
+	out.WriteString("</div></div>")
+	return out.String()
+}
+
+type manSection struct {
+	id, title string
+	nodes     []*xhtml.Node
+}
+
+func manNodeText(node *xhtml.Node) string {
+	if node.Type == xhtml.TextNode {
+		return node.Data
+	}
+	var text strings.Builder
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		text.WriteString(manNodeText(child))
+	}
+	return text.String()
+}
+
+func manSectionID(title string, index int) string {
+	var out strings.Builder
+	for _, r := range strings.ToLower(title) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			out.WriteRune(r)
+		} else if out.Len() > 0 && !strings.HasSuffix(out.String(), "-") {
+			out.WriteByte('-')
+		}
+	}
+	id := strings.Trim(out.String(), "-")
+	if id == "" {
+		id = "section"
+	}
+	return fmt.Sprintf("man-%s-%d", id, index)
+}
+
+func detachNode(node *xhtml.Node) {
+	if node.Parent != nil {
+		node.Parent.RemoveChild(node)
+	}
+}
+
+func flattenManContainers(node *xhtml.Node) {
+	if node.Type == xhtml.ElementNode && node.Data == "pre" {
+		return
+	}
+	for child := node.FirstChild; child != nil; {
+		next := child.NextSibling
+		flattenManContainers(child)
+		if child.Type == xhtml.ElementNode && child.Data == "div" {
+			for nested := child.FirstChild; nested != nil; {
+				nextNested := nested.NextSibling
+				child.RemoveChild(nested)
+				node.InsertBefore(nested, child)
+				nested = nextNested
+			}
+			node.RemoveChild(child)
+		}
+		child = next
+	}
 }
 
 // extractManContent extracts man page content from HTML
@@ -354,12 +518,21 @@ var safeManElements = map[string]bool{
 	"table": true, "tbody": true, "td": true, "th": true, "thead": true, "tr": true, "u": true, "ul": true,
 }
 
+var manCodeTokenPattern = regexp.MustCompile(`(?m)(^\s*(?:[$#]\s*)?[A-Za-z_][A-Za-z0-9_.-]*|--?[A-Za-z0-9][A-Za-z0-9-]*|\$[A-Za-z_][A-Za-z0-9_]*|"[^"\n]*"|'[^'\n]*')`)
+var manHeadingPattern = regexp.MustCompile(`^h[1-6]$`)
+
 func renderSafeManNode(output *strings.Builder, node *xhtml.Node) {
 	switch node.Type {
 	case xhtml.TextNode:
 		output.WriteString(html.EscapeString(node.Data))
 	case xhtml.ElementNode:
 		if node.Data == "script" || node.Data == "style" || node.Data == "iframe" || node.Data == "object" || node.Data == "svg" || node.Data == "math" {
+			return
+		}
+		if node.Data == "pre" {
+			output.WriteString(`<pre class="man-code-block"><code class="man-code">`)
+			output.WriteString(highlightManCode(manNodeText(node)))
+			output.WriteString(`</code></pre><button type="button" class="man-copy-button" data-man-copy>Copy</button>`)
 			return
 		}
 		allowed := safeManElements[node.Data]
@@ -397,6 +570,27 @@ func renderSafeManNode(output *strings.Builder, node *xhtml.Node) {
 			output.WriteByte('>')
 		}
 	}
+}
+
+func highlightManCode(code string) string {
+	var output strings.Builder
+	last := 0
+	for _, match := range manCodeTokenPattern.FindAllStringIndex(code, -1) {
+		output.WriteString(html.EscapeString(code[last:match[0]]))
+		token := code[match[0]:match[1]]
+		class := "man-token-command"
+		if strings.HasPrefix(token, "-") {
+			class = "man-token-option"
+		} else if strings.HasPrefix(token, "$") {
+			class = "man-token-variable"
+		} else if strings.HasPrefix(token, "'") || strings.HasPrefix(token, `"`) {
+			class = "man-token-string"
+		}
+		fmt.Fprintf(&output, `<span class="%s">%s</span>`, class, html.EscapeString(token))
+		last = match[1]
+	}
+	output.WriteString(html.EscapeString(code[last:]))
+	return output.String()
 }
 
 // CheatHandler handles cheat:{command} queries

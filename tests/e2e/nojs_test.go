@@ -671,6 +671,9 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 				t.Errorf("no-JS %s answer is empty or incomplete: %q", tc.name, answerText)
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, answerText)
+			if tc.typeName == "man" {
+				assertManPageControls(t, pageHTML)
+			}
 			if strings.Contains(tc.name, "Wikipedia") {
 				assertFullWikipediaFixture(t, pageHTML)
 				if strings.Contains(tc.name, "localized") && !strings.Contains(pageHTML, `value="de" selected`) {

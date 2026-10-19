@@ -430,6 +430,9 @@ func TestSSRLocalDirectAnswerFeatures(t *testing.T) {
 				t.Errorf("%s SSR output has no substantial answer content", tc.name)
 			}
 			assertDirectAnswerFixture(t, tc.typeName, tc.path, body)
+			if tc.typeName == "man" {
+				assertManPageControls(t, body)
+			}
 			if strings.Contains(tc.name, "Wikipedia") {
 				assertFullWikipediaFixture(t, body)
 				if strings.Contains(tc.name, "localized") && !strings.Contains(body, `value="de" selected`) {
