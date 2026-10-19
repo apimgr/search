@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -808,6 +809,120 @@ func TestSSRAPIDocsPagesRender(t *testing.T) {
 		requireContains(t, body, "<!DOCTYPE html>", "/server/docs/graphql")
 		requireContains(t, body, "/api/graphql", "/server/docs/graphql")
 	})
+}
+
+func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
+	s := newSession(t)
+	requestJSON := func(method, path, body, token string) ([]byte, int) {
+		t.Helper()
+		req, err := http.NewRequest(method, s.baseURL+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("create %s request: %v", path, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s response: %v", path, err)
+		}
+		return data, resp.StatusCode
+	}
+
+	created, status := requestJSON(http.MethodPost, "/api/v1/alerts", `{"query":"MCP credential fixture","category":"general","language":"en","frequency":"daily","email":"mcp@example.test","deliver_rss":true}`, "")
+	if status != http.StatusCreated {
+		t.Fatalf("create fixture alert: status=%d", status)
+	}
+	var createdResponse struct {
+		Data struct {
+			OwnerToken  string `json:"owner_token"`
+			ManageToken string `json:"manage_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(created, &createdResponse); err != nil || createdResponse.Data.OwnerToken == "" || createdResponse.Data.ManageToken == "" {
+		t.Fatalf("create fixture alert did not issue an owner token: err=%v", err)
+	}
+	t.Cleanup(func() {
+		_, status := requestJSON(http.MethodDelete, "/api/v1/alerts/"+url.PathEscape(createdResponse.Data.ManageToken), "", "")
+		if status != http.StatusOK && status != http.StatusNoContent {
+			t.Errorf("delete MCP fixture alert: status=%d", status)
+		}
+	})
+
+	linkedBody, status := requestJSON(http.MethodPost, "/api/v1/server/preferences/tokens", `{"name":"mcp-linked","expires_at":"7d"}`, createdResponse.Data.OwnerToken)
+	if status != http.StatusCreated {
+		t.Fatalf("create linked token: status=%d", status)
+	}
+	var linkedResponse struct {
+		Data struct {
+			ID    int64  `json:"id"`
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(linkedBody, &linkedResponse); err != nil || linkedResponse.Data.ID <= 0 || linkedResponse.Data.Token == "" {
+		t.Fatalf("create linked token response is invalid: err=%v", err)
+	}
+	t.Cleanup(func() {
+		_, status := requestJSON(http.MethodDelete, "/api/v1/server/preferences/tokens/"+strconv.FormatInt(linkedResponse.Data.ID, 10), "", createdResponse.Data.OwnerToken)
+		if status != http.StatusOK {
+			t.Errorf("revoke MCP fixture linked token: status=%d", status)
+		}
+	})
+
+	callMCP := func(tool, token string) struct {
+		Result struct {
+			IsError           bool                   `json:"isError"`
+			StructuredContent map[string]interface{} `json:"structuredContent"`
+		} `json:"result"`
+	} {
+		t.Helper()
+		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tool + `","arguments":{}}}`
+		response, status := requestJSON(http.MethodPost, "/api/v1/server/mcp", body, token)
+		if status != http.StatusOK {
+			t.Fatalf("MCP call %s: status=%d body=%s", tool, status, response)
+		}
+		var payload struct {
+			Result struct {
+				IsError           bool                   `json:"isError"`
+				StructuredContent map[string]interface{} `json:"structuredContent"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(response, &payload); err != nil {
+			t.Fatalf("decode MCP call %s: %v body=%s", tool, err, response)
+		}
+		return payload
+	}
+
+	for _, credential := range []struct {
+		name  string
+		token string
+	}{
+		{name: "primary owner", token: createdResponse.Data.OwnerToken},
+		{name: "linked owner", token: linkedResponse.Data.Token},
+		{name: "no token"},
+	} {
+		t.Run(credential.name, func(t *testing.T) {
+			public := callMCP("getApiV1ServerAbout", credential.token)
+			if public.Result.IsError || public.Result.StructuredContent["ok"] != true {
+				t.Fatalf("public MCP call failed: %#v", public.Result)
+			}
+			privileged := callMCP("getApiV1ServerStatus", credential.token)
+			if !privileged.Result.IsError {
+				t.Fatalf("operator-only MCP tool was callable with %s credentials: %#v", credential.name, privileged.Result)
+			}
+		})
+	}
+
+	operator := callMCP("getApiV1ServerStatus", e2eOperatorToken)
+	if operator.Result.IsError || operator.Result.StructuredContent["ok"] != true {
+		t.Fatalf("operator token could not call the protected MCP tool: %#v", operator.Result)
+	}
 }
 
 // TestSSRConsentFormSetsCookie exercises POST /server/consent, which is a
