@@ -5197,7 +5197,7 @@ func TestSupportedLicenseTextsAreEmbedded(t *testing.T) {
 }
 
 func TestCountryHandlerSupportsNumericISOAndSpecFields(t *testing.T) {
-	body := `[{"name":{"common":"Germany","official":"Federal Republic of Germany"},"cca2":"DE","cca3":"DEU","ccn3":"276","capital":["Berlin"],"region":"Europe","subregion":"Western Europe","area":357114,"population":83200000,"timezones":["UTC+01:00"],"car":{"side":"right"},"flags":{"svg":"https://flagcdn.com/de.svg"},"maps":{"openStreetMaps":"https://www.openstreetmap.org/relation/51477"},"currencies":{"EUR":{"name":"Euro","symbol":"€"}},"languages":{"deu":"German"},"flag":"🇩🇪","tld":[".de"],"idd":{"root":"+4","suffixes":["9"]}}]`
+	body := `[{"name":{"common":"Germany","official":"Federal Republic of Germany"},"cca2":"DE","cca3":"DEU","ccn3":"276","capital":["Berlin"],"region":"Europe","subregion":"Western Europe","area":357114,"population":83200000,"timezones":["UTC+01:00"],"car":{"side":"right"},"flags":{"svg":"https://flagcdn.com/de.svg"},"maps":{"openStreetMaps":"https://www.openstreetmap.org/relation/51477"},"currencies":{"USD":{"name":"US Dollar","symbol":"$"},"EUR":{"name":"Euro","symbol":"€"}},"languages":{"eng":"English","deu":"German"},"flag":"🇩🇪","tld":[".de"],"idd":{"root":"+4","suffixes":["9"]}}]`
 	handler := NewCountryHandler()
 	handler.client = &http.Client{Transport: packageTestTransport{body: body}}
 	answer, err := handler.HandleDirectQuery(context.Background(), "276")
@@ -5206,6 +5206,9 @@ func TestCountryHandlerSupportsNumericISOAndSpecFields(t *testing.T) {
 	}
 	if answer.Data["name"] != "Germany" || answer.Data["ccn3"] != "276" {
 		t.Fatalf("numeric ISO lookup failed: %#v", answer.Data)
+	}
+	if !reflect.DeepEqual(answer.Data["currencies"], []string{"Euro (EUR, €)", "US Dollar (USD, $)"}) || !reflect.DeepEqual(answer.Data["languages"], []string{"German", "English"}) {
+		t.Fatalf("country map metadata is not deterministic: currencies=%#v languages=%#v", answer.Data["currencies"], answer.Data["languages"])
 	}
 	for _, expected := range []string{"83,200,000", "UTC+01:00", "OpenStreetMap", "country-flag"} {
 		if !strings.Contains(answer.Content, expected) {

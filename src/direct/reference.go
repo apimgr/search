@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -724,14 +725,25 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 
 	// Get currency info
 	var currencies []string
-	for code, cur := range country.Currencies {
+	currencyCodes := make([]string, 0, len(country.Currencies))
+	for code := range country.Currencies {
+		currencyCodes = append(currencyCodes, code)
+	}
+	slices.Sort(currencyCodes)
+	for _, code := range currencyCodes {
+		cur := country.Currencies[code]
 		currencies = append(currencies, fmt.Sprintf("%s (%s, %s)", cur.Name, code, cur.Symbol))
 	}
 
 	// Get languages
 	var languages []string
-	for _, lang := range country.Languages {
-		languages = append(languages, lang)
+	languageCodes := make([]string, 0, len(country.Languages))
+	for code := range country.Languages {
+		languageCodes = append(languageCodes, code)
+	}
+	slices.Sort(languageCodes)
+	for _, code := range languageCodes {
+		languages = append(languages, country.Languages[code])
 	}
 
 	// Get calling code
