@@ -1321,9 +1321,17 @@ func TestBeautifyHandlerOptions(t *testing.T) {
 	if got, err := minifyCode("SELECT /*+ INDEX(users idx_users) */ name FROM users", "sql"); err != nil || !strings.Contains(got, "/*+ INDEX(users idx_users) */") {
 		t.Errorf("SQL minification removed an optimizer hint: %q, %v", got, err)
 	}
+	if got, err := minifyCode("SELECT $body$ a  -- literal;\n b $body$ FROM t", "sql"); err != nil || !strings.Contains(got, "$body$ a  -- literal;\n b $body$") {
+		t.Errorf("SQL minification changed a dollar-quoted value: %q, %v", got, err)
+	}
 	for _, test := range []struct{ language, source string }{
 		{"json", `{"a":`},
 		{"js", "function {"},
+		{"scss", ".a{content:'unterminated}"},
+		{"less", ".a{content:red; /* unterminated"},
+		{"sql", "SELECT 'unterminated"},
+		{"sql", "SELECT 1 /* unterminated"},
+		{"sql", "SELECT $$unterminated"},
 	} {
 		if _, err := minifyCode(test.source, test.language); err == nil {
 			t.Errorf("minifyCode(%q) accepted malformed source %q", test.language, test.source)

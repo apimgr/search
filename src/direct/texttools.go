@@ -727,9 +727,9 @@ func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*
 func minifyCode(code, language string) (string, error) {
 	switch language {
 	case "sql":
-		return minifySQLSource(code), nil
+		return minifySQLSource(code)
 	case "scss", "less":
-		return minifyStylesheetSource(code), nil
+		return minifyStylesheetSource(code)
 	case "python":
 		return minifyPythonSource(code), nil
 	}
@@ -785,7 +785,7 @@ func minifyCode(code, language string) (string, error) {
 	return minified, nil
 }
 
-func minifyStylesheetSource(source string) string {
+func minifyStylesheetSource(source string) (string, error) {
 	var output strings.Builder
 	quote := byte(0)
 	escaped := false
@@ -879,7 +879,13 @@ func minifyStylesheetSource(source string) string {
 		pendingSpace = false
 		output.WriteByte(character)
 	}
-	return strings.TrimSpace(output.String())
+	if quote != 0 {
+		return "", fmt.Errorf("cannot minify stylesheet with an unterminated string")
+	}
+	if blockComment {
+		return "", fmt.Errorf("cannot minify stylesheet with an unterminated block comment")
+	}
+	return strings.TrimSpace(output.String()), nil
 }
 
 func isCSSCommentBoundary(character byte) bool {
@@ -902,18 +908,29 @@ func writePendingSpace(output *strings.Builder, pending bool) {
 	}
 }
 
-func minifySQLSource(source string) string {
+func minifySQLSource(source string) (string, error) {
 	var output strings.Builder
 	quote := byte(0)
 	escaped := false
 	blockComment := false
 	preserveBlockComment := false
 	pendingSpace := false
+	dollarQuote := ""
 	for index := 0; index < len(source); index++ {
 		character := source[index]
 		var next byte
 		if index+1 < len(source) {
 			next = source[index+1]
+		}
+		if dollarQuote != "" {
+			if strings.HasPrefix(source[index:], dollarQuote) {
+				output.WriteString(dollarQuote)
+				index += len(dollarQuote) - 1
+				dollarQuote = ""
+			} else {
+				output.WriteByte(character)
+			}
+			continue
 		}
 		if blockComment {
 			if preserveBlockComment {
@@ -960,6 +977,16 @@ func minifySQLSource(source string) string {
 			output.WriteByte(character)
 			continue
 		}
+		if character == '$' {
+			if delimiter := sqlDollarQuoteDelimiter(source, index); delimiter != "" {
+				writePendingSpace(&output, pendingSpace)
+				pendingSpace = false
+				output.WriteString(delimiter)
+				index += len(delimiter) - 1
+				dollarQuote = delimiter
+				continue
+			}
+		}
 		if character == '-' && next == '-' {
 			for index < len(source) && source[index] != '\n' {
 				index++
@@ -996,7 +1023,16 @@ func minifySQLSource(source string) string {
 		pendingSpace = false
 		output.WriteByte(character)
 	}
-	return strings.TrimSpace(output.String())
+	if quote != 0 {
+		return "", fmt.Errorf("cannot minify SQL with an unterminated quoted value")
+	}
+	if blockComment {
+		return "", fmt.Errorf("cannot minify SQL with an unterminated block comment")
+	}
+	if dollarQuote != "" {
+		return "", fmt.Errorf("cannot minify SQL with an unterminated dollar-quoted value")
+	}
+	return strings.TrimSpace(output.String()), nil
 }
 
 func minifyPythonSource(source string) string {
