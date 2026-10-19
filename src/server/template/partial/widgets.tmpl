@@ -5,7 +5,6 @@
         {{range .EnabledWidgets}}
         <div class="widget widget-{{.}}" data-widget="{{.}}" data-loaded="false" draggable="true">
             <div class="widget-header">
-                <span class="widget-icon" aria-hidden="true">{{widgetIcon .}}</span>
                 <span class="widget-title">{{widgetName .}}</span>
                 <button class="widget-menu" aria-label="{{t "widgets_ui.widget_options"}}">&#8942;</button>
                 <button type="button" class="widget-collapse" aria-label="{{t "widgets_ui.collapse"}}" aria-expanded="true" aria-controls="widget-body-{{.}}">&#8722;</button>

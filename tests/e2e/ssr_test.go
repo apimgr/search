@@ -678,6 +678,8 @@ func TestSSRPWAAndWellKnownAssets(t *testing.T) {
 		"/static/img/icon-maskable-512.png":   {X: 512, Y: 512},
 		"/static/splash/iphone-1179x2556.png": {X: 1179, Y: 2556},
 		"/static/splash/iphone-1284x2778.png": {X: 1284, Y: 2778},
+		"/static/screenshots/desktop.png":     {X: 1280, Y: 720},
+		"/static/screenshots/mobile.png":      {X: 750, Y: 1334},
 	}
 
 	cases := []struct {
@@ -691,6 +693,8 @@ func TestSSRPWAAndWellKnownAssets(t *testing.T) {
 		{"/manifest.json", "application/manifest+json", `"/static/img/icon-maskable-512.png"`},
 		{"/static/splash/iphone-1179x2556.png", "image/png", ""},
 		{"/static/splash/iphone-1284x2778.png", "image/png", ""},
+		{"/static/screenshots/desktop.png", "image/png", ""},
+		{"/static/screenshots/mobile.png", "image/png", ""},
 		{"/static/img/favicon-16.png", "image/png", ""},
 		{"/static/img/favicon-32.png", "image/png", ""},
 		{"/static/img/favicon-48.png", "image/png", ""},

@@ -24,6 +24,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")
 	}
+	if cfg.Server.Title != "Search" || cfg.Server.Branding.Title != "Search" {
+		t.Errorf("default app titles = %q / %q, want IDEA.md app_name Search", cfg.Server.Title, cfg.Server.Branding.Title)
+	}
 	if cfg.Web.CSP.FrameSrcExtra != "" {
 		t.Errorf("Web.CSP.FrameSrcExtra = %q, want empty by default", cfg.Web.CSP.FrameSrcExtra)
 	}

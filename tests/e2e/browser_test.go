@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -125,6 +127,40 @@ func TestBrowserInstallPromptControl(t *testing.T) {
 		t.Error("beforeinstallprompt was not prevented for the custom install button")
 	}
 	requireNoFailures(t, failures, "native install prompt control")
+}
+
+func TestCapturePWAInstallScreenshots(t *testing.T) {
+	outputDir := strings.TrimSpace(os.Getenv("PWA_SCREENSHOT_DIR"))
+	if outputDir == "" {
+		t.Skip("set PWA_SCREENSHOT_DIR to capture install dialog screenshots")
+	}
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
+		t.Fatalf("create screenshot output directory: %v", err)
+	}
+
+	site := newTestSite(t)
+	for _, viewport := range []struct {
+		name   string
+		width  int64
+		height int64
+	}{
+		{name: "desktop.png", width: 1280, height: 720},
+		{name: "mobile.png", width: 750, height: 1334},
+	} {
+		ctx := newBrowserContext(t)
+		var screenshot []byte
+		if err := chromedp.Run(ctx,
+			emulation.SetDeviceMetricsOverride(viewport.width, viewport.height, 1, false),
+			chromedp.Navigate(site.URL+"/"),
+			chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
+			chromedp.CaptureScreenshot(&screenshot),
+		); err != nil {
+			t.Fatalf("capture %s PWA screenshot: %v", viewport.name, err)
+		}
+		if err := os.WriteFile(filepath.Join(outputDir, viewport.name), screenshot, 0o600); err != nil {
+			t.Fatalf("write %s PWA screenshot: %v", viewport.name, err)
+		}
+	}
 }
 
 func TestBrowserRelatedSearchSuggestions(t *testing.T) {

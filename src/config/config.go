@@ -2014,7 +2014,7 @@ func DefaultConfig() *Config {
 			Trivy:       TrivyDataConfig{Enabled: false, Source: "ghcr.io/aquasecurity/trivy-db:2"},
 		},
 		Server: ServerConfig{
-			Title:       "Scour",
+			Title:       "Search",
 			Description: "Privacy-Respecting Metasearch Engine",
 			Port:        0,
 			Address:     "[::]",
@@ -2055,7 +2055,7 @@ func DefaultConfig() *Config {
 			Tokens: OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y", IdlePurgeDays: 0},
 			MCP:    MCPConfig{Enabled: true},
 			Branding: BrandingConfig{
-				Title:        "Scour",
+				Title:        "Search",
 				Tagline:      "Privacy-respecting metasearch",
 				Description:  "A privacy-respecting metasearch engine",
 				Theme:        "dark",

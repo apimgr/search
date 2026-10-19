@@ -86,6 +86,7 @@ docker run --rm --name "$TEST_CONTAINER" \
   -e GOFLAGS=-buildvcs=false \
   -e GOPROXY=off \
   -e CHROMEDP_WS \
+  -e PWA_SCREENSHOT_DIR \
   casjaysdev/go:latest \
   go test -tags e2e -count=1 -v "$@" ./tests/e2e/... || EXIT=$?
 

@@ -43,7 +43,13 @@
 }
 
 .logo-icon {
-    font-size: 1.5rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+.logo-icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
 }
 
 .logo-img {
@@ -853,6 +859,13 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     margin-bottom: 0.5rem;
 }
 
+.home-logo-icon {
+    width: 1em;
+    height: 1em;
+    margin-inline-end: 0.16em;
+    vertical-align: -0.12em;
+}
+
 .home-logo-img {
     max-width: 200px;
     height: auto;
@@ -996,6 +1009,9 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 .tab-icon {
     font-size: 1.25rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: 0 0 auto;
 }
 
 .tab-text {
@@ -2729,6 +2745,8 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 .tab-icon {
     font-size: 1rem;
+    width: 1rem;
+    height: 1rem;
 }
 
 .tab-text {
@@ -3115,8 +3133,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 }
 
 .widget-placeholder-icon {
-    font-size: 2rem;
-    margin-bottom: 0.5rem;
+    display: none;
 }
 
 .widget-placeholder-text {

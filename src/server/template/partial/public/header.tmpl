@@ -8,7 +8,7 @@
         {{if .Config.Server.Branding.Logo}}
         <img src="{{.Config.Server.Branding.Logo}}" alt="{{.Config.Server.Title}}" class="logo-img">
         {{else}}
-        <span class="logo-icon">🔍</span>
+        <span class="logo-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 6 6"></path></svg></span>
         {{end}}
         {{default (t "common.search") .Config.Server.Branding.Title}}
     </a>

@@ -42,6 +42,8 @@ const STATIC_ASSETS = [
   '/static/img/icon-maskable-512.png',
   '/static/splash/iphone-1179x2556.png',
   '/static/splash/iphone-1284x2778.png',
+  '/static/screenshots/desktop.png',
+  '/static/screenshots/mobile.png',
   '/manifest.json',
   '/offline.html'
 ];
