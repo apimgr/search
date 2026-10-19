@@ -1988,6 +1988,56 @@ func TestPkgHandlerIgnoresMalformedOptionalPyPIMetadata(t *testing.T) {
 	}
 }
 
+type malformedOptionalRegistryMetadataTransport struct{}
+
+func (malformedOptionalRegistryMetadataTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	status, body := http.StatusBadGateway, `{}`
+	switch {
+	case request.URL.Host == "proxy.golang.org" && strings.HasSuffix(request.URL.Path, "/@latest"):
+		status, body = http.StatusOK, `{"Version":"v1.2.3","Time":{}}`
+	case request.URL.Host == "crates.io" && request.URL.Path == "/api/v1/crates/sample":
+		status, body = http.StatusOK, `{"crate":{"id":"sample","name":"sample","max_version":"1.2.3","description":{},"license":[],"repository":false,"downloads":{},"updated_at":[]}}`
+	case request.URL.Host == "rubygems.org" && strings.HasSuffix(request.URL.Path, ".json"):
+		status, body = http.StatusOK, `{"name":"sample","version":"1.2.3","info":{},"version_created_at":[],"licenses":["MIT",{}," "],"project_uri":false,"source_code_uri":{},"downloads":{},"dependencies":{"runtime":[{"name":"one"},{"name":{}},{}]}}`
+	}
+	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+}
+
+func TestPkgHandlersIgnoreMalformedOptionalGoCratesAndRubyGemMetadata(t *testing.T) {
+	packageDownloadsCache.Lock()
+	delete(packageDownloadsCache.entries, "crates:sample")
+	packageDownloadsCache.Unlock()
+	tests := []struct {
+		name, term, version string
+	}{
+		{name: "Go module", term: "go/example.com/sample", version: "v1.2.3"},
+		{name: "crates.io", term: "crate/sample", version: "1.2.3"},
+		{name: "RubyGems", term: "gem/sample", version: "1.2.3"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := NewPkgHandler()
+			handler.client = &http.Client{Transport: malformedOptionalRegistryMetadataTransport{}}
+			answer, err := handler.HandleDirectQuery(context.Background(), test.term)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if answer.Data["version"] != test.version {
+				t.Fatalf("malformed optional metadata discarded package identity: %#v", answer.Data)
+			}
+			if answer.Data["updated"] != nil {
+				t.Errorf("malformed update metadata was retained: %#v", answer.Data["updated"])
+			}
+			if test.name == "crates.io" && (answer.Data["downloads"] != nil || answer.Data["license"] != nil || answer.Data["repository"] != nil) {
+				t.Errorf("malformed crate metadata was retained: %#v", answer.Data)
+			}
+			if test.name == "RubyGems" && (answer.Data["downloads"] != nil || answer.Data["dependencies"] != 1 || answer.Data["license"] != "MIT") {
+				t.Errorf("malformed gem metadata was not isolated: %#v", answer.Data)
+			}
+		})
+	}
+}
+
 type npmOptionalFailureTransport struct{}
 
 func (npmOptionalFailureTransport) RoundTrip(request *http.Request) (*http.Response, error) {

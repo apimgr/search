@@ -382,7 +382,7 @@ Remaining verified gaps:
 
 crates.io and RubyGems now omit malformed negative lifetime download totals as unavailable metadata rather than rendering the invalid values; regression tests cover both registry responses.
 
-npm package details retain valid name/version data when optional description, timestamp, license, repository, README, or dependency fields have malformed types. Invalid optional values are omitted; offline handler coverage exercises the malformed metadata together.
+npm package details retain valid name/version data when optional description, timestamp, license, repository, README, or dependency fields have malformed types. Invalid optional values are omitted; offline handler coverage exercises the malformed metadata together. PyPI likewise isolates summary, description, license, repository, release timestamp, content type, and requirement fields. Go proxy timestamps, crates.io optional fields, and RubyGems optional details now tolerate malformed types; invalid dependency entries are skipped and repository fallback is deterministic. Offline handler fixtures verify core package identity and valid sibling metadata survive these malformed fields.
 
 The instant dictionary handler now merges every provider record so homographs and additional parts of speech remain visible, caps JSON responses at 1 MiB, and refuses redirects. Regression tests cover merged meanings, oversized bodies, and redirect rejection; the shared deterministic dictionary fixture now includes a second entry so SSR, no-JS, and browser tiers assert both records.
 

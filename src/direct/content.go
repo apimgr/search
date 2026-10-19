@@ -1664,8 +1664,8 @@ func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) 
 	modulePath := escapeGoModulePath(name)
 	apiURL := "https://proxy.golang.org/" + modulePath + "/@latest"
 	var pkg struct {
-		Version string `json:"Version"`
-		Time    string `json:"Time"`
+		Version string          `json:"Version"`
+		Time    json.RawMessage `json:"Time"`
 	}
 	if err := h.fetchPackageJSON(ctx, apiURL, &pkg); err != nil {
 		return nil, err
@@ -1700,8 +1700,10 @@ func (h *PkgHandler) fetchGo(ctx context.Context, name string) (*Answer, error) 
 		}
 	}
 	repository := goModuleRepository(name)
+	var updated string
+	decodeOptionalJSONString(pkg.Time, &updated)
 	data := map[string]interface{}{
-		"name": name, "version": pkg.Version, "updated": pkg.Time, "registry": "go",
+		"name": name, "version": pkg.Version, "updated": packageOptionalString(updated), "registry": "go",
 		"license": license, "weekly_downloads": nil, "dependencies": dependencies,
 		"repository": repository, "readme_preview": readmePreview,
 	}
@@ -1772,14 +1774,14 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 	apiURL := "https://crates.io/api/v1/crates/" + url.PathEscape(name)
 	var response struct {
 		Crate struct {
-			ID          string `json:"id"`
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			MaxVersion  string `json:"max_version"`
-			License     string `json:"license"`
-			Repository  string `json:"repository"`
-			Downloads   int    `json:"downloads"`
-			Updated     string `json:"updated_at"`
+			ID          string          `json:"id"`
+			Name        string          `json:"name"`
+			MaxVersion  string          `json:"max_version"`
+			Description json.RawMessage `json:"description"`
+			License     json.RawMessage `json:"license"`
+			Repository  json.RawMessage `json:"repository"`
+			Downloads   json.RawMessage `json:"downloads"`
+			Updated     json.RawMessage `json:"updated_at"`
 		} `json:"crate"`
 	}
 	if err := h.fetchPackageJSON(ctx, apiURL, &response); err != nil {
@@ -1790,13 +1792,14 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 		return nil, fmt.Errorf("crates.io returned incomplete package metadata")
 	}
 	var totalDownloads interface{}
-	if p.Downloads >= 0 {
-		totalDownloads = p.Downloads
+	var downloads int64
+	if json.Unmarshal(p.Downloads, &downloads) == nil && downloads >= 0 {
+		totalDownloads = downloads
 	}
 	versionURL := apiURL + "/" + url.PathEscape(p.MaxVersion)
 	var versionResponse struct {
 		Version struct {
-			ReadmePath string `json:"readme_path"`
+			ReadmePath json.RawMessage `json:"readme_path"`
 		} `json:"version"`
 	}
 	if p.MaxVersion != "" {
@@ -1812,7 +1815,8 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 		}
 	}
 	var readmePreview string
-	readmePath := versionResponse.Version.ReadmePath
+	var readmePath string
+	decodeOptionalJSONString(versionResponse.Version.ReadmePath, &readmePath)
 	if readmePath != "" && strings.HasPrefix(readmePath, "/api/v1/crates/") {
 		if readmeHTML, err := h.fetchPackageText(ctx, "https://crates.io"+readmePath, 1<<20); err == nil {
 			if document, err := xhtml.Parse(strings.NewReader(readmeHTML)); err == nil {
@@ -1824,15 +1828,24 @@ func (h *PkgHandler) fetchCrates(ctx context.Context, name string) (*Answer, err
 	if count, err := h.fetchCratesWeeklyDownloads(ctx, p.Name); err == nil {
 		weeklyDownloads = count
 	}
+	var description, license, repository, updated string
+	decodeOptionalJSONString(p.Description, &description)
+	decodeOptionalJSONString(p.License, &license)
+	decodeOptionalJSONString(p.Repository, &repository)
+	decodeOptionalJSONString(p.Updated, &updated)
 	data := map[string]interface{}{
-		"name": p.Name, "version": p.MaxVersion, "license": p.License,
+		"name": p.Name, "version": p.MaxVersion, "license": packageOptionalString(license),
 		"downloads": totalDownloads, "weekly_downloads": weeklyDownloads, "dependencies": dependencies,
-		"updated": p.Updated, "repository": p.Repository, "readme_preview": readmePreview,
+		"updated": packageOptionalString(updated), "repository": packageOptionalString(repository), "readme_preview": readmePreview,
 		"registry": "crates.io",
 	}
-	return &Answer{Type: AnswerTypePkg, Term: name, Title: p.Name, Description: p.Description,
-		Content: formatPkgContentWithDetails(LangFromContext(ctx), "crates.io", p.Name, p.Description, p.MaxVersion, p.License, "cargo add "+p.Name, data), Source: "crates.io",
-		SourceURL: "https://crates.io/crates/" + url.PathEscape(p.ID), Data: data}, nil
+	crateID := p.ID
+	if crateID == "" {
+		crateID = p.Name
+	}
+	return &Answer{Type: AnswerTypePkg, Term: name, Title: p.Name, Description: description,
+		Content: formatPkgContentWithDetails(LangFromContext(ctx), "crates.io", p.Name, description, p.MaxVersion, license, "cargo add "+p.Name, data), Source: "crates.io",
+		SourceURL: "https://crates.io/crates/" + url.PathEscape(crateID), Data: data}, nil
 }
 
 func (h *PkgHandler) fetchCratesWeeklyDownloads(ctx context.Context, name string) (int64, error) {
@@ -1883,19 +1896,15 @@ func (h *PkgHandler) fetchCratesWeeklyDownloads(ctx context.Context, name string
 func (h *PkgHandler) fetchRubyGem(ctx context.Context, name string) (*Answer, error) {
 	apiURL := "https://rubygems.org/api/v1/gems/" + url.PathEscape(name) + ".json"
 	var p struct {
-		Name           string   `json:"name"`
-		Info           string   `json:"info"`
-		Version        string   `json:"version"`
-		VersionCreated string   `json:"version_created_at"`
-		Licenses       []string `json:"licenses"`
-		ProjectURI     string   `json:"project_uri"`
-		SourceCodeURI  string   `json:"source_code_uri"`
-		Downloads      int      `json:"downloads"`
-		Dependencies   struct {
-			Runtime []struct {
-				Name string `json:"name"`
-			} `json:"runtime"`
-		} `json:"dependencies"`
+		Name           string          `json:"name"`
+		Version        string          `json:"version"`
+		Info           json.RawMessage `json:"info"`
+		VersionCreated json.RawMessage `json:"version_created_at"`
+		Licenses       json.RawMessage `json:"licenses"`
+		ProjectURI     json.RawMessage `json:"project_uri"`
+		SourceCodeURI  json.RawMessage `json:"source_code_uri"`
+		Downloads      json.RawMessage `json:"downloads"`
+		Dependencies   json.RawMessage `json:"dependencies"`
 	}
 	if err := h.fetchPackageJSON(ctx, apiURL, &p); err != nil {
 		return nil, err
@@ -1904,12 +1913,31 @@ func (h *PkgHandler) fetchRubyGem(ctx context.Context, name string) (*Answer, er
 		return nil, fmt.Errorf("RubyGems returned incomplete package metadata")
 	}
 	var totalDownloads interface{}
-	if p.Downloads >= 0 {
-		totalDownloads = p.Downloads
+	var downloads int64
+	if json.Unmarshal(p.Downloads, &downloads) == nil && downloads >= 0 {
+		totalDownloads = downloads
 	}
 	var runtimeDependencies interface{}
-	if p.Dependencies.Runtime != nil {
-		runtimeDependencies = len(p.Dependencies.Runtime)
+	var dependencyDetails struct {
+		Runtime json.RawMessage `json:"runtime"`
+	}
+	_ = json.Unmarshal(p.Dependencies, &dependencyDetails)
+	var runtimeDependenciesRaw []json.RawMessage
+	if json.Unmarshal(dependencyDetails.Runtime, &runtimeDependenciesRaw) == nil && len(runtimeDependenciesRaw) > 0 {
+		validCount := 0
+		for _, rawDependency := range runtimeDependenciesRaw {
+			var dependency struct {
+				Name json.RawMessage `json:"name"`
+			}
+			if json.Unmarshal(rawDependency, &dependency) == nil {
+				var dependencyName string
+				decodeOptionalJSONString(dependency.Name, &dependencyName)
+				if strings.TrimSpace(dependencyName) != "" {
+					validCount++
+				}
+			}
+		}
+		runtimeDependencies = validCount
 	}
 	var readmePreview interface{}
 	readmeCacheKey := "rubygems:" + strings.ToLower(p.Name) + "@" + p.Version
@@ -1924,14 +1952,34 @@ func (h *PkgHandler) fetchRubyGem(ctx context.Context, name string) (*Answer, er
 			}
 		}
 	}
+	var info, versionCreated, projectURI, sourceCodeURI string
+	decodeOptionalJSONString(p.Info, &info)
+	decodeOptionalJSONString(p.VersionCreated, &versionCreated)
+	decodeOptionalJSONString(p.ProjectURI, &projectURI)
+	decodeOptionalJSONString(p.SourceCodeURI, &sourceCodeURI)
+	var rawLicenses []json.RawMessage
+	_ = json.Unmarshal(p.Licenses, &rawLicenses)
+	licenses := make([]string, 0, len(rawLicenses))
+	for _, rawLicense := range rawLicenses {
+		var license string
+		decodeOptionalJSONString(rawLicense, &license)
+		if strings.TrimSpace(license) != "" {
+			licenses = append(licenses, license)
+		}
+	}
+	licenseText := strings.Join(licenses, ", ")
+	repository := sourceCodeURI
+	if repository == "" {
+		repository = projectURI
+	}
 	data := map[string]interface{}{
-		"name": p.Name, "version": p.Version, "license": strings.Join(p.Licenses, ", "),
-		"updated": p.VersionCreated, "downloads": totalDownloads, "weekly_downloads": nil,
-		"dependencies": runtimeDependencies, "repository": p.SourceCodeURI, "readme_preview": readmePreview,
+		"name": p.Name, "version": p.Version, "license": packageOptionalString(licenseText),
+		"updated": packageOptionalString(versionCreated), "downloads": totalDownloads, "weekly_downloads": nil,
+		"dependencies": runtimeDependencies, "repository": packageOptionalString(repository), "readme_preview": readmePreview,
 		"registry": "rubygems",
 	}
-	return &Answer{Type: AnswerTypePkg, Term: name, Title: p.Name, Description: p.Info,
-		Content: formatPkgContentWithDetails(LangFromContext(ctx), "RubyGems", p.Name, p.Info, p.Version, strings.Join(p.Licenses, ", "), "gem install "+p.Name, data), Source: "RubyGems",
+	return &Answer{Type: AnswerTypePkg, Term: name, Title: p.Name, Description: info,
+		Content: formatPkgContentWithDetails(LangFromContext(ctx), "RubyGems", p.Name, info, p.Version, licenseText, "gem install "+p.Name, data), Source: "RubyGems",
 		SourceURL: "https://rubygems.org/gems/" + url.PathEscape(p.Name), Data: data}, nil
 }
 
