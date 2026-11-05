@@ -17,6 +17,26 @@ Default location:
 
 The file is auto-generated with defaults on first run. There is no admin web UI — all configuration is file-only.
 
+### Reddit Search
+
+Reddit search uses Reddit's OAuth API and is disabled by default. To enable it,
+register an application with Reddit and configure its credentials and your
+Reddit username in the top-level `engines` section:
+
+```yaml
+engines:
+  reddit:
+    enabled: true
+    client_id: ""
+    client_secret: ""
+    contact_username: ""
+```
+
+The username is sent in the API User-Agent as Reddit's contact identifier.
+Reddit API access is subject to Reddit's terms; the free API allowance is for
+eligible non-commercial use, and commercial use requires a separate agreement.
+Search requests use the authenticated API only.
+
 ### Server Settings
 
 ```yaml

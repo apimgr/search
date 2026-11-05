@@ -3182,6 +3182,11 @@ func TestRedditSearch(t *testing.T) {
 	defer server.Close()
 
 	engine := NewReddit()
+	engine.GetConfig().Settings["client_id"] = "test-client"
+	engine.GetConfig().Settings["client_secret"] = "test-secret"
+	engine.GetConfig().Settings["contact_username"] = "test-operator"
+	engine.accessToken = "test-token"
+	engine.tokenExpiry = time.Now().Add(time.Hour)
 	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

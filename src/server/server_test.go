@@ -3188,9 +3188,10 @@ func TestApplyEngineCredentialsSetsSettings(t *testing.T) {
 			APIKey: "gh-token",
 		},
 		"reddit": {
-			ClientID:     "cid",
-			ClientSecret: "csecret",
-			ContactEmail: "ops@example.com",
+			ClientID:        "cid",
+			ClientSecret:    "csecret",
+			ContactEmail:    "ops@example.com",
+			ContactUsername: "operator",
 		},
 	}
 
@@ -3216,6 +3217,9 @@ func TestApplyEngineCredentialsSetsSettings(t *testing.T) {
 	}
 	if got := rd.GetConfig().GetSetting("contact_email"); got != "ops@example.com" {
 		t.Errorf("reddit contact_email = %q, want %q", got, "ops@example.com")
+	}
+	if got := rd.GetConfig().GetSetting("contact_username"); got != "operator" {
+		t.Errorf("reddit contact_username = %q, want %q", got, "operator")
 	}
 }
 

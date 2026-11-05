@@ -15,7 +15,7 @@ import (
 
 // yahooRoundTripper is a dedicated http.RoundTripper for the Yahoo engine
 // only. Yahoo's edge blocks requests by JA3 TLS ClientHello fingerprint
-// regardless of HTTP headers/User-Agent (see TODO.AI.md), so every request
+// regardless of HTTP headers/User-Agent, so every request
 // is sent over a fresh TLS connection whose ClientHello is produced by utls
 // (spoofing a real Chrome fingerprint) instead of Go's stdlib crypto/tls.
 // Every other engine keeps using SharedTransport and the stock crypto/tls

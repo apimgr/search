@@ -23,9 +23,9 @@ official_site:    https://scour.li
 
 ### Product scope & non-goals
 
-`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha, Qwant, Mojeek, and Startpage are not implemented as search engines — Wolfram Alpha's page is JS-rendered with no open API without a key, Qwant's public API is hard-blocked by DataDome anti-bot (403 CAPTCHA on every request), Mojeek returns an explicit bot-block 403 and only offers a paid commercial Search API, and Startpage serves an Anubis proof-of-work anti-bot challenge page with no public API at all; all four were removed entirely rather than kept as dead code, per `TODO.AI.md`.
+`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha, Qwant, Mojeek, and Startpage are not implemented as search engines — Wolfram Alpha's page is JS-rendered with no open API without a key, Qwant's public API is hard-blocked by DataDome anti-bot (403 CAPTCHA on every request), Mojeek returns an explicit bot-block 403 and only offers a paid commercial Search API, and Startpage serves an Anubis proof-of-work anti-bot challenge page with no public API at all; all four were removed entirely rather than kept as dead code.
 
-Live testing (2026-08-01/02) found Reddit hard-blocked in production (aggressive rate-limiting without an authenticated app) — code exists but does not currently return usable results. Yahoo was previously blocked at the TLS/JA3 fingerprint level; this has since been fixed via a `utls`-based custom transport (see `TODO.AI.md`). See `TODO.AI.md` for the pending product decision on Reddit.
+Reddit search uses its OAuth API and requires a registered Reddit application, its client ID and secret, and the operator's Reddit username in `server.yml`. The operator is responsible for eligibility under Reddit's API terms; the current free API allowance is limited to eligible non-commercial use, and commercial use requires a separate Reddit agreement. Reddit search is disabled by default until those settings are configured. Yahoo uses a `utls`-based custom transport to handle its TLS fingerprint requirements.
 
 **Non-goals:**
 - No proxying through other metasearch engines — we hit primary sources directly.
@@ -2193,10 +2193,10 @@ Primary engines with their own indexes - no proxies or metasearch:
 **Not included** (metasearch only - we go direct):
 - Ecosia (Bing-powered)
 - SearXNG (metasearch)
-- Mojeek (bot-blocked, paid-API-only — removed entirely, see `TODO.AI.md`)
-- Startpage (Anubis PoW anti-bot challenge, no public API — removed entirely, see `TODO.AI.md`)
+- Mojeek (bot-blocked, paid-API-only — removed entirely)
+- Startpage (Anubis PoW anti-bot challenge, no public API — removed entirely)
 
-**Note**: Reddit code exists as an alternative access path but is currently non-functional in production — its public JSON endpoints are aggressively rate-limited/blocked without an authenticated app. Yahoo was previously blocked at the TLS/JA3 fingerprint level but this has since been fixed via a `utls`-based custom transport. See `TODO.AI.md` for the pending decision on Reddit.
+**Note**: Reddit search requires operator-configured OAuth credentials and a Reddit username; it is disabled by default. It uses Reddit's authenticated API only and does not fall back to anonymous public endpoints. Yahoo uses a `utls`-based custom transport to handle its TLS fingerprint requirements.
 
 #### Specialized Engines
 | Engine | Category | Notes |
@@ -2204,7 +2204,7 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Wikipedia | web, instant | Instant answers |
 | YouTube | videos | Video search |
 | PeerTube | videos | Public search of PeerTube.TV videos and same-origin MP4/WebM preview clips for videos hosted on that instance; no account or API key required |
-| Reddit | social | **Hard-blocked in production** — public JSON endpoints aggressively rate-limited without an authenticated app (see `TODO.AI.md`) |
+| Reddit | social | OAuth API; requires an app client ID, client secret, and operator Reddit username. Disabled until configured; subject to Reddit API terms. |
 | StackOverflow | it | Programming Q&A |
 | GitHub | it | Code/repositories |
 | Hacker News | it, news | Tech news |
@@ -2212,7 +2212,7 @@ Primary engines with their own indexes - no proxies or metasearch:
 | PubMed | science | Medical research |
 | OpenStreetMap | maps | Open map data |
 
-**Not implemented**: Wolfram Alpha (page is JS-rendered with no open API without a key) and Qwant (public API is hard-blocked by DataDome anti-bot, 403 CAPTCHA on every request) — both removed entirely rather than kept as dead/stub code; see `TODO.AI.md`.
+**Not implemented**: Wolfram Alpha (page is JS-rendered with no open API without a key) and Qwant (public API is hard-blocked by DataDome anti-bot, 403 CAPTCHA on every request) — both removed entirely rather than kept as dead/stub code.
 
 #### Instant Answer Data
 | Type | Source | Update Frequency |

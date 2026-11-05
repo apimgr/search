@@ -658,6 +658,9 @@ func applyEngineCredentials(registry *engine.Registry, engines map[string]config
 		if ov.ContactEmail != "" {
 			mc.Settings["contact_email"] = ov.ContactEmail
 		}
+		if ov.ContactUsername != "" {
+			mc.Settings["contact_username"] = ov.ContactUsername
+		}
 	}
 }
 

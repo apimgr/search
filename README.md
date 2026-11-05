@@ -277,7 +277,7 @@ Web: Google, Bing, DuckDuckGo, Yahoo, Brave Search, Wikipedia
 
 Video: YouTube, PeerTube
 
-News and Social: Reddit
+News and Social: Reddit (OAuth credentials required; disabled by default)
 
 Code: GitHub, Stack Overflow
 

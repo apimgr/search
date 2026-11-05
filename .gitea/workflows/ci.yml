@@ -84,6 +84,28 @@ jobs:
     if: gitea.event_name != 'schedule'
     needs: [test, lint]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -105,6 +127,9 @@ jobs:
           fi
 
       - name: Build binaries
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           go mod download
           go run ./src/cmd/apigen
@@ -124,15 +149,11 @@ jobs:
             -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-          GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
-            -ldflags "$LDFLAGS" -o /tmp/search-linux-amd64 ./src
-          GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
-            -ldflags "$LDFLAGS" -o /tmp/search-linux-arm64 ./src
+          go build -buildvcs=false -trimpath \
+            -ldflags "$LDFLAGS" -o "/tmp/search-${GOOS}-${GOARCH}${{ matrix.ext }}" ./src
           if [ -d src/client ]; then
-            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui \
-              -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-amd64 ./src/client
-            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui \
-              -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-arm64 ./src/client
+            go build -buildvcs=false -trimpath -tags gui \
+              -ldflags "$CLI_LDFLAGS" -o "/tmp/search-cli-${GOOS}-${GOARCH}${{ matrix.ext }}" ./src/client
           fi
           echo "Build OK"
 

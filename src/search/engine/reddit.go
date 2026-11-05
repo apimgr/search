@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -44,8 +45,7 @@ func NewReddit() *Reddit {
 	}
 }
 
-// redditListing is the shared JSON shape returned by both the public
-// old.reddit.com search endpoint and the authenticated oauth.reddit.com one.
+// redditListing is the JSON shape returned by Reddit's OAuth API.
 type redditListing struct {
 	Data struct {
 		Children []struct {
@@ -64,15 +64,11 @@ type redditListing struct {
 	} `json:"data"`
 }
 
-// userAgent returns a descriptive User-Agent for Reddit's API rules
-// (<platform>:<app ID>:<version> (by /contact)). Reddit requires a
-// descriptive, contactable UA to reduce 403/429 risk; since no Reddit
-// username is collected from the operator, an operator-configured contact
-// email is used instead when available.
+// userAgent returns the descriptive, contactable identifier required by Reddit.
 func (e *Reddit) userAgent() string {
-	contact := e.GetConfig().GetSetting("contact_email")
+	contact := e.GetConfig().GetSetting("contact_username")
 	if contact != "" {
-		return fmt.Sprintf("web:search:1.0 (by %s)", contact)
+		return fmt.Sprintf("web:search:1.0 (by u/%s)", strings.TrimPrefix(contact, "u/"))
 	}
 	return "web:search:1.0 (contact not configured)"
 }
@@ -116,7 +112,7 @@ func (e *Reddit) getAccessToken(ctx context.Context, clientID, clientSecret stri
 		TokenType   string `json:"token_type"`
 		ExpiresIn   int    `json:"expires_in"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tokenResp); err != nil {
 		return "", fmt.Errorf("failed to parse Reddit access_token response: %w", err)
 	}
 	if tokenResp.AccessToken == "" {
@@ -133,60 +129,15 @@ func (e *Reddit) getAccessToken(ctx context.Context, clientID, clientSecret stri
 func (e *Reddit) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	clientID := e.GetConfig().GetSetting("client_id")
 	clientSecret := e.GetConfig().GetSetting("client_secret")
-
-	var listing *redditListing
-	var err error
-
-	if clientID != "" && clientSecret != "" {
-		listing, err = e.searchAuthenticated(ctx, query, clientID, clientSecret)
-	} else {
-		listing, err = e.searchPublic(ctx, query)
+	if clientID == "" || clientSecret == "" || e.GetConfig().GetSetting("contact_username") == "" {
+		return nil, fmt.Errorf("Reddit search requires client_id, client_secret, and contact_username in server.yml")
 	}
+	listing, err := e.searchAuthenticated(ctx, query, clientID, clientSecret)
 	if err != nil {
 		return nil, err
 	}
 
 	return e.listingToResults(listing, query.Category), nil
-}
-
-// searchPublic queries the public old.reddit.com JSON API (avoids OAuth
-// requirement, but is aggressively rate-limited/blocked without an
-// authenticated app).
-func (e *Reddit) searchPublic(ctx context.Context, query *model.Query) (*redditListing, error) {
-	searchURL := "https://old.reddit.com/search.json"
-
-	params := url.Values{}
-	params.Set("q", query.Text)
-	params.Set("sort", "relevance")
-	params.Set("limit", "10")
-	params.Set("type", "link")
-
-	reqURL := fmt.Sprintf("%s?%s", searchURL, params.Encode())
-
-	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer closeutil.Close(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Reddit API returned status %d", resp.StatusCode)
-	}
-
-	var data redditListing
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, err
-	}
-
-	return &data, nil
 }
 
 // searchAuthenticated queries the OAuth2 app-only oauth.reddit.com API using
@@ -228,7 +179,7 @@ func (e *Reddit) searchAuthenticated(ctx context.Context, query *model.Query, cl
 	}
 
 	var data redditListing
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 5<<20)).Decode(&data); err != nil {
 		return nil, err
 	}
 

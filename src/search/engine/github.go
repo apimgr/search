@@ -58,7 +58,7 @@ func (e *GitHub) Search(ctx context.Context, query *model.Query) ([]model.Result
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	// An operator-configured token raises the rate limit from 10 req/min
-	// (unauthenticated) to 30 req/min (authenticated). See TODO.AI.md.
+	// (unauthenticated) to 30 req/min (authenticated).
 	if token := e.GetConfig().GetSetting("api_key"); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

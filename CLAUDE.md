@@ -101,5 +101,5 @@ Ask only when: a business/product decision is missing; two implementations diffe
 ## Current Project State
 
 - Last read AI.md: see session start
-- Current task: see `TODO.AI.md`
+- Current task: see `TODO.AI.md` when that backlog exists
 - Relevant PARTs: determined per task

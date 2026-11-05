@@ -22,6 +22,14 @@ type redirectToTestServer struct {
 	base string
 }
 
+func configureRedditTest(e *Reddit) {
+	e.GetConfig().Settings["client_id"] = "test-client"
+	e.GetConfig().Settings["client_secret"] = "test-secret"
+	e.GetConfig().Settings["contact_username"] = "test-operator"
+	e.accessToken = "test-token"
+	e.tokenExpiry = time.Now().Add(time.Hour)
+}
+
 func (r *redirectToTestServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	newReq := req.Clone(req.Context())
 	newReq.URL.Scheme = "http"
@@ -560,6 +568,7 @@ func TestRedditSearchSuccess(t *testing.T) {
 	defer srv.Close()
 
 	e := NewReddit()
+	configureRedditTest(e)
 	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
 
 	q := &model.Query{Text: "golang", Category: model.CategoryGeneral}
@@ -610,6 +619,7 @@ func TestRedditSearchLongSelftext(t *testing.T) {
 	defer srv.Close()
 
 	e := NewReddit()
+	configureRedditTest(e)
 	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
 
 	results, err := e.Search(context.Background(), &model.Query{Text: "test"})
@@ -629,6 +639,7 @@ func TestRedditSearchNonOK(t *testing.T) {
 	defer srv.Close()
 
 	e := NewReddit()
+	configureRedditTest(e)
 	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
 
 	_, err := e.Search(context.Background(), &model.Query{Text: "test"})
@@ -645,6 +656,7 @@ func TestRedditSearchInvalidJSON(t *testing.T) {
 	defer srv.Close()
 
 	e := NewReddit()
+	configureRedditTest(e)
 	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
 
 	_, err := e.Search(context.Background(), &model.Query{Text: "test"})
@@ -669,6 +681,7 @@ func TestRedditSearchEmpty(t *testing.T) {
 	defer srv.Close()
 
 	e := NewReddit()
+	configureRedditTest(e)
 	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
 
 	results, err := e.Search(context.Background(), &model.Query{Text: "test"})
@@ -722,7 +735,7 @@ func TestRedditSearchAuthenticatedSuccess(t *testing.T) {
 	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
 	e.GetConfig().Settings["client_id"] = "cid"
 	e.GetConfig().Settings["client_secret"] = "csecret"
-	e.GetConfig().Settings["contact_email"] = "ops@example.com"
+	e.GetConfig().Settings["contact_username"] = "operator"
 
 	results, err := e.Search(context.Background(), &model.Query{Text: "golang"})
 	if err != nil {
@@ -872,10 +885,10 @@ func TestRedditUserAgentFallback(t *testing.T) {
 		t.Errorf("expected fallback UA, got %q", ua)
 	}
 
-	e.GetConfig().Settings["contact_email"] = "ops@example.com"
+	e.GetConfig().Settings["contact_username"] = "operator"
 	ua = e.userAgent()
-	if !strings.Contains(ua, "ops@example.com") {
-		t.Errorf("expected UA to contain contact email, got %q", ua)
+	if !strings.Contains(ua, "u/operator") {
+		t.Errorf("expected UA to contain Reddit username, got %q", ua)
 	}
 }
 

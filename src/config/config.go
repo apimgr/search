@@ -1997,9 +1997,12 @@ type EngineConfig struct {
 	// authentication (e.g. reddit's oauth.reddit.com API).
 	ClientID     string `yaml:"client_id,omitempty"`
 	ClientSecret string `yaml:"client_secret,omitempty"`
-	// ContactEmail identifies the operator to engines whose usage policy requires
-	// a descriptive contact (e.g. pubmed's E-utilities email param, reddit's User-Agent).
-	ContactEmail string `yaml:"contact_email,omitempty"`
+	// ContactEmail identifies the operator to engines using a contact email
+	// (for example, PubMed's E-utilities email parameter).
+	ContactEmail    string `yaml:"contact_email,omitempty"`
+	// ContactUsername identifies the operator for services requiring a contact
+	// username in the API request, such as Reddit's User-Agent.
+	ContactUsername string `yaml:"contact_username,omitempty"`
 }
 
 // DefaultConfig returns a default configuration
@@ -2749,7 +2752,7 @@ func DefaultConfig() *Config {
 				Weight:     0.8,
 			},
 			"reddit": {
-				Enabled:    true,
+				Enabled:    false,
 				Priority:   45,
 				Categories: []string{"general", "social"},
 				Timeout:    10,
