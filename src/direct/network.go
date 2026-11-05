@@ -184,13 +184,14 @@ func formatDNSRecords(domain string, records map[string]interface{}) string {
 			}
 		case []map[string]interface{}:
 			for _, val := range v {
-				if recordType == "MX" {
+				switch recordType {
+				case "MX":
 					fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%v %s</code> <span>TTL %ss</span></td></tr>",
 						recordType, val["pref"], escapeHTML(val["host"].(string)), val["ttl"])
-				} else if recordType == "SOA" {
+				case "SOA":
 					fmt.Fprintf(&html, "<tr><td>SOA</td><td><code>%s %s</code> serial %v, refresh %v, retry %v, expire %v, minimum %v <span>TTL %ds</span></td></tr>",
 						escapeHTML(val["mname"].(string)), escapeHTML(val["rname"].(string)), val["serial"], val["refresh"], val["retry"], val["expire"], val["minimum"], val["ttl"])
-				} else {
+				default:
 					fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%s</code> <span>TTL %ss</span></td></tr>",
 						escapeHTML(recordType), escapeHTML(val["value"].(string)), val["ttl"])
 				}

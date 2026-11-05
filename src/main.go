@@ -655,7 +655,11 @@ func runServerServiceBody() {
 	// Step 21: Block until graceful shutdown completes.
 	// Per AI.md PART 7: os.Exit() belongs only in main().
 	<-shutdownDone
-	<-serverErrCh
+	if err, ok := <-serverErrCh; ok && err != nil {
+		slog.Error("Server stopped with an error", "err", err)
+		exitFunc(1)
+		return
+	}
 	exitFunc(0)
 }
 

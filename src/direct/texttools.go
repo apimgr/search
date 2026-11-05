@@ -1904,7 +1904,7 @@ func closesJavaScriptControlCondition(formatted string) bool {
 	start := len(prefix)
 	for start > 0 {
 		character := prefix[start-1]
-		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '_' || character == '$') {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '_' && character != '$' {
 			break
 		}
 		start--
@@ -1950,7 +1950,7 @@ func closesJavaScriptStatementBlock(formatted string) bool {
 	start := end
 	for start > 0 {
 		character := prefix[start-1]
-		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_') {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && character != '_' {
 			break
 		}
 		start--
