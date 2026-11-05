@@ -126,13 +126,16 @@ jobs:
             echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITEA_ENV"
           fi
 
+      - name: Generate API code
+        run: |
+          go mod download
+          go run ./src/cmd/apigen
+
       - name: Build binaries
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go mod download
-          go run ./src/cmd/apigen
           LDFLAGS="-s -w \
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
