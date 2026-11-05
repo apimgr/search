@@ -1,130 +1,63 @@
-// Package theme provides color definitions for the application
-// Per AI.md PART 17: Web Frontend
+// Package theme defines the shared semantic color palettes.
 package theme
 
-// Color represents a color value that can be used in templates and CSS
-type Color struct {
-	// Hex color code (e.g., "#bd93f9")
-	Hex string
-	// RGB value (e.g., "189, 147, 249")
-	RGB string
-	// Human-readable name
-	Name string
+// ThemePalette contains the literal web color values shared by CSS, Swagger,
+// and GraphiQL. Terminal interfaces use TerminalPalette instead.
+type ThemePalette struct {
+	Background string `json:"background"`
+	Foreground string `json:"foreground"`
+	Primary    string `json:"primary"`
+	Secondary  string `json:"secondary"`
+	Accent     string `json:"accent"`
+	Success    string `json:"success"`
+	Warning    string `json:"warning"`
+	Error      string `json:"error"`
+	Info       string `json:"info"`
+	Surface    string `json:"surface"`
+	SurfaceAlt string `json:"surface_alt"`
+	Border     string `json:"border"`
+	Muted      string `json:"muted"`
 }
 
-// Theme represents a complete color theme
-type Theme struct {
-	Name        string
-	Description string
-	IsDark      bool
-	Colors      ThemeColors
+// ThemePaletteDark is the literal dark-mode palette defined by AI.md PART 16.
+var ThemePaletteDark = ThemePalette{
+	Background: "#282a36", Foreground: "#f8f8f2",
+	Primary: "#bd93f9", Secondary: "#50fa7b", Accent: "#ff79c6",
+	Success: "#50fa7b", Warning: "#ffb86c", Error: "#ff5555", Info: "#8be9fd",
+	Surface: "#2b2d3a", SurfaceAlt: "#21222c", Border: "#44475a", Muted: "#6272a4",
 }
 
-// ThemeColors contains all color values for a theme
-type ThemeColors struct {
-	// Backgrounds
-	BGPrimary   Color
-	BGSecondary Color
-	BGTertiary  Color
-
-	// Text
-	TextPrimary   Color
-	TextSecondary Color
-	TextMuted     Color
-
-	// Accents
-	AccentPrimary   Color
-	AccentSecondary Color
-	AccentSuccess   Color
-	AccentWarning   Color
-	AccentError     Color
-	AccentInfo      Color
-
-	// UI Elements
-	BorderColor Color
-	ShadowColor Color
-	InputBG     Color
-	InputBorder Color
-	InputFocus  Color
-	LinkColor   Color
-	LinkHover   Color
+// ThemePaletteLight is the literal light-mode palette defined by AI.md PART 16.
+var ThemePaletteLight = ThemePalette{
+	Background: "#ffffff", Foreground: "#1f2328",
+	Primary: "#0969da", Secondary: "#1a7f37", Accent: "#8250df",
+	Success: "#1a7f37", Warning: "#9a6700", Error: "#d1242f", Info: "#0969da",
+	Surface: "#f6f8fa", SurfaceAlt: "#eff2f5", Border: "#d1d9e0", Muted: "#59636e",
 }
 
-// Dark is the default dark theme (Dracula-based)
-var Dark = Theme{
-	Name:        "dark",
-	Description: "Dark theme with Dracula color palette",
-	IsDark:      true,
-	Colors: ThemeColors{
-		BGPrimary:       Color{Hex: "#282a36", RGB: "40, 42, 54", Name: "Background"},
-		BGSecondary:     Color{Hex: "#44475a", RGB: "68, 71, 90", Name: "Current Line"},
-		BGTertiary:      Color{Hex: "#1e1f29", RGB: "30, 31, 41", Name: "Dark Background"},
-		TextPrimary:     Color{Hex: "#f8f8f2", RGB: "248, 248, 242", Name: "Foreground"},
-		TextSecondary:   Color{Hex: "#6272a4", RGB: "98, 114, 164", Name: "Comment"},
-		TextMuted:       Color{Hex: "#6272a4", RGB: "98, 114, 164", Name: "Muted"},
-		AccentPrimary:   Color{Hex: "#bd93f9", RGB: "189, 147, 249", Name: "Purple"},
-		AccentSecondary: Color{Hex: "#ff79c6", RGB: "255, 121, 198", Name: "Pink"},
-		AccentSuccess:   Color{Hex: "#50fa7b", RGB: "80, 250, 123", Name: "Green"},
-		AccentWarning:   Color{Hex: "#ffb86c", RGB: "255, 184, 108", Name: "Orange"},
-		AccentError:     Color{Hex: "#ff5555", RGB: "255, 85, 85", Name: "Red"},
-		AccentInfo:      Color{Hex: "#8be9fd", RGB: "139, 233, 253", Name: "Cyan"},
-		BorderColor:     Color{Hex: "#44475a", RGB: "68, 71, 90", Name: "Border"},
-		ShadowColor:     Color{Hex: "rgba(0, 0, 0, 0.3)", RGB: "0, 0, 0", Name: "Shadow"},
-		InputBG:         Color{Hex: "#44475a", RGB: "68, 71, 90", Name: "Input Background"},
-		InputBorder:     Color{Hex: "#6272a4", RGB: "98, 114, 164", Name: "Input Border"},
-		InputFocus:      Color{Hex: "#bd93f9", RGB: "189, 147, 249", Name: "Input Focus"},
-		LinkColor:       Color{Hex: "#8be9fd", RGB: "139, 233, 253", Name: "Link"},
-		LinkHover:       Color{Hex: "#bd93f9", RGB: "189, 147, 249", Name: "Link Hover"},
-	},
-}
-
-// Light is the light theme
-var Light = Theme{
-	Name:        "light",
-	Description: "Light theme for bright environments",
-	IsDark:      false,
-	Colors: ThemeColors{
-		BGPrimary:       Color{Hex: "#f8f8f2", RGB: "248, 248, 242", Name: "Background"},
-		BGSecondary:     Color{Hex: "#ffffff", RGB: "255, 255, 255", Name: "Secondary Background"},
-		BGTertiary:      Color{Hex: "#e8e8e8", RGB: "232, 232, 232", Name: "Tertiary Background"},
-		TextPrimary:     Color{Hex: "#282a36", RGB: "40, 42, 54", Name: "Text"},
-		TextSecondary:   Color{Hex: "#44475a", RGB: "68, 71, 90", Name: "Secondary Text"},
-		TextMuted:       Color{Hex: "#6272a4", RGB: "98, 114, 164", Name: "Muted Text"},
-		AccentPrimary:   Color{Hex: "#7c3aed", RGB: "124, 58, 237", Name: "Primary"},
-		AccentSecondary: Color{Hex: "#db2777", RGB: "219, 39, 119", Name: "Secondary"},
-		AccentSuccess:   Color{Hex: "#059669", RGB: "5, 150, 105", Name: "Success"},
-		AccentWarning:   Color{Hex: "#d97706", RGB: "217, 119, 6", Name: "Warning"},
-		AccentError:     Color{Hex: "#dc2626", RGB: "220, 38, 38", Name: "Error"},
-		AccentInfo:      Color{Hex: "#0284c7", RGB: "2, 132, 199", Name: "Info"},
-		BorderColor:     Color{Hex: "#e5e7eb", RGB: "229, 231, 235", Name: "Border"},
-		ShadowColor:     Color{Hex: "rgba(0, 0, 0, 0.1)", RGB: "0, 0, 0", Name: "Shadow"},
-		InputBG:         Color{Hex: "#ffffff", RGB: "255, 255, 255", Name: "Input Background"},
-		InputBorder:     Color{Hex: "#d1d5db", RGB: "209, 213, 219", Name: "Input Border"},
-		InputFocus:      Color{Hex: "#7c3aed", RGB: "124, 58, 237", Name: "Input Focus"},
-		LinkColor:       Color{Hex: "#0284c7", RGB: "2, 132, 199", Name: "Link"},
-		LinkHover:       Color{Hex: "#7c3aed", RGB: "124, 58, 237", Name: "Link Hover"},
-	},
-}
-
-// Themes is a map of all available themes
-var Themes = map[string]Theme{
-	"dark":  Dark,
-	"light": Light,
-}
-
-// GetTheme returns a theme by name, defaulting to dark if not found
-func GetTheme(name string) Theme {
-	if theme, ok := Themes[name]; ok {
-		return theme
+// GetThemePalette returns a palette by mode. Unknown modes use the dark default.
+func GetThemePalette(mode string) ThemePalette {
+	if mode == "light" {
+		return ThemePaletteLight
 	}
-	return Dark
+	return ThemePaletteDark
 }
 
-// AvailableThemes returns a list of available theme names
-func AvailableThemes() []string {
-	names := make([]string, 0, len(Themes))
-	for name := range Themes {
-		names = append(names, name)
-	}
-	return names
+// CSSPaletteVariables returns CSS custom properties for the shared palette.
+func CSSPaletteVariables(selector string, palette ThemePalette) string {
+	return selector + " {\n" +
+		"  --palette-background: " + palette.Background + ";\n" +
+		"  --palette-foreground: " + palette.Foreground + ";\n" +
+		"  --palette-primary: " + palette.Primary + ";\n" +
+		"  --palette-secondary: " + palette.Secondary + ";\n" +
+		"  --palette-accent: " + palette.Accent + ";\n" +
+		"  --palette-success: " + palette.Success + ";\n" +
+		"  --palette-warning: " + palette.Warning + ";\n" +
+		"  --palette-error: " + palette.Error + ";\n" +
+		"  --palette-info: " + palette.Info + ";\n" +
+		"  --palette-surface: " + palette.Surface + ";\n" +
+		"  --palette-surface-alt: " + palette.SurfaceAlt + ";\n" +
+		"  --palette-border: " + palette.Border + ";\n" +
+		"  --palette-muted: " + palette.Muted + ";\n" +
+		"}\n"
 }

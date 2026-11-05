@@ -2827,13 +2827,6 @@
         document.addEventListener('submit', function(e) {
             const form = e.target;
 
-            if (form.matches('.directory-scan-form')) {
-                e.preventDefault();
-                const query = (form.dataset.query || '').trim();
-                window.location.assign(form.action + '?q=' + encodeURIComponent(query));
-                return;
-            }
-
             if (form.matches('.directory-filter-form')) {
                 e.preventDefault();
                 const query = ['directory:' + (form.dataset.query || '').trim()];
@@ -3602,13 +3595,14 @@
 
             // Reset preferences
             if (e.target.id === 'reset-prefs') {
+                e.preventDefault();
                 showConfirm(t('preferences.reset_confirm_message', 'Are you sure you want to reset all preferences?'), {
                     title: t('preferences.reset_confirm_title', 'Reset Preferences'),
                     confirmText: t('common.reset', 'Reset'),
                     danger: true
                 }).then(function(confirmed) {
                     if (!confirmed) return;
-                    ['theme', 'lang', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_widget_weather_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density', 'search_pref_accent_color', 'search_pref_engines', 'search_pref_engine_order'].forEach(function(name) { clearCookie(name); });
+                    ['theme', 'lang', 'search_widgets', 'search_widget_weather_units', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density', 'search_pref_accent_color', 'search_pref_engines', 'search_pref_engine_order'].forEach(function(name) { clearCookie(name); });
                     localStorage.removeItem(BANGS_KEY);
                     localStorage.removeItem(SEARCH_HISTORY_KEY);
                     localStorage.removeItem(CUSTOM_CSS_KEY);
@@ -6497,7 +6491,7 @@
         video.src = previewURL;
         video.muted = true;
         video.autoplay = true;
-        video.loop = true;
+        video.loop = false;
         video.playsInline = true;
         video.preload = 'none';
         video.title = videoResult.querySelector('.video-title') ? videoResult.querySelector('.video-title').textContent.trim() : 'Video preview';
@@ -6513,7 +6507,15 @@
         progress.appendChild(progressFill);
         previewContainer.replaceChildren(video, progress);
         video.addEventListener('timeupdate', function() {
-            if (activePreview === videoResult) updatePreviewPosition(videoResult, video.currentTime, false);
+            if (activePreview !== videoResult) return;
+            var previewLimit = Math.max(1, Math.min(10, Number(videoResult.dataset.videoDuration) || 8));
+            if (video.currentTime >= previewLimit) {
+                video.pause();
+                video.currentTime = 0;
+                video.play().catch(function() {});
+                return;
+            }
+            updatePreviewPosition(videoResult, video.currentTime, false);
         });
 
         previewContainer.classList.add('visible');
@@ -6598,7 +6600,7 @@
         }
         var now = Date.now();
         if (lastTapResult === result && now - lastTapAt < 400) {
-            hideVideoPreview();
+            // Let the second tap follow the thumbnail link to the full video page.
             return;
         }
         event.preventDefault();

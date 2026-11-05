@@ -21,7 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/geoip"
+	"github.com/miekg/dns"
 )
 
 // ---------------------------------------------------------------------------
@@ -200,6 +202,67 @@ func TestFormatDNSRecords(t *testing.T) {
 	}
 }
 
+func TestDNSHandlerIncludesSOAAndRecordTTLs(t *testing.T) {
+	packetConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &dns.Server{PacketConn: packetConn, Handler: dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
+		response := new(dns.Msg)
+		response.SetReply(request)
+		for _, question := range request.Question {
+			switch question.Qtype {
+			case dns.TypeA:
+				record, _ := dns.NewRR(question.Name + " 300 IN A 192.0.2.20")
+				response.Answer = append(response.Answer, record)
+			case dns.TypeSOA:
+				record, _ := dns.NewRR(question.Name + " 300 IN SOA ns1.fixture.test. hostmaster.fixture.test. 2026110301 3600 600 1209600 300")
+				response.Answer = append(response.Answer, record)
+			}
+		}
+		_ = writer.WriteMsg(response)
+	})}
+	go func() { _ = server.ActivateAndServe() }()
+	t.Cleanup(func() { _ = server.Shutdown() })
+	handler := &DNSHandler{resolverAddress: packetConn.LocalAddr().String()}
+
+	answer, err := handler.HandleDirectQuery(context.Background(), "fixture.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, ok := answer.Data["records"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("DNS record data = %#v, want record map", answer.Data["records"])
+	}
+	for recordType, want := range map[string]string{"A": "192.0.2.20", "SOA": "ns1.fixture.test."} {
+		values, ok := records[recordType].([]map[string]interface{})
+		if !ok || len(values) != 1 {
+			t.Fatalf("%s records = %#v, want one value", recordType, records[recordType])
+		}
+		if values[0]["ttl"] != uint32(300) {
+			t.Errorf("%s TTL = %#v, want 300", recordType, values[0]["ttl"])
+		}
+		if recordType == "A" && values[0]["value"] != want {
+			t.Errorf("A value = %#v, want %q", values[0]["value"], want)
+		}
+		if recordType == "SOA" && values[0]["mname"] != want {
+			t.Errorf("SOA primary nameserver = %#v, want %q", values[0]["mname"], want)
+		}
+	}
+
+	soa, err := handler.HandleDirectQuery(context.Background(), "fixture.test/soa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	soaRecords := soa.Data["records"].(map[string]interface{})
+	if len(soaRecords) != 1 || soaRecords["SOA"] == nil {
+		t.Fatalf("specific SOA query records = %#v, want only SOA", soaRecords)
+	}
+	if !strings.Contains(soa.Content, "TTL 300s") || !strings.Contains(soa.Content, "2026110301") {
+		t.Errorf("DNS HTML omits TTL or SOA serial: %s", soa.Content)
+	}
+}
+
 func TestFormatWhoisData(t *testing.T) {
 	tests := []struct {
 		name string
@@ -209,12 +272,15 @@ func TestFormatWhoisData(t *testing.T) {
 		{
 			name: "full whois data",
 			data: map[string]interface{}{
-				"domain":      "example.com",
-				"created":     "1995-08-14",
-				"expires":     "2024-08-13",
-				"updated":     "2023-08-11",
-				"status":      []string{"clientDeleteProhibited"},
-				"nameservers": []string{"a.iana-servers.net"},
+				"domain":        "example.com",
+				"registrar":     "Example Registrar",
+				"registrant":    map[string]string{"name": "Public Name", "organization": "Public Org", "email": "public@example.com"},
+				"dnssec_status": "Signed",
+				"created":       "1995-08-14",
+				"expires":       "2024-08-13",
+				"updated":       "2023-08-11",
+				"status":        []string{"clientDeleteProhibited"},
+				"nameservers":   []string{"a.iana-servers.net"},
 			},
 			want: "1995-08-14",
 		},
@@ -227,11 +293,46 @@ func TestFormatWhoisData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			content := formatWhoisData("test.com", tt.data)
+			content := formatWhoisData("en", "test.com", tt.data)
 			if !strings.Contains(content, tt.want) {
 				t.Errorf("expected %q in content; got: %s", tt.want, content)
 			}
+			if tt.name == "full whois data" {
+				for _, marker := range []string{"Example Registrar", "Public Name", "Public Org", "public@example.com", "Signed"} {
+					if !strings.Contains(content, marker) {
+						t.Errorf("WHOIS content missing %q: %s", marker, content)
+					}
+				}
+			}
 		})
+	}
+}
+
+func TestWhoisHandlerRendersPublicRegistrationAndDNSSEC(t *testing.T) {
+	client := &http.Client{Transport: packageTestTransport{body: `{"ldhName":"example.test","secureDNS":{"delegationSigned":true},"entities":[{"handle":"EXAMPLE-REG","roles":["registrar"],"vcardArray":["vcard",[["fn",{},"text","Example Registrar"]]]},{"roles":["registrant"],"vcardArray":["vcard",[["fn",{},"text","Public Name"],["org",{},"text",["Public Org"]],["email",{},"text","owner@example.test"]]]}]}`}}
+	handler := &WhoisHandler{client: client}
+	answer, err := handler.HandleDirectQuery(context.Background(), "example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"Example Registrar", "Public Name", "Public Org", "owner@example.test", "DNSSEC", "Signed"} {
+		if !strings.Contains(answer.Content, marker) {
+			t.Errorf("WHOIS response missing %q: %s", marker, answer.Content)
+		}
+	}
+	if answer.Data["dnssec_status"] != "Signed" {
+		t.Errorf("DNSSEC data = %#v, want Signed", answer.Data["dnssec_status"])
+	}
+}
+
+func TestWhoisTranslationsResolveDomainPlaceholderForEveryLanguage(t *testing.T) {
+	for _, lang := range i18n.DefaultSupportedLanguages() {
+		for _, key := range []string{"direct.whois_description", "direct.whois_unavailable"} {
+			translated := strings.ReplaceAll(i18n.T(lang, key), "{domain}", "example.test")
+			if translated == key || strings.Contains(translated, "{domain}") || !strings.Contains(translated, "example.test") {
+				t.Errorf("%s translation %q = %q, want a resolved domain placeholder", lang, key, translated)
+			}
+		}
 	}
 }
 
@@ -262,6 +363,24 @@ func TestFormatResolveDataIncludesGeoIPAndResolverTimings(t *testing.T) {
 		if !strings.Contains(content, expected) {
 			t.Errorf("expected resolve output to contain %q; got: %s", expected, content)
 		}
+	}
+}
+
+func TestCertificateTransparencyLookupBoundsAndMatchesHostname(t *testing.T) {
+	client := &http.Client{Transport: packageTestTransport{body: `[{"id":123,"common_name":"example.test","name_value":"example.test\nother.test","issuer_name":"Fixture CA","not_before":"2026-01-01","not_after":"2027-01-01"},{"id":456,"common_name":"other.test","name_value":"other.test","issuer_name":"Other CA"}]`}}
+	handler := &CertHandler{ctClient: client}
+	entries, available := handler.lookupCertificateTransparency(context.Background(), "example.test")
+	if !available || len(entries) != 1 || entries[0].ID != 123 {
+		t.Fatalf("CT lookup = %#v, available=%t; want only matching example.test entry", entries, available)
+	}
+	if entries[0].Issuer != "Fixture CA" {
+		t.Errorf("CT issuer = %q, want Fixture CA", entries[0].Issuer)
+	}
+
+	oversized := strings.Repeat(" ", (1<<20)+1)
+	handler.ctClient = &http.Client{Transport: packageTestTransport{body: oversized}}
+	if entries, available := handler.lookupCertificateTransparency(context.Background(), "example.test"); available || len(entries) != 0 {
+		t.Errorf("oversized CT response = %#v, available=%t; want unavailable", entries, available)
 	}
 }
 
@@ -849,12 +968,42 @@ func TestFormatSafeContent(t *testing.T) {
 		{Name: "HTTPS", Passed: true, Details: "Uses HTTPS"},
 		{Name: "Domain TLD", Passed: false, Details: "Suspicious TLD"},
 	}
-	content := formatSafeContent("example.tk", "Suspicious", false, checks)
+	content := formatSafeContent("en", "example.tk", "Suspicious", false, checks)
 	if !strings.Contains(content, "example.tk") {
 		t.Errorf("expected domain; got: %s", content)
 	}
 	if !strings.Contains(content, "Suspicious") {
 		t.Errorf("expected rating; got: %s", content)
+	}
+}
+
+func TestFormatSafeContentUsesLocalizedLabelsAndNotes(t *testing.T) {
+	checks := localizeSafetyChecks("es", []safetyCheck{{
+		Name:    "Related Malicious Domains",
+		Details: "Related-domain intelligence is unavailable because no local domain blacklist is loaded",
+	}})
+	content := formatSafeContent("es", "example.test", i18n.T("es", "direct.unknown_rating"), false, checks)
+	for _, marker := range []string{"Seguridad de URL: example.test", "Comprobaciones de seguridad", "Nota:", "dominios relacionados"} {
+		if !strings.Contains(content, marker) {
+			t.Errorf("localized safety content missing %q: %s", marker, content)
+		}
+	}
+}
+
+func TestSafetyTranslationsResolvePlaceholdersForEveryLanguage(t *testing.T) {
+	for _, lang := range i18n.DefaultSupportedLanguages() {
+		for key, values := range map[string]map[string]string{
+			"direct.safe_title":                 {"domain": "example.test"},
+			"direct.safe_invalid_url":           {"url": "https://example.test/"},
+			"direct.safe_detail_related_match":  {"domains": "exampl3.test"},
+			"direct.safe_detail_domain_age":     {"date": "2020-01-01", "days": "100"},
+			"direct.safe_detail_redirect_chain": {"count": "2"},
+		} {
+			translated := translateSafetyText(lang, key, values)
+			if translated == key || strings.Contains(translated, "{") || strings.Contains(translated, "}") {
+				t.Errorf("%s safety translation %q = %q, want resolved localized text", lang, key, translated)
+			}
+		}
 	}
 }
 
@@ -969,6 +1118,7 @@ func (transport *archiveDateSelectionTransport) RoundTrip(request *http.Request)
 
 type archiveTodayTransport struct {
 	previewRequests int
+	timemapPath     string
 }
 
 func (transport *archiveTodayTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -976,6 +1126,7 @@ func (transport *archiveTodayTransport) RoundTrip(request *http.Request) (*http.
 	body := ""
 	switch {
 	case request.URL.Host == "archive.today" && strings.HasPrefix(request.URL.Path, "/timemap/"):
+		transport.timemapPath = request.URL.Path
 		if request.Header.Get("Accept") != "application/link-format" {
 			return nil, fmt.Errorf("missing Memento link-format Accept header")
 		}
@@ -989,6 +1140,16 @@ func (transport *archiveTodayTransport) RoundTrip(request *http.Request) (*http.
 		return nil, fmt.Errorf("unexpected Archive.today request %s", request.URL)
 	}
 	return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+}
+
+func TestArchiveTodayTimemapPreservesTargetQueryAndFragment(t *testing.T) {
+	transport := &archiveTodayTransport{}
+	handler := NewCacheHandler()
+	handler.client = &http.Client{Transport: transport}
+	handler.lookupArchiveToday(context.Background(), "https://example.com/page?x=1&y=two#section")
+	if transport.timemapPath != "/timemap/https://example.com/page?x=1&y=two#section" {
+		t.Fatalf("Archive.today timemap path = %q", transport.timemapPath)
+	}
 }
 
 func TestArchiveTodayMementoLookupAndPreview(t *testing.T) {
@@ -1376,6 +1537,17 @@ func TestSafeBrowsingReputationCheck(t *testing.T) {
 			t.Fatalf("checkGoogleSafeBrowsing() = (%v, %v), want (true, false)", known, safe)
 		}
 	})
+	for _, body := range []string{`{"matches":null}`, `{"matches":{}}`, `[]`} {
+		t.Run("malformed response "+body, func(t *testing.T) {
+			client := &http.Client{Transport: safeBrowsingTestTransport(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			})}
+			handler := &SafeHandler{client: client, apiKey: "test-key", reputationEndpoint: "https://safebrowsing.googleapis.com/v4/threatMatches:find"}
+			if known, _ := handler.checkGoogleSafeBrowsing(context.Background(), "https://example.test/"); known {
+				t.Fatalf("malformed response %s was treated as known", body)
+			}
+		})
+	}
 	t.Run("redirect is not followed with provider credentials", func(t *testing.T) {
 		calls := 0
 		client := &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
@@ -1413,6 +1585,10 @@ func TestPhishTankReputationCheck(t *testing.T) {
 		{name: "inactive match remains unknown", status: http.StatusOK, body: `{"results":{"in_database":true,"verified":"y","valid":"n"}}`},
 		{name: "rate limited remains unknown", status: http.StatusTooManyRequests, body: `{}`},
 		{name: "malformed result remains unknown", status: http.StatusOK, body: `{"results":`},
+		{name: "missing results remains unknown", status: http.StatusOK, body: `{}`},
+		{name: "missing in_database remains unknown", status: http.StatusOK, body: `{"results":{}}`},
+		{name: "invalid in_database remains unknown", status: http.StatusOK, body: `{"results":{"in_database":"false"}}`},
+		{name: "incomplete active match remains unknown", status: http.StatusOK, body: `{"results":{"in_database":true,"verified":"y"}}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1511,6 +1687,35 @@ func TestCacheHandlerCommonCrawlIndex(t *testing.T) {
 	snapshot := snapshots[0]
 	if snapshot.Source != "Common Crawl" || snapshot.Offset != 100 || snapshot.Length != 300 || !strings.HasPrefix(snapshot.Filename, "crawl-data/") {
 		t.Errorf("unexpected Common Crawl snapshot: %#v", snapshot)
+	}
+}
+
+type partialErrorReader struct {
+	data []byte
+	read bool
+}
+
+func (reader *partialErrorReader) Read(buffer []byte) (int, error) {
+	if !reader.read {
+		reader.read = true
+		return copy(buffer, reader.data), errors.New("fixture read failure")
+	}
+	return 0, errors.New("fixture read failure")
+}
+
+func TestCacheHandlerRejectsPartialCommonCrawlIndex(t *testing.T) {
+	requestCount := 0
+	client := &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		requestCount++
+		if request.URL.Path == "/collinfo.json" {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`[{"id":"CC-MAIN-2026-40"}]`)), Header: make(http.Header)}, nil
+		}
+		body := `{"timestamp":"20261001000000","url":"https://example.test/page","filename":"crawl-data/CC-MAIN-2026-40/warc/example.warc.gz","offset":"100","length":"300","status":"200"}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(&partialErrorReader{data: []byte(body)}), Header: make(http.Header)}, nil
+	})}
+	handler := &CacheHandler{client: client}
+	if snapshots := handler.lookupCommonCrawl(context.Background(), "https://example.test/page"); len(snapshots) != 0 {
+		t.Fatalf("partial Common Crawl response returned snapshots: %#v", snapshots)
 	}
 }
 
@@ -1669,6 +1874,45 @@ func TestSafeHandlerReportsRelatedDomainStatusAsUnknown(t *testing.T) {
 	t.Fatal("related-domain status was omitted from the safety report")
 }
 
+func TestSafeHandlerDoesNotReportSafeWithoutLocalThreatIntelligence(t *testing.T) {
+	originalLookup := publicDirectoryLookup
+	publicDirectoryLookup = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("8.8.8.8")}}, nil
+	}
+	t.Cleanup(func() { publicDirectoryLookup = originalLookup })
+	client := &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		body := `{}`
+		status := http.StatusOK
+		if request.URL.Host == "rdap.org" {
+			body = `{}`
+			status = http.StatusNotFound
+		}
+		return &http.Response{
+			StatusCode: status,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    request,
+		}, nil
+	})}
+	handler := &SafeHandler{
+		client:             client,
+		apiKey:             "test-key",
+		reputationEndpoint: "https://safebrowsing.googleapis.com/v4/threatMatches:find",
+	}
+	handler.SetDomainBlacklistLookup(func(string) (bool, bool) { return false, false })
+
+	answer, err := handler.HandleDirectQuery(context.Background(), "example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.Description != "Unknown" || answer.Data["safe"] != nil {
+		t.Fatalf("safety rating = %q, safe = %#v; want Unknown with no clean verdict", answer.Description, answer.Data["safe"])
+	}
+	if answer.Data["reputation_checked"] != true {
+		t.Fatalf("clean configured reputation provider was not recorded: %#v", answer.Data["reputation_checked"])
+	}
+}
+
 func TestSafeHandlerReportsConfiguredDomainBlacklist(t *testing.T) {
 	handler := NewSafeHandler()
 	handler.SetDomainBlacklistLookup(func(domain string) (bool, bool) {
@@ -1684,7 +1928,7 @@ func TestSafeHandlerReportsConfiguredDomainBlacklist(t *testing.T) {
 	}
 	for _, check := range checks {
 		if check.Name == "Known Blacklist" {
-			if !check.Known || check.Passed || !strings.Contains(check.Details, "configured local domain blacklist") {
+			if !check.Known || check.Passed || check.Details != i18n.T("en", "direct.safe_detail_blacklist_match") {
 				t.Fatalf("blacklist check = %#v, want known malicious domain", check)
 			}
 			if answer.Description != "Suspicious" {
@@ -5150,6 +5394,56 @@ func TestPythonFormatterAndMinifierPreserveEscapedTripleQuotes(t *testing.T) {
 	}
 }
 
+func TestPythonFormatterUsesSourceIndentationForDedents(t *testing.T) {
+	source := "if True:\n    x=1\ny=2"
+	formatted := beautifyPython(source)
+	if !strings.Contains(formatted, "if True:\n    x=1\ny=2") {
+		t.Fatalf("formatter changed the top-level dedent: %q", formatted)
+	}
+}
+
+func TestJavaScriptFormatterPreservesAutomaticSemicolonInsertionLineBreaks(t *testing.T) {
+	formatted := beautifyJavaScript("function f(){return\nvalue}")
+	if !strings.Contains(formatted, "return\n") {
+		t.Fatalf("formatter removed the restricted return line break: %q", formatted)
+	}
+
+	allman := allmanBraceStyle(beautifyJavaScript("const re=/a{2}/;"))
+	if !strings.Contains(allman, "/a{2}/") {
+		t.Fatalf("Allman formatting changed a regular expression: %q", allman)
+	}
+}
+
+func TestJavaScriptFormatterPreservesRegexAfterControlBlocks(t *testing.T) {
+	for _, source := range []string{
+		`if (x) /a{2}/.test(y);`,
+		`if (x) {} /a{2}/.test(y);`,
+	} {
+		formatted := beautifyJavaScript(source)
+		if !strings.Contains(formatted, `/a{2}/.test(y)`) {
+			t.Errorf("formatter changed regex literal after statement control: source=%q output=%q", source, formatted)
+		}
+	}
+}
+
+func TestSCSSBeautifierPreservesLineComments(t *testing.T) {
+	source := "// comment { still comment\n.x{color:red}"
+	formatted := beautifyStylesheet(source, true)
+	if !strings.Contains(formatted, "// comment { still comment") || !strings.Contains(formatted, ".x {") {
+		t.Fatalf("SCSS line comment changed stylesheet structure: %q", formatted)
+	}
+}
+
+func TestHTMLBeautifierPreservesInlineTextAndVoidElementNesting(t *testing.T) {
+	formatted := beautifyHTML("<p><b>a</b><i>b</i></p><div><br><span>text</span></div>")
+	if !strings.Contains(formatted, "<b>a</b><i>b</i>") {
+		t.Fatalf("formatter inserted visible whitespace between inline elements: %q", formatted)
+	}
+	if strings.Contains(formatted, "<br>\n  <span") {
+		t.Fatalf("void element incorrectly increased the indentation depth: %q", formatted)
+	}
+}
+
 func TestBeautifySupportsAdditionalIDEALanguagesAndLineCounts(t *testing.T) {
 	python := beautifyCode("def greet():\nprint('hello')", "python")
 	if !strings.Contains(python, "def greet():\n    print('hello')") {
@@ -5378,12 +5672,51 @@ func TestDirectoryHandlerScanControlExpandsTargetListing(t *testing.T) {
 	}
 }
 
-func TestDirectoryQueryFiltersApplyTypeSizeDateAndSite(t *testing.T) {
-	query, filters, err := parseDirectoryQuery("linux textbook type:documents min-size:10M after:2024-01-01 before:2024-12-31 site:edu scan:2")
+func TestDirectoryHandlerScanPagesThroughLargeListings(t *testing.T) {
+	var body strings.Builder
+	body.WriteString("<html><body>")
+	for index := 0; index < 1201; index++ {
+		fmt.Fprintf(&body, `<a href="file-%04d.bin">file-%04d.bin</a>`, index, index)
+	}
+	body.WriteString("</body></html>")
+	handler := NewDirectoryHandler()
+	handler.client = &http.Client{Transport: directoryTestTransport{body: body.String()}}
+	handler.SetSearcher(func(context.Context, string) ([]DirectoryResult, error) {
+		return []DirectoryResult{{Title: "Index of files", URL: "https://example.test/files/"}}, nil
+	})
+	answer, err := handler.HandleDirectQuery(context.Background(), "linux iso scan:1 offset:500")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if query != "linux textbook" || filters.FileType != "documents" || filters.Site != "edu" || filters.MinimumSize != 10*(1<<20) || filters.After != "2024-01-01" || filters.Before != "2024-12-31" || filters.ScanIndex != 2 {
+	results := answer.Data["results"].([]DirectoryResult)
+	if len(results) != 1 || len(results[0].Files) != 500 || results[0].ScannedFileCount != 500 || results[0].EstimatedFileCount != 1201 {
+		t.Fatalf("page metadata = %#v", results)
+	}
+	if results[0].Files[0].Name != "file-0500.bin" || results[0].Files[499].Name != "file-0999.bin" {
+		t.Fatalf("page files range = %q through %q", results[0].Files[0].Name, results[0].Files[499].Name)
+	}
+	for _, expected := range []string{"Scanned files 501–1000 of 1201", "offset%3A1000", "Load next 201 files", "Load previous 500 files"} {
+		if !strings.Contains(answer.Content, expected) {
+			t.Errorf("directory pagination content missing %q", expected)
+		}
+	}
+	query, filters, err := parseDirectoryQuery("linux scan:1 offset:1000")
+	if err != nil || query != "linux" || filters.ScanOffset != 1000 {
+		t.Fatalf("parse offset query = %q, %#v, %v", query, filters, err)
+	}
+	for _, invalid := range []string{"linux offset:500", "linux scan:1 offset:501", "linux scan:1 offset:10000"} {
+		if _, _, err := parseDirectoryQuery(invalid); err == nil {
+			t.Errorf("invalid pagination query %q was accepted", invalid)
+		}
+	}
+}
+
+func TestDirectoryQueryFiltersApplyTypeSizeDateAndSite(t *testing.T) {
+	query, filters, err := parseDirectoryQuery("linux textbook type:documents min-size:10M after:2024-01-01 before:2024-12-31 site:edu scan:2 offset:1000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if query != "linux textbook" || filters.FileType != "documents" || filters.Site != "edu" || filters.MinimumSize != 10*(1<<20) || filters.After != "2024-01-01" || filters.Before != "2024-12-31" || filters.ScanIndex != 2 || filters.ScanOffset != 1000 {
 		t.Fatalf("parsed query/filters = %q / %#v", query, filters)
 	}
 	files := []DirectoryFile{
@@ -5402,8 +5735,8 @@ func TestDirectoryQueryFiltersApplyTypeSizeDateAndSite(t *testing.T) {
 	if _, _, err := parseDirectoryQuery("linux type:unknown"); err == nil {
 		t.Error("unsupported file type filter was accepted")
 	}
-	content := formatDirectoryResults("linux textbook", "query", []DirectoryResult{{Title: "Index of files", URL: "https://example.test/files/"}}, filters)
-	for _, expected := range []string{"directory-filter-form", `action="/search"`, "directory_type", "directory_min_size", "directory_after", "directory_before", "directory_site", "directory_scan", `value="2"`, "directory-scan-form"} {
+	content := formatDirectoryResults("linux textbook", "query", []DirectoryResult{{Title: "Index of files", URL: "https://example.test/files/"}}, filters, "en")
+	for _, expected := range []string{"directory-filter-form", `action="/search"`, "directory_type", "directory_min_size", "directory_after", "directory_before", "directory_site", "directory_scan", `value="2"`, "directory-scan-link", "/search?q="} {
 		if !strings.Contains(content, expected) {
 			t.Errorf("directory filter control %q missing", expected)
 		}
@@ -5856,6 +6189,57 @@ func TestDictionaryIncludesAllEntriesAndProviderFrequency(t *testing.T) {
 	}
 	if answer.Data["frequency_per_million"] != 21.5 {
 		t.Fatalf("frequency data = %#v", answer.Data["frequency_per_million"])
+	}
+}
+
+func TestDictionaryTranslatesWordToResolvedUILanguage(t *testing.T) {
+	handler := NewDictHandler()
+	handler.translateWord = func(_ context.Context, word, targetLanguage string) (string, error) {
+		if word != "light" || targetLanguage != "es" {
+			t.Fatalf("dictionary translation request = (%q, %q), want (light, es)", word, targetLanguage)
+		}
+		return "luz", nil
+	}
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		body := `[]`
+		if request.URL.Host == "en.wiktionary.org" {
+			body = `{"en":[{"partOfSpeech":"noun","definitions":[{"definition":"A visible form of energy."}]}]}`
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+
+	answer, err := handler.HandleDirectQuery(WithLang(context.Background(), "es"), "light")
+	if err != nil {
+		t.Fatalf("HandleDirectQuery() error = %v", err)
+	}
+	if !strings.Contains(answer.Content, "dictionary-translation") || !strings.Contains(answer.Content, "luz") {
+		t.Fatalf("dictionary translation was not rendered: %s", answer.Content)
+	}
+	translations, ok := answer.Data["translations"].([]map[string]string)
+	if !ok || len(translations) != 1 || translations[0]["language"] != "es" || translations[0]["word"] != "luz" {
+		t.Fatalf("dictionary translation data = %#v", answer.Data["translations"])
+	}
+}
+
+func TestDictionaryTranslationFailurePreservesDefinitions(t *testing.T) {
+	handler := NewDictHandler()
+	handler.translateWord = func(context.Context, string, string) (string, error) {
+		return "", errors.New("translation provider unavailable")
+	}
+	handler.client = &http.Client{Transport: safeBrowsingTestTransport(func(request *http.Request) (*http.Response, error) {
+		body := `[]`
+		if request.URL.Host == "en.wiktionary.org" {
+			body = `{"en":[{"partOfSpeech":"noun","definitions":[{"definition":"A useful definition."}]}]}`
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+
+	answer, err := handler.HandleDirectQuery(WithLang(context.Background(), "fr"), "useful")
+	if err != nil {
+		t.Fatalf("translation failure discarded dictionary result: %v", err)
+	}
+	if !strings.Contains(answer.Content, "A useful definition.") || strings.Contains(answer.Content, "dictionary-translation") {
+		t.Fatalf("dictionary result after translation failure = %s", answer.Content)
 	}
 }
 

@@ -22,7 +22,7 @@ func TestDetectSystemDarkOnWindows(t *testing.T) {
 func TestGetSystemThemeOnWindows(t *testing.T) {
 	theme := GetSystemTheme()
 	// Theme should be either dark or light based on system preference
-	if theme.Name != "dark" && theme.Name != "light" {
-		t.Errorf("GetSystemTheme() on Windows returned unexpected theme: %s", theme.Name)
+	if theme != ThemePaletteDark && theme != ThemePaletteLight {
+		t.Errorf("GetSystemTheme() on Windows returned unexpected palette: %#v", theme)
 	}
 }

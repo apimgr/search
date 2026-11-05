@@ -7,7 +7,7 @@ Search provides both REST and GraphQL APIs for programmatic access.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/v1/` | — | Versioned REST API root |
-| `/healthz` | GET | Public health check |
+| `/healthz` | GET | Optional public health alias; enabled by `server.healthz.root.enabled` |
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI specification (JSON) |
 | `/api/swagger` | GET | OpenAPI specification for the current API version (JSON) |
@@ -109,11 +109,13 @@ With the image proxy enabled (the default), both `thumbnail` and `image_url`
 are signed same-origin `/image-proxy` URLs; clients should render those values
 directly instead of loading the upstream image hosts.
 
-Video results also include `duration` (seconds), `view_count`, `author`, and
-`embed_url` when YouTube supplies the corresponding metadata. `preview_url` is
-available only when a provider supplies a same-origin WebM/MP4 clip. Clients
-must reject external preview URLs and retain the static thumbnail when no
-eligible clip is present.
+Video results also include `duration` (seconds), `view_count`, and `author`.
+YouTube supplies privacy-enhanced `embed_url` metadata. PeerTube supplies a
+same-origin `preview_url` for public MP4/WebM files hosted on PeerTube.TV; the
+server fetches file metadata only for local videos and proxies bounded byte
+ranges so the browser never contacts the provider directly. Clients must reject
+external preview URLs and retain the static thumbnail when no eligible clip is
+present.
 
 ### Suggestions
 
@@ -262,7 +264,7 @@ Return the private RSS feed for an alert.
 
 ## Server Management API
 
-Server management endpoints require the operator token (`server.token` in `server.yml`).
+Most server management endpoints require the operator token (`server.token` in `server.yml`). Health checks are public and do not require a token.
 
 ### Authentication
 
@@ -270,25 +272,40 @@ Include the operator token in the Authorization header:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_OPERATOR_TOKEN" \
-  "https://search.example.com/api/v1/server/healthz"
+  "https://search.example.com/api/v1/server/scheduler/tasks"
 ```
 
 ### Health
 
 #### `GET /api/v1/server/healthz`
 
-Get server health status. This endpoint is also available publicly at `/server/healthz`.
+Get server health status. This endpoint is public and also available at
+`/server/healthz`. The root `/healthz` alias is disabled by default and can be
+enabled with `server.healthz.root.enabled`.
 
 **Response:**
 
 ```json
 {
-  "ok": true,
-  "data": {
-    "status": "healthy",
-    "version": "1.0.0",
-    "uptime": "3d 14h 22m"
-  }
+  "project": {
+    "name": "Search",
+    "tagline": "Privacy-respecting metasearch",
+    "description": ""
+  },
+  "status": "healthy",
+  "version": "1.0.0",
+  "go_version": "go1.27.0",
+  "build": {"commit": "a1b2c3d", "date": "2026-01-01T00:00:00Z"},
+  "uptime": "3d 14h 22m",
+  "mode": "production",
+  "timestamp": "2026-01-04T14:22:00Z",
+  "features": {
+    "tor": {"enabled": false, "running": false, "status": "disabled", "hostname": ""},
+    "i2p": {"enabled": false, "running": false, "status": "disabled", "hostname": "", "provider": "none"},
+    "geoip": true
+  },
+  "checks": {"database": "ok", "cache": "ok", "disk": "ok", "scheduler": "ok"},
+  "stats": {"requests_total": 0, "requests_24h": 0, "active_connections": 0}
 }
 ```
 

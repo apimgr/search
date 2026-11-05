@@ -86,7 +86,7 @@ func (o *Output) writeLine(writer io.Writer, message string) {
 
 // PrintInfo writes an informational message to stdout.
 func (o *Output) PrintInfo(msg string) {
-	o.writeLine(o.out, o.colorize(o.palette.Accent, msg))
+	o.writeLine(o.out, o.colorize(o.palette.Info, msg))
 }
 
 // PrintMuted writes a de-emphasized message to stdout.

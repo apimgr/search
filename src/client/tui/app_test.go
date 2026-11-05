@@ -10,32 +10,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/common/theme"
 )
 
 // Tests for theme color definitions
 
 func TestTUIThemeColors(t *testing.T) {
-	colors := []struct {
-		name  string
-		color lipgloss.Color
-	}{
-		{"background", CurrentTUITheme.Background},
-		{"foreground", CurrentTUITheme.Foreground},
-		{"primary", CurrentTUITheme.Primary},
-		{"secondary", CurrentTUITheme.Secondary},
-		{"accent", CurrentTUITheme.Accent},
-		{"error", CurrentTUITheme.Error},
-		{"success", CurrentTUITheme.Success},
-		{"warning", CurrentTUITheme.Warning},
-		{"muted", CurrentTUITheme.Muted},
+	if CurrentTUITheme.Foreground != lipgloss.Color(theme.TerminalPaletteDark.Foreground) ||
+		CurrentTUITheme.Primary != lipgloss.Color(theme.TerminalPaletteDark.Primary) ||
+		CurrentTUITheme.Success != lipgloss.Color(theme.TerminalPaletteDark.Success) ||
+		CurrentTUITheme.Warning != lipgloss.Color(theme.TerminalPaletteDark.Warning) ||
+		CurrentTUITheme.Error != lipgloss.Color(theme.TerminalPaletteDark.Error) ||
+		CurrentTUITheme.Accent != lipgloss.Color(theme.TerminalPaletteDark.Info) ||
+		CurrentTUITheme.Muted != lipgloss.Color(theme.TerminalPaletteDark.Muted) {
+		t.Fatalf("TUI theme did not derive from the ANSI terminal palette: %#v", CurrentTUITheme)
 	}
+}
 
-	for _, c := range colors {
-		t.Run(c.name, func(t *testing.T) {
-			if c.color == "" {
-				t.Errorf("Color %s should not be empty", c.name)
-			}
-		})
+func TestSetTUIThemeUsesTerminalPalette(t *testing.T) {
+	SetTUITheme("light")
+	if CurrentTUITheme.Primary != lipgloss.Color(theme.TerminalPaletteLight.Primary) || CurrentStyles.Title.Render("title") == "" {
+		t.Fatal("light TUI theme did not use the light terminal palette")
+	}
+	SetTUITheme("dark")
+	if CurrentTUITheme.Primary != lipgloss.Color(theme.TerminalPaletteDark.Primary) {
+		t.Fatal("dark TUI theme did not use the dark terminal palette")
 	}
 }
 

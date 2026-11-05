@@ -161,6 +161,33 @@ func TestHandlerPOST(t *testing.T) {
 	}
 }
 
+func TestUIHandlerPOSTFormEncodedReadOnlyQuery(t *testing.T) {
+	if err := InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	handler := UIHandlerWithDependencies(&config.Config{}, testGraphQLDependencies())
+	req := httptest.NewRequest(http.MethodPost, "/server/docs/graphql", strings.NewReader("query=%7B+health+%7B+status+version+%7D+%7D"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("form query status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	for _, value := range []string{`id="response"`, `&#34;data&#34;`, `&#34;status&#34;`, `&#34;version&#34;`} {
+		if !strings.Contains(rec.Body.String(), value) {
+			t.Errorf("form query page does not contain %q", value)
+		}
+	}
+
+	mutation := httptest.NewRequest(http.MethodPost, "/server/docs/graphql", strings.NewReader("query=mutation+%7B+savePreferences+%7D"))
+	mutation.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mutationResponse := httptest.NewRecorder()
+	handler(mutationResponse, mutation)
+	if mutationResponse.Code != http.StatusBadRequest {
+		t.Fatalf("form mutation status = %d, want %d", mutationResponse.Code, http.StatusBadRequest)
+	}
+}
+
 func TestHandlerGET(t *testing.T) {
 	// Initialize schema
 	if err := InitSchema(); err != nil {
@@ -679,17 +706,16 @@ func TestGetThemeDefault(t *testing.T) {
 // Additional tests for getGraphiQLThemeCSS
 
 func TestGetGraphiQLThemeCSSDefault(t *testing.T) {
-	// Test with a value that's neither "light" nor "dark" - should return dark
 	css := getGraphiQLThemeCSS("auto")
-	if css != graphiqlDarkTheme {
-		t.Error("getGraphiQLThemeCSS('auto') should return dark theme by default")
+	if !strings.Contains(css, "@media (prefers-color-scheme: light)") || !strings.Contains(css, "--palette-background: #282a36") || !strings.Contains(css, "--palette-background: #ffffff") {
+		t.Error("getGraphiQLThemeCSS('auto') should include dark defaults and light system overrides")
 	}
 }
 
 func TestGetGraphiQLThemeCSSEmptyString(t *testing.T) {
 	// Test with empty string - should return dark
 	css := getGraphiQLThemeCSS("")
-	if css != graphiqlDarkTheme {
+	if !strings.Contains(css, "--palette-background: #282a36") || !strings.Contains(css, "var(--palette-foreground)") {
 		t.Error("getGraphiQLThemeCSS('') should return dark theme by default")
 	}
 }
@@ -743,7 +769,7 @@ func TestServeGraphiQLWithDarkTheme(t *testing.T) {
 
 	body := rec.Body.String()
 	// Dark theme should have specific CSS
-	if !strings.Contains(body, "background: #282a36") {
+	if !strings.Contains(body, "--palette-background: #282a36") || !strings.Contains(body, "background: var(--palette-background)") {
 		t.Error("Dark theme should contain dark background CSS")
 	}
 }
@@ -1268,10 +1294,10 @@ func TestGetGraphiQLThemeCSSTableDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			css := getGraphiQLThemeCSS(tt.theme)
 
-			if tt.wantDark && css != graphiqlDarkTheme {
+			if tt.wantDark && !strings.Contains(css, "--palette-background: #282a36") {
 				t.Error("Expected dark theme CSS")
 			}
-			if tt.wantLight && css != graphiqlLightTheme {
+			if tt.wantLight && !strings.Contains(css, "--palette-background: #ffffff") {
 				t.Error("Expected light theme CSS")
 			}
 		})
@@ -1464,10 +1490,11 @@ func TestGraphiQLHTMLStructure(t *testing.T) {
 		"<title>Search API Explorer</title>",
 		"<body>",
 		`<textarea id="query"`,
+		`<form id="query-form" method="post" action="/server/docs/graphql">`,
+		`name="query"`,
 		`<pre id="response">`,
 		`<summary>GraphQL schema</summary>`,
-		"function runQuery()",
-		"/api/graphql",
+		"Run ▶",
 		"</html>",
 	}
 
@@ -1485,7 +1512,7 @@ func TestServeGraphiQLLanguageAttributes(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/graphql?lang=de", nil)
 	rec := httptest.NewRecorder()
 
-	serveGraphiQL(rec, req)
+	serveGraphiQL(rec, req, "Run a query to see results.")
 
 	body := rec.Body.String()
 	if !strings.Contains(body, `<html lang="de" dir="ltr">`) {

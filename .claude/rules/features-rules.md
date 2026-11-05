@@ -14,7 +14,7 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 - Ship an update path with no rollback
 
 ## CRITICAL - ALWAYS DO
-- Configure SMTP from both the config file and the API; keep WebUI notifications available at all times
+- Configure SMTP in `server.yml` and environment overrides; never mutate server configuration through an API
 - Queue email with retry logic and log every success and failure; keep templates customizable
 - Run the built-in scheduler always: backup 02:00 daily, SSL renewal 03:00 daily, GeoIP update 03:00 Sunday, session cleanup hourly — all configurable
 - Expose scheduler status via CLI and a `server.token`-protected status endpoint, plus manual task triggering from the CLI
@@ -24,7 +24,7 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 - Verify every backup after creation (checksum, decrypt, extract, DB integrity); back up database, config, and uploads
 - Honor retention settings: `max_backups` (default 1), `keep_weekly`/`keep_monthly`/`keep_yearly` (default 0)
 - Implement `--maintenance backup` and `--maintenance restore {file}` (prompting for the password when encrypted)
-- Implement `--update check`, `--update yes`, `--update branch {name}` across the stable, beta, and daily channels, notifying via `server.contact.admin`
+- Implement `--update check`, `--update yes`, `--update branch {name}` across the stable, beta, and devel channels; accept legacy channel names only as aliases and normalize them to devel
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -34,7 +34,7 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 | Default `max_backups`? | 1 | PART 21 |
 | Metrics auth? | Per-service bearer token, mandatory | PART 20 |
 | Hourly incremental backup? | Exists, disabled by default | PART 21 |
-| Update channels? | stable, beta, daily | PART 22 |
+| Update channels? | stable, beta, devel | PART 22 |
 
 ## TERMINOLOGY
 | Term | Meaning |

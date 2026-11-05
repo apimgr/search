@@ -4,9 +4,8 @@ This guide covers how to contribute to Search development.
 
 ## Prerequisites
 
-- Go 1.21 or later
 - Git
-- Docker (optional, for testing)
+- Docker (required; Go commands run in `casjaysdev/go:latest`)
 - Make
 
 ## Getting Started
@@ -21,11 +20,14 @@ cd search
 ### Build
 
 ```bash
-# Build for current platform
+# Quick current-platform development build (writes to the OS temp directory)
+make dev
+
+# Build local and all eight release platforms
 make build
 
-# Build all platforms
-make release
+# Build a versioned local binary for production testing
+make local
 
 # Build Docker image
 make docker
@@ -34,11 +36,10 @@ make docker
 ### Run in Development Mode
 
 ```bash
-# Run directly
+# Build into an OS temp directory for a quick check
 make dev
 
-# Or run the binary
-./binaries/search --mode development
+# Build outputs are disposable; use the generated `Built:` path printed by make dev.
 ```
 
 ### Run Tests
@@ -68,16 +69,16 @@ search/
 │   ├── graphql/         # GraphQL handlers
 │   ├── instant/         # Instant answers
 │   ├── logging/         # Logging system
-│   ├── models/          # Data models
+│   ├── model/           # Data models
 │   ├── scheduler/       # Task scheduler
 │   ├── search/          # Search aggregation
-│   │   ├── engines/     # Search engine implementations
-│   │   └── bangs/       # Bang command handling
+│   │   ├── engine/      # Search engine implementations
+│   │   └── bang/        # Bang command handling
 │   ├── server/          # HTTP server
 │   ├── service/         # Service management
-│   ├── tls/             # TLS/SSL handling
-│   ├── widgets/         # Dashboard widgets
-│   └── main.go          # Entry point
+│   ├── ssl/             # TLS/SSL handling
+│   ├── widget/          # Search widgets
+│   └── main.go          # Server entry point
 ├── tests/               # Integration tests
 ├── go.mod
 ├── go.sum
@@ -87,42 +88,9 @@ search/
 
 ## Adding a New Search Engine
 
-1. Create a new file in `src/search/engines/`:
-
-```go
-package engines
-
-type MyEngine struct {
-    BaseEngine
-}
-
-func NewMyEngine() *MyEngine {
-    return &MyEngine{
-        BaseEngine: BaseEngine{
-            name:       "myengine",
-            categories: []Category{CategoryGeneral},
-            enabled:    true,
-            priority:   50,
-        },
-    }
-}
-
-func (e *MyEngine) Search(ctx context.Context, query string, opts SearchOptions) ([]Result, error) {
-    // Implement search logic
-    return results, nil
-}
-```
-
-2. Register the engine in `src/search/engines/registry.go`:
-
-```go
-func DefaultRegistry() *Registry {
-    r := NewRegistry()
-    // ... existing engines ...
-    r.Register(NewMyEngine())
-    return r
-}
-```
+1. Add the implementation under `src/search/engine/` and satisfy the `search.Engine` interface in `src/search/engine.go`.
+2. Register it in `src/search/engine/registry.go` and connect any operator-configurable settings through the existing engine configuration path.
+3. Add parser tests using local fixtures in `src/search/engine/testdata/`; tests must not depend on live search providers.
 
 ## Code Style
 
@@ -133,12 +101,7 @@ func DefaultRegistry() *Registry {
 
 ### Linting
 
-Static analysis runs inside the project toolchain image, never on the host:
-
-```bash
-docker run --rm -v "$PWD:/app" -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
-  casjaysdev/go:latest sh -c 'go vet ./... && staticcheck ./...'
-```
+CI runs `go vet` and `staticcheck` inside the Go toolchain image. Run `make test` for the local Docker-based test suite.
 
 ## Testing
 
@@ -199,16 +162,15 @@ Releases are automated via GitHub Actions:
 docker build -t search:dev -f docker/Dockerfile .
 ```
 
-### Run Container
+### Build and Run the Devel Image
 
 ```bash
-docker run -p 64580:80 search:dev
-```
-
-### Docker Compose
-
-```bash
-docker compose -f docker/docker-compose.yml up -d
+docker build -t search:devel -f docker/Dockerfile.dev .
+docker run --rm --name search-dev \
+  -e MODE=development -e DEBUG=true \
+  -p 64580:80 \
+  -v search-config:/config -v search-data:/data \
+  search:devel
 ```
 
 ## Documentation

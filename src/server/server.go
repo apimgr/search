@@ -157,7 +157,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	// Apply any operator-configured engine credentials (API keys, OAuth
 	// client_id/client_secret, contact email) from server.yml onto the
 	// matching registered engine's config so they take effect at runtime.
-	applyEngineCredentials(registry, cfg.Engines)
+	applyEngineConfiguration(registry, cfg.Engines)
 
 	// Get all enabled engines (already filtered by IsEnabled())
 	enabledEngines := registry.GetEnabled()
@@ -490,6 +490,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	if err := blocklistMgr.LoadFromDisk(); err != nil {
 		slog.Warn("blocklist load from disk failed", "err", err)
 	}
+	aggregator.SetBlockedDomainLookup(blocklistMgr.IsBlockedDomain)
 
 	// Create CVE manager per AI.md PART 18.
 	dataConfig := cfg.Data
@@ -609,12 +610,31 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	return s
 }
 
+// applyEngineConfiguration applies server.yml engine selection and ranking
+// settings before the enabled-engine snapshot is passed to the aggregator.
+func applyEngineConfiguration(registry *engine.Registry, engines map[string]config.EngineConfig) {
+	for _, registered := range registry.GetAll() {
+		configured, ok := engines[registered.Name()]
+		if !ok {
+			registered.GetConfig().Enabled = false
+			continue
+		}
+
+		engineConfig := registered.GetConfig()
+		engineConfig.Enabled = configured.Enabled
+		engineConfig.Priority = configured.Priority
+		if configured.Categories != nil {
+			engineConfig.Categories = append([]string(nil), configured.Categories...)
+		}
+	}
+
+	applyEngineCredentials(registry, engines)
+}
+
 // applyEngineCredentials copies operator-configured credentials (API keys, OAuth
 // client_id/client_secret, contact email) from server.yml's `engines:` section onto
 // the matching registered engine's model.EngineConfig.Settings map, so engines that
-// support authenticated/higher-rate-limit access (github, stackoverflow, pubmed,
-// reddit, openstreetmap) can read them at search time. Engines/keys not present in cfg are left
-// untouched — this never disables or reconfigures an engine's enabled/priority state.
+// support authenticated/higher-rate-limit access can read them at search time.
 func applyEngineCredentials(registry *engine.Registry, engines map[string]config.EngineConfig) {
 	for name, ov := range engines {
 		eng, err := registry.Get(name)
@@ -1170,6 +1190,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/direct/cache-download", s.handleCacheDownload)
 	r.HandleFunc("/direct/cache-download-archive-today", s.handleArchiveTodayDownload)
 	r.HandleFunc("/direct/audio", handleDictionaryAudio)
+	r.HandleFunc("/media/preview/peertube/*", s.handlePeerTubePreview)
 	r.HandleFunc("/direct/*", s.csrfProtect(s.handleDirect))
 
 	// Autocomplete (per AI.md PART 32 line 28280)
@@ -1289,9 +1310,6 @@ func (s *Server) setupRoutes() http.Handler {
 	s.apiHandler.RegisterRoutes(r)
 
 	// GraphQL routes per AI.md PART 14
-	// GET /server/docs/graphql → GraphiQL UI (interactive explorer, POSTs to /api/graphql)
-	r.Get("/server/docs/graphql", graphqlpkg.UIHandler(s.config))
-	// POST /api/graphql → GraphQL queries (unversioned alias for current api version)
 	graphqlDependencies := graphqlpkg.Dependencies{
 		Aggregator:   s.aggregator,
 		Direct:       s.directManager,
@@ -1312,6 +1330,11 @@ func (s *Server) setupRoutes() http.Handler {
 		EngineInventory:   s.apiHandler.EngineInventory,
 		ThumbnailRewriter: s.apiHandler.RewriteThumbnail,
 	}
+	// GET /server/docs/graphql → GraphiQL explorer with native read-only query submission.
+	explorerHandler := graphqlpkg.UIHandlerWithDependencies(s.config, graphqlDependencies)
+	r.MethodFunc(http.MethodGet, "/server/docs/graphql", explorerHandler)
+	r.MethodFunc(http.MethodPost, "/server/docs/graphql", explorerHandler)
+	// POST /api/graphql → JSON GraphQL queries (unversioned alias for current API version).
 	r.Post("/api/graphql", graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies))
 	// POST /api/{api_version}/server/graphql → GraphQL queries (versioned canonical)
 	r.Post(api.APIPrefix+"/server/graphql", graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies))

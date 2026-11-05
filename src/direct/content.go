@@ -365,14 +365,35 @@ func directWikiArticleURL(rawURL, lang string) bool {
 
 // DictHandler handles dict:{word} queries
 type DictHandler struct {
-	client *http.Client
+	client        *http.Client
+	translateWord func(context.Context, string, string) (string, error)
 }
 
 // NewDictHandler creates a new dictionary handler
 func NewDictHandler() *DictHandler {
 	return &DictHandler{
-		client: newNoRedirectHTTPClient(10 * time.Second),
+		client:        newNoRedirectHTTPClient(10 * time.Second),
+		translateWord: translateDictionaryWord,
 	}
+}
+
+func translateDictionaryWord(ctx context.Context, word, targetLanguage string) (string, error) {
+	data, err := widget.NewTranslateFetcher().Fetch(ctx, map[string]string{
+		"text":        word,
+		"source_lang": "en",
+		"target_lang": targetLanguage,
+	})
+	if err != nil {
+		return "", err
+	}
+	if data == nil || data.Error != "" {
+		return "", fmt.Errorf("dictionary translation unavailable")
+	}
+	translation, ok := data.Data.(*widget.TranslateData)
+	if !ok || translation == nil {
+		return "", fmt.Errorf("dictionary translation returned an invalid response")
+	}
+	return strings.TrimSpace(translation.TranslatedText), nil
 }
 
 func (h *DictHandler) Type() AnswerType {
@@ -551,6 +572,12 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		}
 	}
 	frequency := h.fetchWordFrequency(ctx, term)
+	translatedWord := ""
+	if lang != "en" && h.translateWord != nil {
+		translationCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		translatedWord, _ = h.translateWord(translationCtx, entryWord, lang)
+		cancel()
+	}
 
 	proxyAudioURL := ""
 	if audioURL != "" {
@@ -569,13 +596,21 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	if frequency > 0 {
 		data["frequency_per_million"] = frequency
 	}
+	content := formatDictContentWithFrequency(entryWord, phonetic, audioURL, meanings, origin, frequency)
+	if translatedWord != "" {
+		data["translations"] = []map[string]string{{"language": lang, "word": translatedWord}}
+		content += fmt.Sprintf(
+			`<p class="dictionary-translation"><strong>%s:</strong> %s</p>`,
+			escapeHTML(i18n.T(lang, "direct.dictionary_translation")), escapeHTML(translatedWord),
+		)
+	}
 
 	return &Answer{
 		Type:        AnswerTypeDict,
 		Term:        term,
 		Title:       entryWord,
 		Description: fmt.Sprintf("Dictionary entry for %s", entryWord),
-		Content:     formatDictContentWithFrequency(entryWord, phonetic, audioURL, meanings, origin, frequency),
+		Content:     content,
 		Source:      "Wiktionary API",
 		SourceURL:   "https://en.wiktionary.org/api/rest_v1/",
 		Data:        data,
@@ -2883,6 +2918,7 @@ type DirectoryResult struct {
 	Description        string
 	ServerType         string          `json:"server_type,omitempty"`
 	EstimatedFileCount int             `json:"estimated_file_count,omitempty"`
+	ScannedFileCount   int             `json:"scanned_file_count,omitempty"`
 	Files              []DirectoryFile `json:"files,omitempty"`
 }
 
@@ -2893,6 +2929,7 @@ type DirectoryFilters struct {
 	After       string `json:"after,omitempty"`
 	Before      string `json:"before,omitempty"`
 	ScanIndex   int    `json:"scan_index,omitempty"`
+	ScanOffset  int    `json:"scan_offset,omitempty"`
 }
 
 type DirectorySearcher func(context.Context, string) ([]DirectoryResult, error)
@@ -3025,13 +3062,16 @@ func (h *DirectoryHandler) HandleDirectQuery(ctx context.Context, term string) (
 			continue
 		}
 		limit := 20
+		offset := 0
 		if filters.ScanIndex == index+1 {
 			limit = 500
+			offset = filters.ScanOffset
 		}
-		files, serverType, estimatedFileCount := h.scrapeDirectory(ctx, results[index].URL, limit)
+		files, serverType, estimatedFileCount, scannedFileCount := h.scrapeDirectoryPage(ctx, results[index].URL, limit, offset)
 		results[index].Files = files
 		results[index].ServerType = serverType
 		results[index].EstimatedFileCount = estimatedFileCount
+		results[index].ScannedFileCount = scannedFileCount
 		results[index].Files = filterDirectoryFiles(results[index].Files, filters)
 	}
 	data := map[string]interface{}{"term": searchTerm, "query": searchQuery, "filters": filters, "results": results}
@@ -3040,13 +3080,13 @@ func (h *DirectoryHandler) HandleDirectQuery(ctx context.Context, term string) (
 		Term:        searchTerm,
 		Title:       fmt.Sprintf("Directory Search: %s", searchTerm),
 		Description: i18n.T(lang, "direct.directory_search_description"),
-		Content:     formatDirectoryResults(searchTerm, searchQuery, results, filters),
+		Content:     formatDirectoryResults(searchTerm, searchQuery, results, filters, lang),
 		Source:      "Google, Bing, DuckDuckGo",
 		Data:        data,
 	}, nil
 }
 
-var directoryFilterPattern = regexp.MustCompile(`(?i)(?:^|\s)(type|min-size|after|before|site|scan):(\S+)`)
+var directoryFilterPattern = regexp.MustCompile(`(?i)(?:^|\s)(type|min-size|after|before|site|scan|offset):(\S+)`)
 
 func parseDirectoryQuery(term string) (string, DirectoryFilters, error) {
 	filters := DirectoryFilters{}
@@ -3086,7 +3126,16 @@ func parseDirectoryQuery(term string) (string, DirectoryFilters, error) {
 				return "", filters, fmt.Errorf("scan index must be between 1 and 3")
 			}
 			filters.ScanIndex = scanIndex
+		case "offset":
+			scanOffset, err := strconv.Atoi(value)
+			if err != nil || scanOffset < 0 || scanOffset > 9500 || scanOffset%500 != 0 {
+				return "", filters, fmt.Errorf("directory scan offset must be a multiple of 500 from 0 to 9500")
+			}
+			filters.ScanOffset = scanOffset
 		}
+	}
+	if filters.ScanOffset > 0 && filters.ScanIndex == 0 {
+		return "", filters, fmt.Errorf("directory scan offset requires a scan index")
 	}
 	query = directoryFilterPattern.ReplaceAllString(query, " ")
 	query = strings.Join(strings.Fields(query), " ")
@@ -3183,32 +3232,41 @@ func filterDirectoryFiles(files []DirectoryFile, filters DirectoryFilters) []Dir
 }
 
 func (h *DirectoryHandler) scrapeDirectory(ctx context.Context, rawURL string, limit int) ([]DirectoryFile, string, int) {
+	files, serverType, estimatedFileCount, _ := h.scrapeDirectoryPage(ctx, rawURL, limit, 0)
+	return files, serverType, estimatedFileCount
+}
+
+func (h *DirectoryHandler) scrapeDirectoryPage(ctx context.Context, rawURL string, limit, offset int) ([]DirectoryFile, string, int, int) {
 	parsed, err := validatePublicHTTPURL(rawURL)
 	if err != nil {
-		return nil, "", 0
+		return nil, "", 0, 0
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
-		return nil, "", 0
+		return nil, "", 0, 0
 	}
 	request.Header.Set("User-Agent", version.BrowserUserAgent)
 	response, err := h.client.Do(request)
 	if err != nil {
-		return nil, "", 0
+		return nil, "", 0, 0
 	}
 	defer closeutil.Close(response.Body)
 	if response.StatusCode != http.StatusOK || !strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "text/html") {
-		return nil, response.Header.Get("Server"), 0
+		return nil, response.Header.Get("Server"), 0, 0
 	}
 	document, err := xhtml.Parse(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return nil, response.Header.Get("Server"), 0
+		return nil, response.Header.Get("Server"), 0, 0
 	}
 	if limit < 1 || limit > 500 {
 		limit = 20
 	}
+	if offset < 0 || offset > 9500 || offset%500 != 0 {
+		offset = 0
+	}
 	files := make([]DirectoryFile, 0, min(limit, 20))
 	estimatedFileCount := 0
+	scannedFileCount := 0
 	var visit func(*xhtml.Node)
 	visit = func(node *xhtml.Node) {
 		if node.Type == xhtml.ElementNode && node.Data == "a" {
@@ -3229,8 +3287,9 @@ func (h *DirectoryHandler) scrapeDirectory(ctx context.Context, rawURL string, l
 				}
 				estimatedFileCount++
 				modified, size := directoryFileMetadata(node)
-				if len(files) < limit {
+				if estimatedFileCount > offset && len(files) < limit {
 					files = append(files, DirectoryFile{Name: name, URL: parsed.ResolveReference(link).String(), Size: size, Modified: modified})
+					scannedFileCount++
 				}
 			}
 		}
@@ -3239,7 +3298,7 @@ func (h *DirectoryHandler) scrapeDirectory(ctx context.Context, rawURL string, l
 		}
 	}
 	visit(document)
-	return files, truncateString(response.Header.Get("Server"), 200), estimatedFileCount
+	return files, truncateString(response.Header.Get("Server"), 200), estimatedFileCount, scannedFileCount
 }
 
 func directoryFileMetadata(link *xhtml.Node) (string, string) {
@@ -3363,36 +3422,36 @@ func isPublicDirectoryIP(ip net.IP) bool {
 	return true
 }
 
-func formatDirectoryResults(term, query string, results []DirectoryResult, filters DirectoryFilters) string {
+func formatDirectoryResults(term, query string, results []DirectoryResult, filters DirectoryFilters, lang string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"directory-content\">")
-	fmt.Fprintf(&html, "<h1>Open Directory Search: %s</h1>", escapeHTML(term))
+	fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(i18n.T(lang, "direct.directory_title", term)))
 	fmt.Fprintf(&html, "<form class=\"directory-filter-form\" method=\"get\" action=\"/search\" data-query=\"%s\">", escapeHTML(term))
 	fmt.Fprintf(&html, "<input type=\"hidden\" name=\"q\" value=\"%s\">", escapeHTML(directoryQueryString(term, DirectoryFilters{})))
-	html.WriteString("<fieldset><legend>Filter files</legend>")
-	html.WriteString("<label>File type <select name=\"directory_type\"><option value=\"\">Any</option>")
-	for _, option := range []struct{ value, label string }{{"audio", "Audio"}, {"video", "Video"}, {"documents", "Documents"}, {"archives", "Archives"}, {"images", "Images"}} {
+	fmt.Fprintf(&html, "<fieldset><legend>%s</legend>", escapeHTML(i18n.T(lang, "direct.directory_filter_files")))
+	fmt.Fprintf(&html, "<label>%s <select name=\"directory_type\"><option value=\"\">%s</option>", escapeHTML(i18n.T(lang, "direct.directory_file_type")), escapeHTML(i18n.T(lang, "direct.directory_any")))
+	for _, option := range []struct{ value, labelKey string }{{"audio", "direct.directory_audio"}, {"video", "direct.directory_video"}, {"documents", "direct.directory_documents"}, {"archives", "direct.directory_archives"}, {"images", "direct.directory_images"}} {
 		selected := ""
 		if filters.FileType == option.value {
 			selected = " selected"
 		}
-		fmt.Fprintf(&html, "<option value=\"%s\"%s>%s</option>", option.value, selected, option.label)
+		fmt.Fprintf(&html, "<option value=\"%s\"%s>%s</option>", option.value, selected, escapeHTML(i18n.T(lang, option.labelKey)))
 	}
 	html.WriteString("</select></label>")
 	minimumSize := ""
 	if filters.MinimumSize > 0 {
 		minimumSize = strconv.FormatInt(filters.MinimumSize, 10)
 	}
-	fmt.Fprintf(&html, "<label>Minimum size (bytes) <input name=\"directory_min_size\" inputmode=\"numeric\" value=\"%s\"></label>", escapeHTML(minimumSize))
-	fmt.Fprintf(&html, "<label>Modified after <input type=\"date\" name=\"directory_after\" value=\"%s\"></label>", escapeHTML(filters.After))
-	fmt.Fprintf(&html, "<label>Modified before <input type=\"date\" name=\"directory_before\" value=\"%s\"></label>", escapeHTML(filters.Before))
-	fmt.Fprintf(&html, "<label>Site <input name=\"directory_site\" value=\"%s\"></label>", escapeHTML(filters.Site))
+	fmt.Fprintf(&html, "<label>%s <input name=\"directory_min_size\" inputmode=\"numeric\" value=\"%s\"></label>", escapeHTML(i18n.T(lang, "direct.directory_minimum_size")), escapeHTML(minimumSize))
+	fmt.Fprintf(&html, "<label>%s <input type=\"date\" name=\"directory_after\" value=\"%s\"></label>", escapeHTML(i18n.T(lang, "direct.directory_modified_after")), escapeHTML(filters.After))
+	fmt.Fprintf(&html, "<label>%s <input type=\"date\" name=\"directory_before\" value=\"%s\"></label>", escapeHTML(i18n.T(lang, "direct.directory_modified_before")), escapeHTML(filters.Before))
+	fmt.Fprintf(&html, "<label>%s <input name=\"directory_site\" value=\"%s\"></label>", escapeHTML(i18n.T(lang, "direct.directory_site")), escapeHTML(filters.Site))
 	fmt.Fprintf(&html, "<input type=\"hidden\" name=\"directory_scan\" value=\"%d\">", filters.ScanIndex)
-	html.WriteString("<button type=\"submit\">Apply filters</button></fieldset></form>")
+	fmt.Fprintf(&html, "<button type=\"submit\">%s</button></fieldset></form>", escapeHTML(i18n.T(lang, "direct.directory_apply_filters")))
 	if len(results) == 0 {
-		html.WriteString("<p>No open directory listings were found.</p>")
+		fmt.Fprintf(&html, "<p>%s</p>", escapeHTML(i18n.T(lang, "direct.directory_no_listings")))
 	} else {
-		html.WriteString("<h2>Discovered listings</h2><ol>")
+		fmt.Fprintf(&html, "<h2>%s</h2><ol>", escapeHTML(i18n.T(lang, "direct.directory_discovered_listings")))
 		for index, result := range results {
 			parsed, err := url.Parse(result.URL)
 			if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
@@ -3407,51 +3466,69 @@ func formatDirectoryResults(term, query string, results []DirectoryResult, filte
 				fmt.Fprintf(&html, "<p>%s</p>", escapeHTML(result.Description))
 			}
 			if result.ServerType != "" || result.EstimatedFileCount > 0 {
-				html.WriteString("<p class=\"directory-metadata\">Directory metadata: ")
+				fmt.Fprintf(&html, "<p class=\"directory-metadata\">%s ", escapeHTML(i18n.T(lang, "direct.directory_metadata")))
 				metadata := make([]string, 0, 2)
 				if result.ServerType != "" {
-					metadata = append(metadata, "Server: "+escapeHTML(result.ServerType))
+					metadata = append(metadata, escapeHTML(i18n.T(lang, "direct.directory_server", result.ServerType)))
 				}
 				if result.EstimatedFileCount > 0 {
-					metadata = append(metadata, fmt.Sprintf("Estimated files: %d", result.EstimatedFileCount))
+					metadata = append(metadata, escapeHTML(i18n.T(lang, "direct.directory_estimated_files", result.EstimatedFileCount)))
 				}
 				html.WriteString(strings.Join(metadata, " · "))
 				html.WriteString("</p>")
 			}
-			if index < 3 {
+			if index < 3 && filters.ScanIndex != index+1 {
 				scanFilters := filters
 				scanFilters.ScanIndex = index + 1
+				scanFilters.ScanOffset = 0
 				scanQuery := directoryQueryString(term, scanFilters)
-				fmt.Fprintf(&html, "<form class=\"directory-scan-form\" method=\"get\" action=\"/search\" data-query=\"%s\">", escapeHTML(scanQuery))
-				fmt.Fprintf(&html, "<input type=\"hidden\" name=\"q\" value=\"%s\">", escapeHTML(scanQuery))
-				html.WriteString("<button type=\"submit\">Scan directory</button></form>")
+				fmt.Fprintf(&html, "<a class=\"button directory-scan-link\" href=\"/search?q=%s\">%s</a>", url.QueryEscape(scanQuery), escapeHTML(i18n.T(lang, "direct.directory_scan")))
 			}
-			if len(result.Files) > 0 {
-				html.WriteString("<ul class=\"directory-files\">")
-				for _, file := range result.Files {
-					fmt.Fprintf(&html, "<li><a href=\"%s\" rel=\"nofollow noopener\">%s</a>", escapeHTML(file.URL), escapeHTML(file.Name))
-					if file.Size != "" || file.Modified != "" {
-						html.WriteString(" <span class=\"directory-file-metadata\">")
-						metadata := make([]string, 0, 2)
-						if file.Size != "" {
-							metadata = append(metadata, escapeHTML(file.Size))
-						}
-						if file.Modified != "" {
-							metadata = append(metadata, escapeHTML(file.Modified))
-						}
-						html.WriteString(strings.Join(metadata, " · "))
-						html.WriteString("</span>")
+			if len(result.Files) > 0 || (filters.ScanIndex == index+1 && result.ScannedFileCount > 0) {
+				if filters.ScanIndex == index+1 {
+					first := filters.ScanOffset + 1
+					last := filters.ScanOffset + result.ScannedFileCount
+					fmt.Fprintf(&html, "<p class=\"directory-file-range\">%s</p>", escapeHTML(i18n.T(lang, "direct.directory_file_range", first, last, result.EstimatedFileCount)))
+					if filters.ScanOffset > 0 {
+						previousFilters := filters
+						previousFilters.ScanOffset = max(0, filters.ScanOffset-500)
+						previousQuery := directoryQueryString(term, previousFilters)
+						fmt.Fprintf(&html, "<a class=\"button directory-page-link\" data-page-direction=\"previous\" href=\"/search?q=%s\">%s</a>", url.QueryEscape(previousQuery), escapeHTML(i18n.T(lang, "direct.directory_previous_files", min(500, filters.ScanOffset))))
 					}
-					html.WriteString("</li>")
+					if filters.ScanOffset+result.ScannedFileCount < result.EstimatedFileCount && filters.ScanOffset+result.ScannedFileCount <= 9500 {
+						nextFilters := filters
+						nextFilters.ScanOffset += result.ScannedFileCount
+						nextQuery := directoryQueryString(term, nextFilters)
+						fmt.Fprintf(&html, "<a class=\"button directory-page-link\" data-page-direction=\"next\" href=\"/search?q=%s\">%s</a>", url.QueryEscape(nextQuery), escapeHTML(i18n.T(lang, "direct.directory_next_files", min(500, result.EstimatedFileCount-filters.ScanOffset-result.ScannedFileCount))))
+					}
 				}
-				html.WriteString("</ul>")
+				if len(result.Files) > 0 {
+					html.WriteString("<ul class=\"directory-files\">")
+					for _, file := range result.Files {
+						fmt.Fprintf(&html, "<li><a href=\"%s\" rel=\"nofollow noopener\">%s</a>", escapeHTML(file.URL), escapeHTML(file.Name))
+						if file.Size != "" || file.Modified != "" {
+							html.WriteString(" <span class=\"directory-file-metadata\">")
+							metadata := make([]string, 0, 2)
+							if file.Size != "" {
+								metadata = append(metadata, escapeHTML(file.Size))
+							}
+							if file.Modified != "" {
+								metadata = append(metadata, escapeHTML(file.Modified))
+							}
+							html.WriteString(strings.Join(metadata, " · "))
+							html.WriteString("</span>")
+						}
+						html.WriteString("</li>")
+					}
+					html.WriteString("</ul>")
+				}
 			}
 			html.WriteString("</li>")
 		}
 		html.WriteString("</ol>")
 	}
-	fmt.Fprintf(&html, "<details><summary>Search query</summary><pre><code>%s</code></pre></details>", escapeHTML(query))
-	html.WriteString("<p class=\"note\">Results link to publicly accessible servers. Respect copyright and terms of use.</p></div>")
+	fmt.Fprintf(&html, "<details><summary>%s</summary><pre><code>%s</code></pre></details>", escapeHTML(i18n.T(lang, "direct.directory_search_query")), escapeHTML(query))
+	fmt.Fprintf(&html, "<p class=\"note\">%s</p></div>", escapeHTML(i18n.T(lang, "direct.directory_public_note")))
 	return html.String()
 }
 
@@ -3474,6 +3551,9 @@ func directoryQueryString(term string, filters DirectoryFilters) string {
 	}
 	if filters.ScanIndex > 0 {
 		query += " scan:" + strconv.Itoa(filters.ScanIndex)
+	}
+	if filters.ScanOffset > 0 {
+		query += " offset:" + strconv.Itoa(filters.ScanOffset)
 	}
 	return query
 }

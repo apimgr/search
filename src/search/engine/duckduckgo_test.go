@@ -652,6 +652,12 @@ func TestDuckDuckGoSearchImagesWithMockVQD(t *testing.T) {
 	if results[0].Title != "Test Image" {
 		t.Errorf("Title = %q, want %q", results[0].Title, "Test Image")
 	}
+	if results[0].ImageURL != "https://example.com/img.jpg" || results[0].Thumbnail != "https://example.com/thumb.jpg" {
+		t.Errorf("image URLs = (%q, %q), want full image and thumbnail URLs", results[0].ImageURL, results[0].Thumbnail)
+	}
+	if results[0].ImageWidth != 800 || results[0].ImageHeight != 600 || results[0].ImageFormat != "jpg" {
+		t.Errorf("image metadata = %dx%d %q, want 800x600 jpg", results[0].ImageWidth, results[0].ImageHeight, results[0].ImageFormat)
+	}
 }
 
 // TestDuckDuckGoSearchVideosStatusError verifies that a non-200 response from

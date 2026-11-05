@@ -1,7 +1,7 @@
 # nginx proxy address - http://172.17.0.1:64580
 # search - development
 
-name: search-dev
+name: search
 
 x-logging: &default-logging
   options:
@@ -37,9 +37,9 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - search-dev
+      - search
 
 networks:
-  search-dev:
-    name: search-dev
+  search:
+    name: search
     external: false

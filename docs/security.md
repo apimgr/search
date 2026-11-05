@@ -191,11 +191,12 @@ When running in Docker:
 
 - The container uses tini as init system for proper signal handling
 - Alpine-based minimal attack surface
-- Environment variable `MODE=development` by default; set `MODE=production` for production deployments
+- Production is the default mode. Set `MODE=development` only for development deployments; debug endpoints require the separate `DEBUG` setting.
 
 ```bash
 docker run \
-  -e MODE=production \
+  --name search-app \
+  -p 172.17.0.1:64580:80 \
   -v search_config:/config \
   -v search_data:/data \
   ghcr.io/apimgr/search:latest

@@ -2,12 +2,17 @@ package direct
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,25 +22,20 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/version"
+	"github.com/miekg/dns"
 )
 
 var dnsResolverAddress = "8.8.8.8:53"
 
 // DNSHandler handles dns:{domain} queries
 type DNSHandler struct {
-	resolver *net.Resolver
+	resolverAddress string
 }
 
 // NewDNSHandler creates a new DNS handler
 func NewDNSHandler() *DNSHandler {
 	return &DNSHandler{
-		resolver: &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{Timeout: 5 * time.Second}
-				return d.DialContext(ctx, network, dnsResolverAddress)
-			},
-		},
+		resolverAddress: dnsResolverAddress,
 	}
 }
 
@@ -61,70 +61,27 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 
 	records := make(map[string]interface{})
 
-	// Lookup A records
-	if recordType == "" || recordType == "A" {
-		addrs, err := h.resolver.LookupIP(ctx, "ip4", domain)
-		if err == nil && len(addrs) > 0 {
-			ips := make([]string, len(addrs))
-			for i, addr := range addrs {
-				ips[i] = addr.String()
+	queryTypes := []struct {
+		name string
+		code uint16
+	}{{"A", dns.TypeA}, {"AAAA", dns.TypeAAAA}, {"MX", dns.TypeMX}, {"NS", dns.TypeNS}, {"TXT", dns.TypeTXT}, {"CNAME", dns.TypeCNAME}, {"SOA", dns.TypeSOA}}
+	for _, queryType := range queryTypes {
+		if recordType != "" && recordType != queryType.name {
+			continue
+		}
+		answers, err := h.lookup(ctx, domain, queryType.code)
+		if err != nil || len(answers) == 0 {
+			continue
+		}
+		values := make([]map[string]interface{}, 0, len(answers))
+		for _, answer := range answers {
+			value := mapDNSRecord(answer)
+			if value != nil {
+				values = append(values, value)
 			}
-			records["A"] = ips
 		}
-	}
-
-	// Lookup AAAA records
-	if recordType == "" || recordType == "AAAA" {
-		addrs, err := h.resolver.LookupIP(ctx, "ip6", domain)
-		if err == nil && len(addrs) > 0 {
-			ips := make([]string, len(addrs))
-			for i, addr := range addrs {
-				ips[i] = addr.String()
-			}
-			records["AAAA"] = ips
-		}
-	}
-
-	// Lookup MX records
-	if recordType == "" || recordType == "MX" {
-		mxs, err := h.resolver.LookupMX(ctx, domain)
-		if err == nil && len(mxs) > 0 {
-			mxRecords := make([]map[string]interface{}, len(mxs))
-			for i, mx := range mxs {
-				mxRecords[i] = map[string]interface{}{
-					"host": mx.Host,
-					"pref": mx.Pref,
-				}
-			}
-			records["MX"] = mxRecords
-		}
-	}
-
-	// Lookup NS records
-	if recordType == "" || recordType == "NS" {
-		nss, err := h.resolver.LookupNS(ctx, domain)
-		if err == nil && len(nss) > 0 {
-			nsRecords := make([]string, len(nss))
-			for i, ns := range nss {
-				nsRecords[i] = ns.Host
-			}
-			records["NS"] = nsRecords
-		}
-	}
-
-	// Lookup TXT records
-	if recordType == "" || recordType == "TXT" {
-		txts, err := h.resolver.LookupTXT(ctx, domain)
-		if err == nil && len(txts) > 0 {
-			records["TXT"] = txts
-		}
-	}
-
-	// Lookup CNAME record
-	if recordType == "" || recordType == "CNAME" {
-		cname, err := h.resolver.LookupCNAME(ctx, domain)
-		if err == nil && cname != "" && cname != domain+"." {
-			records["CNAME"] = cname
+		if len(values) > 0 {
+			records[queryType.name] = values
 		}
 	}
 
@@ -153,6 +110,58 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	}, nil
 }
 
+func (h *DNSHandler) lookup(ctx context.Context, domain string, recordType uint16) ([]dns.RR, error) {
+	message := new(dns.Msg)
+	message.SetQuestion(dns.Fqdn(domain), recordType)
+	client := &dns.Client{Net: "udp", Timeout: 5 * time.Second}
+	response, _, err := client.ExchangeContext(ctx, message, h.resolverAddress)
+	if err != nil {
+		return nil, err
+	}
+	if response.Truncated {
+		client.Net = "tcp"
+		response, _, err = client.ExchangeContext(ctx, message, h.resolverAddress)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if response.Rcode != dns.RcodeSuccess {
+		return nil, fmt.Errorf("DNS lookup returned %s", dns.RcodeToString[response.Rcode])
+	}
+	return response.Answer, nil
+}
+
+func mapDNSRecord(record dns.RR) map[string]interface{} {
+	header := record.Header()
+	result := map[string]interface{}{"ttl": header.Ttl}
+	switch value := record.(type) {
+	case *dns.A:
+		result["value"] = value.A.String()
+	case *dns.AAAA:
+		result["value"] = value.AAAA.String()
+	case *dns.MX:
+		result["host"] = value.Mx
+		result["pref"] = value.Preference
+	case *dns.NS:
+		result["value"] = value.Ns
+	case *dns.TXT:
+		result["value"] = strings.Join(value.Txt, "")
+	case *dns.CNAME:
+		result["value"] = value.Target
+	case *dns.SOA:
+		result["mname"] = value.Ns
+		result["rname"] = value.Mbox
+		result["serial"] = value.Serial
+		result["refresh"] = value.Refresh
+		result["retry"] = value.Retry
+		result["expire"] = value.Expire
+		result["minimum"] = value.Minttl
+	default:
+		return nil
+	}
+	return result
+}
+
 func formatDNSRecords(domain string, records map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"dns-records\">")
@@ -161,7 +170,13 @@ func formatDNSRecords(domain string, records map[string]interface{}) string {
 	html.WriteString("<thead><tr><th>Type</th><th>Value</th></tr></thead>")
 	html.WriteString("<tbody>")
 
-	for recordType, values := range records {
+	recordTypes := make([]string, 0, len(records))
+	for recordType := range records {
+		recordTypes = append(recordTypes, recordType)
+	}
+	sort.Strings(recordTypes)
+	for _, recordType := range recordTypes {
+		values := records[recordType]
 		switch v := values.(type) {
 		case []string:
 			for _, val := range v {
@@ -170,8 +185,14 @@ func formatDNSRecords(domain string, records map[string]interface{}) string {
 		case []map[string]interface{}:
 			for _, val := range v {
 				if recordType == "MX" {
-					fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%v %s</code></td></tr>",
-						recordType, val["pref"], escapeHTML(val["host"].(string)))
+					fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%v %s</code> <span>TTL %ss</span></td></tr>",
+						recordType, val["pref"], escapeHTML(val["host"].(string)), val["ttl"])
+				} else if recordType == "SOA" {
+					fmt.Fprintf(&html, "<tr><td>SOA</td><td><code>%s %s</code> serial %v, refresh %v, retry %v, expire %v, minimum %v <span>TTL %ds</span></td></tr>",
+						escapeHTML(val["mname"].(string)), escapeHTML(val["rname"].(string)), val["serial"], val["refresh"], val["retry"], val["expire"], val["minimum"], val["ttl"])
+				} else {
+					fmt.Fprintf(&html, "<tr><td>%s</td><td><code>%s</code> <span>TTL %ss</span></td></tr>",
+						escapeHTML(recordType), escapeHTML(val["value"].(string)), val["ttl"])
 				}
 			}
 		case string:
@@ -200,6 +221,7 @@ func (h *WhoisHandler) Type() AnswerType {
 }
 
 func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("domain name required")
@@ -237,9 +259,13 @@ func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 			LdhName string `json:"ldhName"`
 		} `json:"nameservers"`
 		Entities []struct {
+			Handle     string        `json:"handle"`
 			Roles      []string      `json:"roles"`
 			VcardArray []interface{} `json:"vcardArray"`
 		} `json:"entities"`
+		SecureDNS *struct {
+			DelegationSigned *bool `json:"delegationSigned"`
+		} `json:"secureDNS"`
 	}
 
 	if err := decodeBoundedJSON(resp.Body, 2<<20, &rdap); err != nil {
@@ -250,6 +276,40 @@ func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	data := make(map[string]interface{})
 	data["domain"] = rdap.LdhName
 	data["status"] = rdap.Status
+	data["dnssec_status"] = i18n.T(lang, "direct.whois_dnssec_unknown")
+	if rdap.SecureDNS != nil && rdap.SecureDNS.DelegationSigned != nil {
+		if *rdap.SecureDNS.DelegationSigned {
+			data["dnssec_status"] = i18n.T(lang, "direct.whois_dnssec_signed")
+		} else {
+			data["dnssec_status"] = i18n.T(lang, "direct.whois_dnssec_unsigned")
+		}
+	}
+	for _, entity := range rdap.Entities {
+		name, organization, email := rdapVCardContact(entity.VcardArray)
+		for _, role := range entity.Roles {
+			switch strings.ToLower(role) {
+			case "registrar":
+				registrar := firstNonEmpty(name, organization, entity.Handle)
+				if registrar != "" {
+					data["registrar"] = registrar
+				}
+			case "registrant":
+				registrant := make(map[string]string)
+				if name != "" {
+					registrant["name"] = name
+				}
+				if organization != "" {
+					registrant["organization"] = organization
+				}
+				if email != "" {
+					registrant["email"] = email
+				}
+				if len(registrant) > 0 {
+					data["registrant"] = registrant
+				}
+			}
+		}
+	}
 
 	for _, event := range rdap.Events {
 		switch event.EventAction {
@@ -271,9 +331,9 @@ func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	return &Answer{
 		Type:        AnswerTypeWhois,
 		Term:        term,
-		Title:       fmt.Sprintf("WHOIS: %s", term),
-		Description: fmt.Sprintf("Domain registration information for %s", term),
-		Content:     formatWhoisData(term, data),
+		Title:       fmt.Sprintf("%s: %s", i18n.T(lang, "direct.whois_title"), term),
+		Description: strings.ReplaceAll(i18n.T(lang, "direct.whois_description"), "{domain}", term),
+		Content:     formatWhoisData(lang, term, data),
 		Source:      "RDAP",
 		SourceURL:   apiURL,
 		Data:        data,
@@ -285,37 +345,52 @@ func (h *WhoisHandler) fallbackWhois(ctx context.Context, domain string) (*Answe
 	return &Answer{
 		Type:        AnswerTypeWhois,
 		Term:        domain,
-		Title:       fmt.Sprintf("WHOIS: %s", domain),
+		Title:       fmt.Sprintf("%s: %s", i18n.T(lang, "direct.whois_title"), domain),
 		Description: i18n.T(lang, "direct.whois_lookup_failed"),
-		Content:     fmt.Sprintf("<p>Unable to fetch WHOIS data for <code>%s</code>. Try again later.</p>", escapeHTML(domain)),
+		Content:     fmt.Sprintf("<p>%s</p>", escapeHTML(strings.ReplaceAll(i18n.T(lang, "direct.whois_unavailable"), "{domain}", domain))),
 		Error:       "lookup_failed",
 	}, nil
 }
 
-func formatWhoisData(domain string, data map[string]interface{}) string {
+func formatWhoisData(lang, domain string, data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"whois-data\">")
-	fmt.Fprintf(&html, "<h2>WHOIS: %s</h2>", escapeHTML(domain))
+	fmt.Fprintf(&html, "<h2>%s: %s</h2>", escapeHTML(i18n.T(lang, "direct.whois_title")), escapeHTML(domain))
 	html.WriteString("<dl class=\"whois-details\">")
+	if v, ok := data["registrar"].(string); ok && v != "" {
+		fmt.Fprintf(&html, "<dt>%s</dt><dd>%s</dd>", escapeHTML(i18n.T(lang, "direct.whois_registrar")), escapeHTML(v))
+	}
+	if v, ok := data["registrant"].(map[string]string); ok && len(v) > 0 {
+		fmt.Fprintf(&html, "<dt>%s</dt><dd><ul>", escapeHTML(i18n.T(lang, "direct.whois_registrant")))
+		for _, field := range []struct{ key, translationKey string }{{"name", "direct.whois_name"}, {"organization", "direct.whois_organization"}, {"email", "direct.whois_email"}} {
+			if value := v[field.key]; value != "" {
+				fmt.Fprintf(&html, "<li>%s: %s</li>", escapeHTML(i18n.T(lang, field.translationKey)), escapeHTML(value))
+			}
+		}
+		html.WriteString("</ul></dd>")
+	}
 
 	if v, ok := data["created"].(string); ok && v != "" {
-		fmt.Fprintf(&html, "<dt>Registered</dt><dd>%s</dd>", escapeHTML(v))
+		fmt.Fprintf(&html, "<dt>%s</dt><dd>%s</dd>", escapeHTML(i18n.T(lang, "direct.whois_registered")), escapeHTML(v))
 	}
 	if v, ok := data["expires"].(string); ok && v != "" {
-		fmt.Fprintf(&html, "<dt>Expires</dt><dd>%s</dd>", escapeHTML(v))
+		fmt.Fprintf(&html, "<dt>%s</dt><dd>%s</dd>", escapeHTML(i18n.T(lang, "direct.whois_expires")), escapeHTML(v))
 	}
 	if v, ok := data["updated"].(string); ok && v != "" {
-		fmt.Fprintf(&html, "<dt>Updated</dt><dd>%s</dd>", escapeHTML(v))
+		fmt.Fprintf(&html, "<dt>%s</dt><dd>%s</dd>", escapeHTML(i18n.T(lang, "direct.whois_updated")), escapeHTML(v))
+	}
+	if v, ok := data["dnssec_status"].(string); ok {
+		fmt.Fprintf(&html, "<dt>%s</dt><dd>%s</dd>", escapeHTML(i18n.T(lang, "direct.whois_dnssec")), escapeHTML(v))
 	}
 	if v, ok := data["status"].([]string); ok && len(v) > 0 {
-		html.WriteString("<dt>Status</dt><dd>")
+		fmt.Fprintf(&html, "<dt>%s</dt><dd>", escapeHTML(i18n.T(lang, "direct.whois_status")))
 		for _, s := range v {
 			fmt.Fprintf(&html, "<span class=\"status-badge\">%s</span> ", escapeHTML(s))
 		}
 		html.WriteString("</dd>")
 	}
 	if v, ok := data["nameservers"].([]string); ok && len(v) > 0 {
-		html.WriteString("<dt>Name Servers</dt><dd><ul>")
+		fmt.Fprintf(&html, "<dt>%s</dt><dd><ul>", escapeHTML(i18n.T(lang, "direct.whois_nameservers")))
 		for _, ns := range v {
 			fmt.Fprintf(&html, "<li><code>%s</code></li>", escapeHTML(ns))
 		}
@@ -324,6 +399,62 @@ func formatWhoisData(domain string, data map[string]interface{}) string {
 
 	html.WriteString("</dl></div>")
 	return html.String()
+}
+
+func rdapVCardContact(vcard []interface{}) (name, organization, email string) {
+	if len(vcard) != 2 {
+		return "", "", ""
+	}
+	rows, ok := vcard[1].([]interface{})
+	if !ok {
+		return "", "", ""
+	}
+	for _, rawRow := range rows {
+		row, ok := rawRow.([]interface{})
+		if !ok || len(row) < 4 {
+			continue
+		}
+		key, ok := row[0].(string)
+		if !ok {
+			continue
+		}
+		value := rdapVCardValue(row[3])
+		switch strings.ToLower(key) {
+		case "fn":
+			name = value
+		case "org":
+			organization = value
+		case "email":
+			email = value
+		}
+	}
+	return name, organization, email
+}
+
+func rdapVCardValue(raw interface{}) string {
+	switch value := raw.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case []interface{}:
+		parts := make([]string, 0, len(value))
+		for _, part := range value {
+			if text, ok := part.(string); ok && strings.TrimSpace(text) != "" {
+				parts = append(parts, strings.TrimSpace(text))
+			}
+		}
+		return strings.Join(parts, ", ")
+	default:
+		return ""
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // ResolveHandler handles resolve:{hostname} queries
@@ -512,11 +643,13 @@ func resolveDNSTimings(ctx context.Context, hostname string) map[string]time.Dur
 }
 
 // CertHandler handles cert:{domain} queries
-type CertHandler struct{}
+type CertHandler struct {
+	ctClient *http.Client
+}
 
 // NewCertHandler creates a new certificate handler
 func NewCertHandler() *CertHandler {
-	return &CertHandler{}
+	return &CertHandler{ctClient: newPublicHTTPClient(3 * time.Second)}
 }
 
 func (h *CertHandler) Type() AnswerType {
@@ -590,16 +723,56 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		"serial":    cert.SerialNumber.String(),
 		"version":   cert.Version,
 		"keyAlgo":   cert.PublicKeyAlgorithm.String(),
+		"keySize":   certificateKeySize(cert),
 		"sigAlgo":   cert.SignatureAlgorithm.String(),
 		"isCA":      cert.IsCA,
 		"chainLen":  len(certs),
 	}
 
-	// Check validity
+	// Validate the presented leaf against the requested host and system trust roots.
 	now := time.Now()
-	valid := now.After(cert.NotBefore) && now.Before(cert.NotAfter)
+	dateValid := !now.Before(cert.NotBefore) && now.Before(cert.NotAfter)
+	intermediates := x509.NewCertPool()
+	for _, intermediate := range certs[1:] {
+		intermediates.AddCert(intermediate)
+	}
+	verifiedChains, verifyErr := cert.Verify(x509.VerifyOptions{DNSName: hostname, CurrentTime: now, Intermediates: intermediates})
+	hostnameValid := cert.VerifyHostname(hostname) == nil
+	chainTrusted := verifyErr == nil && len(verifiedChains) > 0
+	valid := dateValid && hostnameValid && chainTrusted
 	daysUntilExpiry := int(cert.NotAfter.Sub(now).Hours() / 24)
 	data["valid"] = valid
+	data["dateValid"] = dateValid
+	data["hostnameValid"] = hostnameValid
+	data["chainTrusted"] = chainTrusted
+	data["verificationError"] = ""
+	if verifyErr != nil {
+		data["verificationError"] = verifyErr.Error()
+	}
+	chainCertificates := certs
+	chainOrder := "presented"
+	if chainTrusted {
+		chainCertificates = verifiedChains[0]
+		chainOrder = "verified"
+	}
+	chain := make([]map[string]string, 0, len(chainCertificates))
+	for index := len(chainCertificates) - 1; index >= 0; index-- {
+		item := chainCertificates[index]
+		chain = append(chain, map[string]string{"subject": item.Subject.String(), "issuer": item.Issuer.String()})
+	}
+	data["chain"] = chain
+	data["chainOrder"] = chainOrder
+	sctCount := 0
+	for _, extension := range cert.Extensions {
+		if extension.Id.Equal([]int{1, 3, 6, 1, 4, 1, 11129, 2, 4, 2}) {
+			sctCount++
+		}
+	}
+	data["embeddedSCTs"] = sctCount
+	ctEntries, ctAvailable := h.lookupCertificateTransparency(connectionContext, hostname)
+	data["ctEntries"] = ctEntries
+	data["ctAvailable"] = ctAvailable
+	data["rating"] = certificateRating(valid, cert)
 	data["daysUntilExpiry"] = daysUntilExpiry
 
 	return &Answer{
@@ -611,6 +784,89 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Source:      "TLS Connection",
 		Data:        data,
 	}, nil
+}
+
+type certificateTransparencyEntry struct {
+	ID         int64  `json:"id"`
+	CommonName string `json:"common_name"`
+	NameValue  string `json:"name_value"`
+	Issuer     string `json:"issuer_name"`
+	NotBefore  string `json:"not_before"`
+	NotAfter   string `json:"not_after"`
+}
+
+func (h *CertHandler) lookupCertificateTransparency(ctx context.Context, hostname string) ([]certificateTransparencyEntry, bool) {
+	client := h.ctClient
+	if client == nil {
+		client = newPublicHTTPClient(3 * time.Second)
+	}
+	clientCopy := *client
+	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	requestURL := "https://crt.sh/?q=" + url.QueryEscape(hostname) + "&output=json"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", version.BrowserUserAgent)
+	response, err := clientCopy.Do(request)
+	if err != nil {
+		return nil, false
+	}
+	defer closeutil.Close(response.Body)
+	if response.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	var entries []certificateTransparencyEntry
+	if err := decodeBoundedJSON(response.Body, 1<<20, &entries); err != nil {
+		return nil, false
+	}
+	matching := make([]certificateTransparencyEntry, 0, min(len(entries), 10))
+	for _, entry := range entries {
+		matchesHost := false
+		for _, name := range strings.FieldsFunc(entry.NameValue, func(r rune) bool { return r == '\n' || r == '\r' }) {
+			name = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "*.")
+			if name == strings.ToLower(hostname) {
+				matchesHost = true
+				break
+			}
+		}
+		if !matchesHost || entry.ID <= 0 {
+			continue
+		}
+		matching = append(matching, entry)
+		if len(matching) == 10 {
+			break
+		}
+	}
+	return matching, true
+}
+
+func certificateRating(valid bool, cert *x509.Certificate) string {
+	if !valid || cert.PublicKeyAlgorithm == x509.DSA || cert.SignatureAlgorithm == x509.MD2WithRSA || cert.SignatureAlgorithm == x509.MD5WithRSA {
+		return "F"
+	}
+	keySize := certificateKeySize(cert)
+	if cert.PublicKeyAlgorithm == x509.RSA && keySize < 2048 {
+		return "F"
+	}
+	if keySize < 224 || cert.SignatureAlgorithm == x509.SHA1WithRSA || cert.SignatureAlgorithm == x509.ECDSAWithSHA1 {
+		return "C"
+	}
+	return "A"
+}
+
+func certificateKeySize(cert *x509.Certificate) int {
+	switch key := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		return key.N.BitLen()
+	case *ecdsa.PublicKey:
+		return key.Curve.Params().BitSize
+	case ed25519.PublicKey:
+		return len(key) * 8
+	default:
+		return 0
+	}
 }
 
 func parseCertificateTarget(target string) (string, int, error) {
@@ -656,7 +912,42 @@ func formatCertData(domain string, data map[string]interface{}) string {
 			fmt.Fprintf(&html, "<p class=\"status valid\">Valid (%d days remaining)</p>", days)
 		}
 	} else {
-		html.WriteString("<p class=\"status invalid\">Invalid or Expired</p>")
+		html.WriteString("<p class=\"status invalid\">Not fully valid (date, hostname, or trust check failed)</p>")
+	}
+	for _, check := range []struct{ name, key string }{{"Date validity", "dateValid"}, {"Hostname match", "hostnameValid"}, {"Trusted chain", "chainTrusted"}} {
+		fmt.Fprintf(&html, "<p>%s: %t</p>", check.name, data[check.key])
+	}
+	rating, _ := data["rating"].(string)
+	if rating == "" {
+		rating = "Unrated"
+	}
+	fmt.Fprintf(&html, "<p>Security rating: %s (local certificate checks)</p><p>Embedded CT SCT extensions: %v</p>", escapeHTML(rating), data["embeddedSCTs"])
+	if available, ok := data["ctAvailable"].(bool); ok && available {
+		html.WriteString("<h3>Certificate transparency records (crt.sh)</h3>")
+		entries, _ := data["ctEntries"].([]certificateTransparencyEntry)
+		if len(entries) == 0 {
+			html.WriteString("<p>No matching certificate records were returned.</p>")
+		} else {
+			html.WriteString("<ul>")
+			for _, entry := range entries {
+				fmt.Fprintf(&html, "<li><a href=\"https://crt.sh/?id=%d\" rel=\"noopener noreferrer\">Record %d</a>: %s; issuer %s; %s to %s</li>", entry.ID, entry.ID, escapeHTML(entry.CommonName), escapeHTML(entry.Issuer), escapeHTML(entry.NotBefore), escapeHTML(entry.NotAfter))
+			}
+			html.WriteString("</ul>")
+		}
+	} else if _, ok := data["ctAvailable"]; ok {
+		html.WriteString("<p>Certificate transparency records are temporarily unavailable.</p>")
+	}
+	if chain, ok := data["chain"].([]map[string]string); ok {
+		chainOrder, _ := data["chainOrder"].(string)
+		if chainOrder == "verified" {
+			html.WriteString("<h3>Verified certificate chain (root to leaf)</h3><ol>")
+		} else {
+			html.WriteString("<h3>Presented certificate chain (rootward to leaf; trust not established)</h3><ol>")
+		}
+		for _, item := range chain {
+			fmt.Fprintf(&html, "<li><code>%s</code> issued by <code>%s</code></li>", escapeHTML(item["subject"]), escapeHTML(item["issuer"]))
+		}
+		html.WriteString("</ol>")
 	}
 
 	html.WriteString("<dl class=\"cert-details\">")
@@ -674,6 +965,7 @@ func formatCertData(domain string, data map[string]interface{}) string {
 	}
 
 	fmt.Fprintf(&html, "<dt>Key Algorithm</dt><dd>%s</dd>", escapeHTML(data["keyAlgo"].(string)))
+	fmt.Fprintf(&html, "<dt>Key Size</dt><dd>%v bits</dd>", data["keySize"])
 	fmt.Fprintf(&html, "<dt>Signature Algorithm</dt><dd>%s</dd>", escapeHTML(data["sigAlgo"].(string)))
 	fmt.Fprintf(&html, "<dt>Chain Length</dt><dd>%d certificates</dd>", data["chainLen"].(int))
 

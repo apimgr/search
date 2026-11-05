@@ -6,13 +6,12 @@ import (
 
 func TestConfigStruct(t *testing.T) {
 	cfg := Config{
-		AppName:    "search",
-		Version:    "1.0.0",
-		Mode:       "production",
-		Debug:      false,
-		URLs:       []string{"http://localhost:8080"},
-		ShowSetup:  true,
-		SetupToken: "abc123",
+		AppName:   "search",
+		Version:   "1.0.0",
+		Mode:      "production",
+		Debug:     false,
+		URLs:      []string{"http://localhost:8080"},
+		ShowSetup: true,
 
 		Description: "Test app",
 		SMTPStatus:  "Configured",
@@ -312,13 +311,12 @@ func TestPrint(t *testing.T) {
 		{
 			name: "full config",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "2.0.0",
-				Mode:       "production",
-				Debug:      true,
-				URLs:       []string{"http://localhost:8080", "http://127.0.0.1:8080"},
-				ShowSetup:  true,
-				SetupToken: "setup-123",
+				AppName:   "search",
+				Version:   "2.0.0",
+				Mode:      "production",
+				Debug:     true,
+				URLs:      []string{"http://localhost:8080", "http://127.0.0.1:8080"},
+				ShowSetup: true,
 
 				SMTPStatus: "Ready",
 			},
@@ -345,12 +343,11 @@ func TestPrintFull(t *testing.T) {
 		{
 			name: "full config with all options",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 
 				SMTPStatus: "Auto-detected",
 			},
@@ -370,12 +367,11 @@ func TestPrintFull(t *testing.T) {
 		{
 			name: "without URLs",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{},
+				ShowSetup: true,
 
 				SMTPStatus: "Auto-detected",
 			},
@@ -383,12 +379,11 @@ func TestPrintFull(t *testing.T) {
 		{
 			name: "without setup token",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 
 				SMTPStatus: "Auto-detected",
 			},
@@ -396,12 +391,11 @@ func TestPrintFull(t *testing.T) {
 		{
 			name: "without SMTPStatus",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 
 				SMTPStatus: "",
 			},
@@ -409,11 +403,10 @@ func TestPrintFull(t *testing.T) {
 		{
 			name: "ShowSetup true but no SetupToken",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "",
+				AppName:   "search",
+				Version:   "1.0.0",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 			},
 		},
 		{
@@ -449,45 +442,41 @@ func TestPrintCompact(t *testing.T) {
 		{
 			name: "production mode",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 			},
 		},
 		{
 			name: "development mode",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "development",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "development",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 			},
 		},
 		{
 			name: "empty mode",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 			},
 		},
 		{
 			name: "without URLs",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{},
+				ShowSetup: true,
 			},
 		},
 		{
@@ -536,31 +525,28 @@ func TestPrintMinimal(t *testing.T) {
 		{
 			name: "with URLs and setup",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: true,
 			},
 		},
 		{
 			name: "without URLs",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				URLs:       nil,
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				URLs:      nil,
+				ShowSetup: true,
 			},
 		},
 		{
 			name: "empty URLs slice",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				URLs:       []string{},
-				ShowSetup:  true,
-				SetupToken: "test-token",
+				AppName:   "search",
+				Version:   "1.0.0",
+				URLs:      []string{},
+				ShowSetup: true,
 			},
 		},
 		{
@@ -968,7 +954,6 @@ func TestPrintDispatcher(t *testing.T) {
 	configs := []Config{
 		{AppName: "app1", Version: "1.0"},
 		{AppName: "app2", Version: "2.0", URLs: []string{"http://localhost:8080"}},
-		{AppName: "app3", Version: "3.0", ShowSetup: true, SetupToken: "token123"},
 		{},
 	}
 
@@ -984,13 +969,12 @@ func TestPrintDispatcher(t *testing.T) {
 // terminal.GetSize() which can't be mocked without source modification.
 func TestAllPrintFunctionsDirectly(t *testing.T) {
 	cfg := Config{
-		AppName:    "test",
-		Version:    "1.0.0",
-		Mode:       "production",
-		Debug:      true,
-		URLs:       []string{"http://localhost:8080", "http://127.0.0.1:8080"},
-		ShowSetup:  true,
-		SetupToken: "token-abc-123",
+		AppName:   "test",
+		Version:   "1.0.0",
+		Mode:      "production",
+		Debug:     true,
+		URLs:      []string{"http://localhost:8080", "http://127.0.0.1:8080"},
+		ShowSetup: true,
 
 		Description: "Test Application",
 		SMTPStatus:  "Ready",

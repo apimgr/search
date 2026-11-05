@@ -21,8 +21,9 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 
     ```bash
     docker run -d \
-      --name search \
-      -p 64580:80 \
+      --name search-app \
+      -p 172.17.0.1:64580:80 \
+      -v search_config:/config \
       -v search_data:/data \
       ghcr.io/apimgr/search:latest
     ```
@@ -36,7 +37,7 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
     ./search-linux-amd64
     ```
 
-Then open [http://localhost:64580](http://localhost:64580) in your browser.
+For Docker, open [http://172.17.0.1:64580](http://172.17.0.1:64580). The binary prints its selected URL when it starts.
 
 ## Documentation
 

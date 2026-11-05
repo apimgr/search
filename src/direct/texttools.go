@@ -1263,6 +1263,11 @@ func allmanBraceStyle(formatted string) string {
 				blockComment = true
 				continue
 			}
+			if end := scanJavaScriptRegex(formatted, index); end > index && canStartJavaScriptRegex(output.String()) {
+				output.WriteString(formatted[index:end])
+				index = end - 1
+				continue
+			}
 		}
 		if current == '\'' || current == '"' || current == '`' {
 			quote = current
@@ -1532,7 +1537,8 @@ func countLines(text string) int {
 func beautifyPython(code string) string {
 	lines := strings.Split(strings.ReplaceAll(code, "\r\n", "\n"), "\n")
 	formatted := make([]string, 0, len(lines))
-	indentLevel := 0
+	previousIndent := ""
+	previousLineOpenedBlock := false
 	continuationDepth := 0
 	tripleQuote := rune(0)
 	for _, line := range lines {
@@ -1549,27 +1555,34 @@ func beautifyPython(code string) string {
 			formatted = append(formatted, "")
 			continue
 		}
-		if continuationDepth == 0 && pythonDedentPattern.MatchString(trimmed) && indentLevel > 0 {
-			indentLevel--
+		prefix := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		indent := strings.Repeat(" ", pythonIndentColumns(prefix))
+		if prefix == "" && previousLineOpenedBlock && continuationDepth == 0 {
+			indent = previousIndent + "    "
 		}
-		level := indentLevel + continuationDepth
-		if level < 0 {
-			level = 0
-		}
-		formatted = append(formatted, strings.Repeat("    ", level)+trimmed)
+		formatted = append(formatted, indent+strings.Repeat("    ", continuationDepth)+trimmed)
 		continuationDepth = pythonDelimiterDepth(trimmed, continuationDepth, &tripleQuote)
 		if tripleQuote != 0 {
 			trailing := line[len(strings.TrimRight(line, " \t")):]
 			formatted[len(formatted)-1] += trailing
 		}
-		if continuationDepth == 0 && tripleQuote == 0 && strings.HasSuffix(trimmed, ":") {
-			indentLevel++
-		}
+		previousIndent = indent
+		previousLineOpenedBlock = continuationDepth == 0 && tripleQuote == 0 && strings.HasSuffix(trimmed, ":")
 	}
 	return strings.TrimSpace(strings.Join(formatted, "\n"))
 }
 
-var pythonDedentPattern = regexp.MustCompile(`^(elif\b|else\s*:|except\b|finally\s*:|case\b)`)
+func pythonIndentColumns(prefix string) int {
+	columns := 0
+	for _, character := range prefix {
+		if character == '\t' {
+			columns = (columns/8 + 1) * 8
+		} else {
+			columns++
+		}
+	}
+	return columns
+}
 
 func pythonDelimiterDepth(line string, depth int, tripleQuote *rune) int {
 	quote := rune(0)
@@ -1638,6 +1651,7 @@ func beautifyJavaScript(code string) string {
 	lineComment := false
 	blockComment := false
 	pendingSpace := false
+	pendingLineBreak := false
 	lineStart := true
 	skipNext := false
 	skipUntil := 0
@@ -1698,6 +1712,13 @@ func beautifyJavaScript(code string) string {
 			}
 			continue
 		}
+		if pendingLineBreak {
+			if output.Len() > 0 && !strings.HasSuffix(output.String(), "\n") {
+				writeNewline()
+			}
+			pendingLineBreak = false
+			pendingSpace = false
+		}
 		if char == '/' && next == '/' {
 			writeIndent()
 			if pendingSpace {
@@ -1739,6 +1760,11 @@ func beautifyJavaScript(code string) string {
 			}
 			output.WriteRune(char)
 			quote = char
+			pendingSpace = false
+			continue
+		}
+		if char == '\n' || char == '\r' {
+			pendingLineBreak = true
 			pendingSpace = false
 			continue
 		}
@@ -1829,6 +1855,10 @@ func canStartJavaScriptRegex(formatted string) bool {
 	}
 	last, _ := utf8.DecodeLastRuneInString(previous)
 	switch last {
+	case ')':
+		return closesJavaScriptControlCondition(previous)
+	case '}':
+		return closesJavaScriptStatementBlock(previous)
 	case '=', '(', '[', '{', ',', ':', ';', '!', '&', '|', '?', '+', '-', '*', '%', '^', '~', '<', '>':
 		return true
 	}
@@ -1842,6 +1872,91 @@ func canStartJavaScriptRegex(formatted string) bool {
 	}
 	switch previous[end:] {
 	case "return", "throw", "case", "delete", "void", "typeof", "instanceof", "in", "of", "yield", "await":
+		return true
+	default:
+		return false
+	}
+}
+
+func closesJavaScriptControlCondition(formatted string) bool {
+	end := len(strings.TrimRight(formatted, " \t\r\n")) - 1
+	if end < 0 || formatted[end] != ')' {
+		return false
+	}
+	depth := 0
+	opening := -1
+	for index := end; index >= 0; index-- {
+		switch formatted[index] {
+		case ')':
+			depth++
+		case '(':
+			depth--
+			if depth == 0 {
+				opening = index
+				index = -1
+			}
+		}
+	}
+	if opening < 0 {
+		return false
+	}
+	prefix := strings.TrimRight(formatted[:opening], " \t\r\n")
+	start := len(prefix)
+	for start > 0 {
+		character := prefix[start-1]
+		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '_' || character == '$') {
+			break
+		}
+		start--
+	}
+	switch prefix[start:] {
+	case "if", "while", "for", "with", "switch", "catch":
+		return true
+	default:
+		return false
+	}
+}
+
+func closesJavaScriptStatementBlock(formatted string) bool {
+	end := len(strings.TrimRight(formatted, " \t\r\n")) - 1
+	if end < 0 || formatted[end] != '}' {
+		return false
+	}
+	depth := 0
+	opening := -1
+	for index := end; index >= 0; index-- {
+		switch formatted[index] {
+		case '}':
+			depth++
+		case '{':
+			depth--
+			if depth == 0 {
+				opening = index
+				index = -1
+			}
+		}
+	}
+	if opening < 0 {
+		return false
+	}
+	prefix := strings.TrimSpace(formatted[:opening])
+	if closesJavaScriptControlCondition(prefix) {
+		return true
+	}
+	if strings.HasSuffix(prefix, "=>") {
+		return true
+	}
+	end = len(prefix)
+	start := end
+	for start > 0 {
+		character := prefix[start-1]
+		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_') {
+			break
+		}
+		start--
+	}
+	switch prefix[start:] {
+	case "else", "try", "finally", "do":
 		return true
 	default:
 		return false
@@ -1890,8 +2005,19 @@ func beautifyJSON(code string) string {
 
 func beautifyHTML(code string) string {
 	code, preserved := preserveHTMLRawText(code)
-	// Add newlines after closing tags
-	code = regexp.MustCompile(`>\s*<`).ReplaceAllString(code, ">\n<")
+	tagPair := regexp.MustCompile(`(?s)(<[^>]+>)\s*(<[^>]+>)`)
+	code = tagPair.ReplaceAllStringFunc(code, func(pair string) string {
+		parts := tagPair.FindStringSubmatch(pair)
+		if len(parts) != 3 {
+			return pair
+		}
+		previous, previousOK := htmlElementName(parts[1])
+		next, nextOK := htmlElementName(parts[2])
+		if previousOK && nextOK && isHTMLBlockElement(previous) && isHTMLBlockElement(next) {
+			return parts[1] + "\n" + parts[2]
+		}
+		return pair
+	})
 
 	// Indent
 	var result strings.Builder
@@ -1915,7 +2041,9 @@ func beautifyHTML(code string) string {
 
 		// Check if opening tag (not self-closing)
 		if strings.HasPrefix(line, "<") && !strings.HasPrefix(line, "</") && !strings.HasSuffix(line, "/>") && !strings.Contains(line, "</") {
-			indent++
+			if tag, ok := htmlElementName(line); ok && !isHTMLVoidElement(tag) {
+				indent++
+			}
 		}
 	}
 
@@ -1924,6 +2052,31 @@ func beautifyHTML(code string) string {
 		formatted = strings.ReplaceAll(formatted, block.placeholder, block.content)
 	}
 	return formatted
+}
+
+func htmlElementName(tag string) (string, bool) {
+	match := regexp.MustCompile(`^<\s*/?\s*([A-Za-z][A-Za-z0-9:-]*)\b`).FindStringSubmatch(tag)
+	if len(match) != 2 {
+		return "", false
+	}
+	return strings.ToLower(match[1]), true
+}
+
+func isHTMLBlockElement(name string) bool {
+	_, inline := map[string]struct{}{
+		"a": {}, "abbr": {}, "b": {}, "bdi": {}, "bdo": {}, "br": {}, "button": {}, "cite": {}, "code": {}, "data": {},
+		"em": {}, "i": {}, "img": {}, "input": {}, "label": {}, "map": {}, "mark": {}, "q": {}, "s": {}, "small": {},
+		"span": {}, "strong": {}, "sub": {}, "sup": {}, "time": {}, "u": {}, "var": {},
+	}[name]
+	return !inline
+}
+
+func isHTMLVoidElement(name string) bool {
+	_, ok := map[string]struct{}{
+		"area": {}, "base": {}, "br": {}, "col": {}, "embed": {}, "hr": {}, "img": {}, "input": {},
+		"link": {}, "meta": {}, "param": {}, "source": {}, "track": {}, "wbr": {},
+	}[name]
+	return ok
 }
 
 var htmlRawTextBlockPattern = regexp.MustCompile(`(?is)<(?:pre|textarea|script|style)\b[^>]*>.*?</(?:pre|textarea|script|style)\s*>`)
@@ -1952,6 +2105,10 @@ func htmlRawTextPlaceholder(index int) string {
 }
 
 func beautifyCSS(code string) string {
+	return beautifyStylesheet(code, false)
+}
+
+func beautifyStylesheet(code string, lineComments bool) string {
 	var output strings.Builder
 	indent := 0
 	parenDepth := 0
@@ -1960,6 +2117,17 @@ func beautifyCSS(code string) string {
 		if character == '\\' && index+1 < len(code) {
 			output.WriteString(code[index : index+2])
 			index += 2
+			continue
+		}
+		if lineComments && character == '/' && index+1 < len(code) && code[index+1] == '/' && (index == 0 || strings.ContainsRune(" \t\r\n;{}", rune(code[index-1]))) {
+			end := strings.IndexByte(code[index:], '\n')
+			if end < 0 {
+				output.WriteString(code[index:])
+				break
+			}
+			end += index
+			output.WriteString(code[index:end])
+			index = end
 			continue
 		}
 		if character == '\'' || character == '"' {

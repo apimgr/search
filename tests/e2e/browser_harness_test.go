@@ -76,6 +76,30 @@ func newBrowserContext(t *testing.T) context.Context {
 	return tctx
 }
 
+func clickAndWaitForMainFrameNavigation(ctx context.Context, selector string) error {
+	navigated := make(chan struct{}, 1)
+	chromedp.ListenTarget(ctx, func(event interface{}) {
+		frameEvent, ok := event.(*page.EventFrameNavigated)
+		if !ok || frameEvent.Frame.ParentID != "" {
+			return
+		}
+		select {
+		case navigated <- struct{}{}:
+		default:
+		}
+	})
+	clickErr := chromedp.Run(ctx, chromedp.Click(selector, chromedp.ByQuery))
+	select {
+	case <-navigated:
+		return nil
+	case <-time.After(5 * time.Second):
+		if clickErr != nil {
+			return clickErr
+		}
+		return fmt.Errorf("click %q did not navigate the main frame", selector)
+	}
+}
+
 // pageFailures collects Tier 3 failure signals: console.error/exception text
 // and failed asset/XHR loads. CDP events arrive on chromedp's internal
 // goroutine while the test goroutine reads via requireNoFailures, so every

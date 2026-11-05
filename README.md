@@ -22,7 +22,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Portable Preferences: Save settings locally, export/import them, or share them with portable `prefs` links
 - Search Engine Preferences: Select engines per search category and drag to set their priority
 - Tabbed Preferences: Manage general, interface, privacy, engine, and data settings with keyboard-accessible tabs
-- Search Alerts: Accountless alerts with email verification plus private RSS and webhook delivery
+- Search Alerts: Accountless alerts that activate at creation, with private RSS and webhook delivery
 - Embeddable Search Bar: Native HTML form snippet that works without JavaScript or third-party embeds ([integration guide](docs/integrations.md#search-bar-widget))
 - Browser Search: OpenSearch description and a copyable, customizable browser search URL
 - Fast and Efficient: Written in Go with concurrent engine queries
@@ -58,8 +58,10 @@ Direct answers start with a prefix. For example, `directory:linux iso type:docum
 ### Binary
 
 ```bash
-# Download latest release
-curl -q -LSsf https://raw.githubusercontent.com/apimgr/search/main/scripts/install.sh | bash
+# Download the latest Linux AMD64 release
+curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
+chmod +x search-linux-amd64
+sudo install -m 0755 search-linux-amd64 /usr/local/bin/search
 
 # Start the server (auto-selects port in 64000-65535 range)
 search
@@ -72,10 +74,10 @@ search --port 64080
 
 ```bash
 docker run -d \
-  -p 172.17.0.1:64080:80 \
-  -v ./data:/data \
-  -v ./config:/config \
-  --name search \
+  --name search-app \
+  -p 172.17.0.1:64580:80 \
+  -v search-config:/config \
+  -v search-data:/data \
   ghcr.io/apimgr/search:latest
 ```
 
@@ -83,18 +85,20 @@ docker run -d \
 
 ```bash
 git clone https://github.com/apimgr/search.git
-cd search
-docker compose -f docker/docker-compose.yml up -d
+mkdir -p "$HOME/search-deployment"
+cp search/docker/docker-compose.yml "$HOME/search-deployment/docker-compose.yml"
+cd "$HOME/search-deployment"
+docker compose up -d
 ```
 
 ### Install as System Service
 
 ```bash
-# Install (writes systemd unit / launchd plist / Windows service)
-sudo search install
+# Install and start the service
+sudo search --service --install
 
-# Uninstall
-sudo search uninstall
+# Uninstall (prompts before deleting all config, data, cache, logs, and backups)
+sudo search --service --uninstall
 ```
 
 ### Multi-Platform Downloads
@@ -210,7 +214,7 @@ SEARCH_DATA_DIR="/var/lib/apimgr/search"
 There is **no admin web UI**. Configuration is file-driven via `server.yml` and hot-reloaded automatically via a file watcher (no signal required). To rotate the operator token:
 
 ```bash
-search maintenance rotate-token
+search --maintenance secret rotate installation_secret
 ```
 
 ## API
@@ -271,7 +275,7 @@ GraphQL playground at: `https://scour.li/server/docs/graphql`
 
 Web: Google, Bing, DuckDuckGo, Yahoo, Brave Search, Wikipedia
 
-Video: YouTube
+Video: YouTube, PeerTube
 
 News and Social: Reddit
 
@@ -406,9 +410,9 @@ binaries/      # Built binaries (gitignored)
 
 ### Adding a Search Engine
 
-1. Create `src/search/engines/myengine.go`
+1. Create `src/search/engine/myengine.go`
 2. Implement the `Engine` interface
-3. Register in `src/search/engines/registry.go`
+3. Register in `src/search/engine/registry.go`
 4. Add configuration key to `server.yml` defaults
 5. Write unit tests
 

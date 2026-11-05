@@ -111,10 +111,10 @@ func detectWindowsDark() bool {
 	return true
 }
 
-// GetSystemTheme returns the theme based on system preference
-func GetSystemTheme() Theme {
+// GetSystemTheme returns the palette based on system preference.
+func GetSystemTheme() ThemePalette {
 	if DetectSystemDark() {
-		return Dark
+		return ThemePaletteDark
 	}
-	return Light
+	return ThemePaletteLight
 }

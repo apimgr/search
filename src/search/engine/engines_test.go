@@ -2185,6 +2185,14 @@ func TestGoogleSearchCategories(t *testing.T) {
 			if results[0].Category != tt.category {
 				t.Errorf("Category = %q, want %q", results[0].Category, tt.category)
 			}
+			if tt.category == model.CategoryImages {
+				if results[0].ImageWidth != 100 || results[0].ImageHeight != 200 || results[0].ImageFormat != "jpg" {
+					t.Errorf("image metadata = %dx%d %q, want 100x200 jpg", results[0].ImageWidth, results[0].ImageHeight, results[0].ImageFormat)
+				}
+				if results[0].ImageURL != tt.wantURL || results[0].Thumbnail != tt.wantURL {
+					t.Errorf("image URL fields = (%q, %q), want %q", results[0].ImageURL, results[0].Thumbnail, tt.wantURL)
+				}
+			}
 		})
 	}
 }

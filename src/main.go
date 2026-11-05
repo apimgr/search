@@ -574,14 +574,9 @@ func runServerServiceBody() {
 		}
 	}()
 
-	// On first run, display the auto-generated operator token (server.token)
-	// so the operator can save it. The token lives in server.yml and is the
-	// only credential the application has — there is no admin web UI.
-	var setupToken string
+	// On first run, point the operator to server.yml where the operator token
+	// is stored. The token itself is never displayed or logged.
 	showSetup := cfg.IsFirstRun()
-	if showSetup {
-		setupToken = cfg.Server.Token
-	}
 
 	// Create server (initialises DB, scheduler, etc. — steps 13-16 per AI.md PART 8)
 	srv := server.NewServer(cfg)
@@ -649,13 +644,12 @@ func runServerServiceBody() {
 	}
 
 	banner.Print(banner.Config{
-		AppName:    "Search",
-		Version:    config.Version,
-		Mode:       cfg.Server.Mode,
-		Debug:      mode.IsDebugEnabled(),
-		URLs:       urls,
-		ShowSetup:  showSetup,
-		SetupToken: setupToken,
+		AppName:   "Search",
+		Version:   config.Version,
+		Mode:      cfg.Server.Mode,
+		Debug:     mode.IsDebugEnabled(),
+		URLs:      urls,
+		ShowSetup: showSetup,
 	})
 
 	// Step 21: Block until graceful shutdown completes.
@@ -777,7 +771,6 @@ Environment Variables:
   INSTANCE_NAME            Instance display name
   SEARCH_COLOR             Color output mode (always|never|auto)
   NO_COLOR                 Disable colors when set (standard)
-  DISABLE_TOR              Disable Tor (auto-enabled if tor binary installed)
   BACKUP_PASSWORD          Password for backup encryption (AES-256-GCM)
 
 Examples:
@@ -1038,13 +1031,6 @@ func formatUptime(d time.Duration) string {
 	return fmt.Sprintf("%dm", minutes)
 }
 
-func printFirstRunOperatorToken(cfg *config.Config) {
-	if cfg == nil || !cfg.IsFirstRun() || cfg.Server.Token == "" {
-		return
-	}
-	fmt.Printf("First-run operator token (save it now; it will not be shown again): %s\n", cfg.Server.Token)
-}
-
 func runService(action string) {
 	fmt.Printf(display.Emoji("🔧", "[*]")+" Service Management: %s\n\n", action)
 
@@ -1055,10 +1041,6 @@ func runService(action string) {
 		exitFunc(1)
 		return
 	}
-
-	// Service management can initialize first-run configuration before the
-	// server process starts, so display its one-time operator token here too.
-	printFirstRunOperatorToken(cfg)
 
 	// Create service manager
 	sm := service.NewServiceManager(cfg)
@@ -1130,22 +1112,30 @@ func runService(action string) {
 			return
 		}
 		// Step 4: delete all data directories and the PID file.
+		var cleanupErrors []error
 		for _, dir := range []string{
 			config.GetConfigDir(), config.GetDataDir(), config.GetCacheDir(),
 			config.GetLogDir(), config.GetBackupDir(),
 		} {
 			if dir != "" {
 				if err := os.RemoveAll(dir); err != nil {
-					slog.Warn("Failed to remove directory during uninstall", "dir", dir, "err", err)
+					cleanupErrors = append(cleanupErrors, fmt.Errorf("remove directory %s: %w", dir, err))
 				}
 			}
 		}
 		if pidFile := config.GetPIDFile(); pidFile != "" {
-			os.Remove(pidFile) //nolint:errcheck
+			if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("remove PID file %s: %w", pidFile, err))
+			}
 		}
 		// Step 5: delete the system user and group created by the server.
 		if err := service.DeleteSystemUser(config.InternalName); err != nil {
-			slog.Warn("Failed to delete system user during uninstall", "err", err)
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("delete system user: %w", err))
+		}
+		if err := errors.Join(cleanupErrors...); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Service uninstall incomplete: %v\n", err)
+			exitFunc(1)
+			return
 		}
 		fmt.Println(i18n.TDefault("service.uninstalled_remove_binary", config.GetBinaryPath()))
 

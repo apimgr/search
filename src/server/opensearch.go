@@ -421,6 +421,13 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		return
 	}
 	values := r.Form
+	if values.Get("reset_preferences") == "true" {
+		s.clearPreferenceCookies(w, r)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Location", "/server/preferences")
+		w.WriteHeader(http.StatusSeeOther)
+		return
+	}
 	if CanSetPreferenceCookie(r) {
 		weatherUnits := values.Get("search_widget_weather_units")
 		if weatherUnits != "auto" && weatherUnits != "metric" && weatherUnits != "imperial" {

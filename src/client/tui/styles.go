@@ -30,7 +30,7 @@ func StylesFromTerminalPalette(p theme.TerminalPalette) TUIStyles {
 			Bold(true).
 			Padding(0, 1),
 		Selected: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(p.Background)).
+			Foreground(lipgloss.Color(p.Foreground)).
 			Background(lipgloss.Color(p.Primary)).
 			Bold(true),
 		Error: lipgloss.NewStyle().
@@ -49,4 +49,4 @@ func StylesFromTerminalPalette(p theme.TerminalPalette) TUIStyles {
 }
 
 // CurrentStyles is the active style set, rebuilt whenever the theme changes.
-var CurrentStyles = StylesFromTerminalPalette(theme.TerminalDark)
+var CurrentStyles = StylesFromTerminalPalette(theme.TerminalPaletteDark)

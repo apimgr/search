@@ -23,9 +23,11 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -52,20 +54,81 @@ func runNoJS(t *testing.T, steps ...chromedp.Action) string {
 // typing a query and clicking submit must navigate to /search?q=... with no
 // script running at all.
 func TestNoJSHomeSearchFormSubmitsNatively(t *testing.T) {
-	site := newTestSite(t)
+	site := newCoreSearchTestSite(t)
 
-	var url string
-	runNoJS(t,
+	var url, html string
+	html = runNoJS(t,
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
-		chromedp.SendKeys(`#searchQuery`, "golang testing"),
+		chromedp.SendKeys(`#searchQuery`, "core search fixture nojs"),
 		chromedp.Click(`.search-btn`, chromedp.ByQuery),
 		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
 		chromedp.Location(&url),
+		chromedp.OuterHTML("html", &html),
 	)
 
-	if !strings.Contains(url, "/search") || !strings.Contains(url, "q=golang") {
-		t.Errorf("no-JS search submit navigated to %q, want /search?q=golang...", url)
+	if !strings.Contains(url, "/search") || !strings.Contains(url, "q=core+search+fixture") {
+		t.Errorf("no-JS search submit navigated to %q, want the submitted query", url)
+	}
+	if strings.Count(html, `<article class="result-item">`) != 3 || strings.Count(html, "Shared fixture result") != 1 {
+		t.Errorf("no-JS search did not render three deduplicated engine results")
+	}
+	for _, title := range []string{"Higher priority fixture result", "Lower priority fixture result", "DuckDuckGo", "Wikipedia"} {
+		if !strings.Contains(html, title) {
+			t.Errorf("no-JS search results are missing %q", title)
+		}
+	}
+}
+
+func TestNoJSSearchFiltersBlockedDomains(t *testing.T) {
+	site := newCoreSearchTestSite(t)
+	html := runNoJS(t,
+		chromedp.Navigate(site.URL+"/search?q=core+search+fixture+blocked+domain&engines=duckduckgo"),
+		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+	)
+	if !strings.Contains(html, "Allowed domain fixture result") {
+		t.Fatal("no-JS search page omitted the allowed result")
+	}
+	if strings.Contains(html, "Blocked domain fixture result") || strings.Contains(html, "blocked.example.test") {
+		t.Fatal("no-JS search page exposed a result from a blocked domain")
+	}
+}
+
+func TestNoJSVideoSearchRendersPeerTubePreviewMetadata(t *testing.T) {
+	site := newCoreSearchTestSite(t)
+	html := runNoJS(t,
+		chromedp.Navigate(site.URL+"/search?q=fixture+clip&category=videos"),
+		chromedp.WaitVisible(`.video-result`, chromedp.ByQuery),
+	)
+	for _, marker := range []string{`data-video-preview-url="/media/preview/peertube/fixture.mp4"`, `data-video-duration="120"`, "Fixture PeerTube clip", "Fixture channel"} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("no-JS video results omitted %q", marker)
+		}
+	}
+}
+
+func TestNoJSGraphQLExplorerSubmitsNativeQueryForm(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx, emulation.SetScriptExecutionDisabled(true)); err != nil {
+		t.Fatalf("disable JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/server/docs/graphql"),
+		chromedp.WaitVisible(`#query`, chromedp.ByQuery),
+		chromedp.SetValue(`#query`, `{ health { status version } }`),
+	); err != nil {
+		t.Fatalf("prepare no-JS GraphQL query: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#run-btn`); err != nil {
+		t.Fatalf("submit native GraphQL form: %v", err)
+	}
+	var body string
+	if err := chromedp.Run(ctx, chromedp.Text(`#response`, &body, chromedp.ByQuery)); err != nil {
+		t.Fatalf("read native GraphQL response: %v", err)
+	}
+	if !strings.Contains(body, `"data"`) || !strings.Contains(body, `"status"`) || !strings.Contains(body, `"version"`) {
+		t.Fatalf("native GraphQL form response lacks query data: %s", body)
 	}
 }
 
@@ -106,19 +169,29 @@ func TestNoJSKeyboardShortcutGuideRemainsReadable(t *testing.T) {
 
 func TestNoJSSearchCategoryCanBeSelectedNatively(t *testing.T) {
 	site := newTestSite(t)
-	var pageURL, category string
+	var pageURL, category, html, referrerPolicy string
 	runNoJS(t,
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.WaitVisible(`#nojs-category`, chromedp.ByQuery),
+		chromedp.OuterHTML(`#nojs-category`, &html, chromedp.ByQuery),
 		chromedp.SetValue(`#nojs-category`, "images", chromedp.ByQuery),
 		chromedp.SendKeys(`#searchQuery`, "mountain landscape"),
 		chromedp.Click(`.search-btn`, chromedp.ByQuery),
 		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
 		chromedp.Location(&pageURL),
 		chromedp.AttributeValue(`.search-results-page`, `data-category`, &category, nil, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('meta[name="referrer"]')?.content || ''`, &referrerPolicy),
 	)
 	if !strings.Contains(pageURL, "category=images") || category != "images" {
 		t.Fatalf("no-JS category search used URL %q and rendered category %q", pageURL, category)
+	}
+	if referrerPolicy != "no-referrer" {
+		t.Errorf("no-JS search referrer policy = %q, want no-referrer", referrerPolicy)
+	}
+	for _, value := range []string{"general", "images", "videos", "news", "maps", "files", "music", "science", "it", "social"} {
+		if !strings.Contains(html, `value="`+value+`"`) {
+			t.Errorf("no-JS category selector is missing %q", value)
+		}
 	}
 }
 
@@ -179,6 +252,117 @@ func TestNoJSAlertCreationActivatesWithoutEmailVerification(t *testing.T) {
 	}
 }
 
+func TestNoJSAlertManageLifecycle(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx, emulation.SetScriptExecutionDisabled(true)); err != nil {
+		t.Fatalf("disable JavaScript: %v", err)
+	}
+	var managePath, value, pageURL, deliveryState string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/alerts/new?q=nojs%20alert%20original&category=general"),
+		chromedp.WaitVisible("form.alert-form", chromedp.ByQuery),
+		chromedp.SetValue("#email", "alerts@example.test", chromedp.ByQuery),
+		chromedp.Click(`input[name="deliver_webhook"]`, chromedp.ByQuery),
+		chromedp.SetValue(`#webhook_url`, "https://203.0.113.10/fixture", chromedp.ByQuery),
+		chromedp.Click("form.alert-form button[type=submit]", chromedp.ByQuery),
+		chromedp.WaitVisible("a[href*='/alerts/manage/']", chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector("a[href*='/alerts/manage/']").getAttribute('href')`, &managePath),
+	); err != nil {
+		t.Fatalf("create accountless alert without JavaScript: %v", err)
+	}
+	if managePath == "" {
+		t.Fatal("created no-JS alert did not expose its manage link")
+	}
+	parsedManageURL, err := url.Parse(managePath)
+	if err != nil {
+		t.Fatalf("parse alert manage link: %v", err)
+	}
+	if parsedManageURL.IsAbs() {
+		managePath = parsedManageURL.RequestURI()
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+managePath),
+		chromedp.WaitVisible(".alert-page form.alert-form", chromedp.ByQuery),
+		chromedp.Value("#query", &value, chromedp.ByQuery),
+		chromedp.Evaluate(`[document.querySelector('input[name="deliver_webhook"]').checked, document.querySelector('#webhook_url').value].join('|')`, &deliveryState),
+	); err != nil {
+		t.Fatalf("open no-JS alert management page: %v", err)
+	}
+	if value != "nojs alert original" {
+		t.Fatalf("managed alert query = %q, want original query", value)
+	}
+	if deliveryState != "true|https://203.0.113.10/fixture" {
+		t.Fatalf("managed webhook alert state = %q", deliveryState)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.SetValue("#query", "nojs alert updated", chromedp.ByQuery),
+		chromedp.SetValue("#frequency", "weekly", chromedp.ByQuery),
+		chromedp.Click(".alert-page form.alert-form button[type=submit]", chromedp.ByQuery),
+		chromedp.WaitReady(".alert-page", chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('#query')?.value === 'nojs alert updated'`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Value("#query", &value, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("update alert without JavaScript: %v", err)
+	}
+	if value != "nojs alert updated" {
+		t.Fatalf("updated alert query = %q", value)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, "form.alert-inline-form[action$='/pause'] button"); err != nil {
+		t.Fatalf("submit no-JS alert pause: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady(".alert-page", chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector("form.alert-inline-form[action$='/pause'] input[name=paused]")?.value === "0"`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Value("form.alert-inline-form[action$='/pause'] input[name=paused]", &value, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("pause alert without JavaScript: %v", err)
+	}
+	if value != "0" {
+		t.Fatalf("paused alert next-action value = %q, want resume value 0", value)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, "form.alert-inline-form[action$='/pause'] button"); err != nil {
+		t.Fatalf("submit no-JS alert resume: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady(".alert-page", chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector("form.alert-inline-form[action$='/pause'] input[name=paused]")?.value === "1"`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Value("form.alert-inline-form[action$='/pause'] input[name=paused]", &value, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("resume alert without JavaScript: %v", err)
+	}
+	if value != "1" {
+		t.Fatalf("resumed alert next-action value = %q, want pause value 1", value)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, "form.alert-inline-form[action$='/delete'] button"); err != nil {
+		t.Fatalf("submit no-JS alert deletion: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady("form.alert-form", chromedp.ByQuery),
+		chromedp.Poll(`location.pathname === "/alerts/new"`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Location(&pageURL),
+	); err != nil {
+		t.Fatalf("delete alert without JavaScript: %v", err)
+	}
+	if !strings.Contains(pageURL, "/alerts/new") {
+		t.Fatalf("deleted alert redirected to %q, want alert creation page", pageURL)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+managePath),
+		chromedp.WaitVisible(".error-page", chromedp.ByQuery),
+		chromedp.Text(".error-code", &value, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("verify deleted no-JS alert token is revoked: %v", err)
+	}
+	if value != "404" {
+		t.Fatalf("deleted alert manage link returned status %q, want 404", value)
+	}
+}
+
 func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	site := newTestSite(t)
 	var primary, linked, updated, rotated string
@@ -204,7 +388,13 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] input[name=name]`, "nojs-linked", chromedp.ByQuery),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] select[name=expires_at]`, "7d", chromedp.ByQuery),
-		chromedp.Click(`form[action="/server/preferences/tokens"] button[type=submit]`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare linked token creation without JavaScript: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/tokens"] button[type=submit]`); err != nil {
+		t.Fatalf("submit linked token creation without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &linked, chromedp.ByQuery),
 	); err != nil {
@@ -232,8 +422,16 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('.owner-token-item form[action$="/update"]').action`, &action),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] input[name=name]`, "nojs-renamed", chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] select[name=expires_at]`, "30d", chromedp.ByQuery),
-		chromedp.Click(`.owner-token-item form[action$="/update"] button[type=submit]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`.owner-token-item h4`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare linked-token update without JavaScript: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/update"] button[type=submit]`); err != nil {
+		t.Fatalf("submit linked-token update without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady(`.owner-token-item h4`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('.owner-token-item h4')?.textContent.trim() === 'nojs-renamed'`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Text(`.owner-token-item h4`, &updated, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("rename and update linked-token expiry without JavaScript: %v", err)
@@ -241,8 +439,10 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if updated != "nojs-renamed" {
 		t.Fatalf("linked token name after update = %q", updated)
 	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/rotate"] button`); err != nil {
+		t.Fatalf("submit linked-token rotation without JavaScript: %v", err)
+	}
 	if err := chromedp.Run(ctx,
-		chromedp.Click(`.owner-token-item form[action$="/rotate"] button`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
 	); err != nil {
@@ -251,9 +451,13 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if rotated == "" || rotated == linked {
 		t.Fatalf("linked token rotation did not replace credential: old=%t new=%t", linked != "", rotated != "")
 	}
+	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/server/preferences")); err != nil {
+		t.Fatalf("reload preferences before revealing owner token: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/reveal"] button`); err != nil {
+		t.Fatalf("submit primary-token reveal without JavaScript: %v", err)
+	}
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`form[action="/server/preferences/token/reveal"] button`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &status, chromedp.ByQuery),
 	); err != nil {
@@ -266,7 +470,13 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	var linkedStatus string
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(`document.querySelector('.owner-token-item form[action$="/revoke"]').action.split('/').slice(-2, -1)[0]`, &linkedID),
-		chromedp.Click(`.owner-token-item form[action$="/revoke"] button`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("read linked-token revoke route: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button`); err != nil {
+		t.Fatalf("submit linked-token revoke without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
 		chromedp.Text(`.owner-token-item p`, &linkedStatus, chromedp.ByQuery),
 	); err != nil {
@@ -278,8 +488,10 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if !strings.Contains(strings.ToLower(linkedStatus), "revoked") {
 		t.Fatalf("linked token after revocation has status %q", linkedStatus)
 	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/rotate"] button`); err != nil {
+		t.Fatalf("submit primary-token rotation without JavaScript: %v", err)
+	}
 	if err := chromedp.Run(ctx,
-		chromedp.Click(`form[action="/server/preferences/token/rotate"] button`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
 	); err != nil {
@@ -305,7 +517,13 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		network.ClearBrowserCookies(),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.SetValue(`#restore-owner-token`, rotated, chromedp.ByQuery),
-		chromedp.Click(`form[action="/server/preferences/token/restore"] button`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare restored owner token without JavaScript: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/restore"] button`); err != nil {
+		t.Fatalf("submit restored owner token without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("restore rotated primary token without JavaScript: %v", err)
@@ -547,6 +765,35 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	}
 }
 
+func TestNoJSPreferencesResetUsesNativePost(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var cookies string
+	if err := chromedp.Run(ctx,
+		emulation.SetScriptExecutionDisabled(true),
+		network.SetCookie("theme", "light").WithURL(site.URL),
+		network.SetCookie("lang", "de").WithURL(site.URL),
+		network.SetCookie("search_pref_font_size", "large").WithURL(site.URL),
+		network.SetCookie("search_widgets", "none").WithURL(site.URL),
+		network.SetCookie("search_widget_weather_units", "imperial").WithURL(site.URL),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.WaitVisible(`#reset-prefs`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare no-JS preference reset: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#reset-prefs`); err != nil {
+		t.Fatalf("submit no-JS preference reset: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.cookie`, &cookies)); err != nil {
+		t.Fatalf("read no-JS reset cookies: %v", err)
+	}
+	for _, name := range []string{"theme=", "lang=", "search_pref_font_size=", "search_widgets=", "search_widget_weather_units="} {
+		if strings.Contains(cookies, name) {
+			t.Errorf("no-JS reset left %s in browser cookies: %q", name, cookies)
+		}
+	}
+}
+
 func TestNoJSCookieConsentSettingsSaveFromPreferences(t *testing.T) {
 	site := newTestSite(t)
 	var preferencesHTML string
@@ -663,9 +910,16 @@ func TestNoJSQRCustomizationSubmitsNatively(t *testing.T) {
 		chromedp.SetValue(`select[name="size"]`, "S", chromedp.ByQuery),
 		chromedp.SetValue(`select[name="level"]`, "Q", chromedp.ByQuery),
 		chromedp.SetValue(`input[name="foreground"]`, "#123456", chromedp.ByQuery),
-		chromedp.Click(`.qr-options button[type="submit"]`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare no-JS QR customization: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.qr-options button[type="submit"]`); err != nil {
+		t.Fatalf("submit no-JS QR customization: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.WaitVisible(`.direct-answer-page[data-type="qr"]`, chromedp.ByQuery),
-		chromedp.Location(&pageURL), chromedp.OuterHTML("html", &html),
+		chromedp.Location(&pageURL),
+		chromedp.OuterHTML("html", &html),
 	); err != nil {
 		t.Fatalf("no-JS QR customization: %v", err)
 	}
@@ -758,6 +1012,71 @@ func TestNoJSLocalDirectAnswerFeatures(t *testing.T) {
 	}
 }
 
+func TestNoJSDirectoryScanPagination(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx, emulation.SetScriptExecutionDisabled(true)); err != nil {
+		t.Fatalf("disable script execution: %v", err)
+	}
+	navigated := make(chan struct{}, 1)
+	chromedp.ListenTarget(ctx, func(event interface{}) {
+		frameEvent, ok := event.(*page.EventFrameNavigated)
+		if ok && frameEvent.Frame.ParentID == "" {
+			select {
+			case navigated <- struct{}{}:
+			default:
+			}
+		}
+	})
+	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/direct/directory/fixture")); err != nil {
+		t.Fatalf("open directory listing: %v", err)
+	}
+	loadPage := func(selector, expectedRange string) {
+		t.Helper()
+	drainNavigationEvents:
+		for {
+			select {
+			case <-navigated:
+			default:
+				break drainNavigationEvents
+			}
+		}
+		err := chromedp.Run(ctx, chromedp.Click(selector, chromedp.ByQuery))
+		if err != nil {
+			select {
+			case <-navigated:
+			default:
+				t.Fatalf("submit no-JS directory page: %v", err)
+			}
+		}
+		select {
+		case <-navigated:
+		case <-time.After(5 * time.Second):
+			t.Fatal("no-JS directory form did not navigate")
+		}
+		if err := chromedp.Run(ctx,
+			chromedp.WaitReady("body", chromedp.ByQuery),
+			chromedp.Poll(`document.querySelector('.directory-file-range')?.textContent.includes("`+expectedRange+`") === true`, nil,
+				chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		); err != nil {
+			t.Fatalf("no-JS directory page %q did not render: %v", expectedRange, err)
+		}
+	}
+	loadPage(`.directory-scan-link`, "Scanned files 1–500 of 1201")
+	loadPage(`.directory-page-link[data-page-direction="next"]`, "Scanned files 501–1000 of 1201")
+	var firstFile, lastFile string
+	if err := chromedp.Run(ctx,
+		chromedp.Text(`.directory-files li:first-child a`, &firstFile, chromedp.ByQuery),
+		chromedp.Text(`.directory-files li:last-child a`, &lastFile, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("read no-JS directory page: %v", err)
+	}
+	if firstFile != "file-0499.bin" || lastFile != "file-0998.bin" {
+		t.Fatalf("no-JS second page contains %q through %q", firstFile, lastFile)
+	}
+	loadPage(`.directory-page-link[data-page-direction="next"]`, "Scanned files 1001–1201 of 1201")
+}
+
 func TestNoJSChmodPermissionFormSubmits(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
@@ -812,11 +1131,18 @@ func TestNoJSArchiveTimelineFormSelectsIndexedCapture(t *testing.T) {
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/direct/cache/8.8.8.8"),
 		chromedp.Evaluate(`document.querySelector('.archive-timeline select[name="snapshot_id"]').selectedIndex = 1`, nil),
-		chromedp.Click(`.archive-timeline button[type="submit"]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`.direct-content`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare no-JS archive timeline: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.archive-timeline button[type="submit"]`); err != nil {
+		t.Fatalf("submit no-JS archive timeline: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Poll(`document.querySelector('.direct-content')?.innerText.includes('Archived fixture page older capture') === true`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.direct-content')?.innerText || ''`, &content),
 	); err != nil {
-		t.Fatalf("no-JS archive timeline: %v", err)
+		t.Fatalf("read no-JS archive timeline result: %v", err)
 	}
 	if !strings.Contains(content, "Archived fixture page older capture") {
 		t.Fatalf("no-JS timeline did not select the older capture: %q", content)
@@ -825,20 +1151,81 @@ func TestNoJSArchiveTimelineFormSelectsIndexedCapture(t *testing.T) {
 
 // TestNoJSPaginationLinksNavigate exercises search result pagination
 // ("Core Search") as plain <a href> links, per PART 28 → "Universal
-// Coverage": pagination has to work without JS. Two distinct queries assert
-// the link that follows the results actually changes params.CurrentPage.
+// Coverage": pagination has to work without JS.
 func TestNoJSPaginationLinksNavigate(t *testing.T) {
-	site := newTestSite(t)
-
+	site := newCoreSearchTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx, emulation.SetScriptExecutionDisabled(true)); err != nil {
+		t.Fatalf("disable JavaScript: %v", err)
+	}
 	var url string
-	runNoJS(t,
-		chromedp.Navigate(site.URL+"/search?q=test&category=general"),
-		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/search?q=core+search+fixture+pagination&category=general&per_page=1"),
+		chromedp.WaitVisible(`.pagination-next`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("load first no-JS results page: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.pagination-next`); err != nil {
+		t.Fatalf("follow no-JS next-page link: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.Location(&url),
-	)
+		chromedp.WaitVisible(`.search-results-page[data-page="2"]`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("load second no-JS results page: %v", err)
+	}
+	if !strings.Contains(url, "page=2") {
+		t.Errorf("no-JS pagination URL = %q, want page=2", url)
+	}
+}
 
-	if !strings.Contains(url, "/search") {
-		t.Errorf("no-JS search page URL = %q, want /search...", url)
+func TestNoJSBuiltInBangRedirectsToSearchEngine(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	if err := chromedp.Run(ctx,
+		emulation.SetScriptExecutionDisabled(true),
+		network.Enable(),
+	); err != nil {
+		t.Fatalf("prepare no-JS browser: %v", err)
+	}
+	redirected := make(chan string, 1)
+	chromedp.ListenTarget(ctx, func(event interface{}) {
+		request, ok := event.(*network.EventRequestWillBeSent)
+		if !ok || request.RedirectResponse == nil || !strings.HasPrefix(request.Request.URL, "https://www.google.com/search?") {
+			return
+		}
+		select {
+		case redirected <- request.Request.URL:
+		default:
+		}
+	})
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		_, _, _, _, err := page.Navigate(site.URL + "/search?q=%21g+cats").Do(ctx)
+		return err
+	})); err != nil {
+		t.Fatalf("navigate to built-in bang query: %v", err)
+	}
+	select {
+	case target := <-redirected:
+		parsed, err := url.Parse(target)
+		if err != nil || parsed.Query().Get("q") != "cats" {
+			t.Fatalf("bang redirect target = %q, want Google search for cats", target)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no-JS bang query did not produce an HTTP redirect to Google")
+	}
+}
+
+func TestNoJSPWAOfflineFallbackIsReadable(t *testing.T) {
+	site := newTestSite(t)
+	html := runNoJS(t,
+		chromedp.Navigate(site.URL+"/offline.html"),
+		chromedp.WaitVisible(".offline-fallback", chromedp.ByQuery),
+	)
+	for _, marker := range []string{"You are offline", "Check your connection and try again.", `href="/"`} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("no-JS offline fallback omitted %q", marker)
+		}
 	}
 }
 

@@ -496,7 +496,7 @@
         <div class="data-actions">
             <button type="button" id="export-prefs" class="btn btn-secondary">{{t "preferences.export_preferences"}}</button>
             <button type="button" id="import-prefs" class="btn btn-secondary">{{t "preferences.import_preferences"}}</button>
-            <button type="button" id="reset-prefs" class="btn btn-danger">{{t "preferences.reset_all_preferences"}}</button>
+            <button type="submit" form="general-settings" name="reset_preferences" value="true" id="reset-prefs" class="btn btn-danger">{{t "preferences.reset_all_preferences"}}</button>
         </div>
         <input type="file" id="import-file" accept=".json" class="hidden">
     </div>

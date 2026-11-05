@@ -121,8 +121,18 @@ func (sm *ServiceManager) installLaunchd() error {
 
 func (sm *ServiceManager) uninstallLaunchd() error {
 	plistPath := sm.getLaunchdPath()
-	runCommand("launchctl", "unload", plistPath) //nolint:errcheck
-	os.Remove(plistPath)
+	status, err := sm.statusLaunchd()
+	if err != nil {
+		return fmt.Errorf("failed to check launchd service before uninstall: %w", err)
+	}
+	if status == "active" {
+		if err := runCmd("launchctl", "unload", plistPath); err != nil {
+			return fmt.Errorf("failed to stop launchd service: %w", err)
+		}
+	}
+	if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove launchd plist: %w", err)
+	}
 	return nil
 }
 

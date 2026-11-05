@@ -310,17 +310,14 @@ func TestHealth(t *testing.T) {
 			t.Errorf("Health() path = %q, want %q", r.URL.Path, wantPath)
 		}
 
-		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
-		response := map[string]interface{}{
-			"ok": true,
-			"data": HealthResponse{
-				Status:  "healthy",
-				Version: "1.0.0",
-				Features: map[string]interface{}{
-					"tor": map[string]interface{}{"enabled": true, "status": "healthy"},
-				},
-				Checks: map[string]interface{}{"database": "ok"},
+		// Health probes return the bare health payload per AI.md PART 14.
+		response := HealthResponse{
+			Status:  "healthy",
+			Version: "1.0.0",
+			Features: map[string]interface{}{
+				"tor": map[string]interface{}{"enabled": true, "status": "healthy"},
 			},
+			Checks: map[string]interface{}{"database": "ok"},
 		}
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -351,14 +348,8 @@ func TestHealth(t *testing.T) {
 
 func TestGetVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
-		response := map[string]interface{}{
-			"ok": true,
-			"data": HealthResponse{
-				Status:  "healthy",
-				Version: "2.0.0",
-			},
-		}
+		// Health probes return the bare health payload per AI.md PART 14.
+		response := HealthResponse{Status: "healthy", Version: "2.0.0"}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -660,14 +651,8 @@ func TestHealthConnectionError(t *testing.T) {
 // Test GetVersion with empty version in response
 func TestGetVersionEmptyVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
-		response := map[string]interface{}{
-			"ok": true,
-			"data": HealthResponse{
-				Status:  "healthy",
-				Version: "",
-			},
-		}
+		// Health probes return the bare health payload per AI.md PART 14.
+		response := HealthResponse{Status: "healthy"}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()

@@ -66,7 +66,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 | External service | Trusted for | Failure mode |
 |------------------|-------------|--------------|
 | Primary search engines (Google, Bing, DuckDuckGo, Brave, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
-| Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, OpenStreetMap) | Domain-specific search/answers | Same as above |
+| Specialized engines (Wikipedia, YouTube, PeerTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, OpenStreetMap) | Domain-specific search/answers | Same as above |
 | Instant-answer providers (Open-Meteo, Nominatim, Frankfurter, Wiktionary, ip-location-db, etc.) | Read-only widget data; conversion requests send currency codes, not amounts | Validate bounded responses; skip the widget on failure and never block main search |
 | RIPEstat Data API for `asn:` answers | Current public registration and RIS routing observations; data may be delayed or incomplete | Bounded JSON only; a failed core AS overview fails that direct answer, while unavailable optional prefixes, neighbors, history, or registry details are omitted; observed path positions do not prove commercial relationships. Operators using RIPEstat commercially must contact RIPE NCC. |
 | Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
@@ -2203,6 +2203,7 @@ Primary engines with their own indexes - no proxies or metasearch:
 |--------|----------|-------|
 | Wikipedia | web, instant | Instant answers |
 | YouTube | videos | Video search |
+| PeerTube | videos | Public search of PeerTube.TV videos and same-origin MP4/WebM preview clips for videos hosted on that instance; no account or API key required |
 | Reddit | social | **Hard-blocked in production** — public JSON endpoints aggressively rate-limited without an authenticated app (see `TODO.AI.md`) |
 | StackOverflow | it | Programming Q&A |
 | GitHub | it | Code/repositories |

@@ -312,6 +312,34 @@ func TestAggregatorSearchCaching(t *testing.T) {
 	}
 }
 
+func TestAggregatorSearchFiltersBlockedDomainsAcrossCacheHits(t *testing.T) {
+	engine := newMockEngine("test", model.CategoryGeneral, true)
+	engine.SetResults([]model.Result{
+		{URL: "https://allowed.example/1", Title: "Allowed", Language: "en"},
+		{URL: "https://sub.blocked.example/2", Title: "Blocked", Language: "fr"},
+	})
+	agg := NewAggregator([]Engine{engine}, AggregatorConfig{CacheEnabled: true})
+	agg.SetBlockedDomainLookup(func(domain string) bool {
+		return domain == "blocked.example" || domain == "sub.blocked.example"
+	})
+
+	for _, wantCache := range []bool{false, true} {
+		results, err := agg.Search(context.Background(), &model.Query{Text: "blocklist cache", Category: model.CategoryGeneral})
+		if err != nil {
+			t.Fatalf("Search() error = %v", err)
+		}
+		if len(results.Results) != 1 || results.Results[0].Title != "Allowed" {
+			t.Fatalf("results = %+v, want only the allowed result", results.Results)
+		}
+		if results.TotalResults != 1 || results.TotalPages != 1 || results.Domains["allowed.example"] != 1 || results.Languages["en"] != 1 || len(results.Languages) != 1 {
+			t.Fatalf("filtered metadata = total:%d pages:%d domains:%v languages:%v", results.TotalResults, results.TotalPages, results.Domains, results.Languages)
+		}
+		if results.FromCache != wantCache {
+			t.Fatalf("FromCache = %v, want %v", results.FromCache, wantCache)
+		}
+	}
+}
+
 func TestAggregatorGenerateCacheKey(t *testing.T) {
 	agg := NewAggregatorSimple([]Engine{}, 10*time.Second)
 

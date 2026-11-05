@@ -2,6 +2,7 @@ package direct
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -1168,7 +1169,7 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Term:        term,
 			Title:       i18n.T(lang, "direct.url_safety_check_title"),
 			Description: i18n.T(lang, "direct.invalid_url"),
-			Content:     fmt.Sprintf("<p class=\"error\">Invalid URL: %s</p>", escapeHTML(term)),
+			Content:     fmt.Sprintf("<p class=\"error\">%s</p>", escapeHTML(translateSafetyText(lang, "direct.safe_invalid_url", map[string]string{"url": term}))),
 			Error:       "invalid_url",
 		}, nil
 	}
@@ -1178,10 +1179,12 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	// Perform safety checks
 	checkedURL := parsedURL.Scheme + "://" + parsedURL.Host + "/"
 	checks := performSafetyChecks(ctx, h.client, domain, checkedURL)
+	localThreatIntelKnown := false
 	if h.domainBlacklist == nil {
 		checks = append(checks, safetyCheck{Name: "Known Blacklist", Details: "No local domain blacklist data is available"})
 	} else {
 		blocked, known := h.domainBlacklist(domain)
+		localThreatIntelKnown = known
 		details := "Domain is not present in the loaded local domain blacklists"
 		if !known {
 			details = "Local domain blacklist data is unavailable"
@@ -1193,13 +1196,15 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	if h.domainBlacklist == nil {
 		checks = append(checks, safetyCheck{Name: "Related Malicious Domains", Details: "Related-domain intelligence is unavailable because no local domain blacklist is loaded"})
 	} else {
-		_, blacklistKnown := h.domainBlacklist(domain)
+		blacklistKnown := localThreatIntelKnown
 		related := relatedBlacklistedDomains(domain, func(candidate string) bool {
 			blocked, _ := h.domainBlacklist(candidate)
 			return blocked
 		}, blacklistKnown)
 		details := "No one-edit related domain was found in the loaded local domain blacklists"
-		if len(related) > 0 {
+		if !blacklistKnown {
+			details = "Related-domain intelligence is unavailable because local domain blacklist data is unavailable"
+		} else if len(related) > 0 {
 			details = "Related blacklisted domains: " + strings.Join(related, ", ")
 		}
 		checks = append(checks, safetyCheck{Name: "Related Malicious Domains", Passed: len(related) == 0, Known: blacklistKnown, Details: details})
@@ -1269,11 +1274,12 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	var rating string
 	if !allChecksPassed {
 		rating = i18n.T(lang, "direct.suspicious_rating")
-	} else if reputationKnown {
+	} else if reputationKnown && reputationSafe && localThreatIntelKnown {
 		rating = i18n.T(lang, "direct.safe_rating")
 	} else {
 		rating = i18n.T(lang, "direct.unknown_rating")
 	}
+	checks = localizeSafetyChecks(lang, checks)
 
 	data := map[string]interface{}{
 		"url":                checkedURL,
@@ -1291,10 +1297,10 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeSafe,
 		Term:        term,
-		Title:       fmt.Sprintf("URL Safety: %s", domain),
+		Title:       translateSafetyText(lang, "direct.safe_title", map[string]string{"domain": domain}),
 		Description: rating,
-		Content:     formatSafeContent(domain, rating, reputationKnown && reputationSafe && allChecksPassed, checks),
-		Source:      "Safety Analyzer",
+		Content:     formatSafeContent(lang, domain, rating, reputationKnown && reputationSafe && localThreatIntelKnown && allChecksPassed, checks),
+		Source:      i18n.T(lang, "direct.safe_source"),
 		Data:        data,
 	}, nil
 }
@@ -1338,13 +1344,21 @@ func (h *SafeHandler) checkGoogleSafeBrowsing(ctx context.Context, targetURL str
 	if response.StatusCode != http.StatusOK {
 		return false, false
 	}
-	var result struct {
-		Matches []json.RawMessage `json:"matches"`
-	}
-	if decodeBoundedJSON(response.Body, 1<<20, &result) != nil {
+	var result map[string]json.RawMessage
+	if decodeBoundedJSON(response.Body, 1<<20, &result) != nil || result == nil {
 		return false, false
 	}
-	return true, len(result.Matches) == 0
+	if rawMatches, exists := result["matches"]; exists {
+		if bytes.Equal(bytes.TrimSpace(rawMatches), []byte("null")) {
+			return false, false
+		}
+		var matches []json.RawMessage
+		if json.Unmarshal(rawMatches, &matches) != nil {
+			return false, false
+		}
+		return true, len(matches) == 0
+	}
+	return true, true
 }
 
 func relatedBlacklistedDomains(domain string, lookup func(string) bool, known bool) []string {
@@ -1438,32 +1452,50 @@ func (h *SafeHandler) checkPhishTank(ctx context.Context, targetURL string) (boo
 	if response.StatusCode != http.StatusOK {
 		return false, false, "PhishTank reputation is unavailable"
 	}
-	var result struct {
-		Results struct {
-			InDatabase bool            `json:"in_database"`
-			Verified   json.RawMessage `json:"verified"`
-			Valid      json.RawMessage `json:"valid"`
-		} `json:"results"`
-	}
-	if decodeBoundedJSON(response.Body, 1<<20, &result) != nil {
+	var result map[string]json.RawMessage
+	if decodeBoundedJSON(response.Body, 1<<20, &result) != nil || result == nil {
 		return false, false, "PhishTank returned an invalid response"
 	}
-	if !result.Results.InDatabase {
+	var fields map[string]json.RawMessage
+	if rawResults, ok := result["results"]; !ok || json.Unmarshal(rawResults, &fields) != nil || fields == nil {
+		return false, false, "PhishTank returned an incomplete response"
+	}
+	rawInDatabase, ok := fields["in_database"]
+	var inDatabase bool
+	if !ok || json.Unmarshal(rawInDatabase, &inDatabase) != nil {
+		return false, false, "PhishTank returned an incomplete response"
+	}
+	if !inDatabase {
 		return true, true, "PhishTank reported no matching phishing URL"
 	}
-	if phishTankFlag(result.Results.Verified) && phishTankFlag(result.Results.Valid) {
+	verified, verifiedKnown := phishTankFlag(fields["verified"])
+	valid, validKnown := phishTankFlag(fields["valid"])
+	if !verifiedKnown || !validKnown {
+		return false, false, "PhishTank returned an incomplete response"
+	}
+	if verified && valid {
 		return true, false, "PhishTank reported a verified and active phishing URL"
 	}
 	return false, false, "PhishTank returned an unverified or inactive match"
 }
 
-func phishTankFlag(value json.RawMessage) bool {
+func phishTankFlag(value json.RawMessage) (bool, bool) {
 	var textValue string
 	if json.Unmarshal(value, &textValue) == nil {
-		return strings.EqualFold(textValue, "y") || strings.EqualFold(textValue, "true") || textValue == "1"
+		switch strings.ToLower(textValue) {
+		case "y", "true", "1":
+			return true, true
+		case "n", "false", "0":
+			return false, true
+		default:
+			return false, false
+		}
 	}
 	var boolValue bool
-	return json.Unmarshal(value, &boolValue) == nil && boolValue
+	if json.Unmarshal(value, &boolValue) == nil {
+		return boolValue, true
+	}
+	return false, false
 }
 
 type safetyCheck struct {
@@ -1715,20 +1747,95 @@ func rdapRegistrantPrivacy(entities []rdapEntity) (bool, bool) {
 	return false, false
 }
 
-func formatSafeContent(domain, rating string, safe bool, checks []safetyCheck) string {
+func localizeSafetyChecks(lang string, checks []safetyCheck) []safetyCheck {
+	localized := make([]safetyCheck, len(checks))
+	copy(localized, checks)
+	for index := range localized {
+		name := localized[index].Name
+		localized[index].Name = i18n.T(lang, safetyCheckNameKey(name))
+		localized[index].Details = localizeSafetyDetail(lang, name, localized[index])
+	}
+	return localized
+}
+
+func safetyCheckNameKey(name string) string {
+	keys := map[string]string{
+		"HTTPS": "direct.safe_check_https", "Valid Domain": "direct.safe_check_valid_domain",
+		"Phishing Indicators": "direct.safe_check_phishing_indicators", "Domain TLD": "direct.safe_check_domain_tld",
+		"Domain Structure": "direct.safe_check_domain_structure", "Domain Length": "direct.safe_check_domain_length",
+		"Known Blacklist": "direct.safe_check_known_blacklist", "Related Malicious Domains": "direct.safe_check_related_domains",
+		"Public Address": "direct.safe_check_public_address", "Google Safe Browsing": "direct.safe_check_google",
+		"PhishTank": "direct.safe_check_phishtank", "TLS Certificate": "direct.safe_check_tls",
+		"Domain Age": "direct.safe_check_domain_age", "WHOIS Privacy": "direct.safe_check_whois_privacy",
+		"Redirect Chain": "direct.safe_check_redirect_chain",
+	}
+	if key := keys[name]; key != "" {
+		return key
+	}
+	return "direct.safe_check_unknown"
+}
+
+func localizeSafetyDetail(lang, name string, check safetyCheck) string {
+	detail := check.Details
+	switch {
+	case strings.HasPrefix(detail, "Related blacklisted domains: "):
+		return translateSafetyText(lang, "direct.safe_detail_related_match", map[string]string{"domains": strings.TrimPrefix(detail, "Related blacklisted domains: ")})
+	case strings.HasPrefix(detail, "RDAP registration date "):
+		dateAndAge := strings.TrimPrefix(detail, "RDAP registration date ")
+		date, age, ok := strings.Cut(dateAndAge, "; domain age ")
+		if ok {
+			return translateSafetyText(lang, "direct.safe_detail_domain_age", map[string]string{"date": date, "days": strings.TrimSuffix(age, " days")})
+		}
+	case strings.HasPrefix(detail, "Checked the domain root; "):
+		count := strings.TrimSuffix(strings.TrimPrefix(detail, "Checked the domain root; "), " public redirect hops observed")
+		return translateSafetyText(lang, "direct.safe_detail_redirect_chain", map[string]string{"count": count})
+	case detail == "Related-domain intelligence is unavailable because no local domain blacklist is loaded" ||
+		detail == "Related-domain intelligence is unavailable because local domain blacklist data is unavailable":
+		return i18n.T(lang, "direct.safe_detail_related_unavailable")
+	case name == "Known Blacklist" && !check.Known:
+		return i18n.T(lang, "direct.safe_detail_blacklist_unavailable")
+	case name == "Known Blacklist" && !check.Passed:
+		return i18n.T(lang, "direct.safe_detail_blacklist_match")
+	case detail == "The URL host is an IP literal instead of a registered domain":
+		return i18n.T(lang, "direct.safe_detail_ip_literal")
+	case detail == "The internationalized domain name could not be decoded":
+		return i18n.T(lang, "direct.safe_detail_idn_invalid")
+	case strings.Contains(detail, "mixes Latin with Cyrillic or Greek"):
+		return i18n.T(lang, "direct.safe_detail_mixed_script")
+	case detail == "No IP-literal host or mixed Latin/Cyrillic/Greek label was detected":
+		return i18n.T(lang, "direct.safe_detail_no_phishing_signal")
+	case !check.Known:
+		return i18n.T(lang, "direct.safe_detail_unknown")
+	case !check.Passed:
+		return i18n.T(lang, "direct.safe_detail_risk")
+	default:
+		return i18n.T(lang, "direct.safe_detail_clear")
+	}
+	return i18n.T(lang, "direct.safe_detail_unknown")
+}
+
+func translateSafetyText(lang, key string, values map[string]string) string {
+	text := i18n.T(lang, key)
+	for name, value := range values {
+		text = strings.ReplaceAll(text, "{"+name+"}", value)
+	}
+	return text
+}
+
+func formatSafeContent(lang, domain, rating string, safe bool, checks []safetyCheck) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"safe-content\">")
-	fmt.Fprintf(&html, "<h1>URL Safety: %s</h1>", escapeHTML(domain))
+	fmt.Fprintf(&html, "<h1>%s</h1>", escapeHTML(translateSafetyText(lang, "direct.safe_title", map[string]string{"domain": domain})))
 
 	ratingClass := "unknown"
-	if rating == "Suspicious" {
+	if rating == i18n.T(lang, "direct.suspicious_rating") {
 		ratingClass = "suspicious"
 	} else if safe {
 		ratingClass = "safe"
 	}
 	fmt.Fprintf(&html, "<p class=\"rating %s\">%s</p>", ratingClass, escapeHTML(rating))
 
-	html.WriteString("<h2>Security Checks</h2>")
+	fmt.Fprintf(&html, "<h2>%s</h2>", escapeHTML(i18n.T(lang, "direct.safe_security_checks")))
 	html.WriteString("<table class=\"checks-table\">")
 	html.WriteString("<tbody>")
 
@@ -1748,7 +1855,7 @@ func formatSafeContent(domain, rating string, safe bool, checks []safetyCheck) s
 
 	html.WriteString("</tbody></table>")
 
-	html.WriteString("<p class=\"note\"><strong>Note:</strong> This is a basic check. For comprehensive security analysis, use dedicated security services.</p>")
+	fmt.Fprintf(&html, "<p class=\"note\"><strong>%s</strong> %s</p>", escapeHTML(i18n.T(lang, "direct.safe_note_label")), escapeHTML(i18n.T(lang, "direct.safe_note")))
 	html.WriteString("</div>")
 	return html.String()
 }
@@ -2080,7 +2187,8 @@ func validArchiveTodayHost(host string) bool {
 }
 
 func (h *CacheHandler) lookupArchiveToday(ctx context.Context, targetURL string) []archiveSnapshot {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://archive.today/timemap/"+targetURL, nil)
+	timemapURL := (&url.URL{Scheme: "https", Host: "archive.today", Path: "/timemap/" + targetURL}).String()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, timemapURL, nil)
 	if err != nil {
 		return nil
 	}
@@ -2424,7 +2532,11 @@ func (h *CacheHandler) lookupCommonCrawl(ctx context.Context, targetURL string) 
 		Status    string `json:"status"`
 	}
 	var snapshots []archiveSnapshot
-	scanner := bufio.NewScanner(io.LimitReader(response.Body, 1<<20))
+	indexBody, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil || len(indexBody) > 1<<20 {
+		return nil
+	}
+	scanner := bufio.NewScanner(bytes.NewReader(indexBody))
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	for scanner.Scan() && len(snapshots) < 5 {
 		var entry indexEntry
@@ -2443,6 +2555,9 @@ func (h *CacheHandler) lookupCommonCrawl(ctx context.Context, targetURL string) 
 		}
 		metadataURL := "https://index.commoncrawl.org/" + collections[0].ID + "-index?" + url.Values{"url": []string{entryURL.String()}, "output": []string{"json"}}.Encode()
 		snapshots = append(snapshots, archiveSnapshot{Timestamp: entry.Timestamp, Original: entryURL.String(), URL: metadataURL, Source: "Common Crawl", Filename: entry.Filename, Offset: offset, Length: length})
+	}
+	if scanner.Err() != nil {
+		return nil
 	}
 	return snapshots
 }

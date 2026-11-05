@@ -1293,19 +1293,7 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 	// essential cookie_consent cookie set above is not clobbered in the same response.
 	withdrawal := !prefEnabled && !analyticsEnabled
 	if !prefEnabled {
-		for _, name := range []string{
-			"theme", "lang", widgetCookieName, "search_widget_weather_units",
-			"search_pref_category", "search_pref_safe_search", "search_pref_results_per_page",
-			"search_pref_units", "search_pref_new_tab", "search_pref_infinite_scroll",
-			"search_pref_keyboard_shortcuts", "search_pref_save_history", "search_pref_video_previews",
-			"search_pref_font_size", "search_pref_results_density", "search_pref_accent_color", enginePreferenceCookie, engineOrderPreferenceCookie,
-		} {
-			http.SetCookie(w, &http.Cookie{
-				Name: name, Value: "", Path: "/", MaxAge: -1,
-				Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode,
-				Secure: s.cookieSecure(r),
-			})
-		}
+		s.clearPreferenceCookies(w, r)
 	}
 	if withdrawal && s.config.Server.Security.Headers.ClearSiteData.OnConsentWithdrawal {
 		s.setClearSiteData(w, false)
@@ -1319,6 +1307,23 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 		redirectTo = r.Referer()
 	}
 	http.Redirect(w, r, safeRedirectPath(redirectTo), http.StatusSeeOther)
+}
+
+func (s *Server) clearPreferenceCookies(w http.ResponseWriter, r *http.Request) {
+	for _, name := range []string{
+		"theme", "lang", widgetCookieName, "search_widget_weather_units",
+		"search_pref_category", "search_pref_safe_search", "search_pref_results_per_page",
+		"search_pref_units", "search_pref_new_tab", "search_pref_infinite_scroll",
+		"search_pref_keyboard_shortcuts", "search_pref_save_history", "search_pref_video_previews",
+		"search_pref_font_size", "search_pref_results_density", "search_pref_accent_color",
+		enginePreferenceCookie, engineOrderPreferenceCookie,
+	} {
+		http.SetCookie(w, &http.Cookie{
+			Name: name, Value: "", Path: "/", MaxAge: -1,
+			Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode,
+			Secure: s.cookieSecure(r),
+		})
+	}
 }
 
 // handleAnnouncementDismiss handles POST /announcements/dismiss.

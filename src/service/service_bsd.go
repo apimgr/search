@@ -101,8 +101,18 @@ func (sm *ServiceManager) installRCd() error {
 }
 
 func (sm *ServiceManager) uninstallRCd() error {
-	runCommand("service", "search", "stop") //nolint:errcheck
-	os.Remove("/usr/local/etc/rc.d/search")
+	status, err := sm.statusRCd()
+	if err != nil {
+		return fmt.Errorf("failed to check rc.d service before uninstall: %w", err)
+	}
+	if status == "active" {
+		if err := runCmd("service", "search", "stop"); err != nil {
+			return fmt.Errorf("failed to stop rc.d service: %w", err)
+		}
+	}
+	if err := os.Remove("/usr/local/etc/rc.d/search"); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove rc.d service file: %w", err)
+	}
 	return nil
 }
 

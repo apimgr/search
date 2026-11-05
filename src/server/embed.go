@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/theme"
 	"github.com/apimgr/search/src/config"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -399,7 +400,20 @@ func StaticFileServer() http.Handler {
 	if err != nil {
 		return http.NotFoundHandler()
 	}
-	return etagHandler(http.FileServer(http.FS(staticFS)))
+	files := http.FileServer(http.FS(staticFS))
+	return etagHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if path.Clean("/"+r.URL.Path) == "/css/common.css" {
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+			data, err := GetStaticFile("css/common.css")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(data)
+			return
+		}
+		files.ServeHTTP(w, r)
+	}))
 }
 
 // staticETags memoizes the per-file ETag, keyed by the cleaned,
@@ -460,7 +474,29 @@ func staticETag(urlPath string) (string, bool) {
 
 // GetStaticFile returns the content of a static file
 func GetStaticFile(path string) ([]byte, error) {
-	return fs.ReadFile(EmbeddedFS, filepath.Join("static", path))
+	data, err := fs.ReadFile(EmbeddedFS, filepath.Join("static", path))
+	if err != nil || filepath.ToSlash(path) != "css/common.css" {
+		return data, err
+	}
+	dark := theme.ThemePaletteDark
+	light := theme.ThemePaletteLight
+	replacer := strings.NewReplacer(
+		"__DARK_BACKGROUND__", dark.Background, "__DARK_FOREGROUND__", dark.Foreground,
+		"__DARK_PRIMARY__", dark.Primary, "__DARK_SECONDARY__", dark.Secondary,
+		"__DARK_ACCENT__", dark.Accent, "__DARK_SUCCESS__", dark.Success,
+		"__DARK_WARNING__", dark.Warning, "__DARK_ERROR__", dark.Error,
+		"__DARK_INFO__", dark.Info, "__DARK_SURFACE__", dark.Surface,
+		"__DARK_SURFACE_ALT__", dark.SurfaceAlt, "__DARK_BORDER__", dark.Border,
+		"__DARK_MUTED__", dark.Muted,
+		"__LIGHT_BACKGROUND__", light.Background, "__LIGHT_FOREGROUND__", light.Foreground,
+		"__LIGHT_PRIMARY__", light.Primary, "__LIGHT_SECONDARY__", light.Secondary,
+		"__LIGHT_ACCENT__", light.Accent, "__LIGHT_SUCCESS__", light.Success,
+		"__LIGHT_WARNING__", light.Warning, "__LIGHT_ERROR__", light.Error,
+		"__LIGHT_INFO__", light.Info, "__LIGHT_SURFACE__", light.Surface,
+		"__LIGHT_SURFACE_ALT__", light.SurfaceAlt, "__LIGHT_BORDER__", light.Border,
+		"__LIGHT_MUTED__", light.Muted,
+	)
+	return []byte(replacer.Replace(string(data))), nil
 }
 
 // PageData represents common data passed to all page templates.

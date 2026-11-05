@@ -30,27 +30,106 @@ import (
 // carries the query the user actually typed with no console errors along
 // the way.
 func TestBrowserHomeSearchFlow(t *testing.T) {
-	site := newTestSite(t)
+	site := newCoreSearchTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 
-	var pageURL, html string
+	var pageURL, html, referrerPolicy string
+	var resultCount int
+	var titles []string
+	var categories []string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
-		chromedp.SendKeys(`#searchQuery`, "golang"),
+		chromedp.SendKeys(`#searchQuery`, "core search fixture browser"),
 		chromedp.Click(`.search-btn`, chromedp.ByQuery),
 		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
 		chromedp.Location(&pageURL),
 		chromedp.OuterHTML("html", &html),
+		chromedp.Evaluate(`document.querySelectorAll('.result-item').length`, &resultCount),
+		chromedp.Evaluate(`Array.from(document.querySelectorAll('.result-title')).map(node => node.innerText.trim())`, &titles),
+		chromedp.Evaluate(`Array.from(document.querySelectorAll('.category-link')).map(node => new URL(node.href).searchParams.get('category'))`, &categories),
+		chromedp.Evaluate(`document.querySelector('meta[name="referrer"]')?.content || ''`, &referrerPolicy),
 	); err != nil {
 		t.Fatalf("chromedp run: %v", err)
 	}
 
-	if !strings.Contains(pageURL, "q=golang") {
-		t.Errorf("search flow landed on %q, want q=golang in the URL", pageURL)
+	if !strings.Contains(pageURL, "q=core+search+fixture") {
+		t.Errorf("search flow landed on %q, want the submitted query in the URL", pageURL)
+	}
+	if resultCount != 3 {
+		t.Errorf("rendered %d results, want 3 unique results after cross-engine deduplication", resultCount)
+	}
+	for _, category := range []string{"general", "images", "videos", "news", "maps", "files", "music", "science", "it", "social"} {
+		found := false
+		for _, rendered := range categories {
+			if rendered == category {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("search category navigation is missing %q: %v", category, categories)
+		}
+	}
+	if strings.Count(html, "Shared fixture result") != 1 {
+		t.Errorf("duplicate result was not merged into one rendered result")
+	}
+	position := func(title string) int {
+		for index, candidate := range titles {
+			if candidate == title {
+				return index
+			}
+		}
+		return -1
+	}
+	if position("Higher priority fixture result") < 0 || position("Lower priority fixture result") < 0 || position("Higher priority fixture result") >= position("Lower priority fixture result") {
+		t.Errorf("results are missing or not priority-ranked: %v", titles)
+	}
+	if !strings.Contains(html, "DuckDuckGo") || !strings.Contains(html, "Wikipedia") {
+		t.Error("successful results from both fixture engines were not rendered after the Google failure")
+	}
+	if referrerPolicy != "no-referrer" || !strings.Contains(html, `rel="noopener noreferrer"`) {
+		t.Errorf("search result navigation does not suppress referrer leakage (policy=%q)", referrerPolicy)
 	}
 	requireNoFailures(t, pf, "/ -> /search")
+}
+
+func TestBrowserSearchFiltersBlockedDomains(t *testing.T) {
+	site := newCoreSearchTestSite(t)
+	ctx := newBrowserContext(t)
+	var html string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/search?q=core+search+fixture+blocked+domain&engines=duckduckgo"),
+		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+		chromedp.OuterHTML("html", &html),
+	); err != nil {
+		t.Fatalf("load blocked-domain search results: %v", err)
+	}
+	if !strings.Contains(html, "Allowed domain fixture result") {
+		t.Fatal("browser search page omitted the allowed result")
+	}
+	if strings.Contains(html, "Blocked domain fixture result") || strings.Contains(html, "blocked.example.test") {
+		t.Fatal("browser search page exposed a result from a blocked domain")
+	}
+}
+
+func TestBrowserVideoSearchRendersPeerTubePreviewMetadata(t *testing.T) {
+	site := newCoreSearchTestSite(t)
+	ctx := newBrowserContext(t)
+	var html string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/search?q=fixture+clip&category=videos"),
+		chromedp.WaitVisible(`.video-result`, chromedp.ByQuery),
+		chromedp.OuterHTML("html", &html),
+	); err != nil {
+		t.Fatalf("load PeerTube video results: %v", err)
+	}
+	for _, marker := range []string{`data-video-preview-url="/media/preview/peertube/fixture.mp4"`, `data-video-duration="120"`, "Fixture PeerTube clip", "Fixture channel"} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("browser video results omitted %q", marker)
+		}
+	}
 }
 
 func TestBrowserServiceWorkerServesOfflineFallback(t *testing.T) {
@@ -238,7 +317,7 @@ func TestBrowserKeyboardSearchAndHelpShortcuts(t *testing.T) {
 		chromedp.Evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))`, nil),
 		chromedp.Evaluate(`JSON.stringify({value: document.querySelector('#searchQuery').value, blurred: document.activeElement !== document.querySelector('#searchQuery')})`, &searchAfterEscape),
 		chromedp.Evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 's', bubbles: true}))`, nil),
-		chromedp.WaitVisible(`.preferences-page`, chromedp.ByQuery),
+		chromedp.Sleep(500*time.Millisecond),
 		chromedp.Location(&pageURL),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.Evaluate(`document.activeElement.blur(); document.dispatchEvent(new KeyboardEvent('keydown', {key: '?', bubbles: true}))`, nil),
@@ -687,11 +766,13 @@ func TestBrowserAlertLifecycle(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
-	var managePath, value, pageURL string
+	var managePath, value, pageURL, deliveryState string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/alerts/new?q=browser%20alert%20original&category=general"),
 		chromedp.WaitVisible("form.alert-form", chromedp.ByQuery),
 		chromedp.SetValue("#email", "alerts@example.test", chromedp.ByQuery),
+		chromedp.Click(`input[name="deliver_webhook"]`, chromedp.ByQuery),
+		chromedp.SetValue(`#webhook_url`, "https://203.0.113.10/fixture", chromedp.ByQuery),
 		chromedp.Click("form.alert-form button[type=submit]", chromedp.ByQuery),
 		chromedp.WaitVisible("a[href*='/alerts/manage/']", chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector("a[href*='/alerts/manage/']").getAttribute('href')`, &managePath),
@@ -713,11 +794,15 @@ func TestBrowserAlertLifecycle(t *testing.T) {
 		chromedp.Navigate(site.URL+managePath),
 		chromedp.WaitVisible(".alert-page form.alert-form", chromedp.ByQuery),
 		chromedp.Value("#query", &value, chromedp.ByQuery),
+		chromedp.Evaluate(`[document.querySelector('input[name="deliver_webhook"]').checked, document.querySelector('#webhook_url').value].join('|')`, &deliveryState),
 	); err != nil {
 		t.Fatalf("open alert manage page: %v", err)
 	}
 	if value != "browser alert original" {
 		t.Fatalf("managed alert query = %q, want original query", value)
+	}
+	if deliveryState != "true|https://203.0.113.10/fixture" {
+		t.Fatalf("managed webhook alert state = %q", deliveryState)
 	}
 
 	if err := chromedp.Run(ctx,
@@ -733,30 +818,38 @@ func TestBrowserAlertLifecycle(t *testing.T) {
 		t.Fatalf("updated alert query = %q", value)
 	}
 
+	if err := clickAndWaitForMainFrameNavigation(ctx, "form.alert-inline-form[action$='/pause'] button"); err != nil {
+		t.Fatalf("pause alert in browser: %v", err)
+	}
 	if err := chromedp.Run(ctx,
-		chromedp.Click("form.alert-inline-form[action$='/pause'] button", chromedp.ByQuery),
-		chromedp.WaitVisible(".search-info", chromedp.ByQuery),
+		chromedp.WaitVisible(".alert-page", chromedp.ByQuery),
 		chromedp.Value("form.alert-inline-form[action$='/pause'] input[name=paused]", &value, chromedp.ByQuery),
 	); err != nil {
-		t.Fatalf("pause alert in browser: %v", err)
+		t.Fatalf("read paused alert state: %v", err)
 	}
 	if value != "0" {
 		t.Fatalf("paused alert next-action value = %q, want resume value 0", value)
 	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, "form.alert-inline-form[action$='/pause'] button"); err != nil {
+		t.Fatalf("resume alert in browser: %v", err)
+	}
 	if err := chromedp.Run(ctx,
-		chromedp.Click("form.alert-inline-form[action$='/pause'] button", chromedp.ByQuery),
-		chromedp.WaitVisible(".search-info", chromedp.ByQuery),
+		chromedp.WaitVisible(".alert-page", chromedp.ByQuery),
 		chromedp.Value("form.alert-inline-form[action$='/pause'] input[name=paused]", &value, chromedp.ByQuery),
 	); err != nil {
-		t.Fatalf("resume alert in browser: %v", err)
+		t.Fatalf("read resumed alert state: %v", err)
 	}
 	if value != "1" {
 		t.Fatalf("resumed alert next-action value = %q, want pause value 1", value)
 	}
 
+	if err := clickAndWaitForMainFrameNavigation(ctx, "form.alert-inline-form[action$='/delete'] button"); err != nil {
+		t.Fatalf("submit alert deletion in browser: %v", err)
+	}
 	if err := chromedp.Run(ctx,
-		chromedp.Click("form.alert-inline-form[action$='/delete'] button", chromedp.ByQuery),
-		chromedp.WaitVisible("form.alert-form", chromedp.ByQuery),
+		chromedp.WaitReady("form.alert-form", chromedp.ByQuery),
+		chromedp.Poll(`location.pathname === "/alerts/new"`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Location(&pageURL),
 	); err != nil {
 		t.Fatalf("delete alert in browser: %v", err)
@@ -820,6 +913,7 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Click(`.owner-token-item form[action$="/reveal"] button`, chromedp.ByQuery),
+		chromedp.WaitReady(`.token-reveal .token-value`, chromedp.ByQuery),
 		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &status, chromedp.ByQuery),
@@ -833,6 +927,7 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Click(`.owner-token-item form[action$="/rotate"] button`, chromedp.ByQuery),
+		chromedp.WaitReady(`.token-reveal .token-value`, chromedp.ByQuery),
 		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
 		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
@@ -846,9 +941,17 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Evaluate(`window.confirm = () => true`, nil),
-		chromedp.Click(`.owner-token-item form[action$="/revoke"] button`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare linked token revocation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button`); err != nil {
+		t.Fatalf("submit linked token revocation: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady(`#owner-tokens-heading`, chromedp.ByQuery),
 		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('.owner-token-item p')?.textContent.toLowerCase().includes('revoked')`, nil,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Text(`.owner-token-item p`, &status, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("revoke linked token in browser: %v", err)
@@ -934,9 +1037,12 @@ func TestBrowserAutoThemeTracksSystemColorScheme(t *testing.T) {
 		}),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &light),
+		chromedp.Evaluate(`window.__e2eLightBackground = getComputedStyle(document.body).backgroundColor`, nil),
 		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "dark"}}),
+		chromedp.Poll(`window.matchMedia('(prefers-color-scheme: dark)').matches && getComputedStyle(document.body).backgroundColor !== window.__e2eLightBackground`, nil, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(2*time.Second)),
 		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &dark),
 		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "light"}}),
+		chromedp.Poll(`!window.matchMedia('(prefers-color-scheme: dark)').matches && getComputedStyle(document.body).backgroundColor === window.__e2eLightBackground`, nil, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(2*time.Second)),
 		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &updatedLight),
 	); err != nil {
 		t.Fatalf("auto theme color-scheme emulation: %v", err)
@@ -1034,6 +1140,41 @@ func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
 	requireNoFailures(t, pf, "custom CSS preference save and import")
 }
 
+func TestBrowserResetPreferencesRequiresConfirmationAndClearsLocalData(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var resetComplete bool
+	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
+		network.SetCookie("theme", "light").WithURL(site.URL),
+		network.SetCookie("search_pref_font_size", "large").WithURL(site.URL),
+		network.SetCookie("search_widgets", "none").WithURL(site.URL),
+		network.SetCookie("search_widget_weather_units", "imperial").WithURL(site.URL),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => { localStorage.setItem('search_custom_css', '.fixture { color: red; }'); localStorage.setItem('search_history', '[{"query":"private fixture"}]'); localStorage.setItem('search_custom_bangs', '[{"name":"fixture"}]'); })()`, nil),
+	); err != nil {
+		t.Fatalf("prepare browser preference reset: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Click(`#reset-prefs`, chromedp.ByQuery), chromedp.WaitVisible(`#confirm-dialog[open]`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open preference reset confirmation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#confirm-dialog [data-action="confirm"]`); err != nil {
+		t.Fatalf("confirm browser preference reset: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady("body", chromedp.ByQuery),
+		chromedp.Poll(`[!document.cookie.includes('theme='), !document.cookie.includes('search_pref_font_size='), !document.cookie.includes('search_widgets='), !document.cookie.includes('search_widget_weather_units='), localStorage.getItem('search_custom_css') === null, localStorage.getItem('search_history') === null, localStorage.getItem('search_custom_bangs') === null].every(Boolean)`, &resetComplete, chromedp.WithPollingInterval(50*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+	); err != nil {
+		t.Fatalf("verify browser preference reset: %v", err)
+	}
+	if !resetComplete {
+		t.Error("confirmed preference reset left preference cookies or local data behind")
+	}
+	requireNoFailures(t, pf, "confirmed preference reset")
+}
+
 func TestBrowserOpenSearchCanBeCopiedFromPreferences(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
@@ -1059,7 +1200,7 @@ func TestBrowserOpenSearchCanBeCopiedFromPreferences(t *testing.T) {
 }
 
 func TestBrowserEnginePreferencesPersistSelectionAndPriority(t *testing.T) {
-	site := newTestSite(t)
+	site := newCoreSearchTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	var state string
@@ -1196,12 +1337,118 @@ func TestBrowserVideoPreviewFallsBackWithoutLocalClip(t *testing.T) {
         document.body.appendChild(result);
         const accepted = window.VideoPreview.show(result);
         const video = document.querySelector('#video-preview-container video');
-        return [accepted, video && video.src.startsWith(location.origin), video && video.muted, !!document.querySelector('#video-preview-container iframe')].join(':');
+        let currentTime = 0;
+        Object.defineProperty(video, 'currentTime', {configurable:true, get:() => currentTime, set:value => {currentTime = value;}});
+        video.pause = function() {};
+        video.play = function() { return Promise.resolve(); };
+        currentTime = 10;
+        video.dispatchEvent(new Event('timeupdate'));
+        return [accepted, video && video.src.startsWith(location.origin), video && video.muted, !!document.querySelector('#video-preview-container iframe'), currentTime === 0].join(':');
     })()`, &localPreviewState)); err != nil {
 		t.Fatalf("same-origin video preview setup: %v", err)
 	}
-	if localPreviewState != "true:true:true:false" {
-		t.Errorf("same-origin clip preview state = %q, want accepted/local/muted/no iframe", localPreviewState)
+	if localPreviewState != "true:true:true:false:true" {
+		t.Errorf("same-origin clip preview state = %q, want accepted/local/muted/no iframe/10-second limit", localPreviewState)
+	}
+}
+
+func TestBrowserVideoPreviewMobileSwipeScrubsTimeline(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var state string
+	if err := chromedp.Run(ctx,
+		emulation.SetDeviceMetricsOverride(390, 844, 1, false),
+		chromedp.Navigate(site.URL),
+		chromedp.Evaluate(`(() => {
+            HTMLMediaElement.prototype.play = function() { return Promise.resolve(); };
+            const result = document.createElement('article');
+            result.className = 'video-result';
+            result.dataset.videoPreviewUrl = new URL('/fixtures/preview.webm', location.href).href;
+            result.dataset.videoDuration = '8';
+            result.innerHTML = '<a class="video-thumbnail-link" href="#"><div class="video-thumbnail-container" style="width:200px;height:100px"><img class="video-thumbnail" alt="Fixture thumbnail"></div></a><h3 class="video-title">Mobile fixture clip</h3>';
+            document.body.appendChild(result);
+        })()`, nil),
+		chromedp.Click(`.video-result .video-thumbnail-link`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => {
+            const result = document.querySelector('.video-result');
+            const thumbnail = result.querySelector('.video-thumbnail-container');
+            const video = document.querySelector('#video-preview-container video');
+            if (!video) return 'preview-missing';
+            let currentTime = 0;
+            Object.defineProperty(video, 'currentTime', {configurable:true, get:() => currentTime, set:value => {currentTime = value;}});
+            video.pause = function() {};
+            const touch = (type, x) => {
+                const event = new Event(type, {bubbles:true, cancelable:true});
+                Object.defineProperty(event, 'touches', {value: type === 'touchend' ? [] : [{clientX:x}]});
+                thumbnail.dispatchEvent(event);
+            };
+            const left = thumbnail.getBoundingClientRect().left;
+            touch('touchstart', left + 10);
+            touch('touchmove', left + 180);
+            touch('touchend', left + 180);
+            return [window.matchMedia('(max-width: 767px)').matches, currentTime > 0 && currentTime < 8, Number(document.querySelector('.video-preview-progress').getAttribute('aria-valuenow')) > 0].join(':');
+        })()`, &state),
+	); err != nil {
+		t.Fatalf("mobile video preview swipe: %v", err)
+	}
+	if state != "true:true:true" {
+		t.Errorf("mobile swipe state = %q, want touch viewport to seek and update accessible progress", state)
+	}
+}
+
+func TestBrowserVideoPreviewDesktopHoverStartsMutedClip(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var state string
+	if err := chromedp.Run(ctx,
+		emulation.SetDeviceMetricsOverride(1280, 800, 1, false),
+		chromedp.Navigate(site.URL),
+		chromedp.Evaluate(`(() => {
+            HTMLMediaElement.prototype.play = function() { return Promise.resolve(); };
+            const result = document.createElement('article');
+            result.className = 'video-result';
+            result.dataset.videoPreviewUrl = new URL('/fixtures/preview.webm', location.href).href;
+            result.innerHTML = '<div class="video-thumbnail-container" style="width:200px;height:100px"></div><h3 class="video-title">Desktop fixture clip</h3>';
+            document.body.appendChild(result);
+            result.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true}));
+        })()`, nil),
+		chromedp.Sleep(600*time.Millisecond),
+		chromedp.Evaluate(`(() => { const video=document.querySelector('#video-preview-container video'); return [!!video, video && video.muted, video && video.src.startsWith(location.origin)].join(':'); })()`, &state),
+	); err != nil {
+		t.Fatalf("desktop video hover preview: %v", err)
+	}
+	if state != "true:true:true" {
+		t.Errorf("desktop hover state = %q, want a muted same-origin preview clip", state)
+	}
+}
+
+func TestBrowserVideoPreviewMobileDoubleTapOpensVideoPage(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var pageURL string
+	if err := chromedp.Run(ctx,
+		emulation.SetDeviceMetricsOverride(390, 844, 1, false),
+		chromedp.Navigate(site.URL),
+		chromedp.Evaluate(`(() => {
+            HTMLMediaElement.prototype.play = function() { return Promise.resolve(); };
+            const result = document.createElement('article');
+            result.className = 'video-result';
+            result.dataset.videoPreviewUrl = new URL('/fixtures/preview.webm', location.href).href;
+            result.innerHTML = '<a class="video-thumbnail-link" href="/server/about"><div class="video-thumbnail-container" style="width:200px;height:100px"></div></a><h3 class="video-title">Mobile fixture clip</h3>';
+            document.body.appendChild(result);
+        })()`, nil),
+		chromedp.Click(`.video-result .video-thumbnail-link`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("first mobile video tap: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.video-result .video-thumbnail-link`); err != nil {
+		t.Fatalf("second mobile video tap: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Location(&pageURL)); err != nil {
+		t.Fatalf("read full video destination: %v", err)
+	}
+	if !strings.HasSuffix(pageURL, "/server/about") {
+		t.Errorf("double tap destination = %q, want /server/about", pageURL)
 	}
 }
 
@@ -1326,6 +1573,30 @@ func TestBrowserSwaggerDocsRender(t *testing.T) {
 	}
 
 	requireNoFailures(t, pf, "/server/docs/swagger")
+}
+
+func TestBrowserGraphQLExplorerExecutesQuery(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var response string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(site.URL+"/server/docs/graphql"),
+		chromedp.WaitVisible(`#query`, chromedp.ByQuery),
+		chromedp.SetValue(`#query`, `{ health { status version } }`),
+	); err != nil {
+		t.Fatalf("prepare GraphQL query in browser: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#run-btn`); err != nil {
+		t.Fatalf("submit GraphQL query in browser: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Text(`#response`, &response, chromedp.ByQuery)); err != nil {
+		t.Fatalf("read GraphQL browser response: %v", err)
+	}
+	if !strings.Contains(response, `"status"`) || !strings.Contains(response, `"version"`) {
+		t.Fatalf("GraphQL explorer response lacks requested fields: %s", response)
+	}
+	requireNoFailures(t, pf, "/server/docs/graphql")
 }
 
 // TestBrowserDirectQRDownloadsRender checks the full-page QR downloads in the
@@ -1470,6 +1741,57 @@ func TestBrowserLocalDirectAnswerFeatures(t *testing.T) {
 			requireNoFailures(t, pf, tc.path)
 		})
 	}
+}
+
+func TestBrowserDirectoryScanPagination(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	pf := watchForFailures(ctx)
+	var rangeText, firstFile, lastFile string
+	var nextPagePresent bool
+	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/direct/directory/fixture")); err != nil {
+		t.Fatalf("open directory listing: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.directory-scan-link`); err != nil {
+		t.Fatalf("open scanned directory page: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`.directory-file-range`, chromedp.ByQuery),
+	); err != nil {
+		var pageURL, pageText string
+		_ = chromedp.Run(ctx,
+			chromedp.Location(&pageURL),
+			chromedp.Evaluate(`document.querySelector('.direct-content')?.innerText || ''`, &pageText),
+		)
+		t.Fatalf("first directory page did not render; URL %q, page text %q: %v", pageURL, pageText, err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.directory-page-link[data-page-direction="next"]`); err != nil {
+		t.Fatalf("navigate to second directory page: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`.directory-file-range`, chromedp.ByQuery),
+		chromedp.Text(`.directory-file-range`, &rangeText, chromedp.ByQuery),
+		chromedp.Text(`.directory-files li:first-child a`, &firstFile, chromedp.ByQuery),
+		chromedp.Text(`.directory-files li:last-child a`, &lastFile, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("page through directory scan: %v", err)
+	}
+	if !strings.Contains(rangeText, "501–1000 of 1201") || firstFile != "file-0499.bin" || lastFile != "file-0998.bin" {
+		t.Fatalf("second directory page = %q, %q through %q", rangeText, firstFile, lastFile)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.directory-page-link[data-page-direction="next"]`); err != nil {
+		t.Fatalf("navigate to final directory page: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`.directory-file-range`, chromedp.ByQuery),
+		chromedp.Evaluate(`!!document.querySelector('.directory-page-link[data-page-direction="next"]')`, &nextPagePresent),
+	); err != nil {
+		t.Fatalf("load final directory page: %v", err)
+	}
+	if nextPagePresent {
+		t.Fatal("final directory page still offered a next-page control")
+	}
+	requireNoFailures(t, pf, "directory scan pagination")
 }
 
 func TestBrowserChmodPermissionGridUpdatesOutput(t *testing.T) {

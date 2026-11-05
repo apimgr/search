@@ -78,8 +78,8 @@ func TestSearchInvalidDataJSON(t *testing.T) {
 func TestHealthInvalidDataJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// ok=true but data is a string, not a HealthResponse object
-		w.Write([]byte(`{"ok":true,"data":"not-a-health-object"}`))
+		// A health response with the wrong JSON type cannot decode into HealthResponse.
+		w.Write([]byte(`{"status":42}`))
 	}))
 	defer server.Close()
 
@@ -88,8 +88,8 @@ func TestHealthInvalidDataJSON(t *testing.T) {
 	if err == nil {
 		t.Error("Health() should return error when data cannot be decoded")
 	}
-	if !strings.Contains(err.Error(), "failed to decode health data") {
-		t.Errorf("error = %q, want to contain 'failed to decode health data'", err.Error())
+	if !strings.Contains(err.Error(), "failed to decode health response") {
+		t.Errorf("error = %q, want to contain 'failed to decode health response'", err.Error())
 	}
 }
 

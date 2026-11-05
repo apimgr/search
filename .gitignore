@@ -144,6 +144,4 @@ docker/rootfs/
 # Claude Code personal files (always gitignored)
 CLAUDE.local.md
 
-.cursor/
-.windsurf/
 AGENTS.md

@@ -13,6 +13,7 @@ package e2e
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -22,13 +23,17 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/server"
 	"github.com/miekg/dns"
 )
@@ -44,6 +49,13 @@ var (
 	sharedHTTP  *httptest.Server
 	sharedTitle string
 	sharedDescr string
+
+	coreSearchOnce         sync.Once
+	coreSearchHTTP         *httptest.Server
+	coreSearchServer       *server.Server
+	coreSearchOriginalDial func(context.Context, string, string) (net.Conn, error)
+	coreSearchOriginalTLS  *tls.Config
+	coreSearchSecurityDir  string
 
 	trackedOnce          sync.Once
 	trackedHTTP          *httptest.Server
@@ -265,8 +277,12 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 	case "api.npmjs.org":
 		body = `{"downloads":123456}`
 	case "lingva.ml":
-		body = `{"translation":"hola","info":{"detectedSource":"en"}}`
-	case "en.wikipedia.org", "de.wikipedia.org":
+		if strings.HasSuffix(request.URL.Path, "/ephemeral") {
+			body = `{"translation":"efímero","info":{"detectedSource":"en"}}`
+		} else {
+			body = `{"translation":"hola","info":{"detectedSource":"en"}}`
+		}
+	case "en.wikipedia.org", "de.wikipedia.org", "es.wikipedia.org":
 		if strings.HasPrefix(request.URL.Path, "/api/rest_v1/page/summary/") {
 			body = `{"type":"standard","title":"Python","extract":"Python is a high-level programming language.","extract_html":"<p>Python is a high-level programming language.</p>"}`
 		} else if request.URL.Path == "/w/api.php" && request.URL.Query().Get("action") == "parse" {
@@ -310,7 +326,9 @@ func (transport providerFixtureTransport) RoundTrip(request *http.Request) (*htt
 			body = ""
 		}
 	case "rdap.org":
-		body = `{"handle":"EXAMPLE","ldhName":"example.test","status":["active"],"events":[{"eventAction":"registration","eventDate":"2020-01-01T00:00:00Z"}],"nameservers":[{"ldhName":"ns1.example.test"}]}`
+		body = `{"handle":"EXAMPLE","ldhName":"example.test","status":["active"],"events":[{"eventAction":"registration","eventDate":"2020-01-01T00:00:00Z"}],"nameservers":[{"ldhName":"ns1.example.test"}],"secureDNS":{"delegationSigned":true},"entities":[{"handle":"EXAMPLE-REG","roles":["registrar"],"vcardArray":["vcard",[["fn",{},"text","Fixture Registrar"]]]},{"roles":["registrant"],"vcardArray":["vcard",[["fn",{},"text","Fixture Registrant"],["org",{},"text",["Fixture Organization"]],["email",{},"text","registrant@example.test"]]]}]}`
+	case "crt.sh":
+		body = `[{"id":789,"common_name":"8.8.8.8","name_value":"8.8.8.8","issuer_name":"Fixture CT Issuer","not_before":"2026-01-01","not_after":"2027-01-01"}]`
 	case "services.nvd.nist.gov":
 		body = `{"resultsPerPage":1,"startIndex":0,"totalResults":1,"vulnerabilities":[{"cve":{"id":"CVE-2021-44228","descriptions":[{"lang":"en","value":"Remote code execution vulnerability in Log4j."}],"metrics":{"cvssMetricV31":[{"cvssData":{"baseScore":10.0,"baseSeverity":"CRITICAL","vectorString":"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"}}]},"configurations":[{"nodes":[{"cpeMatch":[{"vulnerable":true,"criteria":"cpe:2.3:a:apache:log4j:*:*:*:*:*:*:*:*","versionEndExcluding":"2.15.0"}]}]}],"published":"2021-12-10T10:15:00.000","lastModified":"2021-12-18T00:00:00.000","references":[{"url":"https://logging.apache.org/log4j/2.x/security.html","tags":["Vendor Advisory","Patch"]},{"url":"https://exploit.example/log4shell","tags":["Exploit"]}]}}]}`
 	case "api.coingecko.com":
@@ -420,6 +438,7 @@ var localDirectAnswerPages = []struct {
 	{"slang definition", "/direct/slang/yeet", "slang"},
 	{"Wikipedia reference", "/direct/wiki/python", "wiki"},
 	{"localized Wikipedia reference", "/direct/wiki/python?lang=de", "wiki"},
+	{"localized dictionary reference", "/direct/dict/ephemeral?lang=es", "dict"},
 	{"CVE vulnerability details", "/direct/cve/2021-44228", "cve"},
 	{"DNS records", "/direct/dns/fixture.example.test", "dns"},
 	{"WHOIS domain lookup", "/direct/whois/example.test", "whois"},
@@ -538,6 +557,9 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 				t.Errorf("dictionary answer is missing fixture metadata %q", marker)
 			}
 		}
+		if strings.Contains(path, "lang=es") && (!strings.Contains(answer, "Traducción:") || !strings.Contains(answer, "efímero")) {
+			t.Errorf("localized dictionary answer is missing its Spanish translation: %q", answer)
+		}
 		return
 	}
 	if typeName == "thesaurus" {
@@ -560,8 +582,22 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 		}
 		return
 	}
-	if typeName == "dns" && (!strings.Contains(answer, "8.8.8.8") || !strings.Contains(answer, "mail.fixture.example.test")) {
-		t.Error("DNS answer is missing fixture address or MX record")
+	if typeName == "dns" {
+		for _, marker := range []string{"8.8.8.8", "mail.fixture.example.test", "SOA", "2026110301", "TTL 60s"} {
+			if !strings.Contains(answer, marker) {
+				t.Errorf("DNS answer is missing fixture record metadata %q", marker)
+			}
+		}
+	}
+	if typeName == "cert" {
+		for _, marker := range []string{"Hostname match: false", "Trusted chain: false", "Security rating: F", "Embedded CT SCT extensions", "Certificate transparency records (crt.sh)", "Record 789", "Fixture CT Issuer", "Key Size", "Presented certificate chain"} {
+			if !strings.Contains(answer, marker) {
+				t.Errorf("certificate answer is missing verification detail %q", marker)
+			}
+		}
+		if strings.Contains(answer, "<p class=\"status valid\">Valid") {
+			t.Error("certificate answer labels an untrusted hostname-mismatched fixture as valid")
+		}
 	}
 	if typeName == "resolve" && (!strings.Contains(answer, "8.8.8.8") || !strings.Contains(answer, "fixture.example.test")) {
 		t.Error("resolve answer is missing fixture address or PTR record")
@@ -572,13 +608,27 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	if typeName == "directory" && (!strings.Contains(answer, "Fixture directory listing") || !strings.Contains(answer, "fixture.txt")) {
 		t.Error("directory answer is missing fixture result")
 	}
+	if typeName == "safe" {
+		for _, key := range []string{"direct.safe_check_related_domains", "direct.safe_detail_related_unavailable"} {
+			if !containsAnyTranslation(answer, key) {
+				t.Errorf("safety answer is missing localized content for %q", key)
+			}
+		}
+	}
 	archiveTodayDownloadVisible := strings.Contains(answer, "/direct/cache-download-archive-today?") ||
 		(strings.Contains(answer, "Archive.today: View") && strings.Contains(answer, "Download archived response"))
 	if typeName == "cache" && (!strings.Contains(answer, "Wayback Machine") || !strings.Contains(answer, "Archived fixture page") || !archiveTodayDownloadVisible) {
 		t.Errorf("archive answer is missing fixture snapshot, archived content, or Archive.today download")
 	}
-	if typeName == "whois" && (!strings.Contains(answer, "example.test") || !strings.Contains(answer, "ns1.example.test")) {
-		t.Error("WHOIS answer is missing fixture domain or nameserver")
+	if typeName == "whois" {
+		for _, marker := range []string{"example.test", "ns1.example.test", "Fixture Registrar", "Fixture Registrant", "Fixture Organization", "registrant@example.test", "DNSSEC"} {
+			if !strings.Contains(answer, marker) {
+				t.Errorf("WHOIS answer is missing fixture field %q", marker)
+			}
+		}
+		if !containsAnyTranslation(answer, "direct.whois_dnssec_signed") {
+			t.Error("WHOIS answer is missing localized signed DNSSEC status")
+		}
 	}
 	if typeName == "headers" && (!strings.Contains(answer, "fixture-server") || !strings.Contains(answer, "Security Grade")) {
 		t.Error("headers answer is missing fixture response metadata")
@@ -626,6 +676,16 @@ func assertDirectAnswerFixture(t *testing.T, typeName, path, answer string) {
 	if !strings.Contains(answer, name) || !strings.Contains(answer, version) {
 		t.Errorf("package answer is missing fixture name %q or version %q", name, version)
 	}
+}
+
+func containsAnyTranslation(value, key string) bool {
+	for _, lang := range i18n.DefaultSupportedLanguages() {
+		translation := i18n.T(lang, key)
+		if translation != "" && strings.Contains(value, translation) {
+			return true
+		}
+	}
+	return false
 }
 
 func assertFormatterHighlighting(t *testing.T, typeName, path, markup string) {
@@ -769,13 +829,68 @@ func newTestSite(t *testing.T) *httptest.Server {
 			engine.Enabled = false
 			cfg.Engines[name] = engine
 		}
+		duckduckgoConfig := cfg.Engines["duckduckgo"]
+		duckduckgoConfig.Enabled = true
+		cfg.Engines["duckduckgo"] = duckduckgoConfig
 
 		e2eOriginalTransport = http.DefaultTransport
 		http.DefaultTransport = providerFixtureTransport{fallback: e2eOriginalTransport}
+		var directoryListing strings.Builder
+		directoryListing.WriteString("<html><body><h1>Fixture directory listing</h1>")
+		directoryListing.WriteString(`<a href="fixture.txt">fixture.txt</a>`)
+		for index := 1; index < 1201; index++ {
+			fmt.Fprintf(&directoryListing, `<a href="file-%04d.bin">file-%04d.bin</a>`, index-1, index-1)
+		}
+		directoryListing.WriteString("</body></html>")
 		e2eHTTPSFixture = httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Server", "fixture-server")
 			writer.Header().Set("X-Frame-Options", "DENY")
 			switch request.URL.Path {
+			case "/html/":
+				if request.Host != "html.duckduckgo.com" {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				if err := request.ParseForm(); err != nil {
+					writer.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+				if !strings.HasPrefix(request.Form.Get("q"), "core search fixture") {
+					return
+				}
+				if strings.HasPrefix(request.Form.Get("q"), "core search fixture blocked") {
+					_, _ = io.WriteString(writer, `<div class="result"><a class="result__a" href="https://blocked.example.test/item">Blocked domain fixture result</a><a class="result__snippet">Must be filtered by the server.</a></div><div class="result"><a class="result__a" href="https://allowed.example.test/item">Allowed domain fixture result</a><a class="result__snippet">Must remain visible.</a></div>`)
+					return
+				}
+				_, _ = io.WriteString(writer, `<div class="result"><a class="result__a" href="https://en.wikipedia.org/?curid=42">Shared fixture result</a><a class="result__snippet">A deterministic result from the first engine.</a></div><div class="result"><a class="result__a" href="https://results.example.test/priority">Higher priority fixture result</a><a class="result__snippet">A deterministic result unique to DuckDuckGo.</a></div>`)
+			case "/search":
+				if request.Host != "www.google.com" {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				writer.WriteHeader(http.StatusServiceUnavailable)
+			case "/w/api.php":
+				if request.Host != "en.wikipedia.org" || !strings.HasPrefix(request.URL.Query().Get("gsrsearch"), "core search fixture") {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(writer, `{"query":{"pages":{"42":{"pageid":42,"title":"Shared fixture result","extract":"A longer deterministic result from the second engine.","index":1},"43":{"pageid":43,"title":"Lower priority fixture result","extract":"A deterministic result unique to Wikipedia.","index":2}}}}`)
+			case "/api/v1/search/videos":
+				if request.Host != "peertube.tv" {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(writer, `{"total":1,"data":[{"name":"Fixture PeerTube clip","description":"A deterministic video result.","uuid":"bd48085e-e07d-406f-995a-7176f11590ed","url":"https://peertube.tv/w/fixture","duration":120,"views":42,"isLocal":true,"thumbnailPath":"","channel":{"displayName":"Fixture channel"}}]}`)
+			case "/api/v1/videos/bd48085e-e07d-406f-995a-7176f11590ed":
+				if request.Host != "peertube.tv" {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(writer, `{"files":[{"fileUrl":"https://peertube.tv/static/web-videos/fixture.mp4"}]}`)
 			case "/feed.xml":
 				writer.Header().Set("Content-Type", "application/rss+xml")
 				_, _ = io.WriteString(writer, `<rss version="2.0"><channel><title>Fixture feed</title><description>Fixture feed description</description><lastBuildDate>Thu, 01 Jan 2026 00:00:00 GMT</lastBuildDate><item><title>Latest fixture story</title><link>https://example.test/story</link><description>Fixture story preview</description><pubDate>Thu, 01 Jan 2026 00:00:00 GMT</pubDate></item></channel></rss>`)
@@ -786,6 +901,9 @@ func newTestSite(t *testing.T) *httptest.Server {
 				_, _ = io.WriteString(writer, "<urlset><url><loc>http://8.8.8.8/</loc></url></urlset>")
 			case "/redirect":
 				http.Redirect(writer, request, "https://8.8.8.8/final", http.StatusFound)
+			case "/directory/":
+				writer.Header().Set("Content-Type", "text/html")
+				_, _ = io.WriteString(writer, directoryListing.String())
 			case "/":
 				writer.Header().Set("Content-Type", "text/html")
 				_, _ = io.WriteString(writer, `<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml" title="Fixture feed"></head><body>fixture React example.com<a href="/fixture.txt">fixture.txt</a></body></html>`)
@@ -797,6 +915,13 @@ func newTestSite(t *testing.T) *httptest.Server {
 		dialFixture := func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, network, fixtureAddress)
 		}
+		fixtureTLS := e2eHTTPSFixture.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+		fixtureTLS.ServerName = "127.0.0.1"
+		coreSearchOriginalDial = engine.SharedTransport.DialContext
+		coreSearchOriginalTLS = engine.SharedTransport.TLSClientConfig
+		engine.SharedTransport.CloseIdleConnections()
+		engine.SharedTransport.DialContext = dialFixture
+		engine.SharedTransport.TLSClientConfig = fixtureTLS
 		fixtureLookup := func(context.Context, string) ([]net.IPAddr, error) {
 			return []net.IPAddr{{IP: net.ParseIP("8.8.8.8")}}, nil
 		}
@@ -822,6 +947,9 @@ func newTestSite(t *testing.T) *httptest.Server {
 				case dns.TypeNS:
 					record, _ := dns.NewRR(question.Name + " 60 IN NS ns1.fixture.example.test.")
 					response.Answer = append(response.Answer, record)
+				case dns.TypeSOA:
+					record, _ := dns.NewRR(question.Name + " 60 IN SOA ns1.fixture.example.test. hostmaster.fixture.example.test. 2026110301 3600 600 1209600 60")
+					response.Answer = append(response.Answer, record)
 				case dns.TypeTXT:
 					record, _ := dns.NewRR(question.Name + ` 60 IN TXT "fixture dns record"`)
 					response.Answer = append(response.Answer, record)
@@ -836,7 +964,7 @@ func newTestSite(t *testing.T) *httptest.Server {
 		go func() { _ = e2eDNSServer.ActivateAndServe() }()
 		dnsAddress := dnsPacketConn.LocalAddr().String()
 		directorySearcher := func(context.Context, string) ([]direct.DirectoryResult, error) {
-			return []direct.DirectoryResult{{Title: "Fixture directory listing", URL: "https://8.8.8.8/", Description: "Deterministic fixture file", EstimatedFileCount: 1}}, nil
+			return []direct.DirectoryResult{{Title: "Fixture directory listing", URL: "https://8.8.8.8/directory/", Description: "Deterministic fixture files", EstimatedFileCount: 1201}}, nil
 		}
 		direct.SetE2ENetworkHooks(dialFixture, dnsAddress, fixtureLookup, directorySearcher)
 		sharedTitle = cfg.Server.Title
@@ -846,6 +974,58 @@ func newTestSite(t *testing.T) *httptest.Server {
 	})
 
 	return sharedHTTP
+}
+
+func newCoreSearchTestSite(t *testing.T) *httptest.Server {
+	t.Helper()
+	newTestSite(t)
+
+	coreSearchOnce.Do(func() {
+		cfg := config.DefaultConfig()
+		cfg.Server.Security.EncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+		cfg.Server.Token = e2eOperatorToken
+		securityRoot := filepath.Join(os.TempDir(), "apimgr")
+		if err := os.MkdirAll(securityRoot, 0700); err != nil {
+			panic(fmt.Errorf("create E2E temp root: %w", err))
+		}
+		securityBase, err := os.MkdirTemp(securityRoot, "search-e2e-")
+		if err != nil {
+			panic(fmt.Errorf("create E2E security directory: %w", err))
+		}
+		coreSearchSecurityDir = securityBase
+		cfg.Data.SecurityDir = securityBase
+		blocklistDir := filepath.Join(securityBase, "blocklists")
+		if err := os.MkdirAll(blocklistDir, 0700); err != nil {
+			panic(fmt.Errorf("create E2E blocklist directory: %w", err))
+		}
+		if err := os.WriteFile(filepath.Join(blocklistDir, "e2e.txt"), []byte("blocked.example.test\n"), 0600); err != nil {
+			panic(fmt.Errorf("write E2E blocklist: %w", err))
+		}
+		cfg.Server.Security.Blocklists = []config.BlocklistSourceConfig{{Name: "e2e", URL: "https://blocklist.example.test/domains.txt", Type: "domain", Enabled: true}}
+		cfg.Server.RateLimit.Enabled = false
+		cfg.Server.GeoIP.Enabled = false
+		cfg.Server.Security.Headers.ContentSecurityPolicy = strings.ReplaceAll(
+			cfg.Server.Security.Headers.ContentSecurityPolicy,
+			"upgrade-insecure-requests;", "",
+		)
+		for name, engineConfig := range cfg.Engines {
+			engineConfig.Enabled = false
+			cfg.Engines[name] = engineConfig
+		}
+		for _, name := range []string{"duckduckgo", "google", "wikipedia"} {
+			engineConfig := cfg.Engines[name]
+			engineConfig.Enabled = true
+			engineConfig.Categories = []string{"general"}
+			cfg.Engines[name] = engineConfig
+		}
+		peerTubeConfig := cfg.Engines["peertube"]
+		peerTubeConfig.Enabled = true
+		peerTubeConfig.Categories = []string{"videos"}
+		cfg.Engines["peertube"] = peerTubeConfig
+		coreSearchServer = server.NewServerWithPublicIPProviders(cfg, []string{})
+		coreSearchHTTP = httptest.NewServer(coreSearchServer.Handler())
+	})
+	return coreSearchHTTP
 }
 
 func newPanicTestSite(t *testing.T) *httptest.Server {
@@ -901,6 +1081,25 @@ func shutdownTrackedSite() {
 
 // shutdownTestSite closes the shared listener once the whole package is done.// Called from TestMain in ssr_test.go.
 func shutdownTestSite() {
+	if coreSearchHTTP != nil {
+		coreSearchHTTP.Close()
+		coreSearchHTTP = nil
+	}
+	if coreSearchServer != nil {
+		_ = coreSearchServer.Shutdown(context.Background())
+		coreSearchServer = nil
+	}
+	if coreSearchSecurityDir != "" {
+		_ = os.RemoveAll(coreSearchSecurityDir)
+		coreSearchSecurityDir = ""
+	}
+	if coreSearchOriginalDial != nil || coreSearchOriginalTLS != nil {
+		engine.SharedTransport.CloseIdleConnections()
+		engine.SharedTransport.DialContext = coreSearchOriginalDial
+		engine.SharedTransport.TLSClientConfig = coreSearchOriginalTLS
+		coreSearchOriginalDial = nil
+		coreSearchOriginalTLS = nil
+	}
 	if sharedHTTP != nil {
 		sharedHTTP.Close()
 		sharedHTTP = nil
@@ -950,8 +1149,11 @@ const httpToolUserAgent = "curl/8.5.0"
 // newSession returns a session with an empty cookie jar.
 func newSession(t *testing.T) *session {
 	t.Helper()
+	return newSessionOnSite(t, newTestSite(t))
+}
 
-	site := newTestSite(t)
+func newSessionOnSite(t *testing.T, site *httptest.Server) *session {
+	t.Helper()
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {

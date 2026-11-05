@@ -19,13 +19,15 @@ import (
 
 // Aggregator aggregates results from multiple search engines
 type Aggregator struct {
-	engines        []Engine
-	timeout        time.Duration
-	cache          *ResultCache
-	cacheEnabled   bool
-	cacheTTL       time.Duration
-	maxConcurrent  int
-	rotationOffset atomic.Uint64
+	engines             []Engine
+	timeout             time.Duration
+	cache               *ResultCache
+	cacheEnabled        bool
+	cacheTTL            time.Duration
+	maxConcurrent       int
+	rotationOffset      atomic.Uint64
+	blockedDomainMu     sync.RWMutex
+	blockedDomainLookup func(string) bool
 }
 
 // AggregatorConfig holds aggregator configuration
@@ -80,6 +82,46 @@ func NewAggregatorSimple(engines []Engine, timeout time.Duration) *Aggregator {
 	})
 }
 
+// SetBlockedDomainLookup configures the domain blocklist applied to every
+// result path, including cached and stale results.
+func (a *Aggregator) SetBlockedDomainLookup(lookup func(string) bool) {
+	a.blockedDomainMu.Lock()
+	defer a.blockedDomainMu.Unlock()
+	a.blockedDomainLookup = lookup
+}
+
+func (a *Aggregator) filterBlockedDomains(results *model.SearchResults) *model.SearchResults {
+	if results == nil {
+		return nil
+	}
+	a.blockedDomainMu.RLock()
+	lookup := a.blockedDomainLookup
+	a.blockedDomainMu.RUnlock()
+	if lookup == nil {
+		return results
+	}
+	filtered := make([]model.Result, 0, len(results.Results))
+	for _, result := range results.Results {
+		if !lookup(result.ExtractDomain()) {
+			filtered = append(filtered, result)
+		}
+	}
+	results.Results = filtered
+	results.TotalResults = len(filtered)
+	results.Domains = make(map[string]int)
+	results.Languages = make(map[string]int)
+	for _, result := range filtered {
+		if domain := result.ExtractDomain(); domain != "" {
+			results.Domains[domain]++
+		}
+		if result.Language != "" {
+			results.Languages[result.Language]++
+		}
+	}
+	results.CalculateTotalPages()
+	return results
+}
+
 // Search performs concurrent searches across all engines
 func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.SearchResults, error) {
 	if err := query.ValidateSearchQuery(); err != nil {
@@ -113,6 +155,13 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 			cached.FromCache = true
 			cached.Stale = false
 			cached.CacheAgeSec = 0
+			cached.Page = query.Page
+			cached.PerPage = query.PerPage
+			cached.CalculateTotalPages()
+			cached = a.filterBlockedDomains(cached)
+			if len(cached.Results) == 0 {
+				return cached, model.ErrNoResults
+			}
 			return cached, nil
 		}
 	}
@@ -134,7 +183,7 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 	// Filter engines
 	activeEngines := a.filterEngines(query)
 	if len(activeEngines) == 0 {
-		if stale := a.getStaleFallback(cacheKey); stale != nil {
+		if stale := a.getStaleFallback(cacheKey, query); stale != nil {
 			return stale, nil
 		}
 		return nil, model.ErrNoEngines
@@ -217,10 +266,11 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 	if a.cacheEnabled && a.cache != nil && len(searchResults.Results) > 0 {
 		a.cache.Set(cacheKey, searchResults)
 	}
+	a.filterBlockedDomains(searchResults)
 
 	if len(searchResults.Results) == 0 {
 		if successCount == 0 && errorCount > 0 {
-			if stale := a.getStaleFallback(cacheKey); stale != nil {
+			if stale := a.getStaleFallback(cacheKey, query); stale != nil {
 				return stale, nil
 			}
 		}
@@ -387,7 +437,7 @@ func (a *Aggregator) RefreshEngineHealth(ctx context.Context) error {
 	return validateErr
 }
 
-func (a *Aggregator) getStaleFallback(cacheKey string) *model.SearchResults {
+func (a *Aggregator) getStaleFallback(cacheKey string, query *model.Query) *model.SearchResults {
 	if !a.cacheEnabled || a.cache == nil {
 		return nil
 	}
@@ -400,7 +450,10 @@ func (a *Aggregator) getStaleFallback(cacheKey string) *model.SearchResults {
 	stale.FromCache = true
 	stale.Stale = true
 	stale.CacheAgeSec = int64(age.Seconds())
-	return stale
+	stale.Page = query.Page
+	stale.PerPage = query.PerPage
+	stale.CalculateTotalPages()
+	return a.filterBlockedDomains(stale)
 }
 
 func (a *Aggregator) selectEnginesForSearch(engines []Engine) []Engine {

@@ -8,8 +8,8 @@ The easiest way to run Search is using Docker:
 
 ```bash
 docker run -d \
-  --name search \
-  -p 64580:80 \
+  --name search-app \
+  -p 172.17.0.1:64580:80 \
   -v search_data:/data \
   -v search_config:/config \
   ghcr.io/apimgr/search:latest
@@ -17,24 +17,17 @@ docker run -d \
 
 ### Docker Compose
 
-For a more complete setup with persistent configuration:
+Use the repository's production Compose file from a deployment directory outside
+the source checkout. Its relative `volumes/` mounts then keep runtime data out of
+the project tree.
 
-```yaml
-version: '3.8'
-
-services:
-  search:
-    image: ghcr.io/apimgr/search:latest
-    container_name: search
-    ports:
-      - "64580:80"
-    volumes:
-      - ./config:/config
-      - ./data:/data
-    environment:
-      - MODE=production
-      - TZ=America/New_York
-    restart: unless-stopped
+```bash
+git clone https://github.com/apimgr/search.git search-source
+DEPLOY_DIR="$HOME/search-deployment"
+mkdir -p "$DEPLOY_DIR"
+cp search-source/docker/docker-compose.yml "$DEPLOY_DIR/docker-compose.yml"
+cd "$DEPLOY_DIR"
+docker compose up -d
 ```
 
 ## Binary Installation
@@ -79,44 +72,15 @@ Download the latest release for your platform from the [releases page](https://g
 
 #### Systemd (Linux)
 
-Create a systemd service file:
+Install and start the managed systemd service:
 
 ```bash
-sudo search --service install
-sudo systemctl enable search
-sudo systemctl start search
-```
-
-Or manually create `/etc/systemd/system/search.service`:
-
-```ini
-[Unit]
-Description=Search - Privacy-Respecting Metasearch Engine
-After=network.target
-
-[Service]
-Type=simple
-User=search
-Group=search
-ExecStart=/usr/local/bin/search
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable search
-sudo systemctl start search
+sudo search --service --install
 ```
 
 ## First Run
 
-After installation, access the web interface at `http://localhost:64580` (or your configured port).
+For the Docker command above, access the web interface at `http://172.17.0.1:64580`. A binary installation prints its selected URL when it starts.
 
 On first run, Search auto-generates `server.yml` with defaults including a random operator token. The startup banner shows the server URL and the token location. No setup wizard or admin account is required.
 
@@ -126,11 +90,11 @@ On first run, Search auto-generates `server.yml` with defaults including a rando
 
 ```bash
 docker pull ghcr.io/apimgr/search:latest
-docker stop search
-docker rm search
+docker stop search-app
+docker rm search-app
 docker run -d \
-  --name search \
-  -p 64580:80 \
+  --name search-app \
+  -p 172.17.0.1:64580:80 \
   -v search_data:/data \
   -v search_config:/config \
   ghcr.io/apimgr/search:latest

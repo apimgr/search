@@ -126,6 +126,7 @@ jobs:
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
             manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
@@ -239,6 +240,7 @@ jobs:
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
             manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}

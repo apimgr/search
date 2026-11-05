@@ -313,15 +313,26 @@ func (c *Client) Health() (*HealthResponse, error) {
 	}
 	defer closeutil.Close(resp.Body)
 
-	// API returns {"ok": true, "data": {...}} - unwrap the data field
-	var apiResp apiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	var raw json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("failed to decode health response: %w", err)
+	}
+
+	var envelope apiResponse
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, fmt.Errorf("failed to decode health response: %w", err)
+	}
+	if len(envelope.Data) > 0 {
+		var result HealthResponse
+		if err := json.Unmarshal(envelope.Data, &result); err != nil {
+			return nil, fmt.Errorf("failed to decode health data: %w", err)
+		}
+		return &result, nil
 	}
 
 	var result HealthResponse
-	if err := json.Unmarshal(apiResp.Data, &result); err != nil {
-		return nil, fmt.Errorf("failed to decode health data: %w", err)
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode health response: %w", err)
 	}
 	return &result, nil
 }

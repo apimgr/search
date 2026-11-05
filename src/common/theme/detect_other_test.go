@@ -20,10 +20,7 @@ func TestDetectSystemDarkOnOtherOS(t *testing.T) {
 func TestGetSystemThemeOnOtherOS(t *testing.T) {
 	theme := GetSystemTheme()
 	// Theme should be dark since unknown platforms default to dark
-	if theme.Name != "dark" {
-		t.Errorf("GetSystemTheme() on unknown OS should return dark theme, got: %s", theme.Name)
-	}
-	if !theme.IsDark {
-		t.Error("GetSystemTheme().IsDark should be true on unknown OS")
+	if theme != ThemePaletteDark {
+		t.Errorf("GetSystemTheme() on unknown OS should return dark palette, got: %#v", theme)
 	}
 }

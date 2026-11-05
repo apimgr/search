@@ -3143,6 +3143,43 @@ func (r *testChiRouter) Find(rctx *chi.Context, method, path string) string { re
 
 // Tests for applyEngineCredentials
 
+func TestApplyEngineConfigurationUsesServerSettings(t *testing.T) {
+	registry := engine.DefaultRegistry()
+	configuredCategories := []string{"science"}
+	applyEngineConfiguration(registry, map[string]config.EngineConfig{
+		"duckduckgo": {Enabled: false, Priority: 10, Categories: []string{"general"}},
+		"google":     {Enabled: true, Priority: 5, Categories: configuredCategories},
+	})
+
+	duckduckgo, err := registry.Get("duckduckgo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duckduckgo.IsEnabled() {
+		t.Error("disabled DuckDuckGo configuration left the engine enabled")
+	}
+
+	google, err := registry.Get("google")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !google.IsEnabled() || google.GetPriority() != 5 || !google.SupportsCategory(model.CategoryScience) {
+		t.Errorf("Google config = enabled %v, priority %d, science %v", google.IsEnabled(), google.GetPriority(), google.SupportsCategory(model.CategoryScience))
+	}
+	configuredCategories[0] = "general"
+	if !google.SupportsCategory(model.CategoryScience) {
+		t.Error("engine categories alias the caller's config slice")
+	}
+
+	bing, err := registry.Get("bing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bing.IsEnabled() {
+		t.Error("engine absent from server.yml remained enabled")
+	}
+}
+
 func TestApplyEngineCredentialsSetsSettings(t *testing.T) {
 	registry := engine.DefaultRegistry()
 

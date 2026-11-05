@@ -203,7 +203,7 @@ func TestUIHandlerGET(t *testing.T) {
 	}
 }
 
-func TestUIHandlerNonGETReturns405(t *testing.T) {
+func TestUIHandlerRejectsUnsupportedMethodsAndPostBodies(t *testing.T) {
 	if err := InitSchema(); err != nil {
 		t.Fatalf("InitSchema() error = %v", err)
 	}
@@ -211,7 +211,7 @@ func TestUIHandlerNonGETReturns405(t *testing.T) {
 	cfg := config.DefaultConfig()
 	handler := UIHandler(cfg)
 
-	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
+	methods := []string{http.MethodPut, http.MethodDelete, http.MethodPatch}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/server/docs/graphql", nil)
@@ -224,6 +224,14 @@ func TestUIHandlerNonGETReturns405(t *testing.T) {
 				t.Errorf("UIHandler %s status = %d, want %d", method, resp.StatusCode, http.StatusMethodNotAllowed)
 			}
 		})
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/server/docs/graphql", strings.NewReader(`{"query":"{ health { status } }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler(w, req)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("UIHandler JSON POST status = %d, want %d", w.Code, http.StatusUnsupportedMediaType)
 	}
 }
 

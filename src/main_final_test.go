@@ -559,9 +559,9 @@ func TestMainShellEmptySubCmd(t *testing.T) {
 	_ = out
 }
 
-// TestPrintFirstRunOperatorToken verifies service-first installs still show
-// the one-time token after configuration initialization consumes first-run state.
-func TestPrintFirstRunOperatorToken(t *testing.T) {
+// TestFirstRunOperatorTokenIsStored verifies the generated credential remains
+// available in the protected configuration file without being printed.
+func TestFirstRunOperatorTokenIsStored(t *testing.T) {
 	dir := t.TempDir()
 	config.SetConfigDirOverride(filepath.Join(dir, "config"))
 	config.SetDataDirOverride(filepath.Join(dir, "data"))
@@ -585,13 +585,12 @@ func TestPrintFirstRunOperatorToken(t *testing.T) {
 	if !cfg.IsFirstRun() || cfg.Server.Token == "" {
 		t.Fatal("expected first-run config with a generated operator token")
 	}
-
-	out := captureStdout(t, func() { printFirstRunOperatorToken(cfg) })
-	if !strings.Contains(out, cfg.Server.Token) {
-		t.Fatalf("first-run output does not contain the operator token: %q", out)
+	contents, err := os.ReadFile(filepath.Join(dir, "config", "server.yml"))
+	if err != nil {
+		t.Fatalf("read generated server.yml: %v", err)
 	}
-	if strings.Contains(captureStdout(t, func() { printFirstRunOperatorToken(nil) }), cfg.Server.Token) {
-		t.Fatal("nil config unexpectedly printed an operator token")
+	if !strings.Contains(string(contents), cfg.Server.Token) {
+		t.Fatal("generated operator token was not persisted in server.yml")
 	}
 }
 

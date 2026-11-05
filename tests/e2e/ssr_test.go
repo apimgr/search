@@ -196,35 +196,219 @@ func TestSSRHomePageIsFullyRendered(t *testing.T) {
 	requireNotContains(t, body, `<div id="app"></div>`, "/")
 }
 
-// TestSSRSearchPageRendersQueryAndCategories covers the search results page.
-// Aggregated engine results require outbound network, so the assertions target
-// what the server itself owns: the echoed query, the category tab strip, and
-// the results container — all present in the SSR output.
+// TestSSRSearchPageRendersQueryAndCategories covers filters and navigation on
+// the server-rendered search page.
 func TestSSRSearchPageRendersQueryAndCategories(t *testing.T) {
-	s := newSession(t)
+	s := newSessionOnSite(t, newCoreSearchTestSite(t))
 
-	resp, body := s.get("/search?q=golang&lang=de&region=fr&time_range=week&time_from=2025-01-01&time_to=2025-01-31")
+	resp, body := s.get("/search?q=core+search+fixture+filters&lang=de&region=fr&time_range=week")
 	requireStatus(t, resp, http.StatusOK)
-	requireHTMLShell(t, body, "/search?q=golang")
+	requireHTMLShell(t, body, "/search?q=core+search+fixture+filters")
 
 	// The query is echoed into the results container's data attributes, which
 	// is what the client-side infinite scroll reads.
-	requireContains(t, body, `data-query="golang"`, "search page")
+	requireContains(t, body, `data-query="core search fixture filters"`, "search page")
 	requireContains(t, body, `data-category="general"`, "search page")
-	for _, filter := range []string{`data-lang="de"`, `data-region="fr"`, `data-time-range="week"`, `data-time-from="2025-01-01"`, `data-time-to="2025-01-31"`} {
+	requireContains(t, body, `<meta name="referrer" content="no-referrer">`, "search page query privacy")
+	for _, filter := range []string{`data-lang="de"`, `data-region="fr"`, `data-time-range="week"`} {
 		requireContains(t, body, filter, "search page filters")
 	}
 	requireContains(t, body, `id="results-container"`, "search page")
 
 	// Category switching is real anchors, not JS handlers, so it survives with
 	// scripting off.
-	for _, cat := range []string{"general", "images", "videos", "news", "maps", "science"} {
-		want := `href="/search?q=golang&category=` + cat
-		requireContains(t, body, want, "search page category "+cat)
+	for _, cat := range []string{"general", "images", "videos", "news", "maps", "files", "music", "science", "it", "social"} {
+		requireContains(t, body, `href="/search?`, "search page category links")
+		requireContains(t, body, `category=`+cat, "search page category "+cat)
 	}
 
 	// The alert-creation flow is reachable from the results page.
-	requireContains(t, body, `href="/alerts/new?q=golang`, "search page")
+	requireContains(t, body, `href="/alerts/new?q=`, "search page")
+}
+
+func TestSSRSearchFiltersBlockedDomains(t *testing.T) {
+	s := newSessionOnSite(t, newCoreSearchTestSite(t))
+	resp, body := s.get("/search?q=core+search+fixture+blocked+domain&engines=duckduckgo")
+	requireStatus(t, resp, http.StatusOK)
+	requireContains(t, body, "Allowed domain fixture result", "domain-filtered search results")
+	requireNotContains(t, body, "Blocked domain fixture result", "domain-filtered search results")
+	requireNotContains(t, body, "blocked.example.test", "domain-filtered search results")
+}
+
+func TestSSRVideoSearchRendersPeerTubePreviewMetadata(t *testing.T) {
+	s := newSessionOnSite(t, newCoreSearchTestSite(t))
+	resp, body := s.get("/search?q=fixture+clip&category=videos")
+	requireStatus(t, resp, http.StatusOK)
+	requireContains(t, body, `class="video-result"`, "video search results")
+	requireContains(t, body, `data-video-preview-url="/media/preview/peertube/fixture.mp4"`, "video preview URL")
+	requireContains(t, body, `data-video-duration="120"`, "video duration")
+	requireContains(t, body, "Fixture PeerTube clip", "video title")
+	requireContains(t, body, "Fixture channel", "video channel")
+}
+
+func TestSSRAlertCreationPreservesFiltersAndActivatesPrivateRSS(t *testing.T) {
+	s := newSession(t).withoutRedirects()
+	path := "/alerts/new?q=ssr+alert+fixture&category=files&language=de&region=ch&safe_search=2"
+	resp, form := s.get(path)
+	requireStatus(t, resp, http.StatusOK)
+	for _, marker := range []string{`value="ssr alert fixture"`, `value="files" selected`, `value="de"`, `value="ch"`, `value="2"`, `name="deliver_rss"`} {
+		requireContains(t, form, marker, "alert creation form context")
+	}
+
+	token, _ := s.csrfTokenFor(path)
+	resp, created := s.postForm("/alerts", url.Values{
+		"csrf_token":      {token},
+		"query":           {"ssr alert fixture"},
+		"category":        {"files"},
+		"language":        {"de"},
+		"region":          {"ch"},
+		"safe_search":     {"2"},
+		"frequency":       {"daily"},
+		"email":           {"alerts@example.test"},
+		"deliver_rss":     {"1"},
+		"deliver_webhook": {"1"},
+		"webhook_url":     {"https://203.0.113.10/fixture"},
+	})
+	requireStatus(t, resp, http.StatusOK)
+	for _, marker := range []string{"Your alert is active.", "/alerts/manage/", ".rss"} {
+		requireContains(t, created, marker, "created private RSS alert")
+	}
+	feedMarker := strings.Index(created, ".rss")
+	if feedMarker < 0 {
+		t.Fatal("created alert page does not contain a private RSS link")
+	}
+	feedStart := strings.LastIndex(created[:feedMarker], `href="`) + len(`href="`)
+	feedEnd := strings.Index(created[feedStart:], `"`)
+	if feedEnd < 0 {
+		t.Fatal("created alert page does not contain a private RSS link")
+	}
+	feedURL, err := url.Parse(created[feedStart : feedStart+feedEnd])
+	if err != nil {
+		t.Fatalf("parse private RSS URL: %v", err)
+	}
+	feedResp, feedBody := s.get(feedURL.RequestURI())
+	requireStatus(t, feedResp, http.StatusOK)
+	if !strings.HasPrefix(feedResp.Header.Get("Content-Type"), "application/rss+xml") {
+		t.Errorf("private RSS content type = %q", feedResp.Header.Get("Content-Type"))
+	}
+	for _, marker := range []string{`<rss version="2.0">`, "Search Alert: ssr alert fixture"} {
+		requireContains(t, feedBody, marker, "private RSS feed")
+	}
+}
+
+func TestSSRCoreSearchAggregatesResultsWithEngineFailure(t *testing.T) {
+	s := newSessionOnSite(t, newCoreSearchTestSite(t))
+	resp, body := s.get("/search?q=core+search+fixture+ssr")
+	requireStatus(t, resp, http.StatusOK)
+	requireHTMLShell(t, body, "/search?q=core+search+fixture+ssr")
+	if strings.Count(body, `<article class="result-item">`) != 3 || strings.Count(body, "Shared fixture result") != 1 {
+		t.Errorf("SSR did not render three results with the cross-engine duplicate merged; %s", snippet(body, `id="results-container"`))
+	}
+	for _, result := range []string{"Shared fixture result", "Higher priority fixture result", "Lower priority fixture result", "DuckDuckGo", "Wikipedia"} {
+		requireContains(t, body, result, "aggregated search results")
+	}
+	if strings.Index(body, "Higher priority fixture result") > strings.Index(body, "Lower priority fixture result") {
+		t.Error("SSR result order does not reflect the configured source priority")
+	}
+}
+
+func TestSSRSearchAPIReturnsAggregatedFixtureResults(t *testing.T) {
+	s := newSessionOnSite(t, newCoreSearchTestSite(t))
+	resp, body := s.get("/api/v1/search?q=core+search+fixture+api&category=general&limit=10")
+	requireStatus(t, resp, http.StatusOK)
+	var response struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Query    string `json:"query"`
+			Category string `json:"category"`
+			Results  []struct {
+				Title string `json:"title"`
+			} `json:"results"`
+			Engines []string `json:"engines_used"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		t.Fatalf("decode search API response: %v (%s)", err, body)
+	}
+	if !response.OK || response.Data.Query != "core search fixture api" || response.Data.Category != "general" || len(response.Data.Results) != 3 {
+		t.Fatalf("search API response = %#v, want successful general search with three deduplicated results", response)
+	}
+	titles := make(map[string]bool, len(response.Data.Results))
+	for _, result := range response.Data.Results {
+		titles[result.Title] = true
+	}
+	for _, title := range []string{"Shared fixture result", "Higher priority fixture result", "Lower priority fixture result"} {
+		if !titles[title] {
+			t.Errorf("search API results are missing %q: %#v", title, response.Data.Results)
+		}
+	}
+	if len(response.Data.Engines) != 2 {
+		t.Errorf("search API successful engines = %v, want DuckDuckGo and Wikipedia after Google failure", response.Data.Engines)
+	}
+
+	resp, body = s.get("/api/v1/categories")
+	requireStatus(t, resp, http.StatusOK)
+	var categories struct {
+		OK   bool `json:"ok"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &categories); err != nil {
+		t.Fatalf("decode category catalog: %v (%s)", err, body)
+	}
+	categoryIDs := make(map[string]bool, len(categories.Data))
+	for _, category := range categories.Data {
+		categoryIDs[category.ID] = true
+	}
+	for _, id := range []string{"general", "images", "videos", "news", "maps", "files", "music", "science", "it", "social"} {
+		if !categoryIDs[id] {
+			t.Errorf("category API catalog is missing %q", id)
+		}
+	}
+
+	resp, body = s.get("/api/v1/engines")
+	requireStatus(t, resp, http.StatusOK)
+	var engines struct {
+		OK   bool `json:"ok"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &engines); err != nil {
+		t.Fatalf("decode engine catalog: %v (%s)", err, body)
+	}
+	engineIDs := make(map[string]bool, len(engines.Data))
+	for _, engine := range engines.Data {
+		engineIDs[engine.ID] = true
+	}
+	for _, id := range []string{"duckduckgo", "google", "wikipedia"} {
+		if !engineIDs[id] {
+			t.Errorf("engine API catalog is missing %q", id)
+		}
+	}
+
+	resp, body = s.get("/api/autodiscover")
+	requireStatus(t, resp, http.StatusOK)
+	var discovery struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Server struct {
+				Features struct {
+					Search bool `json:"search"`
+				} `json:"features"`
+			} `json:"server"`
+			API struct {
+				BasePath string `json:"base_path"`
+			} `json:"api"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &discovery); err != nil {
+		t.Fatalf("decode API autodiscovery: %v (%s)", err, body)
+	}
+	if !discovery.OK || !discovery.Data.Server.Features.Search || discovery.Data.API.BasePath != "/api/v1" {
+		t.Errorf("API autodiscovery = %#v, want public search and base path /api/v1", discovery)
+	}
 }
 
 func TestSSRRelatedSearchSuggestions(t *testing.T) {

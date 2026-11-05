@@ -75,7 +75,7 @@ func Handler(cfg *config.Config, dependencies ...Dependencies) http.HandlerFunc 
 
 		// Handle GET requests (GraphiQL UI)
 		if r.Method == http.MethodGet {
-			serveGraphiQL(w, r)
+			serveGraphiQL(w, r, "Run a query to see results.")
 			return
 		}
 
@@ -90,12 +90,7 @@ func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 
 func handleGraphQLQueryWithContext(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxGraphQLRequestBytes)
-	var params struct {
-		Query         string                 `json:"query"`
-		Variables     map[string]interface{} `json:"variables"`
-		OperationName string                 `json:"operationName"`
-	}
-
+	var params graphQLRequestParams
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
@@ -110,20 +105,29 @@ func handleGraphQLQueryWithContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result := executeGraphQLQuery(w, r, params)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		slog.Debug("failed to write GraphQL response", "error", err)
+	}
+}
+
+type graphQLRequestParams struct {
+	Query         string                 `json:"query"`
+	Variables     map[string]interface{} `json:"variables"`
+	OperationName string                 `json:"operationName"`
+}
+
+func executeGraphQLQuery(w http.ResponseWriter, r *http.Request, params graphQLRequestParams) *graphql.Result {
 	ctx := context.WithValue(r.Context(), graphqlRequestContextKey{}, r)
 	ctx = context.WithValue(ctx, graphqlResponseWriterContextKey{}, w)
-	result := graphql.Do(graphql.Params{
+	return graphql.Do(graphql.Params{
 		Schema:         Schema,
 		RequestString:  params.Query,
 		VariableValues: params.Variables,
 		OperationName:  params.OperationName,
 		Context:        ctx,
 	})
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		slog.Debug("failed to write GraphQL response", "error", err)
-	}
 }
 
 func graphQLQueryCost(query string) (int, int, bool) {
@@ -215,7 +219,7 @@ func graphQLSelectionCost(set *ast.SelectionSet, fragments map[string]*ast.Fragm
 
 // serveGraphiQL serves a server-rendered GraphQL explorer UI.
 // Per frontend rules: vanilla JS only, no CDN frameworks, CSS custom properties for theming.
-func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
+func serveGraphiQL(w http.ResponseWriter, r *http.Request, response string) {
 	theme := getTheme(r)
 	lang, dir := i18n.DetectRequestLocale(r)
 	themeCSS := getGraphiQLThemeCSS(theme)
@@ -229,61 +233,45 @@ func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 	<style>
 ` + themeCSS + `
 		*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-		body { font-family: monospace; background: var(--color-bg); color: var(--color-text); min-height: 100vh; display: flex; flex-direction: column; }
-		header { padding: 0.75rem 1rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 1rem; }
-		h1 { font-size: 1rem; font-weight: 600; color: var(--color-primary); }
+		body { font-family: monospace; background: var(--palette-background); color: var(--palette-foreground); min-height: 100vh; display: flex; flex-direction: column; }
+		header { padding: 0.75rem 1rem; background: var(--palette-surface); border-bottom: 1px solid var(--palette-border); display: flex; align-items: center; gap: 1rem; }
+		h1 { font-size: 1rem; font-weight: 600; color: var(--palette-primary); }
 		main { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 0; flex: 1; }
-		.panel { display: flex; flex-direction: column; border-right: 1px solid var(--color-border); }
+		.panel { display: flex; flex-direction: column; border-right: 1px solid var(--palette-border); }
 		.panel:last-child { border-right: none; }
-		.panel-header { padding: 0.5rem 1rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.75rem; color: var(--color-text-muted); display: flex; justify-content: space-between; align-items: center; }
-		textarea { flex: 1; width: 100%; padding: 1rem; background: var(--color-bg); color: var(--color-text); border: none; resize: none; font-family: monospace; font-size: 0.875rem; outline: none; min-height: 300px; }
-		pre { flex: 1; padding: 1rem; overflow: auto; font-size: 0.875rem; white-space: pre-wrap; word-break: break-all; background: var(--color-bg); min-height: 300px; }
-		button { padding: 0.375rem 0.875rem; background: var(--color-primary); color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+		.panel-header { padding: 0.5rem 1rem; background: var(--palette-surface); border-bottom: 1px solid var(--palette-border); font-size: 0.75rem; color: var(--palette-muted); display: flex; justify-content: space-between; align-items: center; }
+		textarea { flex: 1; width: 100%; padding: 1rem; background: var(--palette-background); color: var(--palette-foreground); border: none; resize: none; font-family: monospace; font-size: 0.875rem; outline: none; min-height: 300px; }
+		pre { flex: 1; padding: 1rem; overflow: auto; font-size: 0.875rem; white-space: pre-wrap; word-break: break-all; background: var(--palette-background); color: var(--palette-foreground); min-height: 300px; }
+		button { padding: 0.375rem 0.875rem; background: var(--palette-primary); color: var(--palette-background); border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
 		button:hover { opacity: 0.85; }
-		.error { color: #e74c3c; }
-		@media (max-width: 700px) { main { grid-template-columns: 1fr; } .panel { border-right: none; border-bottom: 1px solid var(--color-border); } }
+		.error { color: var(--palette-error); }
+		@media (max-width: 700px) { main { grid-template-columns: 1fr; } .panel { border-right: none; border-bottom: 1px solid var(--palette-border); } }
 	</style>
 </head>
 <body>
 	<header>
-		<h1>Search API Explorer</h1>
+		<h1>GraphiQL API Explorer</h1>
+		<p>JSON API endpoint: <code>/api/graphql</code></p>
 	</header>
+	<form id="query-form" method="post" action="/server/docs/graphql">
 	<main>
 		<div class="panel">
 			<div class="panel-header">
 				<span>Query</span>
-				<button id="run-btn" onclick="runQuery()">Run ▶</button>
+				<button id="run-btn" type="submit">Run ▶</button>
 			</div>
-			<textarea id="query" spellcheck="false" placeholder="{ health { status version } }">{ health { status version mode uptime } }</textarea>
+			<textarea id="query" name="query" spellcheck="false" placeholder="{ health { status version } }">{ health { status version mode uptime } }</textarea>
 		</div>
 		<div class="panel">
 			<div class="panel-header"><span>Response</span></div>
-			<pre id="response">Run a query to see results.</pre>
+			<pre id="response">` + html.EscapeString(response) + `</pre>
 		</div>
 	</main>
+	</form>
 	<details class="schema-panel">
 		<summary>GraphQL schema</summary>
 		<pre>` + html.EscapeString(GeneratedSchemaSDL) + `</pre>
 	</details>
-	<script>
-		function runQuery() {
-			var q = document.getElementById('query').value.trim();
-			var out = document.getElementById('response');
-			out.textContent = 'Running…';
-			out.className = '';
-			fetch('/api/graphql', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ query: q })
-			})
-			.then(function(r) { return r.json(); })
-			.then(function(d) { out.textContent = JSON.stringify(d, null, 2); })
-			.catch(function(e) { out.textContent = 'Error: ' + e.message; out.className = 'error'; });
-		}
-		document.getElementById('query').addEventListener('keydown', function(e) {
-			if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); }
-		});
-	</script>
 </body>
 </html>`
 
@@ -301,16 +289,77 @@ func buildBaseURL(r *http.Request) string {
 	return proto + "://" + host
 }
 
-// UIHandler returns an http.HandlerFunc that serves the GraphiQL UI (GET only).
-// Registered at GET /server/docs/graphql per AI.md PART 14.
+// UIHandler returns an http.HandlerFunc that serves the GraphiQL UI and its
+// native read-only query form. Registered at /server/docs/graphql per AI.md
+// PART 14.
 func UIHandler(cfg *config.Config) http.HandlerFunc {
+	return UIHandlerWithDependencies(cfg, Dependencies{})
+}
+
+func UIHandlerWithDependencies(cfg *config.Config, dependencies Dependencies) http.HandlerFunc {
+	if dependencies.StartedAt.IsZero() {
+		dependencies.StartedAt = time.Now()
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
+			serveGraphiQL(w, r, "Run a query to see results.")
+		case http.MethodPost:
+			r.Body = http.MaxBytesReader(w, r.Body, maxGraphQLRequestBytes)
+			if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/x-www-form-urlencoded") {
+				localizedHTTPError(w, r, http.StatusUnsupportedMediaType, "errors.bad_request")
+				return
+			}
+			if err := r.ParseForm(); err != nil {
+				var tooLarge *http.MaxBytesError
+				if errors.As(err, &tooLarge) {
+					localizedHTTPError(w, r, http.StatusRequestEntityTooLarge, "errors.bad_request")
+					return
+				}
+				localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+				return
+			}
+			params := graphQLRequestParams{Query: r.FormValue("query")}
+			if !graphQLQueryReadOnly(params.Query) {
+				localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+				return
+			}
+			if cost, depth, ok := graphQLQueryCost(params.Query); ok && (cost > maxGraphQLQueryFields || depth > maxGraphQLQueryDepth) {
+				localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+				return
+			}
+			ctx := context.WithValue(r.Context(), dependenciesContextKey{}, dependencies)
+			result := executeGraphQLQuery(w, r.WithContext(ctx), params)
+			body, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
+				return
+			}
+			serveGraphiQL(w, r, string(body))
+		default:
 			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 			return
 		}
-		serveGraphiQL(w, r)
 	}
+}
+
+func graphQLQueryReadOnly(query string) bool {
+	document, err := parser.Parse(parser.ParseParams{Source: query})
+	if err != nil {
+		return false
+	}
+	found := false
+	for _, definition := range document.Definitions {
+		operation, ok := definition.(*ast.OperationDefinition)
+		if !ok {
+			continue
+		}
+		found = true
+		if operation.Operation != ast.OperationTypeQuery {
+			return false
+		}
+	}
+	return found
 }
 
 // QueryHandler returns an http.HandlerFunc that handles GraphQL POST queries only.

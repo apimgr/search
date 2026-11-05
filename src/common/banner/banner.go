@@ -22,10 +22,8 @@ type Config struct {
 	Debug bool
 	// Listen URLs
 	URLs []string
-	// Show server.token (server only, first run). The token is persisted to
-	// server.yml; it is shown here so the operator can record it.
+	// Show first-run setup guidance without disclosing credentials.
 	ShowSetup   bool
-	SetupToken  string
 	Description string
 	// SMTP status (e.g., "Auto-detected (localhost:25)")
 	SMTPStatus string
@@ -107,13 +105,6 @@ func printFull(cfg Config) {
 		printBoxLine(vertical, "", boxWidth)
 	}
 
-	// Operator Token (first run only). Sent as: Authorization: Bearer <token>
-	if cfg.ShowSetup && cfg.SetupToken != "" {
-		printBoxLine(vertical, "   "+display.Emoji("🔑", "[KEY]")+" Operator Token (Authorization: Bearer ...):", boxWidth)
-		printBoxLine(vertical, "      "+cfg.SetupToken, boxWidth)
-		printBoxLine(vertical, "", boxWidth)
-	}
-
 	// SMTP Status
 	if cfg.SMTPStatus != "" {
 		printBoxLine(vertical, "   "+display.Emoji("📧", "[MAIL]")+" SMTP: "+cfg.SMTPStatus, boxWidth)
@@ -122,7 +113,7 @@ func printFull(cfg Config) {
 
 	// Warning for first run
 	if cfg.ShowSetup {
-		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Save the operator token! Also stored in server.yml.", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Operator token is stored in server.yml.", boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
 
@@ -165,10 +156,8 @@ func printCompact(cfg Config) {
 		fmt.Printf("%s %s\n", display.Emoji("🌐", "[WEB]"), url)
 	}
 
-	if cfg.ShowSetup && cfg.SetupToken != "" {
-		fmt.Println()
-		fmt.Printf("%s Operator Token: %s\n", display.Emoji("🔑", "[KEY]"), cfg.SetupToken)
-		fmt.Printf("%s  Save this token. Also stored in server.yml.\n", display.Emoji("⚠️", "[!]"))
+	if cfg.ShowSetup {
+		fmt.Printf("%s Operator token is stored in server.yml.\n", display.Emoji("⚠️", "[!]"))
 	}
 	fmt.Println()
 }
@@ -180,8 +169,8 @@ func printMinimal(cfg Config) {
 		// Extract just host:port
 		fmt.Println(extractHostPort(cfg.URLs[0]))
 	}
-	if cfg.ShowSetup && cfg.SetupToken != "" {
-		fmt.Printf("Token: %s\n", cfg.SetupToken)
+	if cfg.ShowSetup {
+		fmt.Println("Operator token is stored in server.yml.")
 	}
 }
 

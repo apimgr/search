@@ -70,6 +70,12 @@ search --service --uninstall
 search --service --help
 ```
 
+`--service --uninstall` prompts for confirmation, then removes the service and
+deletes its configuration, data, cache, logs, backups, PID file, and
+server-created system user/group. The server binary remains installed. Use
+`--service --disable` to stop and disable the service while keeping its files
+and data.
+
 ### Maintenance Commands
 
 ```bash

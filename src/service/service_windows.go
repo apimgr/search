@@ -133,7 +133,15 @@ func (sm *ServiceManager) installWindowsService() error {
 }
 
 func (sm *ServiceManager) uninstallWindowsService() error {
-	runCommand("sc", "stop", "search") //nolint:errcheck
+	status, err := sm.statusWindowsService()
+	if err != nil {
+		return fmt.Errorf("failed to check Windows service before uninstall: %w", err)
+	}
+	if status == "active" {
+		if err := runCmd("sc", "stop", "search"); err != nil {
+			return fmt.Errorf("failed to stop Windows service: %w", err)
+		}
+	}
 	return runCommand("sc", "delete", "search")
 }
 

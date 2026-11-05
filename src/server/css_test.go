@@ -57,3 +57,25 @@ func TestNoHardcodedColorsInStylesheets(t *testing.T) {
 		})
 	}
 }
+
+func TestCommonCSSUsesSharedThemePalettes(t *testing.T) {
+	css, err := GetStaticFile("css/common.css")
+	if err != nil {
+		t.Fatalf("GetStaticFile(common.css) error = %v", err)
+	}
+	text := string(css)
+	for _, expected := range []string{
+		"--palette-background: #282a36",
+		"--palette-accent: #ff79c6",
+		"--palette-background: #ffffff",
+		"--palette-primary: #0969da",
+		"--color-bg: var(--palette-background)",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Errorf("generated common.css is missing %q", expected)
+		}
+	}
+	if strings.Contains(text, "__DARK_") || strings.Contains(text, "__LIGHT_") {
+		t.Fatal("generated common.css contains unresolved palette markers")
+	}
+}
