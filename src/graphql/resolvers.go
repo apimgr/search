@@ -462,6 +462,9 @@ func resolveAlert(p graphql.ResolveParams) (interface{}, error) {
 	if err != nil {
 		return nil, graphQLAlertError(err)
 	}
+	if writer := responseWriterFromContext(p.Context); writer != nil {
+		writer.Header().Set("Cache-Control", "no-store")
+	}
 	return item, nil
 }
 
@@ -489,6 +492,9 @@ func resolveCreateAlert(p graphql.ResolveParams) (interface{}, error) {
 	if err != nil {
 		return nil, graphQLAlertError(err)
 	}
+	if writer := responseWriterFromContext(p.Context); writer != nil {
+		writer.Header().Set("Cache-Control", "no-store")
+	}
 	return created, nil
 }
 
@@ -503,6 +509,9 @@ func resolveUpdateAlert(p graphql.ResolveParams) (interface{}, error) {
 	updated, err := deps.API.AlertUpdateForGraphQL(p.Context, request, token, alert.UpdateRequest{Query: alertInputString(input, "query"), Category: alertInputString(input, "category"), Language: alertInputString(input, "language"), Region: alertInputString(input, "region"), Engines: alertInputStrings(input, "engines"), Frequency: alert.Frequency(alertInputString(input, "frequency")), SafeSearch: alertInputInt(input, "safe_search"), DeliverEmail: alertInputBool(input, "deliver_email"), DeliverRSS: alertInputBool(input, "deliver_rss"), DeliverWebhook: alertInputBool(input, "deliver_webhook"), WebhookURL: alertInputString(input, "webhook_url")})
 	if err != nil {
 		return nil, graphQLAlertError(err)
+	}
+	if writer := responseWriterFromContext(p.Context); writer != nil {
+		writer.Header().Set("Cache-Control", "no-store")
 	}
 	return updated, nil
 }

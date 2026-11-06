@@ -3560,6 +3560,69 @@
         }
       }
     },
+    "/api/v1/server/help/mcp": {
+      "get": {
+        "operationId": "getApiV1ServerHelpMcp",
+        "summary": "MCP connection help",
+        "description": "Return the enabled MCP endpoint, aliases, authentication scheme, live tools, and project-specific usage guidance",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP connection help",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/server/mcp": {
       "post": {
         "summary": "MCP Streamable HTTP endpoint",

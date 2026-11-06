@@ -17,8 +17,5 @@ elif command -v docker &>/dev/null; then
 else
     echo "ERROR: No container runtime found."
     echo "Please install docker or incus to run integration tests."
-    echo ""
-    echo "To run unit tests only:"
-    echo "  go test -v ./src/..."
     exit 1
 fi

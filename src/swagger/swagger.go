@@ -193,7 +193,7 @@ func SpecHandler(cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var spec OpenAPISpec
 		if err := json.Unmarshal(generatedOpenAPISpec, &spec); err != nil {
-			http.Error(w, "embedded OpenAPI document is invalid", http.StatusInternalServerError)
+			http.Error(w, i18n.RequestString(r, "errors.server_error"), http.StatusInternalServerError)
 			return
 		}
 		baseURL := buildBaseURL(r)
@@ -206,7 +206,7 @@ func SpecHandler(cfg *config.Config) http.HandlerFunc {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		if err := json.NewEncoder(w).Encode(spec); err != nil {
-			http.Error(w, `{"ok":false,"error":"INTERNAL_ERROR","message":"failed to encode OpenAPI spec","details":{}}`, http.StatusInternalServerError)
+			http.Error(w, i18n.RequestString(r, "errors.server_error"), http.StatusInternalServerError)
 		}
 	}
 }
@@ -252,7 +252,7 @@ func UIHandler(_ *config.Config) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if _, err := w.Write([]byte(html)); err != nil {
-			http.Error(w, "failed to write Swagger UI", http.StatusInternalServerError)
+			http.Error(w, i18n.RequestString(r, "errors.server_error"), http.StatusInternalServerError)
 		}
 	}
 }

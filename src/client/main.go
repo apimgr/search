@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/apimgr/search/src/client/cmd"
+	clientupdate "github.com/apimgr/search/src/client/update"
 )
 
 func main() {
@@ -25,6 +27,9 @@ func main() {
 	}
 
 	if err := cmd.ExecuteClientCLI(); err != nil {
+		if errors.Is(err, clientupdate.ErrRestartStarted) {
+			os.Exit(0)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(cmd.ExitCodeForError(err))
 	}

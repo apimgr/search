@@ -1,0 +1,133 @@
+{{define "content"}}
+<article class="static-page mcp-help-page">
+  <header class="page-header">
+    <h1>{{t "mcp_help.title"}}</h1>
+    <p>{{t "mcp_help.subtitle"}}</p>
+  </header>
+
+  <nav aria-label="{{t "mcp_help.contents_label"}}">
+    <h2>{{t "mcp_help.contents_title"}}</h2>
+    <ul>
+      <li><a href="#overview">{{t "mcp_help.overview_title"}}</a></li>
+      <li><a href="#endpoint">{{t "mcp_help.endpoint_title"}}</a></li>
+      <li><a href="#authentication">{{t "mcp_help.authentication_title"}}</a></li>
+      <li><a href="#connect">{{t "mcp_help.connect_title"}}</a></li>
+      <li><a href="#tools">{{t "mcp_help.tools_title"}}</a></li>
+      <li><a href="#limits">{{t "mcp_help.limits_title"}}</a></li>
+      <li><a href="#troubleshooting">{{t "mcp_help.troubleshooting_title"}}</a></li>
+      <li><a href="#project">{{t "mcp_help.project_title"}}</a></li>
+    </ul>
+  </nav>
+
+  <section id="overview">
+    <h2>{{t "mcp_help.overview_title"}}</h2>
+    <p>{{t "mcp_help.overview_body" .Config.Server.Branding.Title}}</p>
+  </section>
+
+  <section id="endpoint">
+    <h2>{{t "mcp_help.endpoint_title"}}</h2>
+    <p>{{t "mcp_help.endpoint_intro"}}</p>
+    <div class="code-block">
+      <code id="mcp-endpoint" class="copy-value">{{.MCPURL}}</code>
+      <button type="button" class="copy-btn" data-copy="{{.MCPURL}}" aria-label="{{t "mcp_help.copy_endpoint"}}" data-copied-label="{{t "common.copied"}}">
+        <span class="copy-text">{{t "common.copy"}}</span>
+      </button>
+    </div>
+    <p>{{t "mcp_help.aliases_label"}}</p>
+    <ul>
+      {{range .MCPAliases}}
+      <li><code class="long-string">{{.}}</code></li>
+      {{end}}
+    </ul>
+  </section>
+
+  <section id="authentication">
+    <h2>{{t "mcp_help.authentication_title"}}</h2>
+    <p>{{t "mcp_help.authentication_body"}}</p>
+    <p>{{t "mcp_help.anonymous_access"}}</p>
+    <p>{{t "mcp_help.linked_token_intro"}} <a href="/server/preferences/tokens">{{t "mcp_help.linked_token_link"}}</a> {{t "mcp_help.linked_token_outro"}}</p>
+    <p>{{t "mcp_help.never_use_operator_token"}}</p>
+  </section>
+
+  <section id="connect">
+    <h2>{{t "mcp_help.connect_title"}}</h2>
+    <h3>{{t "mcp_help.claude_code_title"}}</h3>
+    <pre class="code-block"><code>claude mcp add --transport http {{.Config.Server.Branding.Title}} {{.MCPURL}} --header "Authorization: Bearer $MCP_TOKEN"</code></pre>
+
+    <h3>{{t "mcp_help.generic_client_title"}}</h3>
+    <pre class="code-block"><code>{
+  "mcpServers": {
+    "{{.Config.Server.Branding.Title}}": {
+      "type": "http",
+      "url": "{{.MCPURL}}",
+      "headers": {
+        "Authorization": "Bearer $MCP_TOKEN"
+      }
+    }
+  }
+}</code></pre>
+
+    <h3>{{t "mcp_help.verify_title"}}</h3>
+    <p>{{t "mcp_help.verify_intro"}}</p>
+    <pre class="code-block"><code>curl -sS {{.MCPURL}} \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: {{.MCPProtocolVersion}}' \
+  -H "Authorization: Bearer $MCP_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"{{.MCPProtocolVersion}}","capabilities":{},"clientInfo":{"name":"mcp-check","version":"1.0.0"}}}'</code></pre>
+  </section>
+
+  <section id="tools">
+    <h2>{{t "mcp_help.tools_title"}}</h2>
+    <p>{{t "mcp_help.tools_intro"}}</p>
+    {{if .MCPAuthenticatedToolsAvailable}}
+    <p>{{t "mcp_help.authenticated_tools_note"}}</p>
+    {{end}}
+    {{if .MCPTools}}
+    <ul>
+      {{range .MCPTools}}
+      <li><code>{{.Name}}</code>{{if .Description}} — {{.Description}}{{end}}</li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p>{{t "mcp_help.no_tools"}}</p>
+    {{end}}
+  </section>
+
+  <section id="limits">
+    <h2>{{t "mcp_help.limits_title"}}</h2>
+    <ul>
+      <li>{{t "mcp_help.limit_post_only"}}</li>
+      <li>{{t "mcp_help.limit_no_sessions"}}</li>
+      <li>{{t "mcp_help.limit_rate_audit"}}</li>
+      <li>{{t "mcp_help.limit_origin"}}</li>
+      <li>{{t "mcp_help.limit_versions" (join .MCPProtocolVersions ", ")}}</li>
+    </ul>
+  </section>
+
+  <section id="troubleshooting">
+    <h2>{{t "mcp_help.troubleshooting_title"}}</h2>
+    <table>
+      <thead>
+        <tr><th>{{t "mcp_help.status_heading"}}</th><th>{{t "mcp_help.cause_heading"}}</th><th>{{t "mcp_help.fix_heading"}}</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>400</code></td><td>{{t "mcp_help.error_400_cause"}}</td><td>{{t "mcp_help.error_400_fix"}}</td></tr>
+        <tr><td><code>401</code></td><td>{{t "mcp_help.error_401_cause"}}</td><td>{{t "mcp_help.error_401_fix"}}</td></tr>
+        <tr><td><code>403</code></td><td>{{t "mcp_help.error_403_cause"}}</td><td>{{t "mcp_help.error_403_fix"}}</td></tr>
+        <tr><td><code>404</code></td><td>{{t "mcp_help.error_404_cause"}}</td><td>{{t "mcp_help.error_404_fix"}}</td></tr>
+        <tr><td><code>405</code></td><td>{{t "mcp_help.error_405_cause"}}</td><td>{{t "mcp_help.error_405_fix"}}</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="project">
+    <h2>{{t "mcp_help.project_title"}}</h2>
+    {{if .MCPProjectMarkdown}}
+    <div class="markdown">{{.MCPProjectMarkdown | markdownToHTML}}</div>
+    {{else}}
+    <p>{{t "mcp_help.project_empty"}}</p>
+    {{end}}
+  </section>
+</article>
+{{end}}

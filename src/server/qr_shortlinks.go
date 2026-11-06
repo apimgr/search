@@ -59,7 +59,7 @@ func (s *Server) createQRShortlink(ctx context.Context, target string) (string, 
 
 func (s *Server) handleQRShortlinkRedirect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedTextHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 	code := chi.URLParam(r, "code")
@@ -69,7 +69,7 @@ func (s *Server) handleQRShortlinkRedirect(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if s.dbManager == nil || s.dbManager.ServerDB() == nil || !s.dbManager.ServerDB().IsReady() {
-		http.Error(w, "Short-link storage unavailable", http.StatusServiceUnavailable)
+		localizedTextHTTPError(w, r, http.StatusServiceUnavailable, "errors.server_error")
 		return
 	}
 	table := database.ServerTableName(s.dbManager.ServerDB(), "qr_shortlinks")
@@ -80,19 +80,19 @@ func (s *Server) handleQRShortlinkRedirect(w http.ResponseWriter, r *http.Reques
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, "Short-link lookup failed", http.StatusInternalServerError)
+		localizedTextHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 	key := s.config.Get().Security.EncryptionKey
 	plaintext, err := security.DecryptAESGCM(key, encryptedTarget)
 	if err != nil {
-		http.Error(w, "Short-link destination is unavailable", http.StatusInternalServerError)
+		localizedTextHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 	target := string(plaintext)
 	parsed, err := url.ParseRequestURI(target)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || len(target) > maxQRShortlinkTargetBytes || strings.ContainsAny(target, "\r\n\x00") {
-		http.Error(w, "Short-link destination is invalid", http.StatusInternalServerError)
+		localizedTextHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 	w.Header().Set("Cache-Control", "private, no-store")

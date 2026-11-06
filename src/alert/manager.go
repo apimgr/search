@@ -109,9 +109,10 @@ type CreateRequest struct {
 }
 
 type CreateResponse struct {
-	Alert       *Alert
-	ManageToken string
-	RSSToken    string
+	Alert         *Alert
+	ManageToken   string
+	RSSToken      string
+	WebhookSecret string
 }
 
 type UpdateRequest struct {
@@ -189,12 +190,13 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	}
 
 	webhookSecretEncrypted := ""
+	webhookSecret := ""
 	if req.DeliverWebhook {
-		secret, err := randomToken(32)
+		webhookSecret, err = randomToken(32)
 		if err != nil {
 			return nil, err
 		}
-		webhookSecretEncrypted, err = ssl.EncryptCredentials(map[string]string{"secret": secret}, m.serverConfig.Server.SecretKey)
+		webhookSecretEncrypted, err = ssl.EncryptCredentials(map[string]string{"secret": webhookSecret}, m.serverConfig.Server.SecretKey)
 		if err != nil {
 			return nil, fmt.Errorf("encrypt webhook secret: %w", err)
 		}
@@ -245,9 +247,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	}
 
 	return &CreateResponse{
-		Alert:       alert,
-		ManageToken: manageToken,
-		RSSToken:    rssToken,
+		Alert:         alert,
+		ManageToken:   manageToken,
+		RSSToken:      rssToken,
+		WebhookSecret: webhookSecret,
 	}, nil
 }
 
@@ -371,6 +374,9 @@ func (m *Manager) Update(ctx context.Context, manageToken string, req UpdateRequ
 		}
 		if err := validateWebhookURL(req.WebhookURL); err != nil {
 			return nil, err
+		}
+		if err := m.ensureWebhookSecret(ctx, alert.ID); err != nil {
+			return nil, fmt.Errorf("ensure webhook secret: %w", err)
 		}
 	}
 
@@ -631,7 +637,7 @@ func (m *Manager) sendDigestEmail(ctx context.Context, alert *Alert, results []A
 }
 
 func (m *Manager) sendWebhook(ctx context.Context, alert *Alert, results []AlertResult) error {
-	secret, err := m.webhookSecret(alert)
+	secret, err := m.webhookSecret(ctx, alert)
 	if err != nil {
 		return err
 	}
@@ -843,11 +849,41 @@ func (m *Manager) markResultsDelivered(ctx context.Context, results []AlertResul
 	return nil
 }
 
-func (m *Manager) webhookSecret(alert *Alert) (string, error) {
+func (m *Manager) WebhookSecretForManageToken(ctx context.Context, manageToken string) (string, error) {
+	alert, err := m.GetByManageToken(ctx, manageToken)
+	if err != nil {
+		return "", err
+	}
+	if !alert.DeliverWebhook {
+		return "", nil
+	}
+	return m.webhookSecret(ctx, alert)
+}
+
+func (m *Manager) ensureWebhookSecret(ctx context.Context, alertID string) error {
 	var encrypted string
-	// Per AI.md PART 10: SELECT queries must use context with 5s timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	if err := m.db.QueryRowContext(ctx, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alertID).Scan(&encrypted); err != nil {
+		return err
+	}
+	if encrypted != "" {
+		return nil
+	}
+	secret, err := randomToken(32)
+	if err != nil {
+		return err
+	}
+	encrypted, err = ssl.EncryptCredentials(map[string]string{"secret": secret}, m.serverConfig.Server.SecretKey)
+	if err != nil {
+		return fmt.Errorf("encrypt webhook secret: %w", err)
+	}
+	if _, err := m.db.ExecContext(ctx, `UPDATE search_alerts SET webhook_secret_encrypted = ? WHERE id = ? AND COALESCE(webhook_secret_encrypted, '') = ''`, encrypted, alertID); err != nil {
+		return fmt.Errorf("store webhook secret: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) webhookSecret(ctx context.Context, alert *Alert) (string, error) {
+	var encrypted string
 	if err := m.db.QueryRowContext(ctx, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alert.ID).Scan(&encrypted); err != nil {
 		return "", err
 	}

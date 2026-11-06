@@ -169,7 +169,6 @@ func TestFetchReleasesNonOKStatus(t *testing.T) {
 		{"forbidden", http.StatusForbidden},
 		{"internal server error", http.StatusInternalServerError},
 		{"rate limited", http.StatusTooManyRequests},
-		{"not found", http.StatusNotFound},
 	}
 
 	for _, tt := range tests {
@@ -191,6 +190,24 @@ func TestFetchReleasesNonOKStatus(t *testing.T) {
 				t.Errorf("fetchReleases() error = %q, want it to include status code %d", err.Error(), tt.statusCode)
 			}
 		})
+	}
+}
+
+func TestFetchReleasesNotFoundMeansNoUpdates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	restore := patchDefaultTransport(t, server)
+	defer restore()
+
+	m := &Manager{currentVersion: "1.0.0", tempDir: os.TempDir()}
+	got, err := m.fetchReleases()
+	if err != nil {
+		t.Fatalf("fetchReleases() error = %v, want no error for 404", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("fetchReleases() returned %d releases, want 0", len(got))
 	}
 }
 

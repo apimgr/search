@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/owner"
 	"github.com/go-chi/chi/v5"
 )
@@ -37,7 +38,7 @@ func (s *Server) ownerWebIdentity(w http.ResponseWriter, r *http.Request, requir
 func (s *Server) ownerWebRequired(w http.ResponseWriter, r *http.Request) (owner.Identity, bool) {
 	identity, ok := s.ownerWebIdentity(w, r, true)
 	if !ok {
-		http.Error(w, "owner token unavailable", http.StatusForbidden)
+		http.Error(w, i18n.RequestString(r, "errors.forbidden"), http.StatusForbidden)
 	}
 	return identity, ok
 }
@@ -59,7 +60,7 @@ func (s *Server) clearOwnerCookie(w http.ResponseWriter) {
 }
 
 func (s *Server) renderOwnerTokenResult(w http.ResponseWriter, r *http.Request, token string, message string) {
-	extra := map[string]interface{}{"ownerTokenMessage": message}
+	extra := map[string]interface{}{"ownerTokenMessage": i18n.RequestString(r, message)}
 	if token != "" {
 		extra["ownerTokenRevealed"] = token
 	}
@@ -73,11 +74,11 @@ func (s *Server) handleOwnerPrimaryReveal(w http.ResponseWriter, r *http.Request
 	}
 	token, err := s.ownerManager.Reveal(r.Context(), identity, identity.TokenID)
 	if err != nil {
-		http.Error(w, "token unavailable", http.StatusNotFound)
+		http.Error(w, i18n.RequestString(r, "errors.not_found"), http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	s.renderOwnerTokenResult(w, r, token, "Primary token revealed")
+	s.renderOwnerTokenResult(w, r, token, "preferences.owner_tokens.primary_revealed")
 }
 
 func (s *Server) handleOwnerPrimaryRotate(w http.ResponseWriter, r *http.Request) {
@@ -86,28 +87,28 @@ func (s *Server) handleOwnerPrimaryRotate(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if r.FormValue("confirm") != "rotate" {
-		http.Error(w, "confirmation required", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	token, err := s.ownerManager.Rotate(r.Context(), identity, identity.TokenID)
 	if err != nil {
-		http.Error(w, "token operation failed", http.StatusInternalServerError)
+		http.Error(w, i18n.RequestString(r, "errors.server_error"), http.StatusInternalServerError)
 		return
 	}
 	s.setOwnerCookie(w, token)
 	w.Header().Set("Cache-Control", "no-store")
-	s.renderOwnerTokenResult(w, r, token, "Primary token rotated")
+	s.renderOwnerTokenResult(w, r, token, "preferences.owner_tokens.primary_rotated")
 }
 
 func (s *Server) handleOwnerRestore(w http.ResponseWriter, r *http.Request) {
 	if s.ownerManager == nil {
-		http.Error(w, "owner token management unavailable", http.StatusServiceUnavailable)
+		http.Error(w, i18n.RequestString(r, "errors.server_error"), http.StatusServiceUnavailable)
 		return
 	}
 	_, err := s.ownerManager.Restore(r.Context(), strings.TrimSpace(r.FormValue("token")))
 	if err != nil {
 		s.clearOwnerCookie(w)
-		http.Error(w, "invalid primary token", http.StatusUnauthorized)
+		http.Error(w, i18n.RequestString(r, "errors.invalid_token"), http.StatusUnauthorized)
 		return
 	}
 	token := strings.TrimSpace(r.FormValue("token"))
@@ -122,16 +123,16 @@ func (s *Server) handleOwnerLinkedCreate(w http.ResponseWriter, r *http.Request)
 	}
 	expiry, err := parseWebOwnerExpiry(r.FormValue("expires_at"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	_, token, err := s.ownerManager.CreateLinked(r.Context(), identity, r.FormValue("name"), expiry)
 	if err != nil {
-		http.Error(w, "linked token could not be created", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	s.renderOwnerTokenResult(w, r, token, "Linked token created")
+	s.renderOwnerTokenResult(w, r, token, "preferences.owner_tokens.linked_created")
 }
 
 func (s *Server) handleOwnerLinkedReveal(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +163,7 @@ func (s *Server) ownerLinkedAction(w http.ResponseWriter, r *http.Request, actio
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		s.renderOwnerTokenResult(w, r, token, "Linked token revealed")
+		s.renderOwnerTokenResult(w, r, token, "preferences.owner_tokens.linked_revealed")
 	case "rotate":
 		token, err := s.ownerManager.Rotate(r.Context(), identity, id)
 		if err != nil {
@@ -170,7 +171,7 @@ func (s *Server) ownerLinkedAction(w http.ResponseWriter, r *http.Request, actio
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		s.renderOwnerTokenResult(w, r, token, "Linked token rotated")
+		s.renderOwnerTokenResult(w, r, token, "preferences.owner_tokens.linked_rotated")
 	case "revoke":
 		if err := s.ownerManager.RevokeLinked(r.Context(), identity, id); err != nil {
 			http.NotFound(w, r)
@@ -195,7 +196,7 @@ func (s *Server) handleOwnerLinkedUpdate(w http.ResponseWriter, r *http.Request)
 		err = s.ownerManager.UpdateLinked(r.Context(), identity, id, r.FormValue("name"), expiry)
 	}
 	if err != nil {
-		http.Error(w, "linked token could not be updated", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)

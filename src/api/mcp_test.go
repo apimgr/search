@@ -88,3 +88,47 @@ func TestMCPRejectsOriginHeaderMismatchAndDisabledEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestMCPRejectsMalformedProtocolVersionAndToolCallParams(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCode   int
+	}{
+		{
+			name:       "protocol version has wrong type",
+			body:       `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":7}}`,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   -32000,
+		},
+		{
+			name:       "tool call has wrong name type",
+			body:       `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":7}}`,
+			wantStatus: http.StatusOK,
+			wantCode:   -32602,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(test.body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			newMCPTestRouter(config.DefaultConfig()).ServeHTTP(response, request)
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", response.Code, test.wantStatus, response.Body.String())
+			}
+			var payload struct {
+				Error struct {
+					Code int `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Error.Code != test.wantCode {
+				t.Fatalf("error code = %d, want %d; body=%s", payload.Error.Code, test.wantCode, response.Body.String())
+			}
+		})
+	}
+}

@@ -95,37 +95,37 @@ func newImageProxyHandler(cfg config.ImageProxyConfig, key string) *imageProxyHa
 
 func (h *imageProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		localizedTextHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 	u, err := validateImageProxyURL(r.URL.Query().Get("url"))
 	if err != nil || !validImageProxySignature(r.URL.Query().Get("url"), r.URL.Query().Get("sig"), h.key) {
-		http.Error(w, "invalid image URL", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u.String(), nil)
 	if err != nil {
-		http.Error(w, "invalid image URL", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	request.Header.Set("Accept", "image/avif,image/webp,image/png,image/jpeg,image/gif")
 	response, err := h.client.Do(request)
 	if err != nil {
-		http.Error(w, "image source unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	defer closeutil.Close(response.Body)
 	if response.StatusCode != http.StatusOK {
-		http.Error(w, "image source unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, h.maxSize+1))
 	if err != nil {
-		http.Error(w, "image source unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	if int64(len(body)) > h.maxSize {
-		http.Error(w, "image too large", http.StatusRequestEntityTooLarge)
+		localizedTextHTTPError(w, r, http.StatusRequestEntityTooLarge, "errors.bad_request")
 		return
 	}
 	config, format, err := image.DecodeConfig(bytes.NewReader(body))
@@ -134,12 +134,12 @@ func (h *imageProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		format = "webp"
 	}
 	if err != nil || config.Width < 1 || config.Height < 1 || config.Width > maxImageProxyDimension || config.Height > maxImageProxyDimension || uint64(config.Width)*uint64(config.Height) > maxImageProxyPixels {
-		http.Error(w, "unsupported image", http.StatusUnsupportedMediaType)
+		localizedTextHTTPError(w, r, http.StatusUnsupportedMediaType, "errors.bad_request")
 		return
 	}
 	contentType := map[string]string{"png": "image/png", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}[format]
 	if contentType == "" {
-		http.Error(w, "unsupported image", http.StatusUnsupportedMediaType)
+		localizedTextHTTPError(w, r, http.StatusUnsupportedMediaType, "errors.bad_request")
 		return
 	}
 	w.Header().Set("Content-Type", contentType)

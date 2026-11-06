@@ -1022,6 +1022,7 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 // Per AI.md PART 16: Theme read from cookie set by client-side JS
 func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page string) *PageData {
 	data := NewPageData(s.config, title, page)
+	data.MCPEnabled = s.config.Server.MCP.Enabled
 	i18nManager := s.getI18nManager()
 	data.Lang = i18nManager.ResolveLanguage(w, r)
 	if i18nManager.IsRTL(data.Lang) {
@@ -1215,6 +1216,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/server/privacy", s.handlePrivacy)
 	r.HandleFunc("/server/contact", s.csrfProtect(s.handleContact))
 	r.HandleFunc("/server/help", s.handleHelp)
+	r.HandleFunc("/server/help/mcp", s.handleMCPHelp)
 	r.HandleFunc("/server/terms", s.handleTerms)
 
 	// Coordinated-disclosure security pages per AI.md PART 11 "Public Pages"
@@ -1370,6 +1372,8 @@ func (s *Server) setupRoutes() http.Handler {
 		r,
 		// outermost: catches all panics
 		s.middleware.Recovery,
+		// Add build-scoped validators to rendered HTML without changing private cache policy.
+		HTMLCacheHeaders,
 		// 1. normalize URLs (trailing slash, etc.)
 		URLNormalizeMiddleware,
 		// 2. attach request ID (before logging)
@@ -1890,25 +1894,25 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCacheDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedTextHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 	query := r.URL.Query()
 	original := query.Get("url")
 	parsed, err := url.Parse(original)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
-		http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	filename := query.Get("filename")
 	if !strings.HasPrefix(filename, "crawl-data/") || strings.Contains(filename, "..") || strings.ContainsAny(filename, "\\?#") {
-		http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	offset, offsetErr := strconv.ParseInt(query.Get("offset"), 10, 64)
 	length, lengthErr := strconv.ParseInt(query.Get("length"), 10, 64)
 	if offsetErr != nil || lengthErr != nil || offset < 0 || length <= 0 || length > 20<<20 || offset > int64(^uint64(0)>>1)-length+1 {
-		http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -1916,7 +1920,7 @@ func (s *Server) handleCacheDownload(w http.ResponseWriter, r *http.Request) {
 	body, contentType, err := direct.NewCacheHandler().DownloadCommonCrawlRecord(ctx, parsed.String(), filename, offset, length)
 	if err != nil {
 		slog.Warn("Common Crawl archive download failed", "err", err)
-		http.Error(w, "Archived capture is unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	if strings.HasPrefix(strings.ToLower(contentType), "text/html") {
@@ -1940,7 +1944,7 @@ func (s *Server) handleArchiveTodayDownload(w http.ResponseWriter, r *http.Reque
 
 func handleArchiveTodayDownload(w http.ResponseWriter, r *http.Request, download func(context.Context, string, string, string) ([]byte, string, error)) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedTextHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 	query := r.URL.Query()
@@ -1949,11 +1953,11 @@ func handleArchiveTodayDownload(w http.ResponseWriter, r *http.Request, download
 	body, contentType, err := download(ctx, query.Get("url"), query.Get("timestamp"), query.Get("snapshot_url"))
 	if err != nil {
 		if errors.Is(err, direct.ErrInvalidArchiveTodaySnapshot) {
-			http.Error(w, "Invalid archive download request", http.StatusBadRequest)
+			localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 			return
 		}
 		slog.Warn("archive.today download failed", "err", err)
-		http.Error(w, "Archived capture is unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	filename := "archive-capture.txt"

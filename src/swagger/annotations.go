@@ -550,6 +550,18 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
+	paths[version.APIPrefix+"/server/help/mcp"] = PathItem{
+		Get: &Operation{
+			Summary:     "MCP connection help",
+			Description: "Return the enabled MCP endpoint, aliases, authentication scheme, live tools, and project-specific usage guidance",
+			Tags:        []string{"Server"},
+			Responses: map[string]Response{
+				"200": okResponse("MCP connection help", &Schema{Type: "object"}),
+				"404": errorResponse("MCP is disabled"),
+			},
+		},
+	}
+
 	for _, page := range []struct {
 		name    string
 		summary string

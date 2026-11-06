@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"fmt"
+	stdhtml "html"
 	"html/template"
 	"io"
 	"io/fs"
@@ -21,6 +23,8 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/common/theme"
 	"github.com/apimgr/search/src/config"
+	"github.com/yuin/goldmark"
+	xhtml "golang.org/x/net/html"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -54,6 +58,7 @@ func NewTemplateRenderer(cfg *config.Config, i18nManager *i18n.Manager) *Templat
 
 func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.FuncMap {
 	return template.FuncMap{
+		"asset": assetURL,
 		// i18n functions - use provided funcs or fallback
 		"t": func(key string, args ...interface{}) string {
 			if i18nFuncs != nil {
@@ -88,21 +93,22 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 			}
 			return "ltr"
 		},
-		"safe":      func(s string) template.HTML { return template.HTML(s) },
-		"safeHTML":  func(s string) template.HTML { return template.HTML(s) },
-		"safeURL":   func(s string) template.URL { return template.URL(s) },
-		"safeCSS":   func(s string) template.CSS { return template.CSS(s) },
-		"safeJS":    func(s string) template.JS { return template.JS(s) },
-		"lower":     strings.ToLower,
-		"upper":     strings.ToUpper,
-		"title":     func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"contains":  strings.Contains,
-		"hasPrefix": strings.HasPrefix,
-		"hasSuffix": strings.HasSuffix,
-		"replace":   strings.ReplaceAll,
-		"trim":      strings.TrimSpace,
-		"join":      strings.Join,
-		"split":     strings.Split,
+		"safe":           func(s string) template.HTML { return template.HTML(s) },
+		"safeHTML":       func(s string) template.HTML { return template.HTML(s) },
+		"safeURL":        func(s string) template.URL { return template.URL(s) },
+		"safeCSS":        func(s string) template.CSS { return template.CSS(s) },
+		"safeJS":         func(s string) template.JS { return template.JS(s) },
+		"lower":          strings.ToLower,
+		"upper":          strings.ToUpper,
+		"title":          func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"contains":       strings.Contains,
+		"hasPrefix":      strings.HasPrefix,
+		"hasSuffix":      strings.HasSuffix,
+		"replace":        strings.ReplaceAll,
+		"trim":           strings.TrimSpace,
+		"join":           strings.Join,
+		"markdownToHTML": markdownToHTML,
+		"split":          strings.Split,
 		"default": func(def, val interface{}) interface{} {
 			if val == nil || val == "" {
 				return def
@@ -184,6 +190,28 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 			return key
 		},
 	}
+}
+
+func assetURL(assetPath string) string {
+	if !strings.HasPrefix(assetPath, "/static/") {
+		return assetPath
+	}
+	parsed, err := url.Parse(assetPath)
+	if err != nil {
+		return assetPath
+	}
+	query := parsed.Query()
+	query.Set("v", buildAssetStamp())
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+func buildAssetStamp() string {
+	commit := config.CommitID
+	if len(commit) > 7 {
+		commit = commit[:7]
+	}
+	return config.Version + "-" + commit
 }
 
 // loadTemplates loads all templates from embedded filesystem
@@ -440,7 +468,11 @@ func etagHandler(next http.Handler) http.Handler {
 		etag, ok := staticETag(r.URL.Path)
 		if ok {
 			w.Header().Set("ETag", etag)
-			w.Header().Set("Cache-Control", "no-cache")
+			if r.URL.Query().Get("v") == buildAssetStamp() {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			if etagMatches(r.Header.Get("If-None-Match"), etag) {
 				w.WriteHeader(http.StatusNotModified)
 				return
@@ -526,6 +558,7 @@ type PageData struct {
 	TorStatus          string
 	OnionAddress       string
 	WidgetsEnabled     bool
+	MCPEnabled         bool
 	EnabledWidgets     []string
 	CookieConsent      *CookieConsentData
 	// DataSold reflects server.privacy.data.sold — drives dynamic privacy
@@ -1008,4 +1041,89 @@ func parseWidgetCookie(r *http.Request) []string {
 		return nil
 	}
 	return result
+}
+
+func markdownToHTML(source string) template.HTML {
+	var rendered bytes.Buffer
+	if err := goldmark.Convert([]byte(source), &rendered); err != nil {
+		return template.HTML(template.HTMLEscapeString(source))
+	}
+	document, err := xhtml.Parse(bytes.NewReader(rendered.Bytes()))
+	if err != nil {
+		return template.HTML(template.HTMLEscapeString(source))
+	}
+	var safe strings.Builder
+	var renderBody func(*xhtml.Node)
+	renderBody = func(node *xhtml.Node) {
+		if node.Type == xhtml.ElementNode && node.Data == "body" {
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				renderMarkdownNode(&safe, child)
+			}
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			renderBody(child)
+		}
+	}
+	renderBody(document)
+	return template.HTML(safe.String())
+}
+
+var safeMarkdownElements = map[string]bool{
+	"a": true, "blockquote": true, "br": true, "code": true, "del": true,
+	"em": true, "h1": true, "h2": true, "h3": true, "h4": true,
+	"h5": true, "h6": true, "hr": true, "li": true, "ol": true,
+	"p": true, "pre": true, "strong": true, "table": true, "tbody": true,
+	"td": true, "th": true, "thead": true, "tr": true, "ul": true,
+}
+
+func renderMarkdownNode(output *strings.Builder, node *xhtml.Node) {
+	switch node.Type {
+	case xhtml.TextNode:
+		output.WriteString(stdhtml.EscapeString(node.Data))
+	case xhtml.ElementNode:
+		if node.Data == "script" || node.Data == "style" || node.Data == "iframe" || node.Data == "object" || node.Data == "svg" || node.Data == "math" {
+			return
+		}
+		allowed := safeMarkdownElements[node.Data]
+		if allowed {
+			output.WriteByte('<')
+			output.WriteString(node.Data)
+			for _, attr := range node.Attr {
+				value, keep := "", false
+				switch attr.Key {
+				case "title":
+					value, keep = attr.Val, true
+				case "href":
+					parsed, err := url.Parse(strings.TrimSpace(attr.Val))
+					if err == nil && parsed.User == nil && (parsed.Scheme == "https" || parsed.Scheme == "http" || strings.HasPrefix(attr.Val, "#")) {
+						value, keep = attr.Val, true
+					}
+				}
+				if keep {
+					output.WriteByte(' ')
+					output.WriteString(attr.Key)
+					output.WriteString(`="`)
+					output.WriteString(stdhtml.EscapeString(value))
+					output.WriteByte('"')
+				}
+			}
+			if node.Data == "a" {
+				output.WriteString(` rel="noopener noreferrer nofollow ugc"`)
+			}
+			output.WriteByte('>')
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			renderMarkdownNode(output, child)
+		}
+		if allowed && node.Data != "br" && node.Data != "hr" {
+			output.WriteString("</")
+			output.WriteString(node.Data)
+			output.WriteByte('>')
+		}
+	case xhtml.DocumentNode:
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			renderMarkdownNode(output, child)
+		}
+	}
 }

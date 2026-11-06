@@ -119,6 +119,9 @@ All binaries at: https://github.com/apimgr/search/releases/latest
 ## Client
 
 A companion CLI/TUI client (`search-cli`) is available for interacting with the Search API from the terminal.
+The client can check for a compatible update from its configured server with
+`search-cli --update check` and install a checksum-verified update with
+`search-cli --update yes`.
 
 ### Install
 

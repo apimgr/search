@@ -114,6 +114,10 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 ### Features
 
+#### Companion CLI
+
+- The `search-cli` client checks its configured server for a compatible release and can install a checksum-verified update on request.
+
 #### Core Search
 
 - **Multi-Engine Aggregation**: Query multiple engines simultaneously, merge and deduplicate results

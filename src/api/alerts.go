@@ -78,6 +78,9 @@ func (h *Handler) AlertCreateForGraphQL(ctx context.Context, r *http.Request, re
 	}
 	baseURL := baseURLFromRequest(h, r)
 	data := map[string]interface{}{"alert": created.Alert, "manage_url": baseURL + "/alerts/manage/" + created.ManageToken, "rss_url": baseURL + "/alerts/" + created.RSSToken + ".rss", "manage_token": created.ManageToken, "rss_token": created.RSSToken}
+	if created.WebhookSecret != "" {
+		data["webhook_secret"] = created.WebhookSecret
+	}
 	if issuedToken != "" {
 		data["owner_token"] = issuedToken
 	}
@@ -219,6 +222,7 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 		h.writeAlertError(w, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 
 	data := map[string]interface{}{
 		"alert":        created.Alert,
@@ -226,6 +230,9 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 		"rss_url":      baseURLFromRequest(h, r) + "/alerts/" + created.RSSToken + ".rss",
 		"manage_token": created.ManageToken,
 		"rss_token":    created.RSSToken,
+	}
+	if created.WebhookSecret != "" {
+		data["webhook_secret"] = created.WebhookSecret
 	}
 	if issuedToken != "" {
 		data["owner_token"] = issuedToken
@@ -281,6 +288,7 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 				h.writeAlertError(w, err)
 				return
 			}
+			w.Header().Set("Cache-Control", "no-store")
 			h.writeJSON(w, http.StatusOK, APIResponse{OK: true, Data: data})
 		case http.MethodPatch:
 			var req alertUpdateRequest
@@ -310,6 +318,7 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 				h.writeAlertError(w, err)
 				return
 			}
+			w.Header().Set("Cache-Control", "no-store")
 			h.writeJSON(w, http.StatusOK, APIResponse{OK: true, Data: data})
 		case http.MethodDelete:
 			if err := h.alertManager.Delete(r.Context(), token); err != nil {
@@ -398,11 +407,19 @@ func alertManageResponseData(h *Handler, r *http.Request, manageToken string, al
 		return nil, err
 	}
 	baseURL := baseURLFromRequest(h, r)
-	return map[string]interface{}{
+	data := map[string]interface{}{
 		"alert":        alertInfo,
 		"manage_token": manageToken,
 		"manage_url":   baseURL + "/alerts/manage/" + manageToken,
 		"rss_token":    rssToken,
 		"rss_url":      baseURL + "/alerts/" + rssToken + ".rss",
-	}, nil
+	}
+	if alertInfo.DeliverWebhook {
+		secret, err := h.alertManager.WebhookSecretForManageToken(r.Context(), manageToken)
+		if err != nil {
+			return nil, err
+		}
+		data["webhook_secret"] = secret
+	}
+	return data, nil
 }

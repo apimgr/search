@@ -3,9 +3,83 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
+
+func TestHTMLResponsesUseBuildScopedETagWithoutReplacingPrivatePolicy(t *testing.T) {
+	for _, cacheControl := range []string{"", "private, no-store"} {
+		render := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if cacheControl != "" {
+				w.Header().Set("Cache-Control", cacheControl)
+			}
+			_, _ = w.Write([]byte("<html>page</html>"))
+		})
+		wrapped := HTMLCacheHeaders(render)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Accept", "text/html")
+		first := httptest.NewRecorder()
+		wrapped.ServeHTTP(first, r)
+
+		wantCacheControl := cacheControl
+		if wantCacheControl == "" {
+			wantCacheControl = "no-store"
+		}
+		if got := first.Header().Get("Cache-Control"); got != wantCacheControl {
+			t.Errorf("Cache-Control = %q, want %q", got, wantCacheControl)
+		}
+		etag := first.Header().Get("ETag")
+		if !strings.Contains(etag, buildAssetStamp()) {
+			t.Fatalf("ETag %q does not include build stamp %q", etag, buildAssetStamp())
+		}
+
+		conditional := httptest.NewRequest(http.MethodGet, "/", nil)
+		conditional.Header.Set("Accept", "text/html")
+		conditional.Header.Set("If-None-Match", "W/"+etag)
+		second := httptest.NewRecorder()
+		wrapped.ServeHTTP(second, conditional)
+		if second.Code != http.StatusNotModified || second.Body.Len() != 0 {
+			t.Errorf("conditional response = %d with %d body bytes, want empty 304", second.Code, second.Body.Len())
+		}
+	}
+}
+
+func TestHTMLCacheMiddlewareLeavesNonHTMLResponsesAlone(t *testing.T) {
+	handler := HTMLCacheHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/api", nil)
+	r.Header.Set("Accept", "text/html")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Header().Get("Cache-Control") != "" || w.Header().Get("ETag") != "" {
+		t.Errorf("non-HTML headers were changed: Cache-Control=%q ETag=%q", w.Header().Get("Cache-Control"), w.Header().Get("ETag"))
+	}
+}
+
+func TestHTMLCacheMiddlewareRetainsHeadersWhenResponseExceedsBufferLimit(t *testing.T) {
+	handler := HTMLCacheHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html>" + strings.Repeat("x", maxHTMLResponseBuffer)))
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/large", nil)
+	r.Header.Set("Accept", "text/html")
+	r.Header.Set("If-None-Match", `"html-`+buildAssetStamp()+`"`)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("large conditional response status = %d, want 200 because the streaming validator cannot prove body equality", w.Code)
+	}
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("large HTML Cache-Control = %q, want no-store", got)
+	}
+	if got := w.Header().Get("ETag"); got != `"html-`+buildAssetStamp()+`"` {
+		t.Errorf("large HTML ETag = %q, want build-scoped validator", got)
+	}
+}
 
 // TestPWAAssetsAreRevalidatedNotCached pins AI.md line 13270: /sw.js and
 // /manifest.json are "no-cache + ETag", never long-cached. The failure this
@@ -138,6 +212,36 @@ func TestStaticAssetsReturn304(t *testing.T) {
 	}
 	if body := w2.Body.Len(); body != 0 {
 		t.Errorf("304 body is %d bytes, want 0", body)
+	}
+}
+
+func TestAssetURLAddsBuildStamp(t *testing.T) {
+	got := assetURL("/static/css/common.css")
+	req, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("assetURL() returned invalid URL %q: %v", got, err)
+	}
+	if req.Path != "/static/css/common.css" || req.Query().Get("v") != buildAssetStamp() {
+		t.Errorf("assetURL() = %q, want static path with build stamp %q", got, buildAssetStamp())
+	}
+}
+
+func TestStaticAssetImmutableCacheRequiresMatchingBuildStamp(t *testing.T) {
+	handler := StaticFileServer()
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"missing stamp", "", "no-cache"},
+		{"stale stamp", "?v=old", "no-cache"},
+		{"matching stamp", "?v=" + buildAssetStamp(), "public, max-age=31536000, immutable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/css/common.css"+tc.query, nil))
+			if got := w.Header().Get("Cache-Control"); got != tc.want {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

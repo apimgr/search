@@ -95,6 +95,7 @@ func TestIsValidBranch(t *testing.T) {
 
 func TestMatchesBranchIsCumulative(t *testing.T) {
 	stable := Release{TagName: "v1.2.3", Prerelease: false}
+	textRelease := Release{TagName: "release", Prerelease: false}
 	beta := Release{TagName: "v1.3.0-beta", Prerelease: true}
 	devel := Release{TagName: DevelTag, Prerelease: true}
 	otherPre := Release{TagName: "v2.0.0-rc1", Prerelease: true}
@@ -108,6 +109,7 @@ func TestMatchesBranchIsCumulative(t *testing.T) {
 		{"stable release on stable channel", stable, BranchStable, true},
 		{"stable release on beta channel", stable, BranchBeta, true},
 		{"stable release on devel channel", stable, BranchDevel, true},
+		{"non-semver release on stable channel", textRelease, BranchStable, false},
 		{"beta release on stable channel", beta, BranchStable, false},
 		{"beta release on beta channel", beta, BranchBeta, true},
 		{"beta release on devel channel", beta, BranchDevel, true},
@@ -127,14 +129,14 @@ func TestMatchesBranchIsCumulative(t *testing.T) {
 }
 
 func TestIsSemverTag(t *testing.T) {
-	semver := []string{"1.0.0", "v1.0.0", "v10.20.30", "v1.2.3-beta"}
+	semver := []string{"1.0.0", "v1.0.0", "v10.20.30", "v1.2.3-beta", "1.2.3-rc1+build.4"}
 	for _, tag := range semver {
 		if !isSemverTag(tag) {
 			t.Errorf("isSemverTag(%q) = false, want true", tag)
 		}
 	}
 
-	nonSemver := []string{"devel", "daily", "", "beta", "v1.2", "latest"}
+	nonSemver := []string{"devel", "daily", "", "beta", "v1.2", "latest", "v1.2.3-"}
 	for _, tag := range nonSemver {
 		if isSemverTag(tag) {
 			t.Errorf("isSemverTag(%q) = true, want false", tag)

@@ -11,6 +11,7 @@ import (
 var (
 	// ErrConfiguration indicates missing/invalid client configuration (exit 2).
 	ErrConfiguration = errors.New("configuration error")
+	ErrClientUpdateRequired = errors.New("client update required")
 	// ErrUsage indicates invalid command-line arguments (exit 64).
 	ErrUsage = errors.New("usage error")
 )
@@ -31,6 +32,8 @@ func ExitCodeForError(err error) int {
 		return 3
 	case errors.Is(err, ErrConfiguration):
 		return 2
+	case errors.Is(err, ErrClientUpdateRequired):
+		return 1
 	default:
 		return 1
 	}

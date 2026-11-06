@@ -221,9 +221,11 @@ func (m *Manager) check(branch string, cutoff time.Time) (*UpdateInfo, error) {
 // matchesBranch implements the cumulative channel rule from AI.md PART 22:
 // each channel also accepts every release from all more-stable channels.
 func matchesBranch(r Release, branch string) bool {
-	// Stable releases match every channel
+	// Only full numeric semantic-version releases count as stable releases.
+	// Stable releases match every channel, while arbitrary non-prerelease tags
+	// do not silently enter the cumulative channel set.
 	if !r.Prerelease {
-		return true
+		return isSemverTag(r.TagName)
 	}
 	isBeta := strings.HasSuffix(r.TagName, "-beta")
 	// The devel channel is a single rolling release: tag "devel", rebuilt nightly.
@@ -265,7 +267,8 @@ func isSemverTag(tag string) bool {
 }
 
 // semverPattern matches a MAJOR.MINOR.PATCH tag with an optional "v" prefix
-var semverPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+`)
+// and optional prerelease/build metadata.
+var semverPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 
 // findChecksumURL returns the download URL of a checksums file in the release assets.
 func (m *Manager) findChecksumURL(assets []Asset) string {
@@ -302,6 +305,9 @@ func (m *Manager) fetchReleases() ([]Release, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return []Release{}, nil
+		}
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 

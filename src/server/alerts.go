@@ -34,10 +34,11 @@ type AlertNewPageData struct {
 
 type AlertCreatedPageData struct {
 	PageData
-	Alert      *alert.Alert
-	ManageURL  string
-	RSSURL     string
-	OwnerToken string
+	Alert         *alert.Alert
+	ManageURL     string
+	RSSURL        string
+	OwnerToken    string
+	WebhookSecret string
 }
 
 type AlertManagePageData struct {
@@ -45,6 +46,7 @@ type AlertManagePageData struct {
 	Alert            *alert.Alert
 	ManagePath       string
 	FeedURL          string
+	WebhookSecret    string
 	AvailableEngines []AlertEngineOption
 	Error            string
 	Success          string
@@ -183,12 +185,14 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 
 	baseData := s.newPageData(w, r, "", "alerts-created")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.created_title")
+	w.Header().Set("Cache-Control", "no-store")
 	data := &AlertCreatedPageData{
-		PageData:   *baseData,
-		Alert:      created.Alert,
-		ManageURL:  s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
-		RSSURL:     s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
-		OwnerToken: issuedToken,
+		PageData:      *baseData,
+		Alert:         created.Alert,
+		ManageURL:     s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
+		RSSURL:        s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
+		OwnerToken:    issuedToken,
+		WebhookSecret: created.WebhookSecret,
 	}
 	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
 		slog.Error("template render error", "err", err)
@@ -253,15 +257,22 @@ func (s *Server) renderManageAlert(w http.ResponseWriter, r *http.Request, token
 			feedURL = s.getBaseURL(r) + "/alerts/" + rssToken + ".rss"
 		}
 	}
+	webhookSecret, err := s.alertManager.WebhookSecretForManageToken(r.Context(), token)
+	if err != nil {
+		s.renderAlertError(w, r, http.StatusInternalServerError, "alerts.error_unavailable_title", "alerts.error_unavailable")
+		return
+	}
 	data := &AlertManagePageData{
 		PageData:         *baseData,
 		Alert:            alertInfo,
 		ManagePath:       "/alerts/" + token,
 		FeedURL:          feedURL,
+		WebhookSecret:    webhookSecret,
 		AvailableEngines: s.alertEngineOptions(alertInfo.Engines),
 		Error:            strings.TrimSpace(r.URL.Query().Get("error")),
 		Success:          strings.TrimSpace(r.URL.Query().Get("success")),
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	if err := s.renderer.Render(w, "alerts-manage", data); err != nil {
 		slog.Error("template render error", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

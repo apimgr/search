@@ -613,6 +613,41 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type MCPHelpPageData struct {
+	PageData
+	MCPURL                         string
+	MCPAliases                     []string
+	MCPProtocolVersion             string
+	MCPProtocolVersions            []string
+	MCPTools                       []api.MCPHelpTool
+	MCPAuthenticatedToolsAvailable bool
+	MCPProjectMarkdown             string
+}
+
+func (s *Server) handleMCPHelp(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Server.MCP.Enabled || s.apiHandler == nil {
+		http.NotFound(w, r)
+		return
+	}
+	info := s.apiHandler.MCPHelpInfo(r)
+	baseData := s.newPageData(w, r, "", "help_mcp")
+	baseData.Title = s.getI18nManager().T(baseData.Lang, "mcp_help.title")
+	data := &MCPHelpPageData{
+		PageData:                       *baseData,
+		MCPURL:                         info.URL,
+		MCPAliases:                     info.Aliases,
+		MCPProtocolVersion:             info.ProtocolVersion,
+		MCPProtocolVersions:            info.ProtocolVersions,
+		MCPTools:                       info.Tools,
+		MCPAuthenticatedToolsAvailable: info.AuthenticatedToolsAvailable,
+		MCPProjectMarkdown:             info.ProjectMarkdown,
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if err := s.renderer.Render(w, "help_mcp", data); err != nil {
+		s.handleInternalError(w, r, "template render", err)
+	}
+}
+
 // handleTerms renders the terms of service page
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "terms")

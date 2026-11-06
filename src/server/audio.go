@@ -17,12 +17,12 @@ const maxDictionaryAudioBytes = 5 << 20
 func handleDictionaryAudio(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedTextHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 	source := direct.SafeDictionaryAudioSource(r.URL.Query().Get("url"))
 	if source == "" {
-		http.Error(w, "Invalid pronunciation source", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	client := &http.Client{
@@ -36,34 +36,34 @@ func handleDictionaryAudio(w http.ResponseWriter, r *http.Request) {
 
 func serveDictionaryAudio(w http.ResponseWriter, r *http.Request, source string, client *http.Client) {
 	if direct.SafeDictionaryAudioSource(source) == "" || client == nil {
-		http.Error(w, "Invalid pronunciation source", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, source, nil)
 	if err != nil {
-		http.Error(w, "Pronunciation unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	request.Header.Set("Accept", "audio/*")
 	request.Header.Set("User-Agent", "Search pronunciation proxy")
 	response, err := client.Do(request)
 	if err != nil {
-		http.Error(w, "Pronunciation unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	defer closeutil.Close(response.Body)
 	if response.StatusCode != http.StatusOK {
-		http.Error(w, "Pronunciation unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	contentType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || !isSupportedAudioType(contentType) {
-		http.Error(w, "Pronunciation unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxDictionaryAudioBytes+1))
 	if err != nil || len(body) > maxDictionaryAudioBytes {
-		http.Error(w, "Pronunciation unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	w.Header().Set("Content-Type", contentType)

@@ -184,3 +184,53 @@ func TestHandleAlertPauseCanResume(t *testing.T) {
 		t.Fatalf("Status = %q, want %q", alertInfo.Status, alert.StatusActive)
 	}
 }
+
+func TestHandleCreateAlertReturnsWebhookSecretWithoutCaching(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	request := httptest.NewRequest(http.MethodPost, APIPrefix+"/alerts", bytes.NewBufferString(`{"query":"privacy search","category":"general","language":"en","frequency":"daily","email":"alerts@example.com","deliver_rss":true,"deliver_webhook":true,"webhook_url":"https://93.184.216.34/alerts"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.handleCreateAlert(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", response.Header().Get("Cache-Control"))
+	}
+	var body struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	secret, ok := body.Data["webhook_secret"].(string)
+	if !ok || secret == "" {
+		t.Fatalf("webhook_secret missing from create response: %#v", body.Data)
+	}
+	manageToken, ok := body.Data["manage_token"].(string)
+	if !ok || manageToken == "" {
+		t.Fatalf("manage_token missing from create response: %#v", body.Data)
+	}
+
+	manageRequest := httptest.NewRequest(http.MethodGet, APIPrefix+"/alerts/"+manageToken, nil)
+	manageResponse := httptest.NewRecorder()
+	handler.handleAlertByToken(manageResponse, manageRequest)
+	if manageResponse.Code != http.StatusOK {
+		t.Fatalf("manage status = %d, want %d: %s", manageResponse.Code, http.StatusOK, manageResponse.Body.String())
+	}
+	if manageResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("manage Cache-Control = %q, want no-store", manageResponse.Header().Get("Cache-Control"))
+	}
+	var manageBody struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.NewDecoder(manageResponse.Body).Decode(&manageBody); err != nil {
+		t.Fatalf("decode manage response: %v", err)
+	}
+	if manageBody.Data["webhook_secret"] != secret {
+		t.Fatalf("manage webhook_secret = %#v, want same secret", manageBody.Data["webhook_secret"])
+	}
+}

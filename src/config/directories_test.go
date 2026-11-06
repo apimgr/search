@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -169,15 +170,15 @@ func TestGetTorKeysDir(t *testing.T) {
 
 func TestGetTemplatesDir(t *testing.T) {
 	got := GetTemplatesDir()
-	if got == "" {
-		t.Error("GetTemplatesDir() should not be empty")
+	if want := filepath.Join(GetConfigDir(), "template"); got != want {
+		t.Errorf("GetTemplatesDir() = %q, want %q", got, want)
 	}
 }
 
 func TestGetEmailTemplatesDir(t *testing.T) {
 	got := GetEmailTemplatesDir()
-	if got == "" {
-		t.Error("GetEmailTemplatesDir() should not be empty")
+	if want := filepath.Join(GetConfigDir(), "template", "email"); got != want {
+		t.Errorf("GetEmailTemplatesDir() = %q, want %q", got, want)
 	}
 }
 

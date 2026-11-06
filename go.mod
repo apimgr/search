@@ -34,6 +34,7 @@ require (
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/tdewolff/minify/v2 v2.24.19
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d
+	github.com/yuin/goldmark v1.8.7
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.45.0
 	golang.org/x/mod v0.41.0

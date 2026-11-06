@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/swagger"
 	"github.com/apimgr/search/src/version"
 )
@@ -44,36 +45,37 @@ func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	if !h.validMCPOrigin(r) {
-		http.Error(w, "origin not allowed", http.StatusForbidden)
+		http.Error(w, i18n.RequestString(r, "errors.forbidden"), http.StatusForbidden)
 		return
 	}
 	if r.ContentLength > 1<<20 {
-		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusRequestEntityTooLarge)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	var request mcpRequest
 	if err := json.Unmarshal(body, &request); err != nil || request.JSONRPC != "2.0" || request.Method == "" {
-		http.Error(w, "invalid JSON-RPC request", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	if mismatch := mcpHeaderError(r, request); mismatch != "" {
 		writeMCPError(w, http.StatusBadRequest, request.ID, -32600, "HeaderMismatch", mismatch)
 		return
 	}
-	var versionParam struct {
-		ProtocolVersion string `json:"protocolVersion"`
+	versionParam, versionErr := mcpProtocolParam(request.Params)
+	if versionErr != nil {
+		writeMCPError(w, http.StatusBadRequest, request.ID, -32000, "UnsupportedProtocolVersionError", "supported versions: "+strings.Join(mcpVersions, ", "))
+		return
 	}
-	_ = json.Unmarshal(rawParams(request.Params), &versionParam)
-	if headerVersion := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version")); headerVersion != "" && versionParam.ProtocolVersion != "" && headerVersion != versionParam.ProtocolVersion {
+	if headerVersion := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version")); headerVersion != "" && versionParam != "" && headerVersion != versionParam {
 		writeMCPError(w, http.StatusBadRequest, request.ID, -32600, "HeaderMismatch", "MCP-Protocol-Version does not match JSON-RPC protocolVersion")
 		return
 	}
@@ -94,7 +96,12 @@ func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	result, rpcErr := h.dispatchMCP(r, request)
 	response := map[string]interface{}{"jsonrpc": "2.0", "id": json.RawMessage(request.ID)}
 	if rpcErr != nil {
-		response["error"] = map[string]interface{}{"code": -32601, "message": rpcErr.Error()}
+		code := -32601
+		var protocolErr *mcpRPCError
+		if errors.As(rpcErr, &protocolErr) {
+			code = protocolErr.code
+		}
+		response["error"] = map[string]interface{}{"code": code, "message": rpcErr.Error()}
 	} else {
 		response["result"] = result
 	}
@@ -110,7 +117,9 @@ func mcpHeaderError(r *http.Request, request mcpRequest) string {
 		var params struct {
 			Name string `json:"name"`
 		}
-		_ = json.Unmarshal(rawParams(request.Params), &params)
+		if err := json.Unmarshal(rawParams(request.Params), &params); err != nil {
+			return "Mcp-Name does not match JSON-RPC name"
+		}
 		if name != params.Name {
 			return "Mcp-Name does not match JSON-RPC name"
 		}
@@ -120,11 +129,11 @@ func mcpHeaderError(r *http.Request, request mcpRequest) string {
 
 func mcpProtocol(r *http.Request, request mcpRequest) (string, error) {
 	header := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version"))
-	var params struct {
-		ProtocolVersion string `json:"protocolVersion"`
+	bodyValue, err := mcpProtocolParam(request.Params)
+	if err != nil {
+		return "", err
 	}
-	_ = json.Unmarshal(rawParams(request.Params), &params)
-	body := strings.TrimSpace(params.ProtocolVersion)
+	body := strings.TrimSpace(bodyValue)
 	if header != "" && body != "" && header != body {
 		return "", errors.New("protocol version header and body differ")
 	}
@@ -150,6 +159,32 @@ func mcpProtocol(r *http.Request, request mcpRequest) (string, error) {
 	return version, nil
 }
 
+func mcpProtocolParam(params map[string]json.RawMessage) (string, error) {
+	if raw, ok := params["protocolVersion"]; ok {
+		var candidate interface{}
+		if err := json.Unmarshal(raw, &candidate); err != nil {
+			return "", fmt.Errorf("invalid protocolVersion parameter: %w", err)
+		}
+		if _, ok := candidate.(string); !ok {
+			return "", errors.New("invalid protocolVersion parameter type")
+		}
+	}
+	var value struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	if err := json.Unmarshal(rawParams(params), &value); err != nil {
+		return "", fmt.Errorf("invalid protocolVersion parameter: %w", err)
+	}
+	return value.ProtocolVersion, nil
+}
+
+type mcpRPCError struct {
+	code    int
+	message string
+}
+
+func (e *mcpRPCError) Error() string { return e.message }
+
 func rawParams(params map[string]json.RawMessage) []byte {
 	data, _ := json.Marshal(params)
 	return data
@@ -158,11 +193,10 @@ func rawParams(params map[string]json.RawMessage) []byte {
 func (h *Handler) dispatchMCP(r *http.Request, request mcpRequest) (interface{}, error) {
 	switch request.Method {
 	case "initialize":
-		var params struct {
-			ProtocolVersion string `json:"protocolVersion"`
+		protocol, err := mcpProtocolParam(request.Params)
+		if err != nil {
+			return nil, &mcpRPCError{code: -32602, message: "invalid initialize params"}
 		}
-		_ = json.Unmarshal(rawParams(request.Params), &params)
-		protocol := params.ProtocolVersion
 		if protocol == "" {
 			protocol = mcpVersions[0]
 		}
@@ -178,7 +212,7 @@ func (h *Handler) dispatchMCP(r *http.Request, request mcpRequest) (interface{},
 			Arguments map[string]interface{} `json:"arguments"`
 		}
 		if err := json.Unmarshal(rawParams(request.Params), &params); err != nil || params.Name == "" {
-			return nil, errors.New("invalid tools/call params")
+			return nil, &mcpRPCError{code: -32602, message: "invalid tools/call params"}
 		}
 		for _, tool := range h.mcpTools(r) {
 			if tool.Name == params.Name {

@@ -331,6 +331,12 @@
                     <h3>{{t "help.api.graphql_heading"}}</h3>
                     <p>{{t "help.api.graphql_desc"}}</p>
                 </a>
+                {{if .MCPEnabled}}
+                <a href="/server/help/mcp" class="api-link-card">
+                    <h3>{{t "help.api.mcp_heading"}}</h3>
+                    <p>{{t "help.api.mcp_desc"}}</p>
+                </a>
+                {{end}}
             </div>
 
             <h3>{{t "help.api.endpoints_heading"}}</h3>

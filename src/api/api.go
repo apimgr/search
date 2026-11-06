@@ -284,6 +284,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get(APIPrefix+"/server/about", h.handleServerAbout)
 	r.Get(APIPrefix+"/server/privacy", h.handleServerPrivacy)
 	r.Get(APIPrefix+"/server/help", h.handleServerHelp)
+	r.Get(APIPrefix+"/server/help/mcp", h.handleMCPHelp)
 	r.Get(APIPrefix+"/server/terms", h.handleServerTerms)
 	r.Get(APIPrefix+"/server/contact", h.handleServerContact)
 	r.Post(APIPrefix+"/server/contact", h.handleServerContact)

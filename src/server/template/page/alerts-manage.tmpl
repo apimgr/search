@@ -10,6 +10,13 @@
     {{if .Success}}
     <div class="search-info"><span>{{.Success}}</span></div>
     {{end}}
+    {{if .WebhookSecret}}
+    <div class="owner-token-issued" role="status">
+        <h2>{{t "alerts.webhook_secret_label"}}</h2>
+        <p>{{t "alerts.webhook_secret_help"}}</p>
+        <code class="copy-value">{{.WebhookSecret}}</code>
+    </div>
+    {{end}}
     <form method="POST" action="{{.ManagePath}}/update" class="alert-form">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <div class="form-group">

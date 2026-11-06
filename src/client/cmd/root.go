@@ -3,6 +3,8 @@
 package cmd
 
 import (
+	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -21,17 +23,10 @@ import (
 	"github.com/apimgr/search/src/client/path"
 	"github.com/apimgr/search/src/client/setup"
 	"github.com/apimgr/search/src/client/tui"
+	clientupdate "github.com/apimgr/search/src/client/update"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/config"
 )
-
-// fatalVersionCh carries a non-nil error when the server mandates a newer CLI version.
-// Buffered size 1 so backgroundAutodiscover never blocks; main.go drains it and exits.
-var fatalVersionCh = make(chan error, 1)
-
-// FatalVersionCh returns the channel that receives a fatal version error.
-// main() must select on this channel and call os.Exit(1) when it fires.
-func FatalVersionCh() <-chan error { return fatalVersionCh }
 
 var (
 	// Build info - set via -ldflags at build time
@@ -61,6 +56,7 @@ var (
 	shellFlag string
 	// Per AI.md PART 8: --lang flag for output language
 	langFlag  string
+	updateFlag string
 	timeout   int
 	debugMode bool
 	page      int
@@ -157,6 +153,7 @@ func newRootCommand() *command {
 	fs.StringVar(&shellFlag, "shell", "", "shell integration: completions|init|--help")
 	// Per AI.md PART 8: --lang flag for output language
 	fs.StringVar(&langFlag, "lang", "", "output language code (e.g. en, es, zh, fr, ar, de, ja)")
+	fs.StringVar(&updateFlag, "update", "", "check for or install a client update: check|yes")
 	fs.IntVar(&timeout, "timeout", 0, "request timeout in seconds")
 	fs.BoolVar(&debugMode, "debug", false, "enable debug output")
 	fs.IntVar(&page, "page", 1, "page number")
@@ -415,10 +412,63 @@ func initClient() error {
 		saveServerToConfig(serverAddr)
 	}
 
-	// Per AI.md PART 32 line 42797-42811: Background autodiscover
-	go backgroundAutodiscover()
+	// Per AI.md PART 32: check the configured server version before issuing commands.
+	if updateFlag == "" {
+		if err := backgroundAutodiscover(); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func runClientUpdate(action string) error {
+	if err := initClient(); err != nil {
+		return err
+	}
+	info, err := apiClient.Autodiscover()
+	if err != nil {
+		return fmt.Errorf("check client update: %w", err)
+	}
+	latest, ok := info.CLIVersions[api.CurrentPlatform()]
+	if !ok || latest.Version == "" {
+		return fmt.Errorf("no client update is available for %s", api.CurrentPlatform())
+	}
+	if !versionLessThan(Version, latest.Version) {
+		if _, err := fmt.Fprintf(os.Stdout, "%s is up to date (%s).\n", getBinaryName(), Version); err != nil {
+			return fmt.Errorf("write client update status: %w", err)
+		}
+		return nil
+	}
+	if action == "check" {
+		if _, err := fmt.Fprintf(os.Stdout, "Update available: %s → %s\n", Version, latest.Version); err != nil {
+			return fmt.Errorf("write client update status: %w", err)
+		}
+		return nil
+	}
+	quiet := clicfg.GetBool("update.auto") && !term.IsTerminal(int(os.Stdin.Fd()))
+	return installClientUpdate(latest, quiet)
+}
+
+func installClientUpdate(latest api.CLIBinaryInfo, quiet bool) error {
+	if latest.SHA256 == "" {
+		return fmt.Errorf("server did not provide a SHA-256 checksum for client update %s", latest.Version)
+	}
+	assetName := ProjectName + "-cli-" + api.CurrentPlatform()
+	if runtime.GOOS == "windows" {
+		assetName += ".exe"
+	}
+	if !quiet {
+		fmt.Fprintf(os.Stderr, "Updating %s from %s to %s…\n", getBinaryName(), Version, latest.Version)
+	}
+	installedPath, err := clientupdate.DownloadAndInstall(context.Background(), apiClient.HTTPClient, apiClient.BaseURL, apiClient.Token, assetName, latest.SHA256)
+	if err != nil {
+		return err
+	}
+	if !quiet {
+		fmt.Fprintf(os.Stderr, "Client update installed; restarting %s.\n", getBinaryName())
+	}
+	return clientupdate.Restart(installedPath)
 }
 
 // resolveServerAddress resolves server address with priority order.
@@ -467,14 +517,14 @@ func saveServerToConfig(serverAddr string) {
 
 // backgroundAutodiscover performs autodiscovery and checks for CLI updates.
 // Per AI.md PART 32: CLI checks cli_versions on every start; if current < available, notify user.
-func backgroundAutodiscover() {
+func backgroundAutodiscover() error {
 	if apiClient == nil {
-		return
+		return nil
 	}
 
 	info, err := apiClient.Autodiscover()
 	if err != nil || info == nil {
-		return
+		return nil
 	}
 
 	// Per AI.md PART 32: check cli_min_version — refuse further requests if too old
@@ -482,24 +532,32 @@ func backgroundAutodiscover() {
 		if versionLessThan(Version, info.CLIMinVersion) {
 			msg := fmt.Sprintf("this CLI is too old; the server requires %s — run '%s --update yes' to upgrade.",
 				info.CLIMinVersion, getBinaryName())
-			fmt.Fprintln(os.Stderr, msg)
-			// Signal main() to call os.Exit(1); os.Exit is forbidden outside main per AI.md PART 7.
-			fatalVersionCh <- fmt.Errorf("%s", msg)
-			return
+			return fmt.Errorf("%w: %s", ErrClientUpdateRequired, msg)
 		}
 	}
 
 	// Per AI.md PART 32: notify user if a newer version is available for this platform
 	if len(info.CLIVersions) == 0 || Version == "dev" {
-		return
+		return nil
 	}
 	platformKey := api.CurrentPlatform()
 	if latest, ok := info.CLIVersions[platformKey]; ok {
 		if versionLessThan(Version, latest.Version) {
 			fmt.Fprintf(os.Stderr, "A newer version of %s is available: %s (you have %s). Run '%s --update yes' to upgrade.\n",
 				getBinaryName(), latest.Version, Version, getBinaryName())
+			if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd())) {
+				fmt.Fprintf(os.Stderr, "Install this update now? [y/N] ")
+				answer, readErr := bufio.NewReader(os.Stdin).ReadString('\n')
+				if readErr != nil && len(answer) == 0 {
+					return fmt.Errorf("read update confirmation: %w", readErr)
+				}
+				if strings.EqualFold(strings.TrimSpace(answer), "y") || strings.EqualFold(strings.TrimSpace(answer), "yes") {
+					return installClientUpdate(latest, false)
+				}
+			}
 		}
 	}
+	return nil
 }
 
 // versionLessThan returns true when a is strictly less than b using semver-style comparison.
@@ -591,6 +649,12 @@ func executeArgs(args []string) error {
 
 	// Initialize configuration (defaults, file, color, lang).
 	initConfig()
+	if updateFlag != "" {
+		if updateFlag != "check" && updateFlag != "yes" {
+			return fmt.Errorf("%w: --update must be check or yes", ErrUsage)
+		}
+		return runClientUpdate(updateFlag)
+	}
 
 	rest := rootCmd.flags.Args()
 
@@ -658,6 +722,9 @@ func initConfig() {
 	// Per AI.md PART 32 lines 42709-42772: Full cli.yml configuration.
 	// Server connection defaults.
 	clicfg.SetDefault("server.primary", "")
+	clicfg.SetDefault("update.auto", false)
+	clicfg.SetDefault("update.check_interval", "per_invocation")
+	clicfg.SetDefault("update.channel", "stable")
 	clicfg.SetDefault("server.api_version", "v1")
 	clicfg.SetDefault("server.timeout", 30)
 	clicfg.SetDefault("server.retry", 3)

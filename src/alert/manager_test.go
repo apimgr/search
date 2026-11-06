@@ -227,6 +227,80 @@ func TestCreateStoresDistinctPrivateTokens(t *testing.T) {
 	}
 }
 
+func TestWebhookSecretIsReturnedAndAvailableForManageToken(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	created, err := manager.Create(context.Background(), CreateRequest{
+		Query:          "privacy search",
+		Category:       "general",
+		Language:       "en",
+		Frequency:      FrequencyDaily,
+		Email:          "alerts@example.com",
+		DeliverRSS:     true,
+		DeliverWebhook: true,
+		WebhookURL:     "https://93.184.216.34/alerts",
+		BaseURL:        "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.WebhookSecret == "" {
+		t.Fatal("Create() WebhookSecret is empty")
+	}
+	secret, err := manager.WebhookSecretForManageToken(context.Background(), created.ManageToken)
+	if err != nil {
+		t.Fatalf("WebhookSecretForManageToken() error = %v", err)
+	}
+	if secret != created.WebhookSecret {
+		t.Fatal("manage-token lookup returned a different webhook secret")
+	}
+
+	var encrypted string
+	if err := db.QueryRow(`SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, created.Alert.ID).Scan(&encrypted); err != nil {
+		t.Fatalf("read encrypted webhook secret: %v", err)
+	}
+	if encrypted == "" || encrypted == secret {
+		t.Fatal("webhook secret was not stored encrypted")
+	}
+}
+
+func TestUpdateEnablingWebhookCreatesManageableSecret(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	created, err := manager.Create(context.Background(), CreateRequest{
+		Query:      "privacy search",
+		Category:   "general",
+		Language:   "en",
+		Frequency:  FrequencyDaily,
+		Email:      "alerts@example.com",
+		DeliverRSS: true,
+		BaseURL:    "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := manager.Update(context.Background(), created.ManageToken, UpdateRequest{
+		Query:          "privacy search",
+		Category:       "general",
+		Language:       "en",
+		Frequency:      FrequencyDaily,
+		DeliverRSS:     true,
+		DeliverWebhook: true,
+		WebhookURL:     "https://93.184.216.34/alerts",
+	}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	secret, err := manager.WebhookSecretForManageToken(context.Background(), created.ManageToken)
+	if err != nil {
+		t.Fatalf("WebhookSecretForManageToken() error = %v", err)
+	}
+	if secret == "" {
+		t.Fatal("enabling webhook did not create a retrievable secret")
+	}
+}
+
 func TestUpdateReplacesAlertFilterContext(t *testing.T) {
 	manager, db := newTestManager(t, newTestEngine("google", "general"), newTestEngine("bing", "news"))
 	defer db.Close()
@@ -1646,7 +1720,7 @@ func TestWebhookSecretUnknownAlertReturnsError(t *testing.T) {
 	manager, db := newTestManager(t)
 	defer db.Close()
 
-	_, err := manager.webhookSecret(&Alert{ID: "does-not-exist"})
+	_, err := manager.webhookSecret(context.Background(), &Alert{ID: "does-not-exist"})
 	if err == nil {
 		t.Fatal("webhookSecret() for unknown alert ID should return error")
 	}

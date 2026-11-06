@@ -266,9 +266,9 @@ func GetConfigDir() string {
 
 	case "windows":
 		if isRoot {
-			return os.ExpandEnv("%ProgramData%\\" + ProjectOrg + "\\" + ProjectName)
+			return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName)
 		}
-		return os.ExpandEnv("%AppData%\\" + ProjectOrg + "\\" + ProjectName)
+		return filepath.Join(os.Getenv("AppData"), ProjectOrg, ProjectName)
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
@@ -318,9 +318,9 @@ func GetDataDir() string {
 
 	case "windows":
 		if isRoot {
-			return os.ExpandEnv("%ProgramData%\\" + ProjectOrg + "\\" + ProjectName + "\\data")
+			return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName, "data")
 		}
-		return os.ExpandEnv("%LocalAppData%\\" + ProjectOrg + "\\" + ProjectName)
+		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName)
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
@@ -370,9 +370,9 @@ func GetLogDir() string {
 
 	case "windows":
 		if isRoot {
-			return os.ExpandEnv("%ProgramData%\\" + ProjectOrg + "\\" + ProjectName + "\\logs")
+			return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName, "logs")
 		}
-		return os.ExpandEnv("%LocalAppData%\\" + ProjectOrg + "\\" + ProjectName + "\\logs")
+		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName, "logs")
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
@@ -415,7 +415,7 @@ func GetCacheDir() string {
 		return os.ExpandEnv("$HOME/Library/Caches/" + ProjectOrg + "/" + ProjectName)
 
 	case "windows":
-		return os.ExpandEnv("%LocalAppData%\\" + ProjectOrg + "\\" + ProjectName + "\\cache")
+		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName, "cache")
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
@@ -541,6 +541,9 @@ func GetDatabaseDir() string {
 	if runtime.GOOS == "linux" && startedElevated {
 		return "/var/lib/" + ProjectOrg + "/" + ProjectName + "/db"
 	}
+	if runtime.GOOS == "windows" && startedElevated {
+		return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName, "db")
+	}
 	if runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" {
 		if startedElevated {
 			return "/var/db/" + ProjectOrg + "/" + ProjectName + "/db"
@@ -586,12 +589,12 @@ func GetTorKeysDir() string {
 	return filepath.Join(GetTorDir(), "site")
 }
 
-// GetTemplatesDir returns the email templates directory (customizable)
+// GetTemplatesDir returns the customizable template directory.
 func GetTemplatesDir() string {
-	return filepath.Join(GetConfigDir(), "templates")
+	return filepath.Join(GetConfigDir(), "template")
 }
 
-// GetEmailTemplatesDir returns the email templates directory
+// GetEmailTemplatesDir returns the customizable email templates directory.
 func GetEmailTemplatesDir() string {
 	return filepath.Join(GetTemplatesDir(), "email")
 }
@@ -844,9 +847,9 @@ func GetBinaryPath() string {
 
 	case "windows":
 		if IsPrivileged() {
-			return os.ExpandEnv("%ProgramFiles%\\" + ProjectOrg + "\\" + ProjectName + "\\" + ProjectName + ".exe")
+			return filepath.Join(os.Getenv("ProgramFiles"), ProjectOrg, ProjectName, ProjectName+".exe")
 		}
-		return os.ExpandEnv("%LocalAppData%\\" + ProjectOrg + "\\" + ProjectName + "\\" + ProjectName + ".exe")
+		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName, ProjectName+".exe")
 
 	case "freebsd", "openbsd", "netbsd":
 		return "/usr/local/bin/" + ProjectName

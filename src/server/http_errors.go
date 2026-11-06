@@ -26,3 +26,7 @@ func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key 
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }
+
+func localizedTextHTTPError(w http.ResponseWriter, r *http.Request, status int, key string, args ...interface{}) {
+	http.Error(w, i18n.RequestString(r, key, args...), status)
+}

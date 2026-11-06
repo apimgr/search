@@ -1030,6 +1030,7 @@ type PagesConfig struct {
 	Help struct {
 		Enabled bool   `yaml:"enabled"`
 		Content string `yaml:"content"`
+		MCP     string `yaml:"mcp"`
 	} `yaml:"help"`
 	Terms struct {
 		Enabled bool   `yaml:"enabled"`
@@ -1999,7 +2000,7 @@ type EngineConfig struct {
 	ClientSecret string `yaml:"client_secret,omitempty"`
 	// ContactEmail identifies the operator to engines using a contact email
 	// (for example, PubMed's E-utilities email parameter).
-	ContactEmail    string `yaml:"contact_email,omitempty"`
+	ContactEmail string `yaml:"contact_email,omitempty"`
 	// ContactUsername identifies the operator for services requiring a contact
 	// username in the API request, such as Reddit's User-Agent.
 	ContactUsername string `yaml:"contact_username,omitempty"`
@@ -2296,9 +2297,11 @@ func DefaultConfig() *Config {
 				Help: struct {
 					Enabled bool   `yaml:"enabled"`
 					Content string `yaml:"content"`
+					MCP     string `yaml:"mcp"`
 				}{
 					Enabled: true,
 					Content: "",
+					MCP:     "## Search tools\n\nThe live tools above are generated from Search's OpenAPI operations. `getApiV1Search` and `postApiV1Search` search across enabled engines; `getApiV1Autocomplete` suggests queries; `getApiV1Instant` returns an instant answer; `getApiV1Categories` and `getApiV1Engines` describe available sources.\n\nExample prompt: Search for recent privacy-preserving search engine projects, then summarize the distinct results and identify their source engines.\n\nPublic search tools work without authentication. Create a linked token in Search preferences only when the assistant needs operator-only tools; never use the server operator token.",
 				},
 			},
 			Web: WebConfig{

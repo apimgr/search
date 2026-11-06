@@ -101,3 +101,56 @@ func TestTemplateTranslationKeysExist(t *testing.T) {
 			len(missing), strings.Join(missing, "\n  "))
 	}
 }
+
+func TestOwnerTokenTranslationsExistInEveryLocale(t *testing.T) {
+	keys := []string{
+		"preferences.owner_tokens.heading",
+		"preferences.owner_tokens.primary_token",
+		"preferences.owner_tokens.linked_tokens",
+		"preferences.owner_tokens.reveal_notice",
+		"preferences.owner_tokens.reveal_primary",
+		"preferences.owner_tokens.rotate_primary",
+		"preferences.owner_tokens.rotate_primary_confirm",
+		"preferences.owner_tokens.rotate_linked_confirm",
+		"preferences.owner_tokens.create_linked",
+		"preferences.owner_tokens.restore_description",
+		"preferences.owner_tokens.restore_existing",
+		"preferences.owner_tokens.restore_owner",
+		"preferences.owner_tokens.revoke_linked_confirm",
+		"preferences.owner_tokens.primary_revealed",
+		"preferences.owner_tokens.primary_rotated",
+		"preferences.owner_tokens.linked_created",
+		"preferences.owner_tokens.linked_revealed",
+		"preferences.owner_tokens.linked_rotated",
+		"preferences.owner_tokens.expiry_7d",
+		"preferences.owner_tokens.expiry_30d",
+		"preferences.owner_tokens.expiry_90d",
+		"preferences.owner_tokens.expiry_1y",
+	}
+	locales, err := fs.ReadDir(LocalesFS(), "locales")
+	if err != nil {
+		t.Fatalf("cannot read locales: %v", err)
+	}
+	for _, locale := range locales {
+		if locale.IsDir() || !strings.HasSuffix(locale.Name(), ".json") {
+			continue
+		}
+		data, err := fs.ReadFile(LocalesFS(), "locales/"+locale.Name())
+		if err != nil {
+			t.Errorf("%s: cannot read locale: %v", locale.Name(), err)
+			continue
+		}
+		var raw interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Errorf("%s: cannot parse locale: %v", locale.Name(), err)
+			continue
+		}
+		translations := make(map[string]string)
+		flattenTranslations("", raw, translations)
+		for _, key := range keys {
+			if _, ok := translations[key]; !ok {
+				t.Errorf("%s: missing owner-token translation %q", locale.Name(), key)
+			}
+		}
+	}
+}

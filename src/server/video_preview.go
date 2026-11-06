@@ -35,11 +35,11 @@ func (s *Server) handlePeerTubePreview(w http.ResponseWriter, r *http.Request) {
 func servePeerTubePreview(w http.ResponseWriter, r *http.Request, filename string, client *http.Client) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedTextHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 	if !peerTubePreviewFilename.MatchString(filename) || client == nil {
-		http.Error(w, "Invalid preview source", http.StatusBadRequest)
+		localizedTextHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 	byteRange := r.Header.Get("Range")
@@ -49,12 +49,12 @@ func servePeerTubePreview(w http.ResponseWriter, r *http.Request, filename strin
 	start, end, ok := parsePreviewRange(byteRange)
 	if !ok {
 		w.Header().Set("Content-Range", "bytes */*")
-		http.Error(w, "Invalid preview range", http.StatusRequestedRangeNotSatisfiable)
+		localizedTextHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable, "errors.bad_request")
 		return
 	}
 	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://peertube.tv/static/web-videos/"+filename, nil)
 	if err != nil {
-		http.Error(w, "Preview unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	upstream.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
@@ -62,27 +62,27 @@ func servePeerTubePreview(w http.ResponseWriter, r *http.Request, filename strin
 	upstream.Header.Set("User-Agent", "Search video preview")
 	response, err := client.Do(upstream)
 	if err != nil {
-		http.Error(w, "Preview unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	defer closeutil.Close(response.Body)
 	if response.StatusCode != http.StatusPartialContent {
-		http.Error(w, "Preview unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	contentType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || (contentType != "video/mp4" && contentType != "video/webm") {
-		http.Error(w, "Preview unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	actualStart, actualEnd, validRange := parseContentRange(response.Header.Get("Content-Range"))
 	if !validRange || actualStart != start || actualEnd < actualStart || actualEnd > end || actualEnd-actualStart >= maxVideoPreviewRange || response.ContentLength != actualEnd-actualStart+1 {
-		http.Error(w, "Preview unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, response.ContentLength+1))
 	if err != nil || int64(len(body)) != response.ContentLength {
-		http.Error(w, "Preview unavailable", http.StatusBadGateway)
+		localizedTextHTTPError(w, r, http.StatusBadGateway, "errors.server_error")
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
