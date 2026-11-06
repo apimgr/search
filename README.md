@@ -55,6 +55,9 @@ Direct answers start with a prefix. For example, `directory:linux iso type:docum
 
 ## Production
 
+Host-level installation, service, and Docker commands below are for the
+operator to run on the deployment host; do not have an AI agent execute them.
+
 ### Binary
 
 ```bash
@@ -222,7 +225,7 @@ search --maintenance secret rotate installation_secret
 
 ## API
 
-The REST API is versioned under `/api/v1/`. The server also provides a GraphQL API and selected JSON representations of informational pages; not every browser page has an API equivalent.
+The REST API is versioned under `/api/v1/`. The server also provides a GraphQL API and JSON representations of informational pages; see the [API reference](docs/api.md) for the documented endpoints.
 
 ### Search
 

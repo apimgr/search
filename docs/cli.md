@@ -43,6 +43,9 @@ search --daemon
 
 ### Service Management
 
+These commands control the host's installed service. Run them yourself on the
+deployment host; do not have an AI agent execute them.
+
 ```bash
 # Install as system service
 search --service --install

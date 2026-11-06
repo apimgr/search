@@ -182,6 +182,9 @@ environment.
 
 For enhanced privacy, Search automatically enables a Tor hidden service when the `tor` binary is found on PATH:
 
+Install Tor on the deployment host yourself; do not have an AI agent execute
+the package-manager command below.
+
 ```bash
 # Install Tor
 apt-get install tor

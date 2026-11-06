@@ -146,7 +146,8 @@ curl -q -LSsf "https://scour.li/api/v1/autocomplete?q=priv"
 
 ```json
 {
-  "suggestions": [
+  "ok": true,
+  "data": [
     "privacy",
     "privacy policy",
     "private",

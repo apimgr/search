@@ -2,6 +2,10 @@
 
 Search can be installed in several ways depending on your environment and preferences.
 
+Commands that install binaries, change system services, or manage Docker on a
+host are for the operator to run on the deployment host; do not have an AI
+agent execute them.
+
 ## Docker (Recommended)
 
 The easiest way to run Search is using Docker:
