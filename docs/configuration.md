@@ -207,18 +207,22 @@ search:
   # Safe search: 0 (off), 1 (moderate), or 2 (strict)
   safe_search: 1
 
-  # Autocomplete provider
-  autocomplete: duckduckgo
+  # Empty uses the built-in autocomplete provider
+  autocomplete: ""
 
   # Default search language and categories
   default_lang: en
   default_categories:
     - general
 
-  # Results per page
-  results_per_page: 20
+  # Results per page for server-rendered searches
+  results_per_page: 100
+
+  # Search timeout in seconds
   timeout: 10
-  max_concurrent: 10
+
+  # Zero queries every enabled engine for the selected category
+  max_concurrent: 0
 
 server:
   cache:
@@ -226,6 +230,9 @@ server:
     # Default cache lifetime in seconds
     ttl: 300
 ```
+
+The REST API uses its own `limit` parameter (default 20, maximum 100); it does
+not inherit `search.results_per_page`.
 
 ### Search Alert Settings
 
