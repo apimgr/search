@@ -6,8 +6,9 @@ Search is designed with security and privacy as primary concerns. This document 
 
 ### Authentication
 
-- **Operator token** (`server.token` in `server.yml`) — auto-generated on first run; gates all `/api/v1/server/*` management endpoints
+- **Operator token** (`server.token` in `server.yml`) — auto-generated on first run; gates operator management endpoints
 - **Per-resource tokens** — for search alerts and webhooks; stored as SHA-256 hashes
+- **Owner and linked tokens** — owner-scoped credentials for a person's resources and their automation clients
 - **Bearer token authentication** for all protected API access
 - **CSRF protection** on all cookie-authenticated browser forms
 - **Rate limiting** to prevent abuse
@@ -155,7 +156,7 @@ The full disclosure policy is published at `/server/security/policy`.
 
 ## Security Logs
 
-Security events (rate limit violations, blocked requests, CSRF violations) are written to the security log at `/var/log/apimgr/search/security.log`. No user queries, IPs, or identifying information are ever logged.
+Security events (rate limit violations, blocked requests, and CSRF violations) are written to the configured security log. No user queries, IPs, or identifying information are ever logged.
 
 ## Tor Hidden Service
 

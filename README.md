@@ -355,7 +355,7 @@ curl -q -LSsf https://scour.li/server/healthz
 
 ### Security Headers
 
-HSTS, CSP, X-Frame-Options, X-Content-Type-Options, rate limiting (120 req/min default), CSRF protection, and input validation on all endpoints.
+HSTS, CSP, X-Frame-Options, X-Content-Type-Options, rate limiting (60 requests per minute with a burst of 10 by default), CSRF protection, and input validation on all endpoints.
 
 ### Internationalization
 

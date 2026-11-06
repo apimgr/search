@@ -57,6 +57,7 @@ Download the latest release for your platform from the [releases page](https://g
     ```bash
     curl -LO https://github.com/apimgr/search/releases/latest/download/search-darwin-amd64
     chmod +x search-darwin-amd64
+    xattr -d com.apple.quarantine search-darwin-amd64 2>/dev/null || true
     sudo mv search-darwin-amd64 /usr/local/bin/search
     ```
 
@@ -65,6 +66,7 @@ Download the latest release for your platform from the [releases page](https://g
     ```bash
     curl -LO https://github.com/apimgr/search/releases/latest/download/search-darwin-arm64
     chmod +x search-darwin-arm64
+    xattr -d com.apple.quarantine search-darwin-arm64 2>/dev/null || true
     sudo mv search-darwin-arm64 /usr/local/bin/search
     ```
 

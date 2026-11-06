@@ -83,6 +83,12 @@ curl -X POST https://your-instance/api/v1/alerts \
   }'
 ```
 
+When webhook delivery is enabled, the create response includes
+`webhook_secret`. The alert creation page displays the same value. Save it
+securely: the secret is encrypted at rest and is available later through the
+alert's private management page or API response. Anyone with the management
+link can access it, so treat that link and the secret as credentials.
+
 ### Webhook payload
 
 ```json
