@@ -10,7 +10,7 @@ server metadata for CLI clients, agent tools, and other software that needs to
 discover the server's capabilities automatically.
 
 ```bash
-curl https://your-instance.example.com/api/autodiscover
+curl -q -LSsf https://scour.li/api/autodiscover
 ```
 
 ### Response fields
@@ -34,11 +34,12 @@ updates and verify API compatibility.
 ## Search Bar Widget
 
 Add a native HTML form to another site to send searches to a Search instance.
-Replace the example host with the instance's public base URL, and change the
-input ID if the page already uses `search-query`:
+The example targets the public service. For a self-hosted instance, replace
+the origin with that instance's public base URL. Change the input ID if the
+page already uses `search-query`:
 
 ```html
-<form action="https://your-instance.example.com/search" method="get" role="search">
+<form action="https://scour.li/search" method="get" role="search">
   <label for="search-query">Search</label>
   <input id="search-query" type="search" name="q" required>
   <button type="submit">Search</button>
@@ -73,11 +74,13 @@ email and RSS. Configure a webhook URL when creating an alert:
 
 ```bash
 # Via API
-curl -X POST https://your-instance/api/v1/alerts \
+curl -q -LSsf -X POST https://scour.li/api/v1/alerts \
   -H "Content-Type: application/json" \
   -d '{
     "query": "golang security",
+    "category": "general",
     "frequency": "daily",
+    "email": "alerts@example.com",
     "deliver_webhook": true,
     "webhook_url": "https://hooks.example.com/ingest"
   }'
@@ -85,8 +88,8 @@ curl -X POST https://your-instance/api/v1/alerts \
 
 When webhook delivery is enabled, the create response includes
 `webhook_secret`. The alert creation page displays the same value. Save it
-securely: the secret is encrypted at rest and is available later through the
-alert's private management page or API response. Anyone with the management
+securely: the secret is encrypted at rest and is also available through the
+alert's private management page and API response. Anyone with the management
 link can access it, so treat that link and the secret as credentials.
 
 ### Webhook payload
@@ -98,7 +101,7 @@ link can access it, so treat that link and the secret as credentials.
     "query": "golang security",
     "category": "general",
     "frequency": "daily",
-    "manage_url": "https://your-instance.example.com/alerts/manage/<token>"
+    "manage_url": "https://scour.li/alerts/manage/<token>"
   },
   "results": [
     {
@@ -162,7 +165,7 @@ Search exposes a GraphQL API. The interactive GraphiQL explorer is served at
 Core search, autocomplete, instant-answer, direct-answer, and health fields use the same services as REST; inspect the live GraphiQL schema for current query arguments and response fields. REST-only operations remain documented in the REST API reference.
 
 ```bash
-curl -X POST https://your-instance/api/graphql \
+curl -q -LSsf -X POST https://scour.li/api/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "{ search(q: \"golang\") { results { title url } } }"}'
 ```
@@ -197,7 +200,7 @@ specification](https://modelcontextprotocol.io/specification).
 | `/.well-known/llms.txt` and `/llms.txt` | Machine-readable API and capability summary |
 | `/.well-known/security.txt` | RFC 9116 security contact and disclosure details |
 | `/.well-known/pgp-key.asc` | Published security-report encryption key, when configured |
-| `/.well-known/change-password` | Password-change discovery redirect |
+| `/.well-known/change-password` | `404` because this project has no user passwords or account system |
 | `/robots.txt` | Crawler guidance |
 | `/sitemap.xml` | Public-page sitemap |
 
@@ -209,5 +212,6 @@ configuration.
 ## Security.txt / Well-Known
 
 Search serves a `/.well-known/security.txt` file for responsible disclosure.
-Operators configure the contact and PGP key via `server.security.reporting`
-in `server.yml`. See [Security](security.md) for details.
+Operators configure the contact and PGP publication settings under
+`server.web.security` in `server.yml`. Manage the keypair with
+`search --maintenance pgp`; see [Security](security.md) for details.

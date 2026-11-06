@@ -26,10 +26,10 @@ search --status
 search
 
 # Start with custom port
-search --port 9000
+search --port 64080
 
 # Start with custom config directory
-search --config /etc/search
+search --config /etc/apimgr/search
 
 # Start with custom data directory
 search --data /var/lib/search
@@ -150,7 +150,7 @@ The CLI client is included with the main distribution:
 
 ```bash
 # Download
-curl -LO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
+curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
 chmod +x search-cli-linux-amd64
 sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 ```
@@ -163,15 +163,17 @@ display is available.
 
 ```yaml
 server:
-  primary: https://search.example.com
+  primary: https://scour.li
   api_version: v1
   timeout: 30s
 auth:
   token: ""
 display:
-  mode: auto  # auto, gui, or tui
+  # auto, gui, or tui
+  mode: auto
 output:
-  format: table  # table, json, yaml, plain, csv
+  # table, json, yaml, plain, or csv
+  format: table
   color: auto
 update:
   auto: false

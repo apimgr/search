@@ -105,10 +105,10 @@ CI runs `go vet` and `staticcheck` inside the Go toolchain image. Run `make test
 
 ## Testing
 
-`make test` is the single entry point. It runs the whole suite in Docker with
-coverage enforcement, and includes the translation-file validation
-(`TestKeyConsistency` / `TestLocalesFS` in `src/common/i18n`), the unit tests
-and the integration tests.
+`make test` runs the Go package test suite in the maintained Go toolchain
+container and enforces the project coverage threshold. It includes unit and
+route tests, including locale consistency checks. It does not run the separate
+system integration or browser E2E scripts.
 
 ```bash
 make test
@@ -156,22 +156,11 @@ Releases are automated via GitHub Actions:
 
 ## Docker Development
 
-### Build Image
-
-```bash
-docker build -t search:dev -f docker/Dockerfile .
-```
-
-### Build and Run the Devel Image
-
-```bash
-docker build -t search:devel -f docker/Dockerfile.dev .
-docker run --rm --name search-dev \
-  -e MODE=development -e DEBUG=true \
-  -p 64580:80 \
-  -v search-config:/config -v search-data:/data \
-  search:devel
-```
+Use the Makefile targets for image builds. Development and test commands use
+the maintained Go toolchain image; they do not require a local Go installation.
+For the production and development image workflows, follow the repository's
+Makefile targets and Docker documentation rather than invoking `docker build`
+directly.
 
 ## Documentation
 

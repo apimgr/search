@@ -28,7 +28,7 @@ Search sets the following security headers on every response:
 
 | Header | Value |
 |--------|-------|
-| `X-Frame-Options` | `DENY` |
+| `X-Frame-Options` | `SAMEORIGIN` |
 | `X-Content-Type-Options` | `nosniff` |
 | `X-XSS-Protection` | `1; mode=block` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
@@ -37,8 +37,9 @@ Search sets the following security headers on every response:
 
 ### Privacy
 
-- **No query logging** — user searches are never written to logs
-- **No IP logging** — request IPs are never stored or logged
+- **Privacy-aware access logs** — paths are logged without query strings or client IPs
+- **Security and audit logs** — selected abuse and authentication events include a client IP and may include a user agent for operator investigation
+- **Debug logging** — request-body and SQL logging can expose sensitive data and should only be enabled in a controlled environment
 - **No user tracking** — no analytics, no fingerprinting
 - **Image proxy** to prevent third-party tracking of search results
 - **Encrypted backups** (AES-256-GCM, Argon2id KDF)
@@ -76,8 +77,16 @@ Enable and configure rate limiting:
 server:
   rate_limit:
     enabled: true
-    requests_per_minute: 60
-    burst: 10
+    read:
+      requests: 120
+      window: 60
+    write:
+      requests: 10
+      window: 60
+    health:
+      requests: 120
+      window: 60
+    global_burst: 240
 ```
 
 ### IP and Domain Blocklists
@@ -122,7 +131,7 @@ disclosure and health monitoring:
 | `/.well-known/security.txt` | RFC 9116 security contact and policy |
 | `/.well-known/pgp-key.asc` | PGP public key (returns `404` until a keypair exists) |
 | `/.well-known/llms.txt` | Machine-readable summary for LLM agents |
-| `/.well-known/change-password` | Password-change discovery redirect |
+| `/.well-known/change-password` | `404` because this project has no user passwords or account system |
 | `/server/security` | Human-readable security overview and how to report |
 | `/server/security/policy` | Full security/disclosure policy |
 | `/server/contact` | Contact form (supports `security_id` deep links) |
@@ -154,9 +163,20 @@ If you discover a security vulnerability, please report it responsibly:
 
 The full disclosure policy is published at `/server/security/policy`.
 
+The default security.txt contact is the project's GitHub private
+vulnerability-reporting page. Operators can set `server.web.security.report_url`
+and `server.web.security.contact`. PGP publication is controlled by
+`server.web.security.publish_pgp_key`; manage the keypair with
+`search --maintenance pgp generate`, `publish`, or `export public`.
+
 ## Security Logs
 
-Security events (rate limit violations, blocked requests, and CSRF violations) are written to the configured security log. No user queries, IPs, or identifying information are ever logged.
+Rate-limit violations, blocked requests, CSRF violations, and authentication
+events are recorded in security or audit logs. These event logs can include a
+client IP and, for authentication attempts, a user agent. Routine access logs
+omit both the client IP and query string. Debug-only request-body and SQL
+logging can expose sensitive data and should only be enabled in a controlled
+environment.
 
 ## Tor Hidden Service
 

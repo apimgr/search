@@ -2,11 +2,14 @@
 
 Search provides both REST and GraphQL APIs for programmatic access.
 
+Examples use the public service at `https://scour.li`. For a self-hosted
+instance, replace that origin with the public base URL configured for your
+server.
+
 ## Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/` | — | Versioned REST API root |
 | `/healthz` | GET | Optional public health alias; enabled by `server.healthz.root.enabled` |
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI specification (JSON) |
@@ -69,7 +72,7 @@ Perform a search query.
 **Example Request:**
 
 ```bash
-curl "https://search.example.com/api/v1/search?q=privacy&limit=10&region=us&time_range=week&engines=google,bing"
+curl -q -LSsf "https://scour.li/api/v1/search?q=privacy&limit=10&region=us&time_range=week&engines=google,bing"
 ```
 
 Use `POST /api/v1/search` to keep the query out of the request URL. Send a JSON
@@ -79,7 +82,7 @@ Custom ranges require both date bounds, and the request body is capped
 at 1 MiB.
 
 ```bash
-curl -X POST https://search.example.com/api/v1/search \
+curl -q -LSsf -X POST https://scour.li/api/v1/search \
   -H 'Content-Type: application/json' \
   -d '{"query":"privacy","limit":10,"region":"us","time_range":"week","engines":["google","bing"]}'
 ```
@@ -103,7 +106,7 @@ curl -X POST https://search.example.com/api/v1/search \
     "engines": ["duckduckgo"]
   },
   "pagination": {"page": 1, "limit": 10, "total": 100, "pages": 10},
-  "meta": {"version": "v1", "process_time": 12.5}
+  "meta": {"version": "v1", "process_time_ms": 12.5}
 }
 ```
 
@@ -136,7 +139,7 @@ Get search suggestions.
 **Example Request:**
 
 ```bash
-curl "https://search.example.com/api/v1/autocomplete?q=priv"
+curl -q -LSsf "https://scour.li/api/v1/autocomplete?q=priv"
 ```
 
 **Example Response:**
@@ -170,6 +173,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/bangs` | GET | Bang shortcut definitions (filter with `category`) |
 | `/api/v1/widgets` | GET | Available instant-answer widgets (filter with `category`) |
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
+| `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list (404 when MCP is disabled) |
 | `/api/v1/server/preferences` | GET | Default user preferences |
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
 | `/api/v1/server/about` | GET | Server about page (JSON) |
@@ -196,6 +200,12 @@ contact or unavailable delivery returns a standard API error.
 ### Search Alerts
 
 Search alerts are accountless and managed through unguessable manage and RSS tokens. Alerts activate at creation time without an email verification flow, following AI.md PART 17.
+
+`GET /api/v1/alerts` lists alert inventory and requires the operator bearer
+token. `POST /api/v1/alerts` is public. When the request does not include an
+owner bearer token, the response also returns an `owner_token`; save it if you
+want to manage linked alerts through owner-scoped operations. The separate
+`manage_token` in the response manages only that alert.
 
 #### `POST /api/v1/alerts`
 
@@ -236,10 +246,10 @@ Create an alert subscription for a query.
       "DeliverRSS": true,
       "DeliverWebhook": false,
       "Status": "active",
-      "BaseURL": "https://search.example.com"
+      "BaseURL": "https://scour.li"
     },
-    "manage_url": "https://search.example.com/alerts/manage/MANAGE_TOKEN",
-    "rss_url": "https://search.example.com/alerts/RSS_TOKEN.rss",
+    "manage_url": "https://scour.li/alerts/manage/MANAGE_TOKEN",
+    "rss_url": "https://scour.li/alerts/RSS_TOKEN.rss",
     "manage_token": "MANAGE_TOKEN",
     "rss_token": "RSS_TOKEN"
   }
@@ -275,8 +285,8 @@ Most server management endpoints require the operator token (`server.token` in `
 Include the operator token in the Authorization header:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_OPERATOR_TOKEN" \
-  "https://search.example.com/api/v1/server/scheduler/tasks"
+curl -q -LSsf -H "Authorization: Bearer YOUR_OPERATOR_TOKEN" \
+  "https://scour.li/api/v1/server/scheduler/tasks"
 ```
 
 ### Health
@@ -471,14 +481,13 @@ query Search($q: String!, $limit: Int) {
 
 API requests are rate limited. The default limits are:
 
-- 60 requests per minute
-- Burst of 10 requests
+- Read endpoints: 120 requests per 60 seconds
+- Write endpoints: 10 requests per 60 seconds
+- Health endpoints: 120 requests per 60 seconds
+- Global per-IP burst: 240 requests
 
-Rate limit headers are included in responses:
-
-- `X-RateLimit-Limit`: Maximum requests per minute
-- `X-RateLimit-Remaining`: Remaining requests in current window
-- `X-RateLimit-Reset`: Unix timestamp when the limit resets
+Rate-limited responses include `Retry-After`. Configure limits through
+`server.rate_limit` in `server.yml`; see [Configuration](configuration.md).
 
 ## Error Responses
 

@@ -33,7 +33,7 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 
     ```bash
     # Download the latest release
-    curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
+    curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
     chmod +x search-linux-amd64
     ./search-linux-amd64
     ```
@@ -43,7 +43,6 @@ For Docker, open [http://172.17.0.1:64580](http://172.17.0.1:64580). The binary 
 ## Documentation
 
 - [Installation](installation.md) - Detailed installation instructions
-- [Configuration](configuration.md) - Configuration options and settings
 - [API](api.md) - REST and GraphQL API documentation
 - [CLI](cli.md) - Command-line interface reference
 - [Configuration](configuration.md) - Server and client settings
@@ -52,12 +51,11 @@ For Docker, open [http://172.17.0.1:64580](http://172.17.0.1:64580). The binary 
 - [Search](search.md) - Search operators and direct-answer syntax
 - [Development](development.md) - Build, test, and contribution guide
 
-## Requirements
+## Supported Platforms
 
-- **Operating System**: Linux, macOS, Windows, or FreeBSD
-- **Architecture**: AMD64 or ARM64
-- **Memory**: 256MB minimum, 512MB recommended
-- **Disk**: 100MB for the application
+Releases are available for Linux, macOS, Windows, and FreeBSD on AMD64 and
+ARM64. Docker images are available for supported container hosts. See
+[Installation](installation.md) for release assets and setup steps.
 
 ## License
 

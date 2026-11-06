@@ -63,7 +63,7 @@ curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-
 chmod +x search-linux-amd64
 sudo install -m 0755 search-linux-amd64 /usr/local/bin/search
 
-# Start the server (auto-selects port in 64000-65535 range)
+# Start the server (auto-selects and saves a port in 64000-64999)
 search
 
 # Specify port
@@ -138,10 +138,10 @@ sudo mv search-cli-darwin-arm64 /usr/local/bin/search-cli
 
 ```bash
 # Connect to a server
-search-cli config --server https://search.example.com --token YOUR_API_TOKEN
+search-cli config --server https://scour.li --token YOUR_API_TOKEN
 
 # Or via environment variables
-export SEARCH_SERVER_PRIMARY="https://search.example.com"
+export SEARCH_SERVER_PRIMARY="https://scour.li"
 export SEARCH_TOKEN="your-api-token"
 ```
 
@@ -179,7 +179,7 @@ On first run, Search creates a configuration file with sane defaults.
 
 ```yaml
 server:
-  # Port in 64000-65535 range (random on first run, saved to config)
+  # Random port in 64000-64999 on first run, saved to config
   port: 64080
 
   # Listen address: [::] (all interfaces) or 127.0.0.1 (localhost only)
@@ -219,7 +219,7 @@ search --maintenance secret rotate installation_secret
 
 ## API
 
-All API endpoints are under `/api/v1/`. Every web page has a corresponding JSON API endpoint.
+The REST API is versioned under `/api/v1/`. The server also provides a GraphQL API and selected JSON representations of informational pages; not every browser page has an API equivalent.
 
 ### Search
 
@@ -258,9 +258,8 @@ curl -q -LSsf "https://scour.li/api/v1/alerts/MANAGE_TOKEN"
 # Public health (no auth)
 curl -q -LSsf https://scour.li/server/healthz
 
-# Engine status (operator token required)
-curl -q -LSsf -H "Authorization: Bearer YOUR_TOKEN" \
-  https://scour.li/api/v1/server/engines
+# List available search engines (public)
+curl -q -LSsf https://scour.li/api/v1/engines
 ```
 
 ### API Documentation
@@ -321,14 +320,14 @@ Search auto-detects a running Tor daemon and enables the hidden service. Configu
 ```yaml
 server:
   tor:
-    enabled: true
-    socks_proxy: "127.0.0.1:9050"
-    control_port: "127.0.0.1:9051"
-    hidden_service:
-      enabled: false
-      port: 80
-    circuit_rotation: true
-    stream_isolation: true
+    # Empty means discover the Tor binary on PATH
+    binary: ""
+
+    # Route outgoing engine requests through Tor
+    use_network: false
+
+    # Hidden service virtual port
+    virtual_port: 80
 ```
 
 ### Privacy
@@ -355,13 +354,13 @@ curl -q -LSsf https://scour.li/server/healthz
 
 ### Security Headers
 
-HSTS, CSP, X-Frame-Options, X-Content-Type-Options, rate limiting (60 requests per minute with a burst of 10 by default), CSRF protection, and input validation on all endpoints.
+HSTS, CSP, X-Frame-Options (`SAMEORIGIN` by default), X-Content-Type-Options, rate limiting (120 read, 10 write, and 120 health requests per 60-second window, with a global burst of 240), CSRF protection, and input validation on all endpoints.
 
 ### Internationalization
 
 Language resolved from: `?lang=` query param → `lang` cookie → `Accept-Language` header → English.
 
-Supported: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Turkish, and more.
+Supported: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Hebrew, Persian, and Urdu.
 
 ## Development
 
@@ -405,7 +404,6 @@ src/           # Go source code
   └── ...
 docker/        # Docker configuration
   ├── Dockerfile        # Production image
-  ├── Dockerfile.build  # Build toolchain image
   └── Dockerfile.dev    # Development image
 docs/          # MkDocs documentation
 tests/         # Integration tests

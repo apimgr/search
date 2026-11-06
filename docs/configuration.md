@@ -13,9 +13,31 @@ Search is configured via:
 Default location:
 - Linux (root): `/etc/apimgr/search/server.yml`
 - Linux (user): `~/.config/apimgr/search/server.yml`
+- macOS (root): `/Library/Application Support/apimgr/search/server.yml`
+- macOS (user): `~/Library/Application Support/apimgr/search/server.yml`
+- Windows (administrator): `%ProgramData%\apimgr\search\server.yml`
+- Windows (user): `%AppData%\apimgr\search\server.yml`
+- FreeBSD (root): `/usr/local/etc/apimgr/search/server.yml`
+- FreeBSD (user): `~/.config/apimgr/search/server.yml`
 - Docker: `/config/search/server.yml`
 
 The file is auto-generated with defaults on first run. There is no admin web UI — all configuration is file-only.
+
+The native configuration roots are `server`, `search`, `engines`, `data`,
+`web`, and `tor`. Server settings are grouped under `server`: `tokens`, `mcp`,
+`branding`, `rate_limit`,
+`logs`, `ssl`, `tor`, `i2p`, `notifications`, `security`, `auth`, `pages`,
+`privacy`, `scheduler`, `cache`, `geoip`, `metrics`, `image_proxy`, `contact`,
+`tracking`, `seo`, `compression`, `trusted_proxies`, `limits`, `i18n`,
+`healthz`, `backup`, `compliance`, `database`, `maintenance`, `update`, and
+`debug`. The sections below document settings with additional operational
+requirements; the server validates all configuration on load and reports
+invalid values without exposing secrets.
+
+The directory paths can be overridden with `CONFIG_DIR`, `DATA_DIR`,
+`LOG_DIR`, `DATABASE_DIR`, `BACKUP_DIR`, or `SEARCH_CACHE_DIR`; most also
+accept the corresponding `SEARCH_`-prefixed name. See the environment table
+below for the exact supported names.
 
 ### Reddit Search
 
@@ -56,8 +78,11 @@ server:
   # Application mode: production or development
   mode: production
 
-  # Base URL for the application
-  base_url: ""
+  # Public URL path prefix for the application
+  baseurl: ""
+
+  # Fully qualified domain name (auto-detected when empty)
+  fqdn: ""
 
   # Operator token (auto-generated on first run)
   token: ""
@@ -69,8 +94,9 @@ server:
 server:
   ssl:
     enabled: false
-    cert_file: "/config/search/ssl/cert.pem"
-    key_file: "/config/search/ssl/key.pem"
+    cert: ""
+    key: ""
+    min_version: TLS1.2
     auto_tls: false
     letsencrypt:
       enabled: false
@@ -78,6 +104,10 @@ server:
       domains:
         - "search.example.com"
       staging: false
+      challenge: http-01
+    dns01:
+      provider: ""
+      credentials_encrypted: ""
 ```
 
 ### Rate Limiting
@@ -86,8 +116,16 @@ server:
 server:
   rate_limit:
     enabled: true
-    requests_per_minute: 60
-    burst: 10
+    read:
+      requests: 120
+      window: 60
+    write:
+      requests: 10
+      window: 60
+    health:
+      requests: 120
+      window: 60
+    global_burst: 240
 ```
 
 ### Logging
@@ -95,12 +133,31 @@ server:
 ```yaml
 server:
   logs:
-    level: info  # debug, info, warn, error
+    # debug, info, warn, or error
+    level: info
+    format: logfmt
+    access:
+      filename: access.log
+      format: combined
+      log_health_checks: false
+    server:
+      filename: server.log
+      format: logfmt
     error:
-      enabled: true
+      filename: error.log
+      format: iso8601
+    audit:
+      filename: audit.log
+      format: json
+    security:
+      filename: security.log
+      format: json
 ```
 
-Note: access logging (per-request IPs and queries) is intentionally not supported — privacy is the product.
+Access logs record the request path without its query string or the client IP.
+Successful health checks are omitted unless `log_health_checks` is enabled.
+Debug-only request-body and SQL logging can expose sensitive data; enable debug
+logging only in a controlled environment.
 
 ### Tor Hidden Service
 
@@ -121,7 +178,8 @@ key in `server.yml`:
 server:
   pages:
     contact:
-      captcha: hcaptcha # simple, recaptcha, or hcaptcha
+      # simple, recaptcha, or hcaptcha
+      captcha: hcaptcha
       captcha_site_key: ""
       captcha_secret_key: ""
 ```
@@ -146,22 +204,27 @@ do not reveal it again. Requests are signed with HMAC-SHA256 and retried after
 
 ```yaml
 search:
-  # Default search engine
-  default_engine: "auto"
+  # Safe search: 0 (off), 1 (moderate), or 2 (strict)
+  safe_search: 1
+
+  # Autocomplete provider
+  autocomplete: duckduckgo
+
+  # Default search language and categories
+  default_lang: en
+  default_categories:
+    - general
 
   # Results per page
-  results_per_page: 10
+  results_per_page: 20
+  timeout: 10
+  max_concurrent: 10
 
-  # Safe search level: off, moderate, strict
-  safe_search: moderate
-
-  # Default language
-  default_language: "en"
-
-  # Cache settings
+server:
   cache:
-    enabled: true
-    ttl: 300  # seconds
+    type: memory
+    # Default cache lifetime in seconds
+    ttl: 300
 ```
 
 ### Search Alert Settings
@@ -216,7 +279,8 @@ See [Integrations](integrations.md) for a Prometheus scrape example.
 server:
   image_proxy:
     enabled: true
-    max_size: 10485760  # 10MB
+    # Maximum image size in bytes (10 MiB)
+    max_size: 10485760
     timeout: 30
 ```
 

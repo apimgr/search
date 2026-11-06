@@ -39,7 +39,7 @@ Download the latest release for your platform from the [releases page](https://g
 === "Linux (AMD64)"
 
     ```bash
-    curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
+    curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
     chmod +x search-linux-amd64
     sudo mv search-linux-amd64 /usr/local/bin/search
     ```
@@ -47,7 +47,7 @@ Download the latest release for your platform from the [releases page](https://g
 === "Linux (ARM64)"
 
     ```bash
-    curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-arm64
+    curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-linux-arm64
     chmod +x search-linux-arm64
     sudo mv search-linux-arm64 /usr/local/bin/search
     ```
@@ -55,7 +55,7 @@ Download the latest release for your platform from the [releases page](https://g
 === "macOS (AMD64)"
 
     ```bash
-    curl -LO https://github.com/apimgr/search/releases/latest/download/search-darwin-amd64
+    curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-darwin-amd64
     chmod +x search-darwin-amd64
     xattr -d com.apple.quarantine search-darwin-amd64 2>/dev/null || true
     sudo mv search-darwin-amd64 /usr/local/bin/search
@@ -64,7 +64,7 @@ Download the latest release for your platform from the [releases page](https://g
 === "macOS (ARM64)"
 
     ```bash
-    curl -LO https://github.com/apimgr/search/releases/latest/download/search-darwin-arm64
+    curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-darwin-arm64
     chmod +x search-darwin-arm64
     xattr -d com.apple.quarantine search-darwin-arm64 2>/dev/null || true
     sudo mv search-darwin-arm64 /usr/local/bin/search
@@ -150,7 +150,7 @@ Or manually:
 sudo systemctl stop search
 
 # Download new version
-curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
+curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
 chmod +x search-linux-amd64
 sudo mv search-linux-amd64 /usr/local/bin/search
 
