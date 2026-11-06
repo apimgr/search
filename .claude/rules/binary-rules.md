@@ -16,12 +16,14 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 ## CRITICAL - ALWAYS DO
 - Build two binaries: `search` (server) and `search-cli` (client), from `src/server` and `src/client`
 - Let the binary handle ALL initialization: create directories on first run, set permissions from run context, work as root or user
-- Implement the PART 8 flags exactly: `--help`, `--version`, `--config`, `--data`, `--cache`, `--log`, `--backup`, `--pid`, `--address`, `--port`, `--baseurl`, `--mode`, `--status`, `--daemon`, `--debug`, `--service`, `--maintenance`, `--update`
+- Implement the PART 8 flags exactly, including shared `--shell` commands, `--color`, and `--lang`, plus path/listener/mode/status/service/maintenance/update flags
 - Return exit 0 (healthy) / 1 (unhealthy) from `--status`
 - Keep the client version identical to the server version
 - Ship client CLI mode, TUI mode, and config mode, plus shell completions for bash, zsh, fish, and powershell
 - Expose every server API operation through the client
 - Store client config at `~/.config/{internal_org}/{internal_name}/cli.yml`, dark theme by default
+- Create client configuration with mode 0600; open API access may use an optional owner token, while server token model and precedence follow PART 8
+- Verify downloaded updates against SHA-256 and replace atomically; honor the server's `cli_min_version` requirement
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -32,6 +34,8 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 | Client optional? | NEVER — REQUIRED for all projects | PART 32 |
 | Client config file? | `cli.yml` (not `server.yml`) | PART 32 |
 | Renaming the binary? | Allowed — the user may rename it | PART 8 |
+| Client config permissions? | 0600 | PART 32 |
+| Client update integrity? | SHA-256 verified, atomic replacement | PART 32 |
 
 ## TERMINOLOGY
 | Term | Meaning |

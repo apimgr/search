@@ -21,6 +21,10 @@ Read: `AI.md` PART 16 (Web Frontend).
 - Meet WCAG 2.1 AA: semantic HTML, working keyboard navigation, screen reader compatibility, AA color contrast in BOTH themes
 - Treat JavaScript as progressive enhancement only
 - Justify every `<script>` in a diff with a capability impossible in HTML5 + CSS
+- Support PWA installation and offline behavior, with service worker and manifest responses using `no-cache` and a build-stamp ETag
+- Add `Access-Control-Allow-Origin: *` to API endpoints and implement the PART 16 CORS policy for browser requests
+- Normalize URLs before routing: remove trailing slashes (except `/`) with a 301 while preserving the query string; keep explicit file paths intact
+- Keep the specified middleware order, beginning with URL normalization, request ID, path security, and security headers
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -32,6 +36,9 @@ Read: `AI.md` PART 16 (Web Frontend).
 | JS alerts? | NEVER — toasts | PART 16 |
 | Works without JS? | Yes — always | PART 16 |
 | Accessibility bar? | WCAG 2.1 AA | PART 16, 30 |
+| API CORS origin? | `Access-Control-Allow-Origin: *`, with the defined preflight and allow-list policy | PART 16 |
+| PWA? | Installable and offline-capable | PART 16 |
+| URL canonical form? | No trailing slash except `/`; normalize before route processing | PART 16 |
 
 ## TERMINOLOGY
 | Term | Meaning |

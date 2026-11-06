@@ -173,11 +173,19 @@ display:
 output:
   format: table  # table, json, yaml, plain, csv
   color: auto
+update:
+  auto: false
+  check_interval: per_invocation
+  channel: stable
 ```
 
 Set `auth.token` for operator-only commands. Public searches do not require a
 token. The client also accepts `--server`, `--token`, `--output`, `--page`, and
 `--limit` flags.
+
+Check for a client update with `search-cli --update check`. Install a verified
+update from the configured server with `search-cli --update yes`; the client
+checks the published SHA-256 before replacing and restarting its binary.
 
 ### Basic Usage
 

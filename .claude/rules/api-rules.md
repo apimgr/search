@@ -14,13 +14,16 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 
 ## CRITICAL - ALWAYS DO
 - Serve `/server/healthz` (frontend, smart detection) and `/api/{api_version}/server/healthz` (API, supports `.txt`)
-- Return 200 OK when healthy; smart-detect browser → HTML, CLI → formatted text
-- Include in the extended healthz payload: `version`, `go_version`, build info; `features` (tor, geoip, metrics); `checks` (database, cache, disk, scheduler); `stats` (`requests_total`, `requests_24h`, `active_connections`)
+- Also expose `/api/healthz` as a direct unversioned JSON alias; only expose root `/healthz` when configured, using the same handler
+- Keep the complete public-safe health schema and exact field order from PART 13: project, status/restart state, version/build, runtime, public features, checks, aggregate stats, then IDEA-defined app fields
+- Return 200 when healthy; frontend health content negotiation follows PART 14 and API health is JSON by default with supported text output
 - Keep the version in `release.txt`, in the healthz response, and in `--version`, using semantic versioning `MAJOR.MINOR.PATCH`
 - Serve REST under `/api/{api_version}/` with a consistent response envelope and proper HTTP status codes
 - Paginate every list endpoint and support filter/sort/search parameters
 - Rate-limit per endpoint type
 - Support Let's Encrypt HTTP-01 and TLS-ALPN-01 (DNS-01 optional) plus manual certificates
+- Support DNS-01 with provider credentials encrypted at rest; validate them at startup and before certificate requests
+- Resolve request hosts only through the documented trusted proxy policy; static FQDN uses DOMAIN, hostname, public IPs, then localhost
 - Auto-renew certificates via the scheduler, monitor expiry, and send HSTS headers when SSL is enabled
 
 ## KEY DECISIONS (pre-answered)

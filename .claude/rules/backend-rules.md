@@ -22,9 +22,13 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Purge on version change: build-stamp cookie plus `Clear-Site-Data: "cache", "storage"` on mismatch
 - Default to SQLite locally and libsql/Turso remotely, using `CREATE TABLE IF NOT EXISTS` and connection pooling
 - Set all security headers (CSP, X-Frame-Options, …) and enable HSTS whenever SSL is active
-- Enable configurable rate limiting; auto-revoke tokens after repeated failures from one source
+- Enable configurable rate limiting; auto-revoke tokens after the specified number of consecutive authentication failures
+- Compare tokens, password hashes, HMACs, signatures, and credentials in constant time; return identical generic authentication failures and pad response timing
+- Use opaque public resource IDs; never expose sequential database IDs, and never echo credentials in responses or logs
+- Keep private file responses `private, no-store`; serve user-controlled active content only as an attachment with exact content type and `nosniff`
 - Write audit events to `audit.log` and security events to `security.log` in JSON, with rotation and `debug/info/warn/error` levels
-- Auto-enable the Tor hidden service when the tor binary is found; config at `{config_dir}/tor/torrc`, data at `{data_dir}/tor/`
+- Auto-enable and supervise the dedicated Tor hidden-service process when its binary is available; config at `{config_dir}/tor/torrc`, data at `{data_dir}/tor/`; never use a system Tor daemon
+- Keep I2P opt-in; support the in-app i2pd model or the documented external SAM router model, using a dedicated loopback backend port
 - Report `features.tor.*` and `features.i2p.*` in the healthz API
 
 ## KEY DECISIONS (pre-answered)
@@ -37,6 +41,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 | Migrations? | Automatic on startup | PART 10 |
 | Tor? | Auto-enabled when the binary is found | PART 31.1 |
 | I2P? | OPTIONAL, opt-in, disabled by default | PART 31.2 |
+| Auth comparisons? | Constant-time; authentication failures have generic message/status and padded timing | PART 11 |
 
 ## TERMINOLOGY
 | Term | Meaning |

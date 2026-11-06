@@ -23,6 +23,9 @@ Read: `AI.md` PART 2 (License & Attribution), PART 3 (Project Structure), PART 4
 - Resolve config/data/cache/log/backup dirs per the PART 4 matrix for Linux, macOS, BSD, and Windows
 - Detect privileged vs non-privileged at runtime and pick the matching path set
 - Support the Docker path layout: `/config/`, `/data/`, `/data/log/`, `/data/db/sqlite/`, `/data/backups/`
+- Set the Go module path to `github.com/{project_org}/{internal_name}`; use the current latest stable Go toolchain
+- Build and test Go code only in the project Docker image with `CGO_ENABLED=0`; use `casjaysdev/go:latest`
+- Keep `.gitignore` and `.dockerignore`; the Docker ignore file excludes docs, tests, CI metadata, and generated outputs while retaining build inputs
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -33,6 +36,7 @@ Read: `AI.md` PART 2 (License & Attribution), PART 3 (Project Structure), PART 4
 | Go package dir naming? | Singular | PART 3 |
 | Path key? | `{internal_org}/{internal_name}` | PART 4 |
 | Docker DB dir? | `/data/db/sqlite/` | PART 4 |
+| Go module path? | `github.com/{project_org}/{internal_name}` | PART 3 |
 
 ## TERMINOLOGY
 | Term | Meaning |

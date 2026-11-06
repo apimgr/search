@@ -10,14 +10,18 @@ Read: `AI.md` PART 23 (Privilege Escalation & Service), PART 24 (Service Support
 - Assume privileged paths when running unprivileged, or vice versa
 - Skip a supported platform's service integration
 - Write a service unit outside `src/service`
+- Use a reserved or colliding UID/GID for the dedicated service account; UID and GID must match
+- Run as root permanently unless IDEA.md explicitly documents the exception
 
 ## CRITICAL - ALWAYS DO
 - Document the privilege requirements of every protected operation
 - Prompt via `sudo`/`runas` only when the operation genuinely needs it
 - Gate service operations behind the appropriate rights
 - Implement `--service --install`, `--service --uninstall`, and `--service start|stop|restart|reload`
-- Generate the correct unit for the host: systemd on Linux, launchd plist on macOS, Windows Service on Windows, `rc.d` script on BSD
+- Detect and support systemd, OpenRC, SysVinit, runit, and s6 on Linux; launchd on macOS; Windows Service Control Manager; and rc.d on BSD
 - Use the default scope and path rules from PART 23-24 when choosing between system-wide and user-scoped installation
+- Create the platform-appropriate dedicated service account, home, and owned runtime directories before dropping privileges
+- Keep service start/stop/restart/reload operations aligned with the host manager and return command failures to the operator
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -26,6 +30,8 @@ Read: `AI.md` PART 23 (Privilege Escalation & Service), PART 24 (Service Support
 | Unit file location? | `src/service` | PART 24 |
 | macOS plist name? | `io.github.{project_org}.{internal_name}` | PART 23-24 |
 | Service subcommands? | install, uninstall, start, stop, restart, reload | PART 24 |
+| Linux managers? | systemd, OpenRC, SysVinit, runit, s6 | PART 24 |
+| Service account identity? | Frozen `internal_name`; equal, non-reserved UID/GID where applicable | PART 23 |
 
 ## TERMINOLOGY
 | Term | Meaning |
@@ -37,7 +43,7 @@ Read: `AI.md` PART 23 (Privilege Escalation & Service), PART 24 (Service Support
 ## QUICK REFERENCE
 | Platform | Service mechanism |
 |----------|-------------------|
-| Linux | systemd unit |
+| Linux | systemd, OpenRC, SysVinit, runit, or s6 |
 | macOS | launchd plist |
 | Windows | Windows Service |
 | BSD | `rc.d` script |

@@ -11,7 +11,6 @@ Purpose:
 - For complete details, read the referenced PARTs in `AI.md`
 
 ## Asking Questions
-
 - **Default to continuing work** - do not stop just to ask whether you should continue
 - **Never guess** - if the answer is not in `AI.md`, `IDEA.md`, the codebase, or repo state and it materially changes behavior, scope, or safety, ASK
 - **Do NOT ask for permission to keep going** - continue until the task is complete or genuinely blocked
@@ -20,7 +19,6 @@ Purpose:
 Ask only when: a business/product decision is missing; two implementations differ materially; the action is destructive or irreversible; the spec says to ask; or the user asked for a plan/checkpoint.
 
 ## Before ANY Code Change
-
 1. Have I read the relevant PART in AI.md? (If no → read it)
 2. Does this follow the spec EXACTLY? (If unsure → check spec)
 3. Am I guessing or do I KNOW from the spec? (If guessing → read spec)
@@ -29,13 +27,11 @@ Ask only when: a business/product decision is missing; two implementations diffe
 **WHEN IN DOUBT: READ THE SPEC. DO NOT GUESS.**
 
 ## Binary Terminology
-
 - **server** = `search` (main binary, runs as a service)
 - **client** = `search-cli` (REQUIRED companion, CLI/TUI)
 - **Operator** = person who deploys and manages the server via CLI and `server.yml`
 
 ## Key Placeholders
-
 - `{project_name}` = `search` · `{project_org}` = `apimgr`
 - `{internal_name}` = `search` (FROZEN) · `{internal_org}` = `apimgr`
 - `{official_site}` = `https://scour.li`
@@ -76,7 +72,6 @@ Ask only when: a business/product decision is missing; two implementations diffe
 9. Commit via `gitcommit --dir {project_dir} all` with a fresh `.git/COMMIT_MESS`. **Subagents never commit** — they edit and report back; only the parent reviews the diff and commits.
 
 ## File Locations
-
 - Config: `{config_dir}/server.yml` · Data: `{data_dir}/` · Logs: `{log_dir}/`
 - Source: `src/` · Docker: `docker/` · Docs: `docs/` · Tests: `tests/`
 - OS path resolution: `src/config/directories.go` (PART 4)

@@ -11,16 +11,21 @@ Read: `AI.md` PART 28 (Testing & Development), PART 29 (ReadTheDocs Documentatio
 - Hardcode a user-facing string in a template or handler — it belongs in `src/common/i18n`
 - Ship UI that fails WCAG 2.1 AA
 - Skip the documentation badge in `README.md`
+- Run Go commands on the host, or run human-only production/development Compose files in automated testing
+- Run `docker-compose.test.yml` from the repository tree; copy it into the project-scoped temporary workspace first
 
 ## CRITICAL - ALWAYS DO
 - Keep tests in `tests/` and alongside packages as `_test.go`
 - Provide `tests/run_tests.sh` (auto-detects environment), `tests/docker.sh`, `tests/incus.sh`, and `tests/e2e.sh` (browser E2E, on demand)
+- Run unit and integration tests in the supported Docker/Incus container environment and put generated data in a temp directory that is cleaned up
 - Cover both unit and integration tests, including API testing, and measure coverage
 - Document the beta testing procedures
 - Build docs with `mkdocs.yml` and `.readthedocs.yaml` in the project root, with `docs/requirements.txt` for dependencies
 - Use the MkDocs Material theme with a light/dark/auto toggle, dark by default
 - Keep the required pages: `docs/index.md`, `installation.md`, `configuration.md`, `api.md`, `security.md`, `integrations.md`, `development.md`
 - Keep I18N strings in `src/common/i18n`, support RTL where applicable, and test accessibility
+- Require key parity across every locale; test RTL layout, theme variants, keyboard use, skip links, labels, focus, and non-JavaScript behavior
+- Keep docs aligned with every shipped browser, CLI, API, configuration, discovery, and public integration surface
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -31,6 +36,8 @@ Read: `AI.md` PART 28 (Testing & Development), PART 29 (ReadTheDocs Documentatio
 | Docs theme? | MkDocs Material, dark default | PART 29 |
 | Accessibility bar? | WCAG 2.1 AA | PART 30 |
 | I18N string location? | `src/common/i18n` | PART 30 |
+| Test execution? | Container-only Go commands; temp output is cleaned after use | PART 28 |
+| Automated Compose? | Prefer `tests/` wrappers; direct test Compose only from a temp copy | PART 26, 28 |
 
 ## TERMINOLOGY
 | Term | Meaning |

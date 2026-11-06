@@ -7,13 +7,14 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 - **Privacy-First**: No third-party analytics by default, consent-aware preferences, no hosted user profiling
 - **Multiple Engines**: Aggregates results from DuckDuckGo, Google, Bing, Brave, and more
 - **Self-Hosted**: Run your own search engine instance
-- **Dark Theme**: Beautiful Dracula-inspired dark theme
+- **Themes**: Dark, light, and automatic themes with configurable typography and result density
 - **Mobile-Friendly**: Responsive design works on all devices
 - **API Access**: Full REST API and GraphQL support
 - **Bang Commands**: Quick shortcuts to search other sites (e.g., `!g` for Google, `!w` for Wikipedia)
 - **Search Syntax**: Boolean operators, exact phrases, and full-page direct answers
 - **Image Proxy**: Proxies images to protect your privacy
 - **Tor Support**: Built-in Tor hidden service support
+- **CLI Companion**: `search-cli` provides the required operator and search client
 
 ## Quick Start
 

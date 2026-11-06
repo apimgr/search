@@ -11,15 +11,20 @@ Read: `AI.md` PART 25 (Makefile — local dev only, NOT CI/CD).
 - Add a `v` prefix to a text version (dev/beta/devel) or a timestamp version
 - Guess a version — read `release.txt`
 - Add a seventh target — the six core targets are the complete set
+- Use `.env` files or silently infer the official site from a domain; `site.txt` or `OFFICIALSITE` is explicit input
+- Copy or symlink generated binaries out of `binaries/` except during the defined release-artifact step
 
 ## CRITICAL - ALWAYS DO
 - Provide exactly six targets: `dev`, `local`, `build`, `test`, `release`, `docker`
 - Provide cross-compilation targets covering all 8 platforms
 - Inject the version at build time
+- Set `CGO_ENABLED=0` and use the maintained `casjaysdev/go:latest` toolchain image for every Go command
 - Honor version precedence: `release.txt` > env var > default fallback
 - Prefix a numeric semver with `v` on the release tag
 - Use `$(PWD)` in Makefile docker `-v` flags
 - Keep build output out of the repo tree
+- Build the server and required CLI for linux, darwin, windows, and freebsd on amd64 and arm64
+- Embed version, commit ID, build epoch, and official site only from their defined explicit sources
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -31,6 +36,8 @@ Read: `AI.md` PART 25 (Makefile — local dev only, NOT CI/CD).
 | Project name source? | git remote or directory, never hardcoded | PART 25 |
 | How many targets? | Exactly six — `dev`, `local`, `build`, `test`, `release`, `docker` | PART 25 |
 | i18n key validation? | Runs inside `make test`, no separate target | PART 30 |
+| Build output? | `binaries/`; temporary builds go under the project-scoped OS temp directory | PART 25 |
+| Official site? | `site.txt`, then `OFFICIALSITE`, otherwise empty; never guessed | PART 25 |
 
 ## TERMINOLOGY
 | Term | Meaning |

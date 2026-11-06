@@ -88,7 +88,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 |------|--------|-----------------------------|
 | De-anonymize a query to a specific user | Query logs, IP logs | No server-side query/IP logging (per AI.md PART 11). Image proxy strips Referer. |
 | Scrape the public service as free metasearch | High-volume bots | Rate limiting (per AI.md PART 1). Engine rotation. Optional CAPTCHA on abuse signals. |
-| Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Rate limit alert creation. Per-email cap. |
+| Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Per-email cap. |
 | Phish via alert manage links | Signed-token forgery, link confusion | Alert manage tokens are cryptographically signed and unguessable; emails sent from the configured sender address. |
 | SSRF via webhook destinations | User-supplied webhook URL | Validate URL scheme; block private/loopback ranges; signed payload so target can verify origin; outbound timeout. |
 | Inject malicious content into result snippets | Hostile engine response | All result snippets HTML-escaped; CSP headers; result links never auto-clicked; tracking params stripped. |
@@ -104,7 +104,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 - **Accountless alerts without verification flows.** Alerts accept a contact email without creating an account or sending verification email, following AI.md PART 17. Cryptographically random manage and RSS tokens grant access.
 - **Direct querying of primary engines.** We query Google/Bing/etc. directly (no intermediary). Trade-off: engines may rate-limit or change their response format. Mitigation: per-engine health monitoring, parser fallback, engine rotation, brief result caching.
 - **Image proxy enabled by default.** Result thumbnails are proxied through this server to strip Referer and prevent third-party tracking when users hover/load images. Trade-off: bandwidth cost on the server. Reason: privacy.
-- **Tor integration is optional, off by default.** When the operator enables Tor integration (per AI.md PART 31), an `.onion` hidden service is published. Reason: optional anonymity for users on Tor.
+- **Tor hidden service support is automatic when the Tor binary is found.** The service publishes an `.onion` address without an enable/disable toggle. Outbound requests use Tor only when the operator enables `server.tor.use_network` (per AI.md PART 31). Reason: make the service reachable to Tor users while keeping outbound routing opt-in.
 - **Cached results may be stale.** Default cache is 5 minutes (configurable). Reason: reduce engine load and protect against transient failures. Trade-off: results can lag by up to TTL.
 - **Webhook URL is user-supplied.** SSRF mitigations apply but cannot prevent a user from configuring webhooks pointing at private addresses they own. Reason: legitimate self-hosted automation. Mitigation: SSRF protections applied (per AI.md trust boundary rules).
 - **No admin web UI or user accounts.** The spec (AI.md PART 0–33) has no admin web panel, no session system, no login form, no user registration, no organizations, and no custom-domain features. The operator surface is the two-tier bearer-token model (`server.token` + per-resource owner tokens) documented above. Reason: privacy is the product; the application has no UI-driven configuration and no end-user accounts.
