@@ -80,7 +80,7 @@ require (
 	github.com/alibabacloud-go/tea v1.4.0 // indirect
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.9 // indirect
 	github.com/aliyun/credentials-go v1.4.7 // indirect
-	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.6 // indirect
@@ -189,7 +189,7 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.13-0.20220915233716-71ac16282d12 // indirect
 	github.com/k0kubun/go-ansi v0.0.0-20180517002512-3bf9e2903213 // indirect
-	github.com/klauspost/compress v1.20.1 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/kolo/xmlrpc v0.0.0-20220921171641-a4b6fa1dd06b // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/labbsr0x/bindman-dns-webhook v1.0.2 // indirect
