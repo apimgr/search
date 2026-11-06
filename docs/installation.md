@@ -68,6 +68,41 @@ Download the latest release for your platform from the [releases page](https://g
     sudo mv search-darwin-arm64 /usr/local/bin/search
     ```
 
+=== "Windows (AMD64)"
+
+    ```powershell
+    Invoke-WebRequest -Uri https://github.com/apimgr/search/releases/latest/download/search-windows-amd64.exe -OutFile search.exe
+    .\search.exe
+    ```
+
+=== "Windows (ARM64)"
+
+    ```powershell
+    Invoke-WebRequest -Uri https://github.com/apimgr/search/releases/latest/download/search-windows-arm64.exe -OutFile search.exe
+    .\search.exe
+    ```
+
+=== "FreeBSD (AMD64)"
+
+    ```sh
+    fetch https://github.com/apimgr/search/releases/latest/download/search-freebsd-amd64
+    chmod +x search-freebsd-amd64
+    sudo install -m 0755 search-freebsd-amd64 /usr/local/bin/search
+    ```
+
+=== "FreeBSD (ARM64)"
+
+    ```sh
+    fetch https://github.com/apimgr/search/releases/latest/download/search-freebsd-arm64
+    chmod +x search-freebsd-arm64
+    sudo install -m 0755 search-freebsd-arm64 /usr/local/bin/search
+    ```
+
+The same eight operating system and architecture combinations are published
+for `search-cli`. Use the [GitHub releases page](https://github.com/apimgr/search/releases)
+to select the matching `search-cli-{os}-{arch}` asset; Windows assets end in
+`.exe`.
+
 ### Running as a Service
 
 #### Systemd (Linux)

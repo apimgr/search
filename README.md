@@ -341,9 +341,13 @@ server:
 
 ### Monitoring
 
+Metrics endpoints are internal and require a configured per-service bearer
+token. Supply the Prometheus token in the `Authorization` header; do not expose
+metrics endpoints to the public internet.
+
 ```bash
-# Prometheus metrics
-curl -q -LSsf https://scour.li/metrics
+# Prometheus metrics (set PROMETHEUS_TOKEN to the configured service token)
+curl -q -LSsf -H "Authorization: Bearer $PROMETHEUS_TOKEN" https://scour.li/metrics
 
 # Health check
 curl -q -LSsf https://scour.li/server/healthz

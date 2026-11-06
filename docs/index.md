@@ -46,7 +46,11 @@ For Docker, open [http://172.17.0.1:64580](http://172.17.0.1:64580). The binary 
 - [Configuration](configuration.md) - Configuration options and settings
 - [API](api.md) - REST and GraphQL API documentation
 - [CLI](cli.md) - Command-line interface reference
+- [Configuration](configuration.md) - Server and client settings
+- [Security](security.md) - Security model and operator guidance
+- [Integrations](integrations.md) - Discovery protocols and integrations
 - [Search](search.md) - Search operators and direct-answer syntax
+- [Development](development.md) - Build, test, and contribution guide
 
 ## Requirements
 

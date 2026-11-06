@@ -14,7 +14,10 @@ Search provides both REST and GraphQL APIs for programmatic access.
 | `/server/docs/graphql` | GET | GraphiQL interactive explorer |
 | `/api/graphql` | POST | GraphQL queries (unversioned alias) |
 | `/api/v1/server/graphql` | POST | GraphQL queries (versioned canonical) |
-| `/server/metrics` | GET | Prometheus metrics (operator token when configured) |
+| `/server/help/mcp` | GET | MCP client help page (only while MCP is enabled) |
+| `/api/mcp`, `/mcp` | POST | MCP direct aliases (only while MCP is enabled) |
+| `/api/v1/server/mcp` | POST | Versioned MCP endpoint (only while MCP is enabled) |
+| `/server/metrics[/{service}]` | GET | Internal metrics services (per-service bearer token required) |
 
 ### Public docs routes
 
@@ -37,6 +40,7 @@ Convenience aliases that map to the canonical versioned handlers:
 | `/api/healthz` | `/api/v1/server/healthz` | Health check |
 | `/api/v1/server/healthz.txt` | `/api/v1/server/healthz` | Health check (plain text) |
 | `/api/graphql` | `/api/v1/server/graphql` | GraphQL query endpoint |
+| `/api/mcp`, `/mcp` | `/api/v1/server/mcp` | MCP Streamable HTTP endpoint |
 | `/api/autodiscover` | — | Machine-readable server metadata (see [Integrations](integrations.md)) |
 
 ## REST API
@@ -360,6 +364,40 @@ Return detailed server status (operator token required).
 #### `GET /api/v1/server/config`
 
 Return the effective configuration with secrets masked (operator token required).
+
+### Preferences and owner tokens
+
+Preferences are browser-side and require no account. `GET
+/api/v1/server/preferences` returns the preference schema, and `POST` accepts
+the preference-save acknowledgement. `GET /api/v1/server/preferences/export`
+creates a portable preference URL and short code from the current request;
+`GET /api/v1/server/preferences/import` validates and applies a URL or code.
+
+Owner token management is available through the `/api/v1/server/preferences/tokens`
+routes and requires the primary owner bearer token. The routes list masked
+tokens, create linked tokens, reveal or rotate the primary or a linked token,
+update a linked token's name or expiry, and revoke linked tokens. Linked tokens
+are intended for individual CLI, automation, or MCP clients and can be revoked
+without rotating the primary token. These routes are never exposed as MCP tools.
+
+### Contact notification webhooks
+
+`POST /api/v1/server/config/contact/webhooks` configures an operator contact
+notification webhook and requires the operator bearer token. The request
+selects a notification role (`admin`, `security`, `abuse`, or `general`), a
+supported transport, and an HTTPS destination. A newly generated signing
+secret is returned once; save it in the receiving service. Later updates do
+not reveal the secret again. See [Configuration](configuration.md) for the
+supported transports and retry schedule.
+
+### MCP
+
+The versioned MCP endpoint is `POST /api/v1/server/mcp`; `/api/mcp` and `/mcp`
+are direct aliases. It uses Streamable HTTP and the same bearer authentication,
+authorization, and rate limits as the corresponding REST operations. Anonymous
+clients can call public tools; operator-only tools require the operator token.
+See [Integrations](integrations.md#model-context-protocol-mcp) for connection
+guidance, token scope, and enable/disable behavior.
 
 ## GraphQL API
 

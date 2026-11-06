@@ -87,9 +87,13 @@ curl -X POST https://your-instance/api/v1/alerts \
 
 ```json
 {
-  "event": "alert_results",
-  "alert_id": "<opaque-id>",
-  "query": "golang security",
+  "alert": {
+    "id": "<opaque-id>",
+    "query": "golang security",
+    "category": "general",
+    "frequency": "daily",
+    "manage_url": "https://your-instance.example.com/alerts/manage/<token>"
+  },
   "results": [
     {
       "title": "...",
@@ -97,28 +101,35 @@ curl -X POST https://your-instance/api/v1/alerts \
       "snippet": "..."
     }
   ],
-  "result_count": 5,
-  "triggered_at": "2025-01-15T03:00:00Z"
+  "sent_at": "2025-01-15T03:00:00Z"
 }
 ```
 
-Webhooks are delivered with a 30-second timeout and retried up to the configured
-`search.alerts.webhook_max_retries` times on failure.
+The request includes `X-Search-Alert-Signature: sha256=<hex>`, an HMAC-SHA256
+signature over the exact JSON request body using the alert's webhook secret.
+Webhook requests use the configured retry count and retry delay from
+`search.alerts.webhook_max_retries` and
+`search.alerts.webhook_retry_delay_minutes`.
 
 ## Alert RSS Feeds
 
-Each alert has a unique RSS feed URL. After verifying your email for an alert,
-the management page shows your personal RSS URL.
+Each alert has a unique private RSS feed URL. The server returns the RSS URL
+when the alert is created, and the accountless management page shows the URL
+for an existing alert. Keep the URL private: possession of its unguessable
+token grants access to that alert's feed. Email verification is not required.
 
 RSS feeds are compatible with any standard RSS reader (Feedly, NetNewsWire,
 Miniflux, etc.) and support the Atom 1.0 and RSS 2.0 formats.
 
 ## Prometheus Metrics
 
-Search exposes Prometheus-compatible metrics at `/server/metrics` (configurable
-via `server.metrics.endpoint`). Metrics are disabled by default; enable them with
-`server.metrics.enabled: true`. This endpoint is intended for internal monitoring
-only — do not expose it to the public internet.
+Search exposes Prometheus, Grafana dashboard, and Loki log services under
+`/server/metrics`, `/api/v1/server/metrics`, `/api/metrics`, and (by default)
+`/metrics`. Metrics are enabled by default, but each service requires its own
+bearer token. Configure `server.metrics.auth.tokens.prometheus` for Prometheus,
+`server.metrics.auth.tokens.grafana` for the dashboard, and
+`server.metrics.auth.tokens.loki` for recent logs. Keep all metrics endpoints
+internal and do not expose them through a public reverse proxy.
 
 ```yaml
 # prometheus.yml scrape config
@@ -127,11 +138,15 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:64580']
     metrics_path: /server/metrics
-    # Optional bearer token if server.metrics.token is set:
-    # bearer_token: <server.metrics.token>
+    authorization:
+      credentials: 'your-prometheus-service-token'
 ```
 
-See [Configuration](configuration.md) for `server.metrics` settings.
+The token is sent in the `Authorization` header. Empty service tokens disable
+that service and return `403`; query-string tokens are not accepted. The
+`server.metrics.auth.allow_unauthenticated` escape hatch is only for a
+firewalled internal network. See [Configuration](configuration.md) for all
+metrics settings.
 
 ## GraphQL
 
@@ -145,6 +160,45 @@ curl -X POST https://your-instance/api/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "{ search(q: \"golang\") { results { title url } } }"}'
 ```
+
+## Model Context Protocol (MCP)
+
+Search exposes an MCP Streamable HTTP endpoint backed by the REST API. It uses
+JSON-RPC over `POST`; there is no stdio mode or separate MCP service. The
+canonical endpoint is `/api/v1/server/mcp`, with direct aliases at `/api/mcp`
+and `/mcp`. The endpoint is enabled by default and can be disabled with
+`server.mcp.enabled` in `server.yml`.
+
+MCP uses the same bearer credentials and authorization as the REST API. Public
+tools work anonymously; operator-only tools require the operator token. For a
+client that needs owner-scoped access, create a separate linked token at
+`/server/preferences/tokens` and send it in the `Authorization: Bearer ...`
+header. Do not use the operator token for an MCP client. Cookies are ignored.
+Tool availability follows the caller's permissions, and token-management
+operations are not exposed as tools.
+
+The server renders connection instructions and the current tool list at
+`/server/help/mcp`; the page is available only while MCP is enabled. The
+supported protocol revisions and request rules follow the [MCP
+specification](https://modelcontextprotocol.io/specification).
+
+## Discovery and web standards
+
+| Route | Purpose |
+|-------|---------|
+| `/api/autodiscover` | Machine-readable server, API, and CLI compatibility metadata |
+| `/opensearch.xml` | OpenSearch description, when OpenSearch is enabled |
+| `/.well-known/llms.txt` and `/llms.txt` | Machine-readable API and capability summary |
+| `/.well-known/security.txt` | RFC 9116 security contact and disclosure details |
+| `/.well-known/pgp-key.asc` | Published security-report encryption key, when configured |
+| `/.well-known/change-password` | Password-change discovery redirect |
+| `/robots.txt` | Crawler guidance |
+| `/sitemap.xml` | Public-page sitemap |
+
+Search does not enable WebFinger, OpenID Provider Metadata, Android App Links,
+or Apple app-site-association endpoints. Unknown `/.well-known/*` paths return
+`404`. See [Security](security.md) for the security-reporting endpoints and
+configuration.
 
 ## Security.txt / Well-Known
 

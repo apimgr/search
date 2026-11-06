@@ -105,12 +105,11 @@ search --update yes
 
 ### Firewall Configuration
 
-Restrict the metrics endpoint — it must never be proxied to the public internet:
-
-```bash
-# Block external access to the metrics endpoint
-iptables -A INPUT -p tcp --dport 64580 -m string --string "/server/metrics" --algo bm -j DROP
-```
+Metrics are internal operational endpoints. Do not proxy `/server/metrics`,
+`/api/metrics`, `/api/v1/server/metrics`, or their `/metrics` aliases to the
+public internet. Restrict them at the reverse proxy or host firewall to the
+monitoring network. Each service also requires its own bearer token; token
+authentication is defense in depth and does not replace network restrictions.
 
 ## Public Security Endpoints
 

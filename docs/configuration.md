@@ -185,17 +185,28 @@ These settings control accountless search alert creation limits, webhook retry a
 ```yaml
 server:
   metrics:
-    # Disabled by default
-    enabled: false
-    # Endpoint path (operator-only; keep off the public internet)
-    endpoint: /server/metrics
-    # Include CPU/memory/disk metrics
+    enabled: true
+    root:
+      enabled: true
+    auth:
+      allow_unauthenticated: false
+      tokens:
+        prometheus: ""
+        grafana: ""
+        loki: ""
     include_system: true
-    # Include Go runtime metrics
     include_runtime: true
-    # Bearer token for scrape auth (empty = no auth)
-    token: ""
+    loki:
+      max_entries: 1000
+      max_age: 1h
 ```
+
+Metrics are enabled by default, but each service is disabled until its own
+bearer token is configured. Set a strong token for each service you use and
+send it only in `Authorization: Bearer ...`; query-string tokens are rejected.
+The root `/metrics` aliases are enabled by default. Set
+`server.metrics.root.enabled: false` to disable them. The
+`allow_unauthenticated` option is only for a firewalled internal network.
 
 See [Integrations](integrations.md) for a Prometheus scrape example.
 
