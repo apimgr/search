@@ -373,7 +373,25 @@ HSTS, CSP, X-Frame-Options (`SAMEORIGIN` by default), X-Content-Type-Options, ra
 
 Language resolved from: `?lang=` query param → `lang` cookie → `Accept-Language` header → English.
 
-Enabled by default: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, and Arabic.
+All 15 embedded locales are enabled by default: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Arabic, Persian, Hebrew, and Urdu.
+
+| Code | Language | Native name | Direction | CLDR plural categories |
+|------|----------|-------------|-----------|------------------------|
+| `en` | English | English | LTR | one, other |
+| `de` | German | Deutsch | LTR | one, other |
+| `fr` | French | Français | LTR | one, other |
+| `es` | Spanish | Español | LTR | one, other |
+| `it` | Italian | Italiano | LTR | one, many, other |
+| `pt` | Portuguese | Português | LTR | one, many, other |
+| `nl` | Dutch | Nederlands | LTR | one, other |
+| `pl` | Polish | Polski | LTR | one, few, many, other |
+| `ru` | Russian | Русский | LTR | one, few, many, other |
+| `ja` | Japanese | 日本語 | LTR | other |
+| `zh` | Chinese | 中文 | LTR | other |
+| `ar` | Arabic | العربية | RTL | zero, one, two, few, many, other |
+| `fa` | Persian | فارسی | RTL | one, other |
+| `he` | Hebrew | עברית | RTL | one, two, other |
+| `ur` | Urdu | اردو | RTL | one, other |
 
 ## Development
 

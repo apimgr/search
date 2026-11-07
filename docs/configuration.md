@@ -563,6 +563,8 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.compression.types[6]` | `text/xml` |
 | `server.contact.abuse.email` | `` |
 | `server.contact.admin.email` | `` |
+| `server.contact.dpo.email` | `` |
+| `server.contact.dpo.name` | `` |
 | `server.contact.general.email` | `` |
 | `server.contact.security.email` | `` |
 | `server.daemonize` | `false` |

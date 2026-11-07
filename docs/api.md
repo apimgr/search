@@ -181,6 +181,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
 | `/api/v1/server/about` | GET | Server about page (JSON) |
 | `/api/v1/server/privacy` | GET | Privacy policy (JSON) |
+| `/api/v1/server/dpo` | GET | Data Protection Officer contact (`name`, `email`, `privacy_url`) |
 | `/api/v1/server/terms` | GET | Terms of service (JSON) |
 | `/api/v1/server/help` | GET | Help content (JSON) |
 | `/api/v1/server/contact` | GET, POST | Contact information and message submission (JSON) |
@@ -190,6 +191,12 @@ accepts a JSON object with required `name`, `email`, `subject`, and `message`
 fields. The message is queued for the configured general contact recipient,
 falling back to the admin recipient. Invalid input returns `400`; disabled
 contact or unavailable delivery returns a standard API error.
+
+`GET /api/v1/server/dpo` is public and always returns the standard success
+envelope. Its `email` uses `server.contact.dpo.email`, falling back to
+`server.contact.general.email`; it is an empty string when neither is set.
+The response never exposes the admin address. The matching HTML page is
+`/server/dpo`.
 
 ```json
 {

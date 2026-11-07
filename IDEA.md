@@ -151,7 +151,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, and search preference values with a sync URL or code. Custom CSS, bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import.
 
-The language selector is enabled by default for English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, and Arabic. Language choice is stored in a browser cookie and can be included in a portable preference sync URL or code.
+The language selector is enabled by default for all fifteen embedded locales: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Arabic, Persian, Hebrew, and Urdu. Language choice is stored in a browser cookie and can be included in a portable preference sync URL or code.
 
 Per AI.md PART 16, `theme`, `lang`, and the validated search preferences below can be transferred through a sync URL or code. The allowed keys and values are:
 
