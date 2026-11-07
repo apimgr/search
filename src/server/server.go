@@ -1268,6 +1268,8 @@ func (s *Server) setupRoutes() http.Handler {
 	// /preferences (or /prefs/*) alias must never be kept for "backward
 	// compatibility".
 	r.HandleFunc("/server/preferences", s.csrfProtect(s.handlePreferences))
+	r.Get("/server/preferences/tools", s.handlePreferencesTools)
+	r.Get("/server/preferences/tokens", s.handleOwnerTokensPage)
 	// Preferences-page widget selection is submitted through the same
 	// general-settings form (form="general-settings" checkboxes) - one Save
 	// action, one route. /preferences/widgets remains for the homepage
@@ -1471,7 +1473,7 @@ func (s *Server) resolveUnits(r *http.Request) string {
 }
 
 func (s *Server) resolveWeatherUnits(r *http.Request) string {
-	if c, err := r.Cookie("search_widget_weather_units"); err == nil {
+	if c, err := r.Cookie("search_pref_weather_units"); err == nil {
 		if c.Value == "auto" || c.Value == "metric" || c.Value == "imperial" {
 			return c.Value
 		}

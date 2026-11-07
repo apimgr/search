@@ -64,7 +64,40 @@ func (s *Server) renderOwnerTokenResult(w http.ResponseWriter, r *http.Request, 
 	if token != "" {
 		extra["ownerTokenRevealed"] = token
 	}
-	s.renderPreferences(w, r, extra)
+	s.renderOwnerTokensPage(w, r, extra)
+}
+
+func (s *Server) handleOwnerTokensPage(w http.ResponseWriter, r *http.Request) {
+	s.renderOwnerTokensPage(w, r, nil)
+}
+
+func (s *Server) renderOwnerTokensPage(w http.ResponseWriter, r *http.Request, extra map[string]interface{}) {
+	page := s.newPageData(w, r, "Owner Tokens", "owner_tokens")
+	data := map[string]interface{}{}
+	if identity, ok := s.ownerWebIdentity(w, r, true); ok {
+		if tokens, err := s.ownerManager.List(r.Context(), identity); err == nil {
+			views := make([]map[string]interface{}, 0, len(tokens))
+			for _, token := range tokens {
+				masked, _ := s.ownerManager.Mask(r.Context(), identity, token.ID)
+				status := "active"
+				if token.RevokedAt != nil {
+					status = "revoked"
+				} else if token.ExpiresAt != nil && !token.ExpiresAt.After(time.Now()) {
+					status = "expired"
+				}
+				views = append(views, map[string]interface{}{"ID": token.ID, "Kind": token.Kind, "Name": token.Name, "Masked": masked, "CreatedAt": token.CreatedAt.Format(time.RFC3339), "LastUsedAt": formatOwnerTime(token.LastUsedAt), "ExpiresAt": formatOwnerTime(token.ExpiresAt), "Status": status})
+			}
+			data["ownerTokens"] = views
+			data["ownerPrimaryMasked"], _ = s.ownerManager.Mask(r.Context(), identity, identity.TokenID)
+		}
+	}
+	for key, value := range extra {
+		data[key] = value
+	}
+	page.Data = data
+	if err := s.renderer.Render(w, "owner_tokens", page); err != nil {
+		s.handleInternalError(w, r, "owner token render", err)
+	}
 }
 
 func (s *Server) handleOwnerPrimaryReveal(w http.ResponseWriter, r *http.Request) {

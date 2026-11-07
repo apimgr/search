@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 )
 
@@ -50,7 +51,7 @@ func GetTheme(r *http.Request) string {
 
 // SetTheme sets the theme cookie
 // Per AI.md PART 16: User preference persisted in cookie
-func SetTheme(w http.ResponseWriter, theme string) {
+func SetTheme(w http.ResponseWriter, r *http.Request, theme string) {
 	// Validate theme value
 	switch theme {
 	case ThemeLight, ThemeDark, ThemeAuto:
@@ -59,15 +60,13 @@ func SetTheme(w http.ResponseWriter, theme string) {
 		theme = DefaultTheme
 	}
 
-	// Set cookie with 30-day expiry; HttpOnly=false allows JavaScript theme switching;
-	// Secure is set dynamically by the server based on TLS config
 	cookie := &http.Cookie{
 		Name:     "theme",
 		Value:    theme,
 		Path:     "/",
-		MaxAge:   30 * 24 * 60 * 60,
+		MaxAge:   31536000,
 		HttpOnly: false,
-		Secure:   false,
+		Secure:   strings.HasPrefix(strings.ToLower(httputil.BuildURL(r, "/")), "https://"),
 		SameSite: http.SameSiteLaxMode,
 	}
 
@@ -121,7 +120,7 @@ func (s *Server) handleThemeSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if CanSetPreferenceCookie(r) {
-		SetTheme(w, r.FormValue("theme"))
+		SetTheme(w, r, r.FormValue("theme"))
 	}
 
 	redirectTo := "/"

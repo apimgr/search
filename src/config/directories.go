@@ -106,11 +106,6 @@ func GetColorMode() string {
 		return mode
 	}
 
-	// Check environment variable
-	if mode := os.Getenv("SEARCH_COLOR"); mode != "" {
-		return mode
-	}
-
 	// Check NO_COLOR environment variable (standard)
 	if os.Getenv("NO_COLOR") != "" {
 		return "never"
@@ -125,11 +120,6 @@ func GetColorMode() string {
 func GetBaseURL() string {
 	// Check CLI override first (--baseurl flag)
 	if url, ok := getOverride("base_url"); ok && url != "" {
-		return url
-	}
-
-	// Check environment variable
-	if url := os.Getenv("SEARCH_BASE_URL"); url != "" {
 		return url
 	}
 
@@ -236,9 +226,6 @@ func GetConfigDir() string {
 	}
 
 	// Check environment variable
-	if dir := os.Getenv("SEARCH_CONFIG_DIR"); dir != "" {
-		return dir
-	}
 	if dir := os.Getenv("CONFIG_DIR"); dir != "" {
 		return dir
 	}
@@ -289,9 +276,6 @@ func GetDataDir() string {
 	}
 
 	// Check environment variable
-	if dir := os.Getenv("SEARCH_DATA_DIR"); dir != "" {
-		return dir
-	}
 	if dir := os.Getenv("DATA_DIR"); dir != "" {
 		return dir
 	}
@@ -341,9 +325,6 @@ func GetLogDir() string {
 	}
 
 	// Check environment variable
-	if dir := os.Getenv("SEARCH_LOG_DIR"); dir != "" {
-		return dir
-	}
 	if dir := os.Getenv("LOG_DIR"); dir != "" {
 		return dir
 	}
@@ -392,11 +373,6 @@ func GetCacheDir() string {
 		return dir
 	}
 
-	// Check environment variable
-	if dir := os.Getenv("SEARCH_CACHE_DIR"); dir != "" {
-		return dir
-	}
-
 	// Container paths (per AI.md PART 4)
 	if IsRunningInContainer() {
 		return "/data/" + ProjectName + "/cache"
@@ -433,9 +409,6 @@ func GetCacheDir() string {
 // privilege state is captured before privilege dropping so paths stay stable.
 func GetBackupDir() string {
 	if dir, ok := getOverride("backup"); ok && dir != "" {
-		return dir
-	}
-	if dir := os.Getenv("SEARCH_BACKUP_DIR"); dir != "" {
 		return dir
 	}
 	if dir := os.Getenv("BACKUP_DIR"); dir != "" {
@@ -501,12 +474,6 @@ func GetPIDFile() string {
 	if path, ok := getOverride("pid"); ok && path != "" {
 		return path
 	}
-	if path := os.Getenv("SEARCH_PID_FILE"); path != "" {
-		return path
-	}
-	if path := os.Getenv("PID_FILE"); path != "" {
-		return path
-	}
 	if IsRunningInContainer() {
 		return "/data/" + ProjectName + ".pid"
 	}
@@ -527,9 +494,6 @@ func GetSSLDir() string {
 // GetDatabaseDir returns the database directory for this project.
 func GetDatabaseDir() string {
 	if dir, ok := getOverride("database"); ok && dir != "" {
-		return dir
-	}
-	if dir := os.Getenv("SEARCH_DATABASE_DIR"); dir != "" {
 		return dir
 	}
 	if dir := os.Getenv("DATABASE_DIR"); dir != "" {

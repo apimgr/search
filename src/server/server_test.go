@@ -1351,7 +1351,7 @@ func TestSetTheme(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.theme, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			SetTheme(rec, tt.theme)
+			SetTheme(rec, httptest.NewRequest(http.MethodPost, "https://search.example/server/theme", nil), tt.theme)
 
 			cookies := rec.Result().Cookies()
 			if len(cookies) == 0 {
@@ -1365,8 +1365,11 @@ func TestSetTheme(t *testing.T) {
 					if c.Value != tt.wantValue {
 						t.Errorf("Cookie value = %q, want %q", c.Value, tt.wantValue)
 					}
-					if c.MaxAge != 30*24*60*60 {
-						t.Errorf("Cookie MaxAge = %d, want %d", c.MaxAge, 30*24*60*60)
+					if c.MaxAge != 31536000 {
+						t.Errorf("Cookie MaxAge = %d, want %d", c.MaxAge, 31536000)
+					}
+					if !c.Secure {
+						t.Error("HTTPS theme cookie must be Secure")
 					}
 				}
 			}
@@ -3012,15 +3015,55 @@ func TestPreferencesExposeCookieAndCCPAControls(t *testing.T) {
 		t.Fatalf("preferences status = %d, want %d", response.Code, http.StatusOK)
 	}
 	for _, marker := range []string{
-		`id="cookie-preferences-form"`,
-		`action="/server/consent"`,
+		`name="consent_form" value="1" form="general-settings"`,
 		`id="consent-preferences"`,
 		`id="consent-analytics"`,
-		`action="/server/ccpa"`,
-		`name="action" value="opt-out"`,
+		`name="consent_preferences"`,
+		`name="consent_analytics"`,
+		`name="ccpa_opt_out"`,
 	} {
 		if !strings.Contains(response.Body.String(), marker) {
 			t.Errorf("preferences page is missing consent control %q", marker)
+		}
+	}
+}
+
+func TestPreferencesPageKeepsSingleFormActionsAndMovesTools(t *testing.T) {
+	server := newTestServer(t)
+	request := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
+	response := httptest.NewRecorder()
+	server.handlePreferences(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("preferences status = %d, want %d", response.Code, http.StatusOK)
+	}
+	page := response.Body.String()
+	for _, marker := range []string{
+		`id="general-settings"`,
+		`id="save-preferences"`,
+		`id="reset-prefs"`,
+		`id="reset-preferences"`,
+		`href="/server/preferences/tools"`,
+		`data-copy-target="sync-url"`,
+		`data-copy-target="sync-code"`,
+	} {
+		if !strings.Contains(page, marker) {
+			t.Errorf("preferences page is missing %q", marker)
+		}
+	}
+	for _, marker := range []string{`id="clear-search-history"`, `id="save-custom-css"`, `id="add-custom-bang"`, `id="copy-opensearch"`} {
+		if strings.Contains(page, marker) {
+			t.Errorf("preference tools leaked onto the single-form page: %q", marker)
+		}
+	}
+
+	toolsResponse := httptest.NewRecorder()
+	server.handlePreferencesTools(toolsResponse, httptest.NewRequest(http.MethodGet, "/server/preferences/tools", nil))
+	if toolsResponse.Code != http.StatusOK {
+		t.Fatalf("preference tools status = %d, want %d", toolsResponse.Code, http.StatusOK)
+	}
+	for _, marker := range []string{`id="custom-css"`, `id="add-custom-bang"`, `id="copy-opensearch"`} {
+		if !strings.Contains(toolsResponse.Body.String(), marker) {
+			t.Errorf("preference tools page is missing %q", marker)
 		}
 	}
 }
@@ -3045,6 +3088,69 @@ func TestHandleGeneralPreferencesSavePersistsLocalVideoPreviewPreference(t *test
 		}
 	}
 	t.Fatal("video preview preference cookie was not set")
+}
+
+func TestHandleGeneralPreferencesSaveResetClearsSiteData(t *testing.T) {
+	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("action=reset"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.handleGeneralPreferencesSave(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
+	}
+	if got := response.Header().Get("Clear-Site-Data"); got != `"storage"` {
+		t.Errorf("Clear-Site-Data = %q, want storage directive", got)
+	}
+	cleared := map[string]bool{}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.MaxAge < 0 {
+			cleared[cookie.Name] = true
+		}
+	}
+	for _, name := range []string{"theme", "lang", "cookie_consent", "ccpa_opt_out", "search_build", "dismissed_announcements", "contact_captcha_required"} {
+		if !cleared[name] {
+			t.Errorf("reset did not clear %q", name)
+		}
+	}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == "contact_captcha_required" && (cookie.Path != "/server/contact" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode) {
+			t.Errorf("contact challenge cookie deletion changed its attributes: %#v", cookie)
+		}
+	}
+}
+
+func TestHandleGeneralPreferencesSaveMalformedFormRedirects(t *testing.T) {
+	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("%zz"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.handleGeneralPreferencesSave(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
+	}
+}
+
+func TestHandleGeneralPreferencesSaveSyncCodeOverridesForm(t *testing.T) {
+	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en", "fr"})}
+	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("theme=light&lang=en&consent_form=1&consent_preferences=on&code=theme%3Ddark%26lang%3Dfr"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.handleGeneralPreferencesSave(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
+	}
+	cookies := map[string]string{}
+	for _, cookie := range response.Result().Cookies() {
+		cookies[cookie.Name] = cookie.Value
+	}
+	consent, _ := url.PathUnescape(cookies["cookie_consent"])
+	if cookies["theme"] != "dark" || cookies["lang"] != "fr" || !strings.Contains(consent, `"preferences":true`) {
+		t.Errorf("sync code did not override form values: cookies=%v", cookies)
+	}
 }
 
 func TestHandleBangProxyMissingURL(t *testing.T) {

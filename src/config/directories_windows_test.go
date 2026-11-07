@@ -8,7 +8,7 @@ import (
 )
 
 func TestWindowsDirectoryPathsResolveKnownFolders(t *testing.T) {
-	for _, name := range []string{"SEARCH_CONFIG_DIR", "CONFIG_DIR", "SEARCH_DATA_DIR", "DATA_DIR", "SEARCH_LOG_DIR", "LOG_DIR", "SEARCH_CACHE_DIR", "SEARCH_DATABASE_DIR", "DATABASE_DIR"} {
+	for _, name := range []string{"CONFIG_DIR", "DATA_DIR", "LOG_DIR", "DATABASE_DIR"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("ProgramData", `C:\ProgramData`)

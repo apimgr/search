@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // TestRunServerStartsBodyOnRegularProcess ensures non-service invocations
@@ -367,154 +369,85 @@ func resetFlagVars() {
 }
 
 func TestApplyCliOverrides(t *testing.T) {
-	// Capture and restore all env vars that applyCliOverrides may write
-	restore := saveEnvKeys(
-		"SEARCH_MODE", "MODE",
-		"DEBUG", "SEARCH_DEBUG",
-		"SEARCH_DATA_DIR", "SEARCH_CONFIG_DIR",
-		"SEARCH_CACHE_DIR", "SEARCH_LOG_DIR",
-		"SEARCH_BACKUP_DIR", "SEARCH_PID_FILE",
-		"SEARCH_ADDRESS", "SEARCH_PORT", "PORT",
-		"SEARCH_BASE_URL", "SEARCH_COLOR",
-		"SEARCH_LANG", "LANG",
-	)
-	t.Cleanup(restore)
-
-	t.Run("flagMode production sets SEARCH_MODE and MODE", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_MODE", "MODE")()
+	t.Setenv("MODE", "")
+	t.Setenv("DEBUG", "")
+	t.Setenv("PORT", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("LANG", "")
+	t.Run("mode uses canonical environment variable", func(t *testing.T) {
+		defer saveEnvKeys("MODE")()
 		resetFlagVars()
-
-		flagMode = "production"
+		flagMode = "development"
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_MODE"); got != "production" {
-			t.Errorf("SEARCH_MODE = %q, want %q", got, "production")
-		}
-		if got := os.Getenv("MODE"); got != "production" {
-			t.Errorf("MODE = %q, want %q", got, "production")
+		if got := os.Getenv("MODE"); got != "development" {
+			t.Errorf("MODE = %q, want development", got)
 		}
 	})
-
-	t.Run("flagDebug true sets DEBUG and SEARCH_DEBUG", func(t *testing.T) {
-		defer saveEnvKeys("DEBUG", "SEARCH_DEBUG")()
+	t.Run("debug uses canonical environment variable", func(t *testing.T) {
+		defer saveEnvKeys("DEBUG")()
 		resetFlagVars()
-
 		flagDebug = true
 		applyCliOverrides()
-
 		if got := os.Getenv("DEBUG"); got != "true" {
-			t.Errorf("DEBUG = %q, want %q", got, "true")
-		}
-		if got := os.Getenv("SEARCH_DEBUG"); got != "true" {
-			t.Errorf("SEARCH_DEBUG = %q, want %q", got, "true")
+			t.Errorf("DEBUG = %q, want true", got)
 		}
 	})
-
-	t.Run("flagPort sets SEARCH_PORT and PORT", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_PORT", "PORT")()
+	t.Run("port uses canonical environment variable", func(t *testing.T) {
+		defer saveEnvKeys("PORT")()
 		resetFlagVars()
-
 		flagPort = 8080
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_PORT"); got != "8080" {
-			t.Errorf("SEARCH_PORT = %q, want %q", got, "8080")
-		}
 		if got := os.Getenv("PORT"); got != "8080" {
-			t.Errorf("PORT = %q, want %q", got, "8080")
+			t.Errorf("PORT = %q, want 8080", got)
 		}
 	})
-
-	t.Run("flagBaseURL sets SEARCH_BASE_URL", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_BASE_URL")()
+	t.Run("address uses canonical environment variable", func(t *testing.T) {
+		defer saveEnvKeys("LISTEN")()
 		resetFlagVars()
-
-		flagBaseURL = "/app"
-		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_BASE_URL"); got != "/app" {
-			t.Errorf("SEARCH_BASE_URL = %q, want %q", got, "/app")
-		}
-	})
-
-	t.Run("flagLang sets SEARCH_LANG and LANG", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_LANG", "LANG")()
-		resetFlagVars()
-
-		flagLang = "es"
-		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_LANG"); got != "es" {
-			t.Errorf("SEARCH_LANG = %q, want %q", got, "es")
-		}
-		if got := os.Getenv("LANG"); got != "es" {
-			t.Errorf("LANG = %q, want %q", got, "es")
-		}
-	})
-
-	t.Run("flagAddress sets SEARCH_ADDRESS", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_ADDRESS")()
-		resetFlagVars()
-
 		flagAddress = "127.0.0.1"
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_ADDRESS"); got != "127.0.0.1" {
-			t.Errorf("SEARCH_ADDRESS = %q, want %q", got, "127.0.0.1")
+		if got := os.Getenv("LISTEN"); got != "127.0.0.1" {
+			t.Errorf("LISTEN = %q, want 127.0.0.1", got)
 		}
 	})
-
-	t.Run("flagData with temp dir sets SEARCH_DATA_DIR", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_DATA_DIR")()
+	t.Run("directory flags set config overrides", func(t *testing.T) {
 		resetFlagVars()
-
 		dir := t.TempDir()
 		flagData = dir
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_DATA_DIR"); got != dir {
-			t.Errorf("SEARCH_DATA_DIR = %q, want %q", got, dir)
+		if got := config.GetDataDir(); got != dir {
+			t.Errorf("GetDataDir() = %q, want %q", got, dir)
 		}
+		config.SetDataDirOverride("")
 	})
-
-	t.Run("flagConfig with temp dir sets SEARCH_CONFIG_DIR", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_CONFIG_DIR")()
+	t.Run("base URL flag sets config override", func(t *testing.T) {
 		resetFlagVars()
-
-		dir := t.TempDir()
-		flagConfig = dir
+		flagBaseURL = "/app"
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_CONFIG_DIR"); got != dir {
-			t.Errorf("SEARCH_CONFIG_DIR = %q, want %q", got, dir)
+		if got := config.GetBaseURL(); got != "/app" {
+			t.Errorf("GetBaseURL() = %q, want /app", got)
 		}
+		config.SetBaseURLOverride("")
 	})
-
-	t.Run("zero flagPort leaves SEARCH_PORT unchanged", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_PORT", "PORT")()
-		os.Unsetenv("SEARCH_PORT")
-		os.Unsetenv("PORT")
+	t.Run("color flag sets config override", func(t *testing.T) {
 		resetFlagVars()
-
+		flagColor = "never"
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_PORT"); got != "" {
-			t.Errorf("SEARCH_PORT = %q, want empty when flagPort == 0", got)
+		if got := config.GetColorMode(); got != "never" {
+			t.Errorf("GetColorMode() = %q, want never", got)
 		}
+		config.SetColorMode("")
 	})
-
-	t.Run("empty flagMode does not force-overwrite existing SEARCH_MODE", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_MODE", "MODE")()
+	t.Run("language flag sets locale", func(t *testing.T) {
+		defer saveEnvKeys("SEARCH_LANG", "LANG")()
 		resetFlagVars()
-
-		// Pre-set SEARCH_MODE to a non-default value
-		os.Setenv("SEARCH_MODE", "development")
-		// flagMode is empty — applyCliOverrides must call mode.FromEnv(), not
-		// os.Setenv("SEARCH_MODE", ...), so the pre-set value must survive
+		flagLang = "es"
 		applyCliOverrides()
-
-		if got := os.Getenv("SEARCH_MODE"); got != "development" {
-			t.Errorf("SEARCH_MODE = %q, want %q (empty flagMode must not overwrite)", got, "development")
+		if got := os.Getenv("SEARCH_LANG"); got != "es" {
+			t.Errorf("SEARCH_LANG = %q, want es", got)
+		}
+		if got := os.Getenv("LANG"); got != "es" {
+			t.Errorf("LANG = %q, want es", got)
 		}
 	})
 }

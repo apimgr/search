@@ -190,9 +190,6 @@ func applyCliOverrides() {
 	// Set mode from CLI flag or environment
 	// Per AI.md PART 6: Mode Detection Priority
 	if flagMode != "" {
-		if err := os.Setenv("SEARCH_MODE", flagMode); err != nil {
-			slog.Warn("failed to set SEARCH_MODE", "error", err)
-		}
 		if err := os.Setenv("MODE", flagMode); err != nil {
 			slog.Warn("failed to set MODE", "error", err)
 		}
@@ -208,73 +205,43 @@ func applyCliOverrides() {
 		if err := os.Setenv("DEBUG", "true"); err != nil {
 			slog.Warn("failed to set DEBUG", "error", err)
 		}
-		if err := os.Setenv("SEARCH_DEBUG", "true"); err != nil {
-			slog.Warn("failed to set SEARCH_DEBUG", "error", err)
-		}
 		mode.SetDebugEnabled(true)
 	}
 
 	if flagData != "" {
-		if err := os.Setenv("SEARCH_DATA_DIR", flagData); err != nil {
-			slog.Warn("failed to set SEARCH_DATA_DIR", "error", err)
-		}
 		config.SetDataDirOverride(flagData)
 	}
 	if flagConfig != "" {
-		if err := os.Setenv("SEARCH_CONFIG_DIR", flagConfig); err != nil {
-			slog.Warn("failed to set SEARCH_CONFIG_DIR", "error", err)
-		}
 		config.SetConfigDirOverride(flagConfig)
 	}
 	if flagCache != "" {
-		if err := os.Setenv("SEARCH_CACHE_DIR", flagCache); err != nil {
-			slog.Warn("failed to set SEARCH_CACHE_DIR", "error", err)
-		}
 		config.SetCacheDirOverride(flagCache)
 	}
 	if flagLog != "" {
-		if err := os.Setenv("SEARCH_LOG_DIR", flagLog); err != nil {
-			slog.Warn("failed to set SEARCH_LOG_DIR", "error", err)
-		}
 		config.SetLogDirOverride(flagLog)
 	}
 	if flagBackup != "" {
-		if err := os.Setenv("SEARCH_BACKUP_DIR", flagBackup); err != nil {
-			slog.Warn("failed to set SEARCH_BACKUP_DIR", "error", err)
-		}
 		config.SetBackupDirOverride(flagBackup)
 	}
 	if flagPID != "" {
-		if err := os.Setenv("SEARCH_PID_FILE", flagPID); err != nil {
-			slog.Warn("failed to set SEARCH_PID_FILE", "error", err)
-		}
 		config.SetPIDFileOverride(flagPID)
 	}
-	if flagAddress != "" {
-		if err := os.Setenv("SEARCH_ADDRESS", flagAddress); err != nil {
-			slog.Warn("failed to set SEARCH_ADDRESS", "error", err)
-		}
-	}
 	if flagPort != 0 {
-		if err := os.Setenv("SEARCH_PORT", fmt.Sprintf("%d", flagPort)); err != nil {
-			slog.Warn("failed to set SEARCH_PORT", "error", err)
-		}
 		if err := os.Setenv("PORT", fmt.Sprintf("%d", flagPort)); err != nil {
 			slog.Warn("failed to set PORT", "error", err)
 		}
 	}
+	if flagAddress != "" {
+		if err := os.Setenv("LISTEN", flagAddress); err != nil {
+			slog.Warn("failed to set LISTEN", "error", err)
+		}
+	}
 	// Per AI.md PART 6: --baseurl sets URL path prefix for reverse proxy
 	if flagBaseURL != "" {
-		if err := os.Setenv("SEARCH_BASE_URL", flagBaseURL); err != nil {
-			slog.Warn("failed to set SEARCH_BASE_URL", "error", err)
-		}
 		config.SetBaseURLOverride(flagBaseURL)
 	}
 	// Per AI.md PART 8: Color priority: CLI flag > Config > NO_COLOR env > Auto-detect
 	if flagColor != "" {
-		if err := os.Setenv("SEARCH_COLOR", flagColor); err != nil {
-			slog.Warn("failed to set SEARCH_COLOR", "error", err)
-		}
 		config.SetColorMode(flagColor)
 	}
 	// Per AI.md PART 8: --lang sets language for CLI output
@@ -476,24 +443,16 @@ func runServerServiceBody() {
 		// applied via config.SetXDirOverride above) take precedence and are
 		// left untouched here.
 		if flagData == "" {
-			if err := os.Setenv("SEARCH_DATA_DIR", "/var/lib/apimgr/search"); err != nil {
-				slog.Warn("failed to set service SEARCH_DATA_DIR", "error", err)
-			}
+			config.SetDataDirOverride("/var/lib/apimgr/search")
 		}
 		if flagConfig == "" {
-			if err := os.Setenv("SEARCH_CONFIG_DIR", "/etc/apimgr/search"); err != nil {
-				slog.Warn("failed to set service SEARCH_CONFIG_DIR", "error", err)
-			}
+			config.SetConfigDirOverride("/etc/apimgr/search")
 		}
 		if flagLog == "" {
-			if err := os.Setenv("SEARCH_LOG_DIR", "/var/log/apimgr/search"); err != nil {
-				slog.Warn("failed to set service SEARCH_LOG_DIR", "error", err)
-			}
+			config.SetLogDirOverride("/var/log/apimgr/search")
 		}
 		if flagCache == "" {
-			if err := os.Setenv("SEARCH_CACHE_DIR", "/var/cache/apimgr/search"); err != nil {
-				slog.Warn("failed to set service SEARCH_CACHE_DIR", "error", err)
-			}
+			config.SetCacheDirOverride("/var/cache/apimgr/search")
 		}
 		if err := os.Setenv("HOME", config.GetDataDir()); err != nil {
 			slog.Warn("failed to set service HOME", "error", err)
@@ -764,18 +723,23 @@ Email:
   email test <address>     Send a test email to verify SMTP configuration
 
 Environment Variables:
-  SEARCH_SETTINGS_PATH     Path to configuration file
-  SEARCH_CONFIG_DIR        Configuration directory
-  SEARCH_DATA_DIR          Data directory
-  SEARCH_LOG_DIR           Log directory
-  DEBUG, SEARCH_DEBUG      Enable debug mode (0/1, true/false)
-  SECRET_KEY               Secret key for in-memory caches (not sessions)
-  PORT, SEARCH_PORT        Server port
-  MODE, SEARCH_MODE        Application mode (production|development|debug)
-  INSTANCE_NAME            Instance display name
-  SEARCH_COLOR             Color output mode (always|never|auto)
-  NO_COLOR                 Disable colors when set (standard)
-  BACKUP_PASSWORD          Password for backup encryption (AES-256-GCM)
+  DOMAIN                   Public hostname override
+  MODE                     Application mode (production|development|debug)
+  DATABASE_DRIVER          Database driver
+  DATABASE_URL             Database connection string
+  SMTP_HOST, SMTP_PORT     SMTP server connection
+  SMTP_USERNAME, SMTP_PASSWORD
+                           SMTP authentication
+  SMTP_FROM_NAME, SMTP_FROM_EMAIL, SMTP_TLS
+                           SMTP sender identity and transport
+  CONFIG_DIR, DATA_DIR, LOG_DIR
+                           Configuration, data, and log directories
+  DATABASE_DIR, BACKUP_DIR Database and backup directories
+  PORT, LISTEN             First-run server port and listen address
+  APPLICATION_NAME, APPLICATION_TAGLINE
+                           First-run title and description
+  DEBUG                    Enable debug features
+  NO_COLOR, TERM           Standard terminal behavior
 
 Examples:
   %s                                 Start server with defaults

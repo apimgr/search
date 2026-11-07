@@ -24,12 +24,7 @@ func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request)
 		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
 		return
 	}
-	page := s.newPageData(w, r, "Preferences", "preferences")
-	page.Prefs = resolveGeneralPrefs(r)
-	page.Data = map[string]interface{}{"bangs": s.bangManager.GetAll(), "categories": s.bangManager.GetCategories(), "builtins": s.bangManager.GetBuiltins(), "syncURL": fullURL, "syncCode": code}
-	if err := s.renderer.Render(w, "preferences", page); err != nil {
-		s.handleInternalError(w, r, "preferences export render", err)
-	}
+	s.renderPreferences(w, r, nil)
 }
 
 func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request) {

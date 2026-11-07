@@ -40,9 +40,21 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Search.Timeout != 10 {
 		t.Errorf("Search.Timeout = %d, want %d", cfg.Search.Timeout, 10)
 	}
+	if !hasLanguage(cfg.Server.I18n.SupportedLanguages, "ar") {
+		t.Error("Server.I18n.SupportedLanguages must include Arabic per AI.md PART 30")
+	}
 	if cfg.Server.Pages.Contact.SuccessMessage != "Thank you for your message. We'll respond soon." {
 		t.Errorf("Contact.SuccessMessage = %q, want the AI.md default", cfg.Server.Pages.Contact.SuccessMessage)
 	}
+}
+
+func hasLanguage(languages []string, code string) bool {
+	for _, language := range languages {
+		if language == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGetRandomPort(t *testing.T) {
@@ -1024,15 +1036,17 @@ func TestNormalizeHTTPSMode(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	// Save original directory overrides
-	origConfig := os.Getenv("SEARCH_CONFIG_DIR")
-	origData := os.Getenv("SEARCH_DATA_DIR")
-	origLog := os.Getenv("SEARCH_LOG_DIR")
-	origCache := os.Getenv("SEARCH_CACHE_DIR")
+	origConfig := os.Getenv("CONFIG_DIR")
+	origData := os.Getenv("DATA_DIR")
+	origLog := os.Getenv("LOG_DIR")
+	origDatabase := os.Getenv("DATABASE_DIR")
+	origBackup := os.Getenv("BACKUP_DIR")
 	defer func() {
-		os.Setenv("SEARCH_CONFIG_DIR", origConfig)
-		os.Setenv("SEARCH_DATA_DIR", origData)
-		os.Setenv("SEARCH_LOG_DIR", origLog)
-		os.Setenv("SEARCH_CACHE_DIR", origCache)
+		os.Setenv("CONFIG_DIR", origConfig)
+		os.Setenv("DATA_DIR", origData)
+		os.Setenv("LOG_DIR", origLog)
+		os.Setenv("DATABASE_DIR", origDatabase)
+		os.Setenv("BACKUP_DIR", origBackup)
 		SetConfigDirOverride("")
 		SetDataDirOverride("")
 		SetLogDirOverride("")

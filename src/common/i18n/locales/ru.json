@@ -204,7 +204,7 @@
     "opensearch_url_copied": "URL OpenSearch скопирован!",
     "opensearch_copy_manual": "URL выше обновлен — скопируйте его вручную",
     "exported_success": "Настройки экспортированы!",
-    "reset_confirm_message": "Вы уверены, что хотите сбросить все настройки?",
+    "reset_confirm_message": "Будут удалены настройки сайта, согласие на cookie, выбор CCPA, метка сборки, скрытые объявления и хранилище браузера. Учетные данные сохраняются. Отменить действие нельзя.",
     "reset_confirm_title": "Сбросить настройки",
     "required_fields_error": "Заполните все обязательные поля",
     "bang_shortcut_exists": "Bang с таким сокращением уже существует",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "Имя пользовательской поисковой системы (необязательно)",
     "copy_opensearch_url": "Скопировать URL OpenSearch",
     "data_management_heading": "Управление данными",
-    "data_management_help": "Экспорт/импорт сохраняет ваши поисковые настройки, виджеты главной страницы и пользовательские bang-команды.",
+    "data_management_help": "Экспорт и импорт включают тему, язык и поддерживаемые настройки приложения. Согласие на cookie и учетные данные не включаются。",
     "export_preferences": "Экспортировать настройки",
     "import_preferences": "Импортировать настройки",
     "reset_all_preferences": "Сбросить все настройки",
@@ -312,7 +312,16 @@
       "expiry_30d": "30 дней",
       "expiry_90d": "90 дней",
       "expiry_1y": "1 год"
-    }
+    },
+    "font_size": "Размер шрифта",
+    "font_size_small": "Маленький",
+    "font_size_medium": "Средний",
+    "font_size_large": "Большой",
+    "results_density": "Плотность результатов",
+    "density_compact": "Компактная",
+    "density_comfortable": "Удобная",
+    "density_spacious": "Просторная",
+    "accent_color": "Акцентный цвет"
   },
   "nav": {
     "home": "Главная",

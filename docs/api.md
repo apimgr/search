@@ -175,7 +175,9 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/widgets` | GET | Available instant-answer widgets (filter with `category`) |
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
 | `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list (404 when MCP is disabled) |
-| `/api/v1/server/preferences` | GET | Default user preferences |
+| `/api/v1/server/preferences` | GET, POST | Read or update guest preferences |
+| `/api/v1/server/preferences/export` | GET | Export guest preferences as a URL and short code |
+| `/api/v1/server/preferences/import` | GET | Validate and apply guest preferences from query values or a code |
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
 | `/api/v1/server/about` | GET | Server about page (JSON) |
 | `/api/v1/server/privacy` | GET | Privacy policy (JSON) |
@@ -378,11 +380,38 @@ Return the effective configuration with secrets masked (operator token required)
 
 ### Preferences and owner tokens
 
-Preferences are browser-side and require no account. `GET
-/api/v1/server/preferences` returns the preference schema, and `POST` accepts
-the preference-save acknowledgement. `GET /api/v1/server/preferences/export`
-creates a portable preference URL and short code from the current request;
-`GET /api/v1/server/preferences/import` validates and applies a URL or code.
+Preferences are guest browser cookies and require no account. `GET
+/api/v1/server/preferences` returns the current effective state:
+
+```json
+{"ok":true,"data":{"theme":"dark","lang":"en","prefs":{"units":"metric"}}}
+```
+
+`GET /api/v1/server/preferences/export` returns that state plus `url` and
+`code`. `GET /api/v1/server/preferences/import` accepts direct query values,
+a pasted full URL, a plain query string, or a padded or unpadded base64url
+`code`; valid values are applied additively and invalid values are listed in
+`ignored`. Direct query values override `code` values by key. Codes are
+limited to 2048 characters, imports consider at most 32 parameters, and each
+value is limited to 64 characters. Invalid themes, language tags, and
+documented preference enums are dropped; unknown preference keys use the
+documented safe-character rule. Import and POST responses include `applied`
+and `ignored`; export returns state plus `url` and `code`. The `prefs` object
+uses bare preference keys, such as `units`, while import parameters use the
+`search_pref_` cookie prefix. Export includes only `theme`, `lang`, and valid
+app preference cookies. It never transfers consent, CCPA choices, build
+stamps, session cookies, or owner credentials. Consent and CCPA fields are
+never written through the API.
+
+`POST /api/v1/server/preferences` accepts JSON or form fields named `theme`,
+`lang`, and `search_pref_{key}`. It applies a partial update and returns the
+resulting state with `applied` and `ignored` arrays. It returns
+`400 VALIDATION_FAILED` only when no supplied preference value is valid.
+On the HTML preferences form, a non-empty `code` overrides the form values;
+`code` is a web-form-only control and is ignored by the POST API. Use the GET
+import endpoint when applying a sync code through the API.
+Preferences API calls do not require authentication or CSRF tokens because
+they can write only the caller's guest preference cookies.
 
 Owner token management is available through the `/api/v1/server/preferences/tokens`
 routes and requires the primary owner bearer token. The routes list masked

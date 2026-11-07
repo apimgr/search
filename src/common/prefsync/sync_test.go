@@ -21,14 +21,14 @@ func TestImportDirectValuesWinAndRemainAdditive(t *testing.T) {
 	if !contains(result.Applied, "theme") || !contains(result.Applied, "lang") || !contains(result.Applied, "search_pref_units") {
 		t.Fatalf("applied=%v", result.Applied)
 	}
-	if !contains(result.Ignored, "cookie_consent") || !contains(result.Ignored, "search_owner_token") || !contains(result.Ignored, "search_pref_video_previews") {
+	if !contains(result.Ignored, "cookie_consent") || contains(result.Ignored, "code") || !contains(result.Ignored, "search_owner_token") || contains(result.Ignored, "search_pref_video_previews") {
 		t.Fatalf("ignored=%v", result.Ignored)
 	}
 	w := httptest.NewRecorder()
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	Apply(w, req, "search", result)
-	if len(w.Result().Cookies()) != 3 {
+	if len(w.Result().Cookies()) != 4 {
 		t.Fatalf("set cookies=%v", w.Result().Cookies())
 	}
 	for _, cookie := range w.Result().Cookies() {
@@ -52,7 +52,7 @@ func TestImportPaddedCodeAndUnsupportedRegionFallback(t *testing.T) {
 
 func TestImportInvalidAndOversizedValuesAreIgnored(t *testing.T) {
 	oversized := strings.Repeat("x", 2049)
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?theme=neon&lang=zz&search_pref_units=stones&search_pref_private=secret&code="+oversized, nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?theme=neon&lang=zz&search_pref_units=stones&search_pref_private=not+safe&code="+oversized, nil)
 	result := Import(req, "search", "en", testLanguages)
 	if result.State.Theme != "dark" || result.State.Lang != "en" || len(result.State.Prefs) != 0 {
 		t.Fatalf("state=%#v", result.State)
@@ -61,6 +61,14 @@ func TestImportInvalidAndOversizedValuesAreIgnored(t *testing.T) {
 		if !contains(result.Ignored, name) {
 			t.Errorf("ignored list missing %s: %v", name, result.Ignored)
 		}
+	}
+}
+
+func TestImportControlFieldsAreNotReportedAsPreferences(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?csrf_token=x&code=bad&redirect=%2Fsearch&action=save&consent_form=1&consent_preferences=on&consent_analytics=on&ccpa_opt_out=on", nil)
+	result := Import(req, "search", "en", testLanguages)
+	if len(result.Applied) != 0 || len(result.Ignored) != 0 {
+		t.Fatalf("control fields affected result: applied=%v ignored=%v", result.Applied, result.Ignored)
 	}
 }
 
@@ -83,7 +91,7 @@ func TestExportCanonicalIncludesOnlyPreferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Query().Get("search_pref_units") != "metric" || parsed.Query().Get("search_pref_save_history") != "0" || parsed.Query().Get("search_pref_font_size") != "large" || parsed.Query().Get("search_pref_results_density") != "compact" || parsed.Query().Get("search_pref_accent_color") != "#a1b2c3" || parsed.Query().Get("search_pref_video_previews") != "" || parsed.Query().Get("cookie_consent") != "" {
+	if parsed.Query().Get("search_pref_units") != "metric" || parsed.Query().Get("search_pref_save_history") != "0" || parsed.Query().Get("search_pref_font_size") != "large" || parsed.Query().Get("search_pref_results_density") != "compact" || parsed.Query().Get("search_pref_accent_color") != "#a1b2c3" || parsed.Query().Get("search_pref_video_previews") != "0" || parsed.Query().Get("cookie_consent") != "" {
 		t.Fatalf("query=%s", parsed.RawQuery)
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(code)
@@ -116,14 +124,14 @@ func TestEnginePreferenceCookiesCanBeExportedAndImported(t *testing.T) {
 }
 
 func TestImportValidatesVisualPreferences(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=large&search_pref_results_density=spacious&search_pref_accent_color=%23ABCDEF", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=large&search_pref_results_density=spacious&search_pref_accent_color=%23ABCDEF&search_pref_weather_units=metric", nil)
 	result := Import(req, "search", "en", testLanguages)
-	if result.State.Prefs["font_size"] != "large" || result.State.Prefs["results_density"] != "spacious" || result.State.Prefs["accent_color"] != "#ABCDEF" {
+	if result.State.Prefs["font_size"] != "large" || result.State.Prefs["results_density"] != "spacious" || result.State.Prefs["accent_color"] != "#ABCDEF" || result.State.Prefs["weather_units"] != "metric" {
 		t.Fatalf("valid values not imported: %#v", result.State.Prefs)
 	}
-	invalid := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=huge&search_pref_results_density=tight&search_pref_accent_color=red", nil)
+	invalid := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=huge&search_pref_results_density=tight&search_pref_accent_color=red&search_pref_weather_units=kelvin", nil)
 	result = Import(invalid, "search", "en", testLanguages)
-	if len(result.State.Prefs) != 0 || !contains(result.Ignored, "search_pref_font_size") || !contains(result.Ignored, "search_pref_results_density") || !contains(result.Ignored, "search_pref_accent_color") {
+	if len(result.State.Prefs) != 0 || !contains(result.Ignored, "search_pref_font_size") || !contains(result.Ignored, "search_pref_results_density") || !contains(result.Ignored, "search_pref_accent_color") || !contains(result.Ignored, "search_pref_weather_units") {
 		t.Fatalf("invalid visual values were not rejected: %#v", result)
 	}
 }

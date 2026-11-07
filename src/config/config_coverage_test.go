@@ -154,7 +154,7 @@ func TestConfigOnReload(t *testing.T) {
 // TestGetConfigDirInContainer verifies GetConfigDir returns /config/search in a container.
 func TestGetConfigDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_CONFIG_DIR")
+	os.Unsetenv("CONFIG_DIR")
 	os.Unsetenv("CONFIG_DIR")
 	SetConfigDirOverride("")
 	defer SetConfigDirOverride("")
@@ -169,7 +169,7 @@ func TestGetConfigDirInContainer(t *testing.T) {
 // TestGetDataDirInContainer verifies GetDataDir returns /data/search in a container.
 func TestGetDataDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_DATA_DIR")
+	os.Unsetenv("DATA_DIR")
 	os.Unsetenv("DATA_DIR")
 	SetDataDirOverride("")
 	defer SetDataDirOverride("")
@@ -184,7 +184,7 @@ func TestGetDataDirInContainer(t *testing.T) {
 // TestGetLogDirInContainer verifies GetLogDir returns /data/log/search in a container.
 func TestGetLogDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_LOG_DIR")
+	os.Unsetenv("LOG_DIR")
 	os.Unsetenv("LOG_DIR")
 	SetLogDirOverride("")
 	defer SetLogDirOverride("")
@@ -199,7 +199,6 @@ func TestGetLogDirInContainer(t *testing.T) {
 // TestGetCacheDirInContainer verifies GetCacheDir returns /data/search/cache in a container.
 func TestGetCacheDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_CACHE_DIR")
 	SetCacheDirOverride("")
 	defer SetCacheDirOverride("")
 
@@ -213,7 +212,7 @@ func TestGetCacheDirInContainer(t *testing.T) {
 // TestGetBackupDirInContainer verifies GetBackupDir returns /data/backups/search in a container.
 func TestGetBackupDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_BACKUP_DIR")
+	os.Unsetenv("BACKUP_DIR")
 	os.Unsetenv("BACKUP_DIR")
 	SetBackupDirOverride("")
 	defer SetBackupDirOverride("")
@@ -228,7 +227,6 @@ func TestGetBackupDirInContainer(t *testing.T) {
 // TestGetPIDFileInContainer verifies GetPIDFile returns /data/search.pid in a container.
 func TestGetPIDFileInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_PID_FILE")
 	os.Unsetenv("PID_FILE")
 	SetPIDFileOverride("")
 	defer SetPIDFileOverride("")
@@ -243,7 +241,7 @@ func TestGetPIDFileInContainer(t *testing.T) {
 // TestGetDatabaseDirInContainer verifies GetDatabaseDir returns /data/db in a container.
 func TestGetDatabaseDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("SEARCH_DATABASE_DIR")
+	os.Unsetenv("DATABASE_DIR")
 	os.Unsetenv("DATABASE_DIR")
 	SetDatabaseDirOverride("")
 	defer SetDatabaseDirOverride("")
@@ -276,22 +274,10 @@ func TestGetDirEnvVarPaths(t *testing.T) {
 		cleanup func()
 	}{
 		{
-			"GetConfigDir via SEARCH_CONFIG_DIR",
-			"SEARCH_CONFIG_DIR", "/test/config/search",
-			GetConfigDir,
-			func() { SetConfigDirOverride(""); os.Unsetenv("SEARCH_CONFIG_DIR") },
-		},
-		{
 			"GetConfigDir via CONFIG_DIR",
 			"CONFIG_DIR", "/test/config2/search",
 			GetConfigDir,
 			func() { SetConfigDirOverride(""); os.Unsetenv("CONFIG_DIR") },
-		},
-		{
-			"GetDataDir via SEARCH_DATA_DIR",
-			"SEARCH_DATA_DIR", "/test/data/search",
-			GetDataDir,
-			func() { SetDataDirOverride(""); os.Unsetenv("SEARCH_DATA_DIR") },
 		},
 		{
 			"GetDataDir via DATA_DIR",
@@ -300,52 +286,16 @@ func TestGetDirEnvVarPaths(t *testing.T) {
 			func() { SetDataDirOverride(""); os.Unsetenv("DATA_DIR") },
 		},
 		{
-			"GetLogDir via SEARCH_LOG_DIR",
-			"SEARCH_LOG_DIR", "/test/log/search",
-			GetLogDir,
-			func() { SetLogDirOverride(""); os.Unsetenv("SEARCH_LOG_DIR") },
-		},
-		{
 			"GetLogDir via LOG_DIR",
 			"LOG_DIR", "/test/log2/search",
 			GetLogDir,
 			func() { SetLogDirOverride(""); os.Unsetenv("LOG_DIR") },
 		},
 		{
-			"GetCacheDir via SEARCH_CACHE_DIR",
-			"SEARCH_CACHE_DIR", "/test/cache/search",
-			GetCacheDir,
-			func() { SetCacheDirOverride(""); os.Unsetenv("SEARCH_CACHE_DIR") },
-		},
-		{
-			"GetBackupDir via SEARCH_BACKUP_DIR",
-			"SEARCH_BACKUP_DIR", "/test/backup/search",
-			GetBackupDir,
-			func() { SetBackupDirOverride(""); os.Unsetenv("SEARCH_BACKUP_DIR") },
-		},
-		{
 			"GetBackupDir via BACKUP_DIR",
 			"BACKUP_DIR", "/test/backup2/search",
 			GetBackupDir,
 			func() { SetBackupDirOverride(""); os.Unsetenv("BACKUP_DIR") },
-		},
-		{
-			"GetPIDFile via SEARCH_PID_FILE",
-			"SEARCH_PID_FILE", "/test/search.pid",
-			GetPIDFile,
-			func() { SetPIDFileOverride(""); os.Unsetenv("SEARCH_PID_FILE") },
-		},
-		{
-			"GetPIDFile via PID_FILE",
-			"PID_FILE", "/test/search2.pid",
-			GetPIDFile,
-			func() { SetPIDFileOverride(""); os.Unsetenv("PID_FILE") },
-		},
-		{
-			"GetDatabaseDir via SEARCH_DATABASE_DIR",
-			"SEARCH_DATABASE_DIR", "/test/db/search",
-			GetDatabaseDir,
-			func() { SetDatabaseDirOverride(""); os.Unsetenv("SEARCH_DATABASE_DIR") },
 		},
 		{
 			"GetDatabaseDir via DATABASE_DIR",

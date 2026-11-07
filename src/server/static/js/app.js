@@ -558,7 +558,7 @@
                 'search_pref_results_per_page', 'search_pref_units', 'search_pref_new_tab',
                 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history',
                 'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density',
-                'search_pref_accent_color', 'search_pref_engines', 'search_pref_engine_order', 'search_widget_weather_units', 'preferencesEnabled'].forEach(clearCookie);
+                'search_pref_accent_color', 'search_pref_engines', 'search_pref_engine_order', 'search_pref_weather_units', 'preferencesEnabled'].forEach(clearCookie);
         }
         var banner = document.getElementById('cookie-consent');
         if (banner) banner.remove();
@@ -3239,138 +3239,6 @@
             }
         }
 
-        // Save preferences to cookies and keep history records client-side.
-        function savePreferences() {
-            var themeSelect = document.getElementById('theme');
-            var fontSizeSelect = document.getElementById('font-size');
-            var resultsDensitySelect = document.getElementById('results-density');
-            var accentColorInput = document.getElementById('accent-color');
-            var langSelect = document.getElementById('lang');
-            var unitsSelect = document.getElementById('units');
-            var weatherUnitsSelect = document.getElementById('weather-units');
-            var defaultCategorySelect = document.getElementById('default-category');
-            var safeSearchSelect = document.getElementById('safe-search');
-            var resultsPerPageSelect = document.getElementById('results-per-page');
-            var newTabCheckbox = document.getElementById('new-tab');
-            var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
-            var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
-            var saveHistoryCheckbox = document.getElementById('save-history');
-            var videoPreviewsCheckbox = document.getElementById('video-previews');
-
-            var prefs = {
-                theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'dark',
-                font_size: fontSizeSelect && ['small', 'medium', 'large'].indexOf(fontSizeSelect.value) !== -1 ? fontSizeSelect.value : 'medium',
-                results_density: resultsDensitySelect && ['compact', 'comfortable', 'spacious'].indexOf(resultsDensitySelect.value) !== -1 ? resultsDensitySelect.value : 'comfortable',
-                accent_color: accentColorInput && /^#[0-9a-f]{6}$/i.test(accentColorInput.value) ? accentColorInput.value : '#8250df',
-                lang: langSelect ? langSelect.value : getClientLanguage(),
-                units: unitsSelect && unitsSelect.value === 'metric' ? 'metric' : 'imperial',
-                weather_units: weatherUnitsSelect && ['auto', 'metric', 'imperial'].indexOf(weatherUnitsSelect.value) !== -1 ? weatherUnitsSelect.value : 'auto',
-                default_category: defaultCategorySelect ? defaultCategorySelect.value : 'general',
-                safe_search: safeSearchSelect ? safeSearchSelect.value : '1',
-                results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '100',
-                new_tab: newTabCheckbox ? newTabCheckbox.checked : true,
-                infinite_scroll: infiniteScrollCheckbox ? infiniteScrollCheckbox.checked : true,
-                keyboard_shortcuts: keyboardShortcutsCheckbox ? keyboardShortcutsCheckbox.checked : true,
-                save_history: saveHistoryCheckbox ? saveHistoryCheckbox.checked : true,
-                video_previews: videoPreviewsCheckbox ? videoPreviewsCheckbox.checked : true
-            };
-
-            if (!prefs.save_history) localStorage.removeItem(SEARCH_HISTORY_KEY);
-            setCookie('theme', prefs.theme, 31536000);
-            setCookie('lang', prefs.lang, 31536000);
-            setCookie('search_pref_font_size', prefs.font_size, 31536000);
-            setCookie('search_pref_results_density', prefs.results_density, 31536000);
-            setCookie('search_pref_accent_color', prefs.accent_color, 31536000);
-            setUnitsCookie(prefs.units);
-            setCookie('search_widget_weather_units', prefs.weather_units, 31536000);
-            setCookie('search_pref_category', prefs.default_category, 31536000);
-            setCookie('search_pref_safe_search', prefs.safe_search, 31536000);
-            setCookie('search_pref_results_per_page', prefs.results_per_page, 31536000);
-            setCookie('search_pref_new_tab', prefs.new_tab ? '1' : '0', 31536000);
-            setCookie('search_pref_infinite_scroll', prefs.infinite_scroll ? '1' : '0', 31536000);
-            setCookie('search_pref_keyboard_shortcuts', prefs.keyboard_shortcuts ? '1' : '0', 31536000);
-            setCookie('search_pref_save_history', prefs.save_history ? '1' : '0', 31536000);
-            setCookie('search_pref_video_previews', prefs.video_previews ? '1' : '0', 31536000);
-
-            applyTheme(prefs.theme);
-
-            // Save through the canonical preferences endpoint so cookies and
-            // the no-JavaScript form path share server-side validation. Widget toggles are
-            // form="general-settings" checkboxes rendered elsewhere on the
-            // page, so they are collected and sent in the same request -
-            // there is a single Save action, not a separate one per section.
-            syncGeneralPreferences(prefs);
-
-            applySearchPreferencesToForms();
-            showPrefStatus(t('preferences.saved', 'Preferences saved'));
-
-            // Redirect back to previous page after a short delay
-            var referrer = document.referrer;
-            setTimeout(function() {
-                if (referrer && referrer.indexOf(window.location.hostname) !== -1 && referrer !== window.location.href) {
-                    window.location.href = referrer;
-                } else {
-                    window.location.href = '/';
-                }
-            }, 500);
-        }
-
-        // Persist the general preferences (including the homepage widget
-        // toggles, which are form="general-settings" checkboxes rendered in
-        // a different section of the page) to the server-side cookies via
-        // AJAX, so .Prefs on the next server-rendered page reflects the
-        // JS-enabled save path too, not just the no-JS form POST fallback.
-        function syncGeneralPreferences(prefs) {
-            var csrfInput = document.querySelector('#general-settings input[name="csrf_token"]');
-            var params = new URLSearchParams();
-            if (csrfInput) {
-                params.append('csrf_token', csrfInput.value);
-            }
-            params.append('theme', prefs.theme);
-            params.append('lang', prefs.lang);
-            params.append('search_pref_font_size', prefs.font_size);
-            params.append('search_pref_results_density', prefs.results_density);
-            params.append('search_pref_accent_color', prefs.accent_color);
-            params.append('search_pref_units', prefs.units);
-            params.append('search_widget_weather_units', prefs.weather_units);
-            params.append('search_pref_category', prefs.default_category);
-            params.append('search_pref_safe_search', prefs.safe_search);
-            params.append('search_pref_results_per_page', prefs.results_per_page);
-            params.append('search_pref_new_tab', prefs.new_tab ? '1' : '0');
-            params.append('search_pref_infinite_scroll', prefs.infinite_scroll ? '1' : '0');
-            params.append('search_pref_keyboard_shortcuts', prefs.keyboard_shortcuts ? '1' : '0');
-            params.append('search_pref_save_history', prefs.save_history ? '1' : '0');
-            params.append('search_pref_video_previews', prefs.video_previews ? '1' : '0');
-            params.append('search_pref_video_previews_present', '1');
-            params.append('search_pref_engines_present', '1');
-            document.querySelectorAll('input[name="search_pref_engine"]:checked:not(:disabled)').forEach(function(input) {
-                params.append('search_pref_engine', input.value);
-            });
-            var engineOrder = document.getElementById('search-pref-engine-order');
-            params.append('search_pref_engine_order_present', '1');
-            params.append('search_pref_engine_order', engineOrder ? engineOrder.value : '');
-
-            var toggles = document.getElementById('widget-toggles');
-            if (toggles) {
-                toggles.querySelectorAll('input[name="widget"]:checked').forEach(function(input) {
-                    params.append('widget', input.value);
-                });
-            }
-
-            fetch('/server/preferences', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params.toString(),
-                redirect: 'follow'
-            }).catch(function(e) {
-                console.error('General preference save failed:', e);
-            });
-        }
-
-        // loadWidgetPreferences is a no-op — the server renders the correct
-        // checked state on each preference page load via the server-side cookie.
-        function loadWidgetPreferences() {}
-
         // Load custom bangs
         function loadCustomBangs() {
             try {
@@ -3435,16 +3303,6 @@
 
         // Event handlers via delegation
         prefsPage.addEventListener('click', function(e) {
-            // Save preferences button - the button is a real submit control
-            // (form="general-settings") so no-JS clients get a plain POST;
-            // when JS is available, prevent that default submit and instead
-            // save via cookies/localStorage + AJAX for a faster, no-reload UX.
-            if (e.target.id === 'save-preferences') {
-                e.preventDefault();
-                savePreferences();
-                return;
-            }
-
             if (e.target.id === 'save-custom-css') {
                 var cssInput = document.getElementById('custom-css');
                 var cssStatus = document.getElementById('custom-css-status');
@@ -3593,37 +3451,27 @@
                 return;
             }
 
-            // Reset preferences
-            if (e.target.id === 'reset-prefs') {
-                e.preventDefault();
-                showConfirm(t('preferences.reset_confirm_message', 'Are you sure you want to reset all preferences?'), {
-                    title: t('preferences.reset_confirm_title', 'Reset Preferences'),
-                    confirmText: t('common.reset', 'Reset'),
-                    danger: true
-                }).then(function(confirmed) {
-                    if (!confirmed) return;
-                    ['theme', 'lang', 'search_widgets', 'search_widget_weather_units', 'search_pref_category', 'search_pref_safe_search', 'search_pref_results_per_page', 'search_pref_units', 'search_pref_new_tab', 'search_pref_infinite_scroll', 'search_pref_keyboard_shortcuts', 'search_pref_save_history', 'search_pref_video_previews', 'search_pref_font_size', 'search_pref_results_density', 'search_pref_accent_color', 'search_pref_engines', 'search_pref_engine_order'].forEach(function(name) { clearCookie(name); });
-                    localStorage.removeItem(BANGS_KEY);
-                    localStorage.removeItem(SEARCH_HISTORY_KEY);
-                    localStorage.removeItem(CUSTOM_CSS_KEY);
-                    applyCustomCSS('');
-                    // Clear per-widget settings
-                    for (var i = localStorage.length - 1; i >= 0; i--) {
-                        var key = localStorage.key(i);
-                        if (key && key.startsWith('search_widget_')) {
-                            localStorage.removeItem(key);
-                        }
-                    }
-                    location.reload();
-                });
-                return;
+            if (e.target.matches('[data-copy-target]')) {
+                var target = document.getElementById(e.target.dataset.copyTarget);
+                if (!target) return;
+                var value = target.href || target.textContent.trim();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(value).catch(function() {
+                        var selection = window.getSelection();
+                        var range = document.createRange();
+                        range.selectNodeContents(target);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                    });
+                } else {
+                    var selection = window.getSelection();
+                    var range = document.createRange();
+                    range.selectNodeContents(target);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
             }
         });
-
-        // Widget toggle state is persisted by syncGeneralPreferences(), called
-        // from savePreferences() when the user clicks "Save & Return" — see
-        // above. The toggles are form="general-settings" checkboxes, not
-        // their own <form>, so there is nothing to intercept here.
 
         // Add custom bang form
         var addBangForm = document.getElementById('add-custom-bang');
@@ -3710,7 +3558,6 @@
                         // widgets are server-side (enabled_widgets cookie) — not imported from file
                         loadPreferences();
                         loadCustomBangs();
-                        loadWidgetPreferences();
                         showPrefStatus(t('preferences.imported_success', 'Preferences imported!'));
                     } catch (err) {
                         showPrefStatus(t('preferences.import_failed', 'Failed to import preferences'), true);
@@ -3774,7 +3621,6 @@
         // Initialize
         loadPreferences();
         loadCustomBangs();
-        loadWidgetPreferences();
     }
 
     // ========================================================================

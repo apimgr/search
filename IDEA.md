@@ -149,9 +149,11 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 #### User Preferences
 
-Preferences persist across sessions without accounts. Visitors can edit them from the preferences page, back them up as JSON, and transfer them to another device without creating an account. Search history is local to the browser and can be disabled or cleared independently.
+Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, and search preference values with a sync URL or code. Custom CSS, bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import.
 
-Per AI.md "Cross-device preference sync", `theme`, `lang`, and the validated Search preferences below can be transferred through an import link, short code, or QR code. The allowed keys and values are:
+The language selector is enabled by default for English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, and Arabic. Language choice is stored in a browser cookie and can be included in a portable preference sync URL or code.
+
+Per AI.md PART 16, `theme`, `lang`, and the validated search preferences below can be transferred through a sync URL or code. The allowed keys and values are:
 
 | Cookie key (`search_pref_{key}`) | Accepted values |
 |---|---|
@@ -159,6 +161,7 @@ Per AI.md "Cross-device preference sync", `theme`, `lang`, and the validated Sea
 | `safe_search` | `0`, `1`, `2` |
 | `results_per_page` | `10`, `20`, `30`, `50`, `100` |
 | `units` | `metric`, `imperial` |
+| `weather_units` | `auto`, `metric`, `imperial` |
 | `new_tab`, `infinite_scroll`, `keyboard_shortcuts` | `0`, `1` |
 | `save_history` | `0`, `1` |
 | `font_size` | `small`, `medium`, `large` |
@@ -167,16 +170,14 @@ Per AI.md "Cross-device preference sync", `theme`, `lang`, and the validated Sea
 
 **Use Cases:**
 - **Sync URL**: `https://search.example.com/server/preferences/import?theme=dark&lang=fr`
-- **Short Code**: base64url form of the same query string, for manual retyping
-- **QR Code**: Scan to apply theme/language on another device
+- **Sync Code**: base64url form of the same query string, for copying to another device
 
 **Workflow:**
-1. Settings page → Cross-Device Sync section → "Copy Preferences"
-2. Fetches `GET /server/preferences/export`, which reads current `theme`, `lang`, and valid Search preference cookies and returns the full URL and short code
-3. On another device, paste the URL/code into "Paste a Sync Code or URL" → "Apply", which navigates to `GET /server/preferences/import`
-4. Import validates each value against its allowlist, sets the matching cookies, and redirects — no account, no server-side row
+1. Open the Data Management section on `/server/preferences` to view the generated sync URL and code.
+2. Copy the URL or code to another device. Paste it into the same section and submit the preferences form to import it.
+3. Import validates each value against its allowlist, sets the matching cookies, and redirects — no account or server-side preference row is created.
 
-**Note:** The broader `?prefs=` URL parameter (category, safe search, results per page, new-tab behavior, pagination mode, keyboard shortcuts) is still read client-side on page load for bookmarklet/manual-link use, but it no longer has a dedicated "Generate Link" button in Settings — the Shareable Preference Link section was merged into Cross-Device Sync since both existed to move preferences to a new device/browser.
+**Note:** The broader `?prefs=` URL parameter is not the cross-device preference sync format. Sync uses only the allowlisted cookie preferences described above.
 
 #### Search Alerts
 
@@ -1762,7 +1763,7 @@ s         → Open settings
 #### Theming & Customization
 
 - **Built-in Themes**: Dark (Dracula), Light, Auto (system preference)
-- **Custom CSS**: User-provided stylesheet override stored in this browser's local storage and included in preference file exports/imports; limited to 4,096 characters
+- **Custom CSS**: User-provided stylesheet override stored in this browser's local storage; limited to 4,096 characters and excluded from preference export/import
 - **Font Size**: Small, medium, large
 - **Results Density**: Compact, comfortable, spacious
 - **Accent Color**: Customizable highlight color
@@ -1785,7 +1786,7 @@ s         → Open settings
 - Quick access to recent searches
 - Clear history button
 - Disable history option
-- Export/import with preferences
+- Stored locally in browser storage; excluded from preference export/import
 
 #### Browser Integration
 
@@ -1928,85 +1929,11 @@ Hover on thumbnail → animated preview plays
 Click → opens video in embedded player or source site
 ```
 
-#### Preferences Page (SearXNG-style Tabs)
+#### Preferences Page
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ ← Back to Search                                        │
-│                                                         │
-│ Preferences                                             │
-│ ─────────────────────────────────────────────────────── │
-│ [General] [Interface] [Privacy] [Engines] [Data]        │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│ GENERAL TAB:                                            │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ Default Category      [Web ▼]                       │ │
-│ │ Language              [English ▼]                   │ │
-│ │ Region                [United States ▼]             │ │
-│ │ Safe Search           [Moderate ▼]                  │ │
-│ │ Autocomplete          [✓] Enabled                   │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ INTERFACE TAB:                                          │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ Theme                 [Auto ▼] (Dark/Light/Auto)    │ │
-│ │ Results per page      [20 ▼]                        │ │
-│ │ Open in new tab       [✓] Enabled                   │ │
-│ │ Infinite scroll       [ ] Disabled                  │ │
-│ │ Keyboard shortcuts    [✓] Enabled                   │ │
-│ │ Show engine badges    [✓] Show source engine        │ │
-│ │ Video previews        [✓] Enabled                   │ │
-│ │ Font size             [Medium ▼]                    │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ PRIVACY TAB:                                            │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ Image proxy           [✓] Proxy images for privacy  │ │
-│ │ Link tracking removal [✓] Remove tracking params    │ │
-│ │ Search history        [ ] Disabled (local only)     │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ ENGINES TAB:                                            │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ ◉ Google         [✓] Web [✓] Images [✓] Videos     │ │
-│ │ ◉ Bing           [✓] Web [✓] Images [ ] Videos     │ │
-│ │ ◉ DuckDuckGo     [✓] Web [✓] Images                │ │
-│ │ ◉ Brave          [✓] Web [ ] Images [ ] Videos     │ │
-│ │                                                     │ │
-│ │ Drag to reorder priority                            │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ DATA TAB:                                               │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ [Export Settings]  Download as JSON                 │ │
-│ │ [Import Settings]  Upload JSON file                 │ │
-│ │ [Reset All]        Restore default settings         │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ CROSS-DEVICE SYNC:                                      │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ Sync URL:                                           │ │
-│ │ ┌───────────────────────────────────────────────┐   │ │
-│ │ │ https://example.com/server/preferences/import? │   │ │
-│ │ │ theme=dark&lang=fr                              │   │ │
-│ │ └───────────────────────────────────────────────┘   │ │
-│ │ Sync Code:                                          │ │
-│ │ ┌───────────────────────────────────────────────┐   │ │
-│ │ │ dGhlbWU9ZGFyayZsYW5nPWZy                       │   │ │
-│ │ └───────────────────────────────────────────────┘   │ │
-│ │ [Copy Preferences] [QR Code]                        │ │
-│ │                                                     │ │
-│ │ Paste a Sync Code or URL:                           │ │
-│ │ ┌───────────────────────────────────────────────┐   │ │
-│ │ │                                                 │   │ │
-│ │ └───────────────────────────────────────────────┘   │ │
-│ │ [Apply]                                             │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│                              [Save Preferences]         │
-└─────────────────────────────────────────────────────────┘
-```
+The preferences page is one server-rendered form. Save submits all preference and consent controls together; Cancel returns without saving, and Reset opens a native confirmation before clearing preferences and local browser storage. Custom CSS, available/custom bangs, filters, and OpenSearch configuration are separate tools. Owner-token management is on `/server/preferences/tokens`.
+
+The Data Management section shows the generated sync URL and code, plus a field for pasting a URL or code. Submitting the form saves the visible settings and imports the pasted sync values. Export includes only `theme`, `lang`, and allowlisted `search_pref_*` cookies; localStorage data is excluded.
 
 #### Mobile Responsive
 

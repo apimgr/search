@@ -33,53 +33,19 @@ func TestSetColorMode(t *testing.T) {
 	}
 }
 
-// TestGetColorModeEnvPriority verifies environment variable fallback when no CLI override.
+// TestGetColorModeEnvPriority verifies the standard NO_COLOR override.
 func TestGetColorModeEnvPriority(t *testing.T) {
 	SetColorMode("")
-	originalSearchColor := os.Getenv("SEARCH_COLOR")
-	originalNoColor := os.Getenv("NO_COLOR")
-	defer func() {
-		os.Setenv("SEARCH_COLOR", originalSearchColor)
-		os.Setenv("NO_COLOR", originalNoColor)
-	}()
-
-	tests := []struct {
-		name        string
-		searchColor string
-		noColor     string
-		wantMode    string
-	}{
-		{"SEARCH_COLOR always", "always", "", "always"},
-		{"SEARCH_COLOR never", "never", "", "never"},
-		{"NO_COLOR set", "", "1", "never"},
-		{"both clear - auto-detect", "", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("SEARCH_COLOR", tt.searchColor)
-			os.Setenv("NO_COLOR", tt.noColor)
-
-			got := GetColorMode()
-
-			if tt.wantMode != "" && got != tt.wantMode {
-				t.Errorf("GetColorMode() = %q, want %q", got, tt.wantMode)
-			}
-			if tt.wantMode == "" {
-				// auto-detect: just verify it returns something
-				_ = got
-			}
-		})
+	t.Setenv("NO_COLOR", "1")
+	if got := GetColorMode(); got != "never" {
+		t.Errorf("GetColorMode() with NO_COLOR = %q, want never", got)
 	}
 }
 
 // TestGetColorModeCLIOverrideBeatsEnv verifies CLI flag takes priority over env.
 func TestGetColorModeCLIOverrideBeatsEnv(t *testing.T) {
-	originalSearchColor := os.Getenv("SEARCH_COLOR")
-	defer os.Setenv("SEARCH_COLOR", originalSearchColor)
 	defer SetColorMode("")
-
-	os.Setenv("SEARCH_COLOR", "never")
+	t.Setenv("NO_COLOR", "1")
 	SetColorMode("always")
 
 	got := GetColorMode()
@@ -113,31 +79,9 @@ func TestSetBaseURLOverride(t *testing.T) {
 	}
 }
 
-// TestGetBaseURLEnvFallback verifies SEARCH_BASE_URL env is checked after CLI override.
-func TestGetBaseURLEnvFallback(t *testing.T) {
-	SetBaseURLOverride("")
-	original := os.Getenv("SEARCH_BASE_URL")
-	defer os.Setenv("SEARCH_BASE_URL", original)
-
-	os.Setenv("SEARCH_BASE_URL", "/env-prefix")
-	got := GetBaseURL()
-	if got != "/env-prefix" {
-		t.Errorf("GetBaseURL() with SEARCH_BASE_URL env = %q, want '/env-prefix'", got)
-	}
-
-	os.Setenv("SEARCH_BASE_URL", "")
-	got = GetBaseURL()
-	if got != "/" {
-		t.Errorf("GetBaseURL() default = %q, want '/'", got)
-	}
-}
-
 // TestGetBaseURLDefaultIsSlash verifies the default return value is "/".
 func TestGetBaseURLDefaultIsSlash(t *testing.T) {
 	SetBaseURLOverride("")
-	original := os.Getenv("SEARCH_BASE_URL")
-	defer os.Setenv("SEARCH_BASE_URL", original)
-	os.Setenv("SEARCH_BASE_URL", "")
 
 	got := GetBaseURL()
 	if got != "/" {

@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // ============================================================
@@ -440,7 +442,7 @@ func TestRunMaintenanceBackupWithPassword(t *testing.T) {
 // ============================================================
 // showStatus — running process path
 // Write the current test process's PID into a temp file, then override
-// SEARCH_PID_FILE so showStatus reads it and finds the process running.
+// a PID file override so showStatus finds the current process.
 // ============================================================
 
 func TestShowStatusRunningProcess(t *testing.T) {
@@ -457,15 +459,8 @@ func TestShowStatusRunningProcess(t *testing.T) {
 		t.Skip("cannot write PID file: " + err.Error())
 	}
 
-	origPID, hadPID := os.LookupEnv("SEARCH_PID_FILE")
-	os.Setenv("SEARCH_PID_FILE", pidFile)
-	t.Cleanup(func() {
-		if hadPID {
-			os.Setenv("SEARCH_PID_FILE", origPID)
-		} else {
-			os.Unsetenv("SEARCH_PID_FILE")
-		}
-	})
+	config.SetPIDFileOverride(pidFile)
+	t.Cleanup(func() { config.SetPIDFileOverride("") })
 
 	out := captureStdout(t, showStatus)
 	if strings.TrimSpace(out) == "" {

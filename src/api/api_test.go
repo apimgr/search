@@ -3254,6 +3254,34 @@ func TestHandlePreferencesPOST(t *testing.T) {
 	}
 }
 
+func TestHandlePreferencesPOSTIgnoresWebSyncCode(t *testing.T) {
+	handler := newTestHandler()
+	body := `{"theme":"dark","code":"theme=light&lang=fr"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handlePreferences(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var response APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data, ok := response.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("data = %T, want object", response.Data)
+	}
+	if data["lang"] != "en" {
+		t.Errorf("lang = %v, want en because code is a web-form-only control", data["lang"])
+	}
+	if data["theme"] != "dark" {
+		t.Errorf("direct theme = %v, want dark to take precedence over code", data["theme"])
+	}
+}
+
 func TestHandlePreferencesMethodNotAllowed(t *testing.T) {
 	handler := newTestHandler()
 

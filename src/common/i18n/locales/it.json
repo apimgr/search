@@ -204,7 +204,7 @@
     "opensearch_url_copied": "URL OpenSearch copiata!",
     "opensearch_copy_manual": "URL aggiornata sopra: copiala manualmente",
     "exported_success": "Preferenze esportate!",
-    "reset_confirm_message": "Vuoi davvero reimpostare tutte le preferenze?",
+    "reset_confirm_message": "Questa operazione cancella preferenze del sito, consenso ai cookie, scelta CCPA, versione, avvisi ignorati e spazio di archiviazione del browser. Le credenziali restano. È irreversibile.",
     "reset_confirm_title": "Reimposta preferenze",
     "required_fields_error": "Compila tutti i campi obbligatori",
     "bang_shortcut_exists": "Esiste gia un bang con questa scorciatoia",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "Nome motore personalizzato (opzionale)",
     "copy_opensearch_url": "Copia URL OpenSearch",
     "data_management_heading": "Gestione dati",
-    "data_management_help": "L'esportazione/importazione conserva i valori di ricerca salvati, i widget della home page e i bang personalizzati.",
+    "data_management_help": "L’esportazione e l’importazione includono tema, lingua e preferenze supportate. Consenso ai cookie e credenziali sono esclusi.",
     "export_preferences": "Esporta preferenze",
     "import_preferences": "Importa preferenze",
     "reset_all_preferences": "Reimposta tutte le preferenze",
@@ -312,7 +312,16 @@
       "expiry_30d": "30 giorni",
       "expiry_90d": "90 giorni",
       "expiry_1y": "1 anno"
-    }
+    },
+    "font_size": "Dimensione carattere",
+    "font_size_small": "Piccolo",
+    "font_size_medium": "Medio",
+    "font_size_large": "Grande",
+    "results_density": "Densità risultati",
+    "density_compact": "Compatta",
+    "density_comfortable": "Confortevole",
+    "density_spacious": "Spaziosa",
+    "accent_color": "Colore accento"
   },
   "nav": {
     "home": "Home",

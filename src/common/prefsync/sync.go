@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/apimgr/search/src/common/httputil"
 )
@@ -14,12 +15,20 @@ import (
 const CookieMaxAge = 31536000
 
 var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+var preferenceValuePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
+var controlFields = map[string]bool{
+	"csrf_token": true, "code": true, "redirect": true, "action": true,
+	"consent_form": true, "consent_preferences": true, "consent_analytics": true,
+	"ccpa_opt_out": true,
+}
 
 var preferenceEnums = map[string]map[string]bool{
 	"category":           {"general": true, "images": true, "videos": true, "news": true, "maps": true, "files": true, "music": true, "science": true, "it": true, "social": true},
 	"safe_search":        {"0": true, "1": true, "2": true},
 	"results_per_page":   {"10": true, "20": true, "30": true, "50": true, "100": true},
 	"units":              {"metric": true, "imperial": true},
+	"weather_units":      {"auto": true, "metric": true, "imperial": true},
 	"new_tab":            {"0": true, "1": true},
 	"infinite_scroll":    {"0": true, "1": true},
 	"keyboard_shortcuts": {"0": true, "1": true},
@@ -107,7 +116,7 @@ func Import(r *http.Request, projectName, defaultLang string, supported []string
 				text = string(data)
 			}
 		}
-		if text != "" {
+		if text != "" && utf8.ValidString(text) {
 			if values, err := url.ParseQuery(text); err == nil {
 				decoded = values
 			}
@@ -115,10 +124,12 @@ func Import(r *http.Request, projectName, defaultLang string, supported []string
 	}
 	keys := map[string]bool{}
 	for key := range decoded {
-		keys[key] = true
+		if !controlFields[key] {
+			keys[key] = true
+		}
 	}
 	for key := range query {
-		if key != "code" {
+		if !controlFields[key] {
 			keys[key] = true
 		}
 	}
@@ -219,8 +230,10 @@ func validPref(key, value string) bool {
 		_, err := base64.RawURLEncoding.DecodeString(value)
 		return err == nil
 	}
-	options, ok := preferenceEnums[key]
-	return ok && options[value]
+	if options, ok := preferenceEnums[key]; ok {
+		return options[value]
+	}
+	return preferenceValuePattern.MatchString(value)
 }
 
 func ValidAccentColor(value string) bool {

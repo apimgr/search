@@ -204,7 +204,7 @@
     "opensearch_url_copied": "نشاني OpenSearch کپي شد!",
     "opensearch_copy_manual": "نشاني بالا به روز شد - آن را دستي کپي کنيد",
     "exported_success": "ترجيحات صادر شد!",
-    "reset_confirm_message": "آيا مطمئن هستيد که مي خواهيد همه ترجيحات را بازنشاني کنيد؟",
+    "reset_confirm_message": "این کار ترجیحات سایت، رضایت کوکی، انتخاب CCPA، نشان ساخت، اعلان‌های ردشده و فضای ذخیره‌سازی مرورگر را پاک می‌کند. اطلاعات ورود حفظ می‌شود. این کار برگشت‌ناپذیر است.",
     "reset_confirm_title": "بازنشاني ترجيحات",
     "required_fields_error": "لطفا همه فيلدهاي الزامي را پر کنيد",
     "bang_shortcut_exists": "bang با اين ميانبر از قبل وجود دارد",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "نام موتور سفارشي (اختياري)",
     "copy_opensearch_url": "کپي نشاني OpenSearch",
     "data_management_heading": "مديريت داده",
-    "data_management_help": "خروجي/ورودي تنظيمات پيش فرض جستجو، ويجت هاي صفحه اصلي و bang هاي سفارشي را حفظ مي کند.",
+    "data_management_help": "خروجی و ورودی شامل پوسته، زبان و تنظیمات پشتیبانی‌شده برنامه است. رضایت کوکی و اطلاعات ورود شامل نمی‌شود.",
     "export_preferences": "خروجي گرفتن از ترجيحات",
     "import_preferences": "وارد کردن ترجيحات",
     "reset_all_preferences": "بازنشاني همه ترجيحات",
@@ -312,7 +312,16 @@
       "expiry_30d": "۳۰ روز",
       "expiry_90d": "۹۰ روز",
       "expiry_1y": "۱ سال"
-    }
+    },
+    "font_size": "اندازه قلم",
+    "font_size_small": "کوچک",
+    "font_size_medium": "متوسط",
+    "font_size_large": "بزرگ",
+    "results_density": "تراکم نتایج",
+    "density_compact": "فشرده",
+    "density_comfortable": "راحت",
+    "density_spacious": "باز",
+    "accent_color": "رنگ تاکیدی"
   },
   "nav": {
     "home": "خانه",

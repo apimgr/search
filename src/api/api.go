@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"os"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1803,7 +1802,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 		units = c.Value
 	}
 	weatherUnits := "auto"
-	if c, err := r.Cookie("search_widget_weather_units"); err == nil && (c.Value == "auto" || c.Value == "metric" || c.Value == "imperial") {
+	if c, err := r.Cookie("search_pref_weather_units"); err == nil && (c.Value == "auto" || c.Value == "metric" || c.Value == "imperial") {
 		weatherUnits = c.Value
 	}
 	ctx = instant.WithUnits(ctx, units)
@@ -2481,7 +2480,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost {
-		values := url.Values{}
+		values := r.URL.Query()
 		if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 			var input map[string]json.RawMessage
 			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
@@ -2505,7 +2504,6 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 			}
 			values = r.Form
 		}
-		hasCode := values.Has("code")
 		values.Del("code")
 		clone := r.Clone(r.Context())
 		urlCopy := *r.URL
@@ -2513,10 +2511,6 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		clone.URL = &urlCopy
 		manager := h.syncI18nManager()
 		result := prefsync.Import(clone, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
-		if hasCode {
-			result.Ignored = append(result.Ignored, "code")
-			sort.Strings(result.Ignored)
-		}
 		if len(result.Applied) == 0 {
 			h.errorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "no valid preferences were supplied")
 			return

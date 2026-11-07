@@ -4,7 +4,7 @@ Search uses direct upstream search engines and combines their results. Search op
 
 ## Bang shortcuts
 
-Use `!shortcut terms` to redirect a search to a built-in engine or site. In Preferences, custom bangs are stored in this browser and use a URL template containing `{query}`. The autocomplete suggests matching custom bangs; submitting one replaces `{query}` with the URL-encoded search terms. Custom targets must be HTTP or HTTPS URLs without embedded credentials.
+Use `!shortcut terms` to redirect a search to a built-in engine or site. In Preferences → Interface, custom bangs are stored in this browser and use a URL template containing `{query}`. The autocomplete suggests matching custom bangs; submitting one replaces `{query}` with the URL-encoded search terms. Custom targets must be HTTP or HTTPS URLs without embedded credentials. The same page lets you edit optional custom CSS, filter the built-in bang list, and copy the OpenSearch URL. These browser customizations are stored locally and are not included in preference sync URLs or codes.
 
 ## Image results
 
@@ -36,7 +36,7 @@ Search autocomplete uses DuckDuckGo suggestions. The related-search API combines
 
 ## Instant answers
 
-Weather answers show current conditions and a five-day outlook from Open-Meteo. In Preferences, the weather widget can follow the global units preference or use a metric/imperial override. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.
+Weather answers show current conditions and a five-day outlook from Open-Meteo. In Preferences, the weather widget can follow the global units preference or use a metric/imperial override; that choice is included in preference sync. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.
 
 Video results keep their proxied static thumbnails when no same-origin WebM/MP4 preview clip is available. Eligible clips load on hover or touch and can be disabled in Preferences. Third-party embeds are not used for previews.
 
@@ -76,6 +76,6 @@ Use `qr:https://example.com` to generate a QR code. The options form supports si
 
 ## Local search history
 
-Recent searches are kept in this browser's `localStorage`; Search does not send the history list to the server. The homepage shows recent queries as links. Disable **Save search history** in Preferences to stop recording and clear the stored list, or use **Clear history** to remove it at any time. When history saving is enabled, it is included in the downloadable preferences export and restored from that file's import. Importing preferences with history disabled clears imported history. History is not included in cross-device preference URLs.
+Recent searches are kept in this browser's `localStorage`; Search does not send the history list to the server. The homepage shows recent queries as links. Disable **Save search history** in Preferences to stop recording and clear the stored list, or use **Clear history** to remove it at any time. Search history is local browser data and is not included in preference exports or cross-device preference URLs.
 
 Preferences also let you choose small, medium, or large text; compact, comfortable, or spacious result spacing; and a custom accent color. These appearance choices are stored in browser cookies, rendered by the server, and included in portable preference links.

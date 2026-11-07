@@ -204,7 +204,7 @@
     "opensearch_url_copied": "OpenSearch URL 已复制！",
     "opensearch_copy_manual": "上方 URL 已更新，请手动复制",
     "exported_success": "偏好设置已导出！",
-    "reset_confirm_message": "确定要重置所有偏好设置吗？",
+    "reset_confirm_message": "此操作会清除网站偏好、Cookie 同意、CCPA 选择、构建标记、已关闭的公告和浏览器存储。登录信息等凭据会保留。此操作无法撤销。",
     "reset_confirm_title": "重置偏好设置",
     "required_fields_error": "请填写所有必填字段",
     "bang_shortcut_exists": "已存在使用此快捷方式的 bang",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "自定义引擎名称（可选）",
     "copy_opensearch_url": "复制 OpenSearch URL",
     "data_management_heading": "数据管理",
-    "data_management_help": "导出/导入会保留您保存的搜索默认值、首页小组件和自定义 bang。",
+    "data_management_help": "导出和导入包含主题、语言及受支持的应用偏好设置，不包含 Cookie 同意状态和凭据。",
     "export_preferences": "导出偏好设置",
     "import_preferences": "导入偏好设置",
     "reset_all_preferences": "重置所有偏好设置",
@@ -312,7 +312,16 @@
       "expiry_30d": "30 天",
       "expiry_90d": "90 天",
       "expiry_1y": "1 年"
-    }
+    },
+    "font_size": "字体大小",
+    "font_size_small": "小",
+    "font_size_medium": "中",
+    "font_size_large": "大",
+    "results_density": "结果密度",
+    "density_compact": "紧凑",
+    "density_comfortable": "舒适",
+    "density_spacious": "宽松",
+    "accent_color": "强调色"
   },
   "nav": {
     "home": "首页",

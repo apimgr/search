@@ -2566,7 +2566,7 @@ func DefaultConfig() *Config {
 			I18n: I18nConfig{
 				Enabled:            true,
 				DefaultLanguage:    "en",
-				SupportedLanguages: []string{"en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "ja", "zh"},
+				SupportedLanguages: []string{"en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "ja", "zh", "ar"},
 				AutoDetect:         true,
 				ShowSelector:       true,
 				RTLLanguages:       []string{"ar", "he", "fa", "ur"},

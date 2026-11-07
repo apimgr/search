@@ -204,7 +204,7 @@
     "opensearch_url_copied": "OpenSearch URL نقل ہو گئی!",
     "opensearch_copy_manual": "اوپر URL اپ ڈیٹ ہو گئی ہے - اسے دستي نقل کريں",
     "exported_success": "ترجيحات برآمد کر دی گئيں!",
-    "reset_confirm_message": "کيا آپ واقعی تمام ترجيحات ري سيٹ کرنا چاہتے ہيں؟",
+    "reset_confirm_message": "اس سے سائٹ کی ترجیحات، کوکی رضامندی، CCPA انتخاب، بلڈ نشان، مسترد کردہ اعلانات اور براؤزر اسٹوریج مٹ جائے گا۔ سائن اِن اور دیگر اسناد محفوظ رہیں گی۔ یہ واپس نہیں ہو سکتا۔",
     "reset_confirm_title": "ترجيحات ري سيٹ کريں",
     "required_fields_error": "براہ کرم تمام مطلوبہ خانے پُر کريں",
     "bang_shortcut_exists": "اس شارٹ کٹ کے ساتھ ايک bang پہلے سے موجود ہے",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "حسب منشا انجن کا نام (اختياری)",
     "copy_opensearch_url": "OpenSearch URL نقل کريں",
     "data_management_heading": "ڈیٹا مينيجمينٹ",
-    "data_management_help": "برآمد/درآمد آپ کے محفوظ تلاشی طے شدہ اقدار، ہوم پيج وجيٹس، اور حسب منشا bangs کو محفوظ رکھتی ہے۔",
+    "data_management_help": "برآمد اور درآمد میں تھیم، زبان اور معاون ایپ ترجیحات شامل ہیں۔ کوکی رضامندی اور اسناد شامل نہیں ہیں。",
     "export_preferences": "ترجيحات برآمد کريں",
     "import_preferences": "ترجيحات درآمد کريں",
     "reset_all_preferences": "تمام ترجيحات ري سيٹ کريں",
@@ -312,7 +312,16 @@
       "expiry_30d": "۳۰ دن",
       "expiry_90d": "۹۰ دن",
       "expiry_1y": "۱ سال"
-    }
+    },
+    "font_size": "فونٹ سائز",
+    "font_size_small": "چھوٹا",
+    "font_size_medium": "درمیانہ",
+    "font_size_large": "بڑا",
+    "results_density": "کثافت نتائج",
+    "density_compact": "مختصر",
+    "density_comfortable": "آرام دہ",
+    "density_spacious": "کشادہ",
+    "accent_color": "نمایاں رنگ"
   },
   "nav": {
     "home": "ہوم",

@@ -33,7 +33,7 @@ func TestIsRunningInContainerOverrideTrue(t *testing.T) {
 func TestGetConfigDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_CONFIG_DIR")
+	os.Unsetenv("CONFIG_DIR")
 	os.Unsetenv("CONFIG_DIR")
 	SetConfigDirOverride("")
 	defer SetConfigDirOverride("")
@@ -52,7 +52,7 @@ func TestGetConfigDirNonContainer(t *testing.T) {
 func TestGetDataDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_DATA_DIR")
+	os.Unsetenv("DATA_DIR")
 	os.Unsetenv("DATA_DIR")
 	SetDataDirOverride("")
 	defer SetDataDirOverride("")
@@ -71,7 +71,7 @@ func TestGetDataDirNonContainer(t *testing.T) {
 func TestGetSSLDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_CONFIG_DIR")
+	os.Unsetenv("CONFIG_DIR")
 	os.Unsetenv("CONFIG_DIR")
 	SetConfigDirOverride("")
 	defer SetConfigDirOverride("")
@@ -94,7 +94,7 @@ func TestGetSSLDirNonContainer(t *testing.T) {
 func TestGetGeoIPDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_CONFIG_DIR")
+	os.Unsetenv("CONFIG_DIR")
 	os.Unsetenv("CONFIG_DIR")
 	SetConfigDirOverride("")
 	defer SetConfigDirOverride("")
@@ -113,7 +113,7 @@ func TestGetGeoIPDirNonContainer(t *testing.T) {
 func TestGetSecurityDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_CONFIG_DIR")
+	os.Unsetenv("CONFIG_DIR")
 	os.Unsetenv("CONFIG_DIR")
 	SetConfigDirOverride("")
 	defer SetConfigDirOverride("")
@@ -132,7 +132,7 @@ func TestGetSecurityDirNonContainer(t *testing.T) {
 func TestGetTorDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_DATA_DIR")
+	os.Unsetenv("DATA_DIR")
 	os.Unsetenv("DATA_DIR")
 	SetDataDirOverride("")
 	defer SetDataDirOverride("")
@@ -160,7 +160,7 @@ func TestGetDirectoryPermissionsRoot(t *testing.T) {
 func TestGetLogDirNonContainer(t *testing.T) {
 	setContainerOverride(t, false)
 
-	os.Unsetenv("SEARCH_LOG_DIR")
+	os.Unsetenv("LOG_DIR")
 	os.Unsetenv("LOG_DIR")
 	SetLogDirOverride("")
 	defer SetLogDirOverride("")

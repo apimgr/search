@@ -227,7 +227,7 @@ func TestConsentWithdrawalExpiresPreferenceCookies(t *testing.T) {
 			expired[cookie.Name] = true
 		}
 	}
-	for _, name := range []string{"theme", "lang", "search_widgets", "search_pref_units", "search_pref_video_previews", "search_widget_weather_units"} {
+	for _, name := range []string{"theme", "lang", "search_widgets", "search_pref_units", "search_pref_video_previews", "search_pref_weather_units"} {
 		if !expired[name] {
 			t.Errorf("preference cookie %q was not expired after consent withdrawal", name)
 		}

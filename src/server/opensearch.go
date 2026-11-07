@@ -236,9 +236,22 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	s.renderPreferences(w, r, nil)
 }
 
+func (s *Server) handlePreferencesTools(w http.ResponseWriter, r *http.Request) {
+	data := s.newPageData(w, r, "Preferences", "preferences_tools")
+	data.Data = map[string]interface{}{
+		"bangs":      s.bangManager.GetAll(),
+		"categories": s.bangManager.GetCategories(),
+	}
+	if err := s.renderer.Render(w, "preferences_tools", data); err != nil {
+		s.handleInternalError(w, r, "template render", err)
+	}
+}
+
 func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra map[string]interface{}) {
 	data := s.newPageData(w, r, "Preferences", "preferences")
 	data.Prefs = resolveGeneralPrefs(r)
+	mgr := s.getI18nManager()
+	_, syncURL, syncCode := prefsync.Export(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
 
 	// Populate enabled widgets from the server-side cookie.
 	enabled := parseWidgetCookie(r)
@@ -259,28 +272,14 @@ func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra
 		"builtins":          s.bangManager.GetBuiltins(),
 		"preferenceEngines": s.enginePreferenceRows(r),
 		"engineOrder":       engineOrderValue(s.registry, r),
+		"syncURL":           syncURL,
+		"syncCode":          syncCode,
+		"cancelURL":         preferenceRedirect(r),
+		"hasOwnerTokens":    s.ownerManager != nil,
 	}
 	pageValues := data.Data.(map[string]interface{})
 	for key, value := range extra {
 		pageValues[key] = value
-	}
-	if identity, ok := s.ownerWebIdentity(w, r, false); ok && identity.Kind == "primary" {
-		if tokens, err := s.ownerManager.List(r.Context(), identity); err == nil {
-			views := make([]map[string]interface{}, 0, len(tokens))
-			for _, token := range tokens {
-				masked, _ := s.ownerManager.Mask(r.Context(), identity, token.ID)
-				status := "active"
-				if token.RevokedAt != nil {
-					status = "revoked"
-				} else if token.ExpiresAt != nil && !token.ExpiresAt.After(time.Now()) {
-					status = "expired"
-				}
-				views = append(views, map[string]interface{}{"ID": token.ID, "Kind": token.Kind, "Name": token.Name, "Masked": masked, "CreatedAt": token.CreatedAt.Format(time.RFC3339), "LastUsedAt": formatOwnerTime(token.LastUsedAt), "ExpiresAt": formatOwnerTime(token.ExpiresAt), "Status": status})
-			}
-			pageValues["ownerTokens"] = views
-			pageValues["ownerPrimaryID"] = identity.TokenID
-			pageValues["ownerPrimaryMasked"], _ = s.ownerManager.Mask(r.Context(), identity, identity.TokenID)
-		}
 	}
 
 	if err := s.renderer.Render(w, "preferences", data); err != nil {
@@ -362,7 +361,7 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 			prefs.Units = c.Value
 		}
 	}
-	if c, err := r.Cookie("search_widget_weather_units"); err == nil {
+	if c, err := r.Cookie("search_pref_weather_units"); err == nil {
 		if c.Value == "auto" || c.Value == "metric" || c.Value == "imperial" {
 			prefs.WeatherUnits = c.Value
 		}
@@ -416,25 +415,45 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 // intercepts the same form submit for a faster, no-reload UX when JavaScript
 // is available.
 func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
-		return
-	}
+	_ = r.ParseForm()
 	values := r.Form
-	if values.Get("reset_preferences") == "true" {
+	if values.Get("action") == "reset" || values.Get("reset_preferences") == "true" {
 		s.clearPreferenceCookies(w, r)
+		http.SetCookie(w, &http.Cookie{Name: "cookie_consent", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		http.SetCookie(w, &http.Cookie{Name: "search_build", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		http.SetCookie(w, &http.Cookie{Name: "dismissed_announcements", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		http.SetCookie(w, &http.Cookie{Name: "contact_captcha_required", Value: "", Path: "/server/contact", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, Secure: s.cookieSecure(r), SameSite: http.SameSiteStrictMode})
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Location", "/server/preferences")
+		w.Header().Set("Clear-Site-Data", `"storage"`)
 		w.WriteHeader(http.StatusSeeOther)
 		return
 	}
-	if CanSetPreferenceCookie(r) {
-		weatherUnits := values.Get("search_widget_weather_units")
+	consentForm := values.Get("consent_form") == "1"
+	canSetPreferences := CanSetPreferenceCookie(r)
+	if consentForm {
+		prefEnabled := values.Get("consent_preferences") == "on" || values.Get("consent_preferences") == "true"
+		analyticsEnabled := values.Get("consent_analytics") == "on" || values.Get("consent_analytics") == "true"
+		cookieVal := url.PathEscape(fmt.Sprintf(`{"essential":true,"preferences":%t,"analytics":%t,"timestamp":%d}`, prefEnabled, analyticsEnabled, time.Now().Unix()))
+		http.SetCookie(w, &http.Cookie{Name: "cookie_consent", Value: cookieVal, Path: "/", MaxAge: 365 * 24 * 60 * 60, SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		canSetPreferences = prefEnabled
+		if values.Get("ccpa_opt_out") == "on" || values.Get("ccpa_opt_out") == "true" {
+			http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: "true", Path: "/", MaxAge: 365 * 24 * 60 * 60, SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		} else {
+			http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+		}
+		if !prefEnabled {
+			s.clearPreferenceCookies(w, r)
+		}
+	}
+	if canSetPreferences {
+		weatherUnits := values.Get("search_pref_weather_units")
 		if weatherUnits != "auto" && weatherUnits != "metric" && weatherUnits != "imperial" {
 			weatherUnits = "auto"
 		}
 		http.SetCookie(w, &http.Cookie{
-			Name: "search_widget_weather_units", Value: weatherUnits, Path: "/",
+			Name: "search_pref_weather_units", Value: weatherUnits, Path: "/",
 			MaxAge: generalPrefCookieMaxAge, SameSite: http.SameSiteLaxMode,
 		})
 		for _, key := range []string{"new_tab", "infinite_scroll", "keyboard_shortcuts", "save_history"} {
@@ -469,6 +488,28 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		if values.Has("search_pref_engine_order_present") {
 			values.Set(engineOrderPreferenceCookie, encodeEngineOrder(s.registry, strings.Split(values.Get(engineOrderPreferenceCookie), ",")))
 			values.Del("search_pref_engine_order_present")
+		}
+		if code := strings.TrimSpace(values.Get("code")); code != "" {
+			codeRequest := r.Clone(r.Context())
+			codeURL := *r.URL
+			codeURL.RawQuery = url.Values{"code": {code}}.Encode()
+			codeRequest.URL = &codeURL
+			mgr := s.getI18nManager()
+			codeResult := prefsync.Import(codeRequest, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
+			for _, name := range codeResult.Applied {
+				switch name {
+				case "theme":
+					values.Set(name, codeResult.State.Theme)
+				case "lang":
+					values.Set(name, codeResult.State.Lang)
+				default:
+					prefix := "search_pref_"
+					if strings.HasPrefix(name, prefix) {
+						key := strings.TrimPrefix(name, prefix)
+						values.Set(name, codeResult.State.Prefs[key])
+					}
+				}
+			}
 		}
 		clone := r.Clone(r.Context())
 		urlCopy := *r.URL

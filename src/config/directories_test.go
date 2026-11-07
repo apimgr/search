@@ -343,218 +343,59 @@ func TestContains(t *testing.T) {
 	}
 }
 
-func TestGetConfigDirWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalConfigDir := os.Getenv("SEARCH_CONFIG_DIR")
-	originalConfigDir2 := os.Getenv("CONFIG_DIR")
-	defer func() {
-		os.Setenv("SEARCH_CONFIG_DIR", originalConfigDir)
-		os.Setenv("CONFIG_DIR", originalConfigDir2)
-	}()
-
-	// Clear override first
-	SetConfigDirOverride("")
-
-	// Test SEARCH_CONFIG_DIR env var
-	os.Setenv("SEARCH_CONFIG_DIR", "/env/config")
-	os.Setenv("CONFIG_DIR", "")
-	got := GetConfigDir()
-	if got != "/env/config" {
-		t.Errorf("GetConfigDir() with SEARCH_CONFIG_DIR = %q, want %q", got, "/env/config")
-	}
-
-	// Test CONFIG_DIR fallback
-	os.Setenv("SEARCH_CONFIG_DIR", "")
-	os.Setenv("CONFIG_DIR", "/env/config2")
-	got = GetConfigDir()
-	if got != "/env/config2" {
-		t.Errorf("GetConfigDir() with CONFIG_DIR = %q, want %q", got, "/env/config2")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_CONFIG_DIR", "")
-	os.Setenv("CONFIG_DIR", "")
+func TestCanonicalDirectoryEnvironmentOverrides(t *testing.T) {
+	t.Run("config directory", func(t *testing.T) {
+		SetConfigDirOverride("")
+		t.Setenv("CONFIG_DIR", "/env/config")
+		if got := GetConfigDir(); got != "/env/config" {
+			t.Fatalf("GetConfigDir() = %q, want /env/config", got)
+		}
+	})
+	t.Run("data directory", func(t *testing.T) {
+		SetDataDirOverride("")
+		t.Setenv("DATA_DIR", "/env/data")
+		if got := GetDataDir(); got != "/env/data" {
+			t.Fatalf("GetDataDir() = %q, want /env/data", got)
+		}
+	})
+	t.Run("log directory", func(t *testing.T) {
+		SetLogDirOverride("")
+		t.Setenv("LOG_DIR", "/env/log")
+		if got := GetLogDir(); got != "/env/log" {
+			t.Fatalf("GetLogDir() = %q, want /env/log", got)
+		}
+	})
+	t.Run("backup directory", func(t *testing.T) {
+		SetBackupDirOverride("")
+		t.Setenv("BACKUP_DIR", "/env/backup")
+		if got := GetBackupDir(); got != "/env/backup" {
+			t.Fatalf("GetBackupDir() = %q, want /env/backup", got)
+		}
+	})
+	t.Run("database directory", func(t *testing.T) {
+		SetDatabaseDirOverride("")
+		t.Setenv("DATABASE_DIR", "/env/database")
+		if got := GetDatabaseDir(); got != "/env/database" {
+			t.Fatalf("GetDatabaseDir() = %q, want /env/database", got)
+		}
+	})
 }
 
-func TestGetDataDirWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalDataDir := os.Getenv("SEARCH_DATA_DIR")
-	originalDataDir2 := os.Getenv("DATA_DIR")
-	defer func() {
-		os.Setenv("SEARCH_DATA_DIR", originalDataDir)
-		os.Setenv("DATA_DIR", originalDataDir2)
-	}()
-
-	// Clear override first
-	SetDataDirOverride("")
-
-	// Test SEARCH_DATA_DIR env var
-	os.Setenv("SEARCH_DATA_DIR", "/env/data")
-	os.Setenv("DATA_DIR", "")
-	got := GetDataDir()
-	if got != "/env/data" {
-		t.Errorf("GetDataDir() with SEARCH_DATA_DIR = %q, want %q", got, "/env/data")
-	}
-
-	// Test DATA_DIR fallback
-	os.Setenv("SEARCH_DATA_DIR", "")
-	os.Setenv("DATA_DIR", "/env/data2")
-	got = GetDataDir()
-	if got != "/env/data2" {
-		t.Errorf("GetDataDir() with DATA_DIR = %q, want %q", got, "/env/data2")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_DATA_DIR", "")
-	os.Setenv("DATA_DIR", "")
-}
-
-func TestGetLogDirWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalLogDir := os.Getenv("SEARCH_LOG_DIR")
-	originalLogDir2 := os.Getenv("LOG_DIR")
-	defer func() {
-		os.Setenv("SEARCH_LOG_DIR", originalLogDir)
-		os.Setenv("LOG_DIR", originalLogDir2)
-	}()
-
-	// Clear override first
-	SetLogDirOverride("")
-
-	// Test SEARCH_LOG_DIR env var
-	os.Setenv("SEARCH_LOG_DIR", "/env/logs")
-	os.Setenv("LOG_DIR", "")
-	got := GetLogDir()
-	if got != "/env/logs" {
-		t.Errorf("GetLogDir() with SEARCH_LOG_DIR = %q, want %q", got, "/env/logs")
-	}
-
-	// Test LOG_DIR fallback
-	os.Setenv("SEARCH_LOG_DIR", "")
-	os.Setenv("LOG_DIR", "/env/logs2")
-	got = GetLogDir()
-	if got != "/env/logs2" {
-		t.Errorf("GetLogDir() with LOG_DIR = %q, want %q", got, "/env/logs2")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_LOG_DIR", "")
-	os.Setenv("LOG_DIR", "")
-}
-
-func TestGetCacheDirWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalCacheDir := os.Getenv("SEARCH_CACHE_DIR")
-	defer os.Setenv("SEARCH_CACHE_DIR", originalCacheDir)
-
-	// Clear override first
-	SetCacheDirOverride("")
-
-	// Test SEARCH_CACHE_DIR env var
-	os.Setenv("SEARCH_CACHE_DIR", "/env/cache")
-	got := GetCacheDir()
-	if got != "/env/cache" {
-		t.Errorf("GetCacheDir() with SEARCH_CACHE_DIR = %q, want %q", got, "/env/cache")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_CACHE_DIR", "")
-}
-
-func TestGetBackupDirWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalBackupDir := os.Getenv("SEARCH_BACKUP_DIR")
-	originalBackupDir2 := os.Getenv("BACKUP_DIR")
-	defer func() {
-		os.Setenv("SEARCH_BACKUP_DIR", originalBackupDir)
-		os.Setenv("BACKUP_DIR", originalBackupDir2)
-	}()
-
-	// Clear override first
-	SetBackupDirOverride("")
-
-	// Test SEARCH_BACKUP_DIR env var
-	os.Setenv("SEARCH_BACKUP_DIR", "/env/backup")
-	os.Setenv("BACKUP_DIR", "")
-	got := GetBackupDir()
-	if got != "/env/backup" {
-		t.Errorf("GetBackupDir() with SEARCH_BACKUP_DIR = %q, want %q", got, "/env/backup")
-	}
-
-	// Test BACKUP_DIR fallback
-	os.Setenv("SEARCH_BACKUP_DIR", "")
-	os.Setenv("BACKUP_DIR", "/env/backup2")
-	got = GetBackupDir()
-	if got != "/env/backup2" {
-		t.Errorf("GetBackupDir() with BACKUP_DIR = %q, want %q", got, "/env/backup2")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_BACKUP_DIR", "")
-	os.Setenv("BACKUP_DIR", "")
-}
-
-func TestGetPIDFileWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalPIDFile := os.Getenv("SEARCH_PID_FILE")
-	originalPIDFile2 := os.Getenv("PID_FILE")
-	defer func() {
-		os.Setenv("SEARCH_PID_FILE", originalPIDFile)
-		os.Setenv("PID_FILE", originalPIDFile2)
-	}()
-
-	// Clear override first
-	SetPIDFileOverride("")
-
-	// Test SEARCH_PID_FILE env var
-	os.Setenv("SEARCH_PID_FILE", "/env/search.pid")
-	os.Setenv("PID_FILE", "")
-	got := GetPIDFile()
-	if got != "/env/search.pid" {
-		t.Errorf("GetPIDFile() with SEARCH_PID_FILE = %q, want %q", got, "/env/search.pid")
-	}
-
-	// Test PID_FILE fallback
-	os.Setenv("SEARCH_PID_FILE", "")
-	os.Setenv("PID_FILE", "/env/search2.pid")
-	got = GetPIDFile()
-	if got != "/env/search2.pid" {
-		t.Errorf("GetPIDFile() with PID_FILE = %q, want %q", got, "/env/search2.pid")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_PID_FILE", "")
-	os.Setenv("PID_FILE", "")
-}
-
-func TestGetDatabaseDirWithEnvOverride(t *testing.T) {
-	// Save and restore env var
-	originalDBDir := os.Getenv("SEARCH_DATABASE_DIR")
-	originalDBDir2 := os.Getenv("DATABASE_DIR")
-	defer func() {
-		os.Setenv("SEARCH_DATABASE_DIR", originalDBDir)
-		os.Setenv("DATABASE_DIR", originalDBDir2)
-	}()
-
-	// Test SEARCH_DATABASE_DIR env var
-	os.Setenv("SEARCH_DATABASE_DIR", "/env/db")
-	os.Setenv("DATABASE_DIR", "")
-	got := GetDatabaseDir()
-	if got != "/env/db" {
-		t.Errorf("GetDatabaseDir() with SEARCH_DATABASE_DIR = %q, want %q", got, "/env/db")
-	}
-
-	// Test DATABASE_DIR fallback
-	os.Setenv("SEARCH_DATABASE_DIR", "")
-	os.Setenv("DATABASE_DIR", "/env/db2")
-	got = GetDatabaseDir()
-	if got != "/env/db2" {
-		t.Errorf("GetDatabaseDir() with DATABASE_DIR = %q, want %q", got, "/env/db2")
-	}
-
-	// Clear env vars
-	os.Setenv("SEARCH_DATABASE_DIR", "")
-	os.Setenv("DATABASE_DIR", "")
+func TestCacheAndPIDPathsUseCLIOverrides(t *testing.T) {
+	t.Run("cache", func(t *testing.T) {
+		SetCacheDirOverride("/flag/cache")
+		t.Cleanup(func() { SetCacheDirOverride("") })
+		if got := GetCacheDir(); got != "/flag/cache" {
+			t.Fatalf("GetCacheDir() = %q, want /flag/cache", got)
+		}
+	})
+	t.Run("pid file", func(t *testing.T) {
+		SetPIDFileOverride("/flag/search.pid")
+		t.Cleanup(func() { SetPIDFileOverride("") })
+		if got := GetPIDFile(); got != "/flag/search.pid" {
+			t.Fatalf("GetPIDFile() = %q, want /flag/search.pid", got)
+		}
+	})
 }
 
 func TestEnsureDir(t *testing.T) {

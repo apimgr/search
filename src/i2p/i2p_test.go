@@ -393,9 +393,9 @@ func TestLoadOrCreateSAMDestinationRejectsCorruptKey(t *testing.T) {
 func useTempDirs(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("SEARCH_CONFIG_DIR", filepath.Join(root, "config"))
-	t.Setenv("SEARCH_DATA_DIR", filepath.Join(root, "data"))
-	t.Setenv("SEARCH_LOG_DIR", filepath.Join(root, "log"))
+	t.Setenv("CONFIG_DIR", filepath.Join(root, "config"))
+	t.Setenv("DATA_DIR", filepath.Join(root, "data"))
+	t.Setenv("LOG_DIR", filepath.Join(root, "log"))
 	return root
 }
 

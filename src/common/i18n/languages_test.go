@@ -97,6 +97,19 @@ func TestDefaultSupportedLanguages(t *testing.T) {
 			t.Errorf("Invalid language code in defaults: %q", code)
 		}
 	}
+
+	for _, code := range []string{"en", "es", "zh", "fr", "ar", "de", "ja"} {
+		found := false
+		for _, supported := range defaults {
+			if supported == code {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("DefaultSupportedLanguages() is missing AI.md required language %q", code)
+		}
+	}
 }
 
 func TestAllLanguageCodes(t *testing.T) {

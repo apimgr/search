@@ -204,7 +204,7 @@
     "opensearch_url_copied": "כתובת OpenSearch הועתקה!",
     "opensearch_copy_manual": "הכתובת עודכנה למעלה - העתיקו אותה ידנית",
     "exported_success": "ההעדפות יוצאו!",
-    "reset_confirm_message": "האם לאפס את כל ההעדפות?",
+    "reset_confirm_message": "פעולה זו תמחק את העדפות האתר, הסכמת העוגיות, בחירת CCPA, סימון הגרסה, הודעות שהוסתרו ואחסון הדפדפן. פרטי ההתחברות יישמרו. אי אפשר לבטל פעולה זו.",
     "reset_confirm_title": "איפוס העדפות",
     "required_fields_error": "נא למלא את כל השדות הנדרשים",
     "bang_shortcut_exists": "כבר קיים bang עם קיצור זה",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "שם מנוע מותאם אישית (אופציונלי)",
     "copy_opensearch_url": "העתק כתובת OpenSearch",
     "data_management_heading": "ניהול נתונים",
-    "data_management_help": "ייצוא/ייבוא שומר על ברירות המחדל לחיפוש, ווידג׳טי עמוד הבית והבאנגים המותאמים אישית.",
+    "data_management_help": "הייצוא והייבוא כוללים ערכת נושא, שפה והעדפות יישום נתמכות. הסכמת עוגיות ופרטי התחברות אינם נכללים.",
     "export_preferences": "יצא העדפות",
     "import_preferences": "יבא העדפות",
     "reset_all_preferences": "אפס את כל ההעדפות",
@@ -312,7 +312,16 @@
       "expiry_30d": "30 ימים",
       "expiry_90d": "90 ימים",
       "expiry_1y": "שנה אחת"
-    }
+    },
+    "font_size": "גודל גופן",
+    "font_size_small": "קטן",
+    "font_size_medium": "בינוני",
+    "font_size_large": "גדול",
+    "results_density": "צפיפות תוצאות",
+    "density_compact": "קומפקטית",
+    "density_comfortable": "נוחה",
+    "density_spacious": "מרווחת",
+    "accent_color": "צבע הדגשה"
   },
   "nav": {
     "home": "דף הבית",

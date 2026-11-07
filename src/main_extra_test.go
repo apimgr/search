@@ -416,76 +416,76 @@ func TestGenerateSetupTokenEntropy(t *testing.T) {
 // ============================================================
 
 func TestApplyCliOverridesColorAndDirs(t *testing.T) {
-	restore := saveEnvKeys(
-		"SEARCH_COLOR", "SEARCH_CACHE_DIR", "SEARCH_LOG_DIR", "SEARCH_BACKUP_DIR",
-		"SEARCH_MODE", "MODE", "DEBUG", "SEARCH_DEBUG",
-		"SEARCH_DATA_DIR", "SEARCH_CONFIG_DIR", "SEARCH_PID_FILE",
-		"SEARCH_ADDRESS", "SEARCH_PORT", "PORT",
-		"SEARCH_BASE_URL", "SEARCH_LANG", "LANG",
-	)
-	t.Cleanup(restore)
+	t.Cleanup(func() {
+		resetFlagVars()
+		config.SetColorMode("")
+		config.SetCacheDirOverride("")
+		config.SetLogDirOverride("")
+		config.SetBackupDirOverride("")
+		config.SetPIDFileOverride("")
+	})
 
-	t.Run("flagColor sets SEARCH_COLOR", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_COLOR")()
+	t.Run("flagColor sets the config override", func(t *testing.T) {
 		resetFlagVars()
 
 		flagColor = "never"
 		applyCliOverrides()
 
-		if got := os.Getenv("SEARCH_COLOR"); got != "never" {
-			t.Errorf("SEARCH_COLOR = %q, want %q", got, "never")
+		if got := config.GetColorMode(); got != "never" {
+			t.Errorf("GetColorMode() = %q, want never", got)
 		}
+		config.SetColorMode("")
 	})
 
-	t.Run("flagCache with temp dir sets SEARCH_CACHE_DIR", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_CACHE_DIR")()
+	t.Run("flagCache sets the config override", func(t *testing.T) {
 		resetFlagVars()
 
 		dir := t.TempDir()
 		flagCache = dir
 		applyCliOverrides()
 
-		if got := os.Getenv("SEARCH_CACHE_DIR"); got != dir {
-			t.Errorf("SEARCH_CACHE_DIR = %q, want %q", got, dir)
+		if got := config.GetCacheDir(); got != dir {
+			t.Errorf("GetCacheDir() = %q, want %q", got, dir)
 		}
+		config.SetCacheDirOverride("")
 	})
 
-	t.Run("flagLog with temp dir sets SEARCH_LOG_DIR", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_LOG_DIR")()
+	t.Run("flagLog sets the config override", func(t *testing.T) {
 		resetFlagVars()
 
 		dir := t.TempDir()
 		flagLog = dir
 		applyCliOverrides()
 
-		if got := os.Getenv("SEARCH_LOG_DIR"); got != dir {
-			t.Errorf("SEARCH_LOG_DIR = %q, want %q", got, dir)
+		if got := config.GetLogDir(); got != dir {
+			t.Errorf("GetLogDir() = %q, want %q", got, dir)
 		}
+		config.SetLogDirOverride("")
 	})
 
-	t.Run("flagBackup with temp dir sets SEARCH_BACKUP_DIR", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_BACKUP_DIR")()
+	t.Run("flagBackup sets the config override", func(t *testing.T) {
 		resetFlagVars()
 
 		dir := t.TempDir()
 		flagBackup = dir
 		applyCliOverrides()
 
-		if got := os.Getenv("SEARCH_BACKUP_DIR"); got != dir {
-			t.Errorf("SEARCH_BACKUP_DIR = %q, want %q", got, dir)
+		if got := config.GetBackupDir(); got != dir {
+			t.Errorf("GetBackupDir() = %q, want %q", got, dir)
 		}
+		config.SetBackupDirOverride("")
 	})
 
-	t.Run("flagPID sets SEARCH_PID_FILE", func(t *testing.T) {
-		defer saveEnvKeys("SEARCH_PID_FILE")()
+	t.Run("flagPID sets the config override", func(t *testing.T) {
 		resetFlagVars()
 
 		flagPID = "/tmp/test-search.pid"
 		applyCliOverrides()
 
-		if got := os.Getenv("SEARCH_PID_FILE"); got != "/tmp/test-search.pid" {
-			t.Errorf("SEARCH_PID_FILE = %q, want %q", got, "/tmp/test-search.pid")
+		if got := config.GetPIDFile(); got != "/tmp/test-search.pid" {
+			t.Errorf("GetPIDFile() = %q, want /tmp/test-search.pid", got)
 		}
+		config.SetPIDFileOverride("")
 	})
 }
 

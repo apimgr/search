@@ -5,21 +5,10 @@
         <p class="subtitle">{{t "preferences.subtitle"}}</p>
     </header>
 
-    <nav class="preferences-tabs" role="tablist" aria-label="{{t "preferences.title"}}" hidden>
-        <button type="button" role="tab" id="preferences-tab-general" aria-selected="true" data-preferences-tab="general">{{t "preferences.general"}}</button>
-        <button type="button" role="tab" id="preferences-tab-interface" aria-selected="false" data-preferences-tab="interface" tabindex="-1">{{t "preferences.interface"}}</button>
-        <button type="button" role="tab" id="preferences-tab-privacy" aria-selected="false" data-preferences-tab="privacy" tabindex="-1">{{t "preferences.privacy"}}</button>
-        <button type="button" role="tab" id="preferences-tab-engines" aria-selected="false" data-preferences-tab="engines" tabindex="-1">{{t "preferences.engines_tab"}}</button>
-        <button type="button" role="tab" id="preferences-tab-data" aria-selected="false" data-preferences-tab="data" tabindex="-1">{{t "preferences.data"}}</button>
-    </nav>
-
     <section class="preferences-section" data-preference-tab="privacy" aria-labelledby="cookie-preferences-heading">
         <h2 id="cookie-preferences-heading">{{t "privacy.cookies_heading"}}</h2>
         <p>{{t "privacy.cookies_intro"}}</p>
-        <form action="/server/consent" method="POST" id="cookie-preferences-form" class="preferences-form">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="return_to" value="{{.RequestPath}}">
-            <input type="hidden" name="choice" value="save">
+            <input type="hidden" name="consent_form" value="1" form="general-settings">
             <div class="form-group toggle-group">
                 <label class="toggle">
                     <input type="checkbox" checked disabled aria-label="{{t "privacy.session_cookie_label"}}">
@@ -30,7 +19,7 @@
             </div>
             <div class="form-group toggle-group">
                 <label class="toggle">
-                    <input type="checkbox" id="consent-preferences" name="preferences" value="true" role="switch" aria-checked="{{if .ConsentPreferences}}true{{else}}false{{end}}" {{if .ConsentPreferences}}checked{{end}}>
+                    <input type="checkbox" id="consent-preferences" name="consent_preferences" value="on" form="general-settings" role="switch" aria-checked="{{if .ConsentPreferences}}true{{else}}false{{end}}" {{if .ConsentPreferences}}checked{{end}}>
                     <span class="toggle-track"><span class="toggle-thumb"></span></span>
                     <span class="toggle-label">{{t "privacy.preference_cookie_label"}}</span>
                 </label>
@@ -38,14 +27,12 @@
             </div>
             <div class="form-group toggle-group">
                 <label class="toggle">
-                    <input type="checkbox" id="consent-analytics" name="analytics" value="true" role="switch" aria-checked="{{if .ConsentAnalytics}}true{{else}}false{{end}}" {{if .ConsentAnalytics}}checked{{end}}>
+                    <input type="checkbox" id="consent-analytics" name="consent_analytics" value="on" form="general-settings" role="switch" aria-checked="{{if .ConsentAnalytics}}true{{else}}false{{end}}" {{if .ConsentAnalytics}}checked{{end}}>
                     <span class="toggle-track"><span class="toggle-thumb"></span></span>
                     <span class="toggle-label">{{t "privacy.analytics_heading"}}</span>
                 </label>
                 <p>{{if .Config.Server.Tracking.Type}}{{t "privacy.analytics_provider" .Config.Server.Tracking.Type}}{{else}}{{t "privacy.analytics_none"}}{{end}}</p>
             </div>
-            <button type="submit" class="btn" id="save-cookie-preferences">{{t "common.save"}}</button>
-        </form>
     </section>
 
     <section class="preferences-section ccpa-section" data-preference-tab="privacy" aria-labelledby="ccpa-preferences-heading">
@@ -53,17 +40,7 @@
         {{if .DataSold}}
         <p>{{t "privacy.ccpa_opt_out_description"}}</p>
         {{if .CCPAOptedOut}}<p class="ccpa-status">{{t "privacy.ccpa_opt_out_status_active"}}</p>{{end}}
-        <form method="post" action="/server/ccpa">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="return_to" value="{{.RequestPath}}">
-            {{if .CCPAOptedOut}}
-            <input type="hidden" name="action" value="opt-in">
-            <button type="submit" class="btn">{{t "privacy.ccpa_opt_in_button"}}</button>
-            {{else}}
-            <input type="hidden" name="action" value="opt-out">
-            <button type="submit" class="btn btn-decline">{{t "privacy.ccpa_opt_out_button"}}</button>
-            {{end}}
-        </form>
+        <label class="toggle"><input type="checkbox" name="ccpa_opt_out" value="on" form="general-settings" {{if .CCPAOptedOut}}checked{{end}}><span>{{t "privacy.ccpa_opt_out_button"}}</span></label>
         {{else}}
         <p>{{t "privacy.ccpa_no_sell_notice"}}</p>
         {{end}}
@@ -83,30 +60,30 @@
             </div>
 
             <div class="form-group">
-                <label for="font-size">Font Size</label>
+                <label for="font-size">{{t "preferences.font_size"}}</label>
                 <select id="font-size" name="search_pref_font_size">
-                    <option value="small" {{if eq .Prefs.FontSize "small"}}selected{{end}}>Small</option>
-                    <option value="medium" {{if eq .Prefs.FontSize "medium"}}selected{{end}}>Medium</option>
-                    <option value="large" {{if eq .Prefs.FontSize "large"}}selected{{end}}>Large</option>
+                    <option value="small" {{if eq .Prefs.FontSize "small"}}selected{{end}}>{{t "preferences.font_size_small"}}</option>
+                    <option value="medium" {{if eq .Prefs.FontSize "medium"}}selected{{end}}>{{t "preferences.font_size_medium"}}</option>
+                    <option value="large" {{if eq .Prefs.FontSize "large"}}selected{{end}}>{{t "preferences.font_size_large"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="results-density">Results Density</label>
+                <label for="results-density">{{t "preferences.results_density"}}</label>
                 <select id="results-density" name="search_pref_results_density">
-                    <option value="compact" {{if eq .Prefs.ResultsDensity "compact"}}selected{{end}}>Compact</option>
-                    <option value="comfortable" {{if eq .Prefs.ResultsDensity "comfortable"}}selected{{end}}>Comfortable</option>
-                    <option value="spacious" {{if eq .Prefs.ResultsDensity "spacious"}}selected{{end}}>Spacious</option>
+                    <option value="compact" {{if eq .Prefs.ResultsDensity "compact"}}selected{{end}}>{{t "preferences.density_compact"}}</option>
+                    <option value="comfortable" {{if eq .Prefs.ResultsDensity "comfortable"}}selected{{end}}>{{t "preferences.density_comfortable"}}</option>
+                    <option value="spacious" {{if eq .Prefs.ResultsDensity "spacious"}}selected{{end}}>{{t "preferences.density_spacious"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="accent-color">Accent Color</label>
+                <label for="accent-color">{{t "preferences.accent_color"}}</label>
                 <input type="color" id="accent-color" name="search_pref_accent_color" value="{{if .Prefs.AccentColor}}{{.Prefs.AccentColor}}{{else}}#8250df{{end}}">
             </div>
 
             <div class="form-group">
-                <label for="lang">Language</label>
+                <label for="lang">{{t "preferences.language"}}</label>
                 <select id="lang" name="lang">
                     {{range .AvailableLanguages}}<option value="{{.Code}}" {{if eq $.Lang .Code}}selected{{end}}>{{.NativeName}}</option>{{end}}
                 </select>
@@ -147,7 +124,7 @@
 
             <div class="form-group">
                 <label for="weather-units">{{t "preferences.weather_units"}}</label>
-                <select id="weather-units" name="search_widget_weather_units">
+                <select id="weather-units" name="search_pref_weather_units">
                     <option value="auto" {{if eq .Prefs.WeatherUnits "auto"}}selected{{end}}>{{t "preferences.weather_units_global"}}</option>
                     <option value="metric" {{if eq .Prefs.WeatherUnits "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
                     <option value="imperial" {{if eq .Prefs.WeatherUnits "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
@@ -216,8 +193,25 @@
                 </label>
             </div>
             <div class="form-group">
-                <button type="button" class="btn btn-secondary" id="clear-search-history">{{t "preferences.clear_history"}}</button>
             </div>
+            <section class="preferences-section" aria-labelledby="preference-sync-heading">
+                <h2 id="preference-sync-heading">{{t "preferences.data_management_heading"}}</h2>
+                <p>{{t "preferences.data_management_help"}}</p>
+                <div class="form-group">
+                    <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
+                    <a id="sync-url" class="preference-export-value" href="{{index .Data "syncURL"}}">{{index .Data "syncURL"}}</a>
+                    <button type="button" class="btn btn-secondary" data-copy-target="sync-url">{{t "preferences.copy_preferences"}}</button>
+                </div>
+                <div class="form-group">
+                    <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
+                    <code id="sync-code" class="preference-export-value" tabindex="0">{{index .Data "syncCode"}}</code>
+                    <button type="button" class="btn btn-secondary" data-copy-target="sync-code">{{t "preferences.copy_preferences"}}</button>
+                </div>
+                <div class="form-group">
+                    <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
+                    <textarea id="sync-paste" name="code" form="general-settings" maxlength="2048" placeholder="{{t "preferences.sync_paste_placeholder"}}"></textarea>
+                </div>
+            </section>
         </form>
     </div>
 
@@ -246,112 +240,10 @@
         </div>
     </section>
 
-    <section class="preferences-section" data-preference-tab="interface" aria-labelledby="custom-css-heading">
-        <h2 id="custom-css-heading">{{t "preferences.custom_css_heading"}}</h2>
-        <p class="help-text">{{t "preferences.custom_css_help"}}</p>
-        <label for="custom-css">{{t "preferences.custom_css_label"}}</label>
-        <textarea id="custom-css" rows="12" maxlength="4096" spellcheck="false" autocomplete="off" aria-describedby="custom-css-help"></textarea>
-        <small id="custom-css-help">{{t "preferences.custom_css_limit"}}</small>
-        <div class="data-actions">
-            <button type="button" class="btn btn-primary" id="save-custom-css">{{t "preferences.custom_css_save"}}</button>
-            <button type="button" class="btn btn-secondary" id="clear-custom-css">{{t "preferences.custom_css_clear"}}</button>
-        </div>
-        <p class="help-text" id="custom-css-status" role="status" aria-live="polite"></p>
-    </section>
-
-    <section class="preferences-section" data-preference-tab="data" aria-labelledby="owner-tokens-heading">
-        <h2 id="owner-tokens-heading">{{t "preferences.owner_tokens.heading"}}</h2>
-        {{with index .Data "ownerTokenMessage"}}<p role="status">{{.}}</p>{{end}}
-        {{with index .Data "ownerTokenRevealed"}}
-        <div class="token-reveal" role="alert">
-            <p>{{t "preferences.owner_tokens.reveal_notice"}}</p>
-            <code class="token-value">{{.}}</code>
-        </div>
-        {{end}}
-        {{with index .Data "ownerTokens"}}
-        <h3>{{t "preferences.owner_tokens.primary_token"}}</h3>
-        <code>{{index $.Data "ownerPrimaryMasked"}}</code>
-        <form action="/server/preferences/token/reveal" method="POST">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-            <button type="submit">{{t "preferences.owner_tokens.reveal_primary"}}</button>
-        </form>
-        <details class="confirm-disclosure">
-            <summary>{{t "preferences.owner_tokens.rotate_primary"}}</summary>
-            <p>{{t "preferences.owner_tokens.rotate_primary_confirm"}}</p>
-            <form action="/server/preferences/token/rotate" method="POST">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="confirm" value="rotate">
-                <button type="submit">{{t "preferences.owner_tokens.rotate"}}</button>
-            </form>
-        </details>
-        <h3>{{t "preferences.owner_tokens.linked_tokens"}}</h3>
-        {{range .}}
-        {{if eq .Kind "linked"}}
-        <article class="owner-token-item">
-            <h4>{{.Name}}</h4>
-            <code>{{.Masked}}</code>
-            <p>{{t "health.status"}}: {{if eq .Status "active"}}{{t "preferences.owner_tokens.active"}}{{else if eq .Status "expired"}}{{t "preferences.owner_tokens.expired"}}{{else}}{{t "preferences.owner_tokens.revoked"}}{{end}} · {{t "admin.tokens_page.created"}} {{.CreatedAt}} · {{t "admin.tokens_page.last_used"}} {{.LastUsedAt}} · {{t "admin.tokens_page.expires"}} {{.ExpiresAt}}</p>
-            <form action="/server/preferences/tokens/{{.ID}}/reveal" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">{{t "common.show"}}</button></form>
-            <details class="confirm-disclosure">
-                <summary>{{t "preferences.owner_tokens.rotate"}}</summary>
-                <p>{{t "preferences.owner_tokens.rotate_linked_confirm"}}</p>
-                <form action="/server/preferences/tokens/{{.ID}}/rotate" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">{{t "preferences.owner_tokens.rotate"}}</button></form>
-            </details>
-            <form action="/server/preferences/tokens/{{.ID}}/update" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>{{t "preferences.name_label"}} <input name="name" value="{{.Name}}" maxlength="64" required></label><label>{{t "admin.tokens_page.expires"}} <select name="expires_at"><option value="never">{{t "admin.tokens_page.never"}}</option><option value="7d">{{t "preferences.owner_tokens.expiry_7d"}}</option><option value="30d">{{t "preferences.owner_tokens.expiry_30d"}}</option><option value="90d">{{t "preferences.owner_tokens.expiry_90d"}}</option><option value="1y">{{t "preferences.owner_tokens.expiry_1y"}}</option></select></label><button type="submit">{{t "common.save"}}</button></form>
-            <details class="confirm-disclosure">
-                <summary>{{t "admin.tokens_page.revoke"}}</summary>
-                <p>{{t "preferences.owner_tokens.revoke_linked_confirm"}}</p>
-                <form action="/server/preferences/tokens/{{.ID}}/revoke" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">{{t "admin.tokens_page.revoke"}}</button></form>
-            </details>
-        </article>
-        {{end}}
-        {{end}}
-        <form action="/server/preferences/tokens" method="POST">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-            <label>{{t "preferences.name_label"}} <input name="name" maxlength="64" required></label>
-            <label>{{t "admin.tokens_page.expires"}} <select name="expires_at"><option value="never">{{t "admin.tokens_page.never"}}</option><option value="7d">{{t "preferences.owner_tokens.expiry_7d"}}</option><option value="30d">{{t "preferences.owner_tokens.expiry_30d"}}</option><option value="90d">{{t "preferences.owner_tokens.expiry_90d"}}</option><option value="1y">{{t "preferences.owner_tokens.expiry_1y"}}</option></select></label>
-            <button type="submit">{{t "preferences.owner_tokens.create_linked"}}</button>
-        </form>
-        {{else}}
-        <p>{{t "preferences.owner_tokens.restore_description"}}</p>
-        <form action="/server/preferences/token/restore" method="POST">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <label for="restore-owner-token">{{t "preferences.owner_tokens.restore_existing"}}</label>
-            <input id="restore-owner-token" name="token" type="password" autocomplete="off" required>
-            <button type="submit">{{t "preferences.owner_tokens.restore_owner"}}</button>
-        </form>
-        {{end}}
-    </section>
-
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.search_bangs_heading"}}</h2>
-        <p class="help-text">
-            {{t "preferences.search_bangs_help_prefix"}} <code>!g</code> {{t "preferences.search_bangs_help_google"}},
-            <code>!w</code> {{t "preferences.search_bangs_help_wikipedia"}}, <code>!yt</code> {{t "preferences.search_bangs_help_youtube"}}.
-        </p>
-
-        <div class="bang-categories">
-            <h3>{{t "preferences.available_bangs"}}</h3>
-            <div class="category-filter">
-                <button class="filter-btn active" data-category="all">{{t "common.all"}}</button>
-                {{range .Data.categories}}
-                <button class="filter-btn" data-category="{{.}}">{{. | title}}</button>
-                {{end}}
-            </div>
-
-            <div class="bang-list" id="bang-list">
-                {{range .Data.bangs}}
-                <div class="bang-item" data-category="{{.Category}}">
-                    <span class="bang-shortcut">!{{.Shortcut}}</span>
-                    <span class="bang-name">{{.Name}}</span>
-                    {{if .Description}}
-                    <span class="bang-description">{{.Description}}</span>
-                    {{end}}
-                </div>
-                {{end}}
-            </div>
-        </div>
-    </div>
+    {{if index .Data "hasOwnerTokens"}}
+    <p><a href="/server/preferences/tokens">{{t "preferences.owner_tokens.heading"}}</a></p>
+    {{end}}
+    <p><a href="/server/preferences/tools">{{t "preferences.interface"}}</a></p>
 
     <div class="preferences-section" data-preference-tab="interface">
         <h2>{{t "preferences.homepage_widgets_heading"}}</h2>
@@ -449,104 +341,17 @@
         </p>
     </div>
 
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.custom_bangs_heading"}}</h2>
-        <p class="help-text">{{t "preferences.custom_bangs_help"}}</p>
-
-        <div id="custom-bangs-list" class="custom-bangs-list">
-            <!-- Custom bangs will be populated by JavaScript -->
-        </div>
-
-        <form id="add-custom-bang" class="add-bang-form">
-            <h3>{{t "preferences.add_custom_bang"}}</h3>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="bang-shortcut">{{t "preferences.shortcut_label"}}</label>
-                    <input type="text" id="bang-shortcut" name="shortcut" placeholder="{{t "preferences.shortcut_placeholder"}}" required pattern="[a-zA-Z0-9_-]+">
-                </div>
-                <div class="form-group">
-                    <label for="bang-name">{{t "preferences.name_label"}}</label>
-                    <input type="text" id="bang-name" name="name" placeholder="{{t "preferences.name_placeholder"}}" required>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="bang-url">{{t "preferences.url_template_label"}}</label>
-                <input type="text" id="bang-url" name="url" inputmode="url" autocomplete="url" placeholder="{{t "preferences.url_template_placeholder"}}" required>
-                <small>{{t "preferences.url_template_help_prefix"}} <code>{query}</code> {{t "preferences.url_template_help_suffix"}}</small>
-            </div>
-            <div class="form-group">
-                <label for="bang-category">{{t "search.category"}}</label>
-                <input type="text" id="bang-category" name="category" placeholder="{{t "preferences.category_placeholder"}}" value="custom">
-            </div>
-            <button type="submit" class="btn btn-primary">{{t "preferences.add_bang"}}</button>
-        </form>
-    </div>
-
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.add_to_browser_heading"}}</h2>
-        <p class="help-text">{{t "preferences.add_to_browser_help"}}</p>
-
-        <div class="browser-add">
-            <p>
-                {{t "preferences.add_to_browser_instructions"}}
-            </p>
-            <p>
-                <strong>{{t "preferences.opensearch_url_label"}}:</strong>
-                <code id="opensearch-url">{{.ServerURL}}/opensearch.xml</code>
-            </p>
-            <div class="form-group">
-                <label for="custom-engine-name">{{t "preferences.custom_engine_name_optional"}}</label>
-                <input type="text" id="custom-engine-name" placeholder="{{.Config.Server.Title}}">
-                <button type="button" id="copy-opensearch" class="btn btn-secondary">{{t "preferences.copy_opensearch_url"}}</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="preferences-section" data-preference-tab="data">
-        <h2>{{t "preferences.data_management_heading"}}</h2>
-        <p class="help-text">{{t "preferences.data_management_help"}}</p>
-        <div class="data-actions">
-            <button type="button" id="export-prefs" class="btn btn-secondary">{{t "preferences.export_preferences"}}</button>
-            <button type="button" id="import-prefs" class="btn btn-secondary">{{t "preferences.import_preferences"}}</button>
-            <button type="submit" form="general-settings" name="reset_preferences" value="true" id="reset-prefs" class="btn btn-danger">{{t "preferences.reset_all_preferences"}}</button>
-        </div>
-        <input type="file" id="import-file" accept=".json" class="hidden">
-    </div>
-
-    <div class="preferences-section" data-preference-tab="data">
-        <h2>{{t "preferences.sync_heading"}}</h2>
-        <p class="help-text">{{t "preferences.sync_help"}}</p>
-
-        <div class="form-group">
-            <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
-            <input type="text" id="sync-url" readonly {{with index .Data "syncURL"}}value="{{.}}"{{end}}>
-            {{with index .Data "syncURL"}}<p>URL: <code>{{.}}</code></p>{{end}}
-        </div>
-
-        <div class="form-group">
-            <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
-            <input type="text" id="sync-code" readonly {{with index .Data "syncCode"}}value="{{.}}"{{end}}>
-            {{with index .Data "syncCode"}}<p>Code: <code>{{.}}</code></p>{{end}}
-        </div>
-
-        <div class="data-actions">
-            <button type="button" id="copy-sync-prefs" class="btn btn-secondary">{{t "preferences.copy_preferences"}}</button>
-            <a id="qr-sync-prefs" class="btn btn-secondary" href="/direct/qr/" target="_blank" rel="noopener noreferrer">{{t "preferences.qr_code"}}</a>
-        </div>
-
-        <form action="/server/preferences/import" method="GET">
-            <div class="form-group">
-                <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
-                <input type="text" id="sync-paste" name="code" placeholder="{{t "preferences.sync_paste_placeholder"}}">
-            </div>
-            <div class="data-actions"><button type="submit" id="apply-sync-prefs" class="btn btn-secondary">{{t "preferences.apply_preferences"}}</button></div>
-        </form>
-    </div>
-
     <div class="preferences-actions">
-        <button type="button" id="cancel-preferences" class="btn btn-secondary" data-action="go-back">{{t "common.cancel"}}</button>
+        <a id="cancel-preferences" class="btn btn-secondary" href="{{index .Data "cancelURL"}}">{{t "common.cancel"}}</a>
+        <button type="button" id="reset-prefs" class="btn btn-danger" popovertarget="reset-preferences">{{t "preferences.reset_all_preferences"}}</button>
         <button type="submit" form="general-settings" id="save-preferences" class="btn btn-primary">{{t "preferences.save_return"}}</button>
         <span id="save-status" class="save-status"></span>
+    </div>
+    <div id="reset-preferences" class="preferences-reset-popover" popover>
+        <p>{{t "preferences.reset_confirm_title"}}</p>
+        <p>{{t "preferences.reset_confirm_message"}}</p>
+        <button type="button" popovertarget="reset-preferences" popovertargetaction="hide">{{t "common.cancel"}}</button>
+        <button type="submit" form="general-settings" name="action" value="reset">{{t "preferences.reset_all_preferences"}}</button>
     </div>
 </div>
 {{/* Per AI.md PART 16: NO inline CSS/JS - all styles in main.css, scripts in app.js */}}

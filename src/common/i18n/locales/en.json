@@ -204,7 +204,7 @@
     "opensearch_url_copied": "OpenSearch URL copied!",
     "opensearch_copy_manual": "URL updated above - copy manually",
     "exported_success": "Preferences exported!",
-    "reset_confirm_message": "Are you sure you want to reset all preferences?",
+    "reset_confirm_message": "This erases your site preferences, cookie consent, CCPA choice, build stamp, announcement dismissals, and browser storage. Your sign-in and other credentials are kept. This cannot be undone.",
     "reset_confirm_title": "Reset Preferences",
     "required_fields_error": "Please fill in all required fields",
     "bang_shortcut_exists": "A bang with this shortcut already exists",
@@ -250,7 +250,7 @@
     "custom_engine_name_optional": "Custom Engine Name (optional)",
     "copy_opensearch_url": "Copy OpenSearch URL",
     "data_management_heading": "Data Management",
-    "data_management_help": "Export/import preserves your saved search defaults, homepage widgets, and custom bangs.",
+    "data_management_help": "Export and import theme, language, and supported application preferences. Cookie consent and credentials are never included.",
     "export_preferences": "Export Preferences",
     "import_preferences": "Import Preferences",
     "reset_all_preferences": "Reset All Preferences",
@@ -312,7 +312,16 @@
       "expiry_30d": "30 days",
       "expiry_90d": "90 days",
       "expiry_1y": "1 year"
-    }
+    },
+    "font_size": "Font Size",
+    "font_size_small": "Small",
+    "font_size_medium": "Medium",
+    "font_size_large": "Large",
+    "results_density": "Results Density",
+    "density_compact": "Compact",
+    "density_comfortable": "Comfortable",
+    "density_spacious": "Spacious",
+    "accent_color": "Accent Color"
   },
   "nav": {
     "home": "Home",

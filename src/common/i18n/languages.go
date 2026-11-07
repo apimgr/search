@@ -241,7 +241,7 @@ var Languages = map[string]Language{
 // DefaultSupportedLanguages returns the default list of supported languages
 func DefaultSupportedLanguages() []string {
 	return []string{
-		"en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "ja", "zh",
+		"en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "ja", "zh", "ar",
 	}
 }
 

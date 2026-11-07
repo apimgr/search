@@ -112,11 +112,11 @@ func TestRunShellWith4thArg(t *testing.T) {
 func TestMainVersionDispatch(t *testing.T) {
 	withExitFunc(t)
 	restore := saveEnvKeys(
-		"SEARCH_MODE", "MODE", "DEBUG", "SEARCH_DEBUG",
-		"SEARCH_DATA_DIR", "SEARCH_CONFIG_DIR", "SEARCH_CACHE_DIR",
-		"SEARCH_LOG_DIR", "SEARCH_BACKUP_DIR", "SEARCH_PID_FILE",
-		"SEARCH_ADDRESS", "SEARCH_PORT", "PORT",
-		"SEARCH_BASE_URL", "SEARCH_COLOR", "SEARCH_LANG", "LANG",
+		"MODE", "DEBUG", "SEARCH_DEBUG",
+		"DATA_DIR", "CONFIG_DIR", "CACHE_DIR",
+		"LOG_DIR", "BACKUP_DIR", "PID_FILE",
+		"LISTEN", "PORT", "SEARCH_BASE_URL",
+		"SEARCH_COLOR", "SEARCH_LANG", "LANG",
 	)
 	t.Cleanup(restore)
 
@@ -131,7 +131,7 @@ func TestMainVersionDispatch(t *testing.T) {
 // TestMainHelpDispatch covers the --help dispatch case in main().
 func TestMainHelpDispatch(t *testing.T) {
 	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
+	restore := saveEnvKeys("MODE", "MODE")
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
@@ -145,7 +145,7 @@ func TestMainHelpDispatch(t *testing.T) {
 // TestMainStatusDispatch covers the --status dispatch case in main().
 func TestMainStatusDispatch(t *testing.T) {
 	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
+	restore := saveEnvKeys("MODE", "MODE")
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
@@ -159,7 +159,7 @@ func TestMainStatusDispatch(t *testing.T) {
 // TestMainServiceDispatch covers the --service dispatch case in main().
 func TestMainServiceDispatch(t *testing.T) {
 	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
+	restore := saveEnvKeys("MODE", "MODE")
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
@@ -173,7 +173,7 @@ func TestMainServiceDispatch(t *testing.T) {
 // TestMainMaintenanceDispatch covers the --maintenance dispatch case in main().
 func TestMainMaintenanceDispatch(t *testing.T) {
 	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
+	restore := saveEnvKeys("MODE", "MODE")
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
@@ -188,7 +188,7 @@ func TestMainMaintenanceDispatch(t *testing.T) {
 // `subCmd := flagUpdate` and `if subCmd == ""` check stmts.
 func TestMainUpdateDispatch(t *testing.T) {
 	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
+	restore := saveEnvKeys("MODE", "MODE")
 	t.Cleanup(restore)
 
 	resetAllFlagVars()
@@ -203,7 +203,7 @@ func TestMainUpdateDispatch(t *testing.T) {
 // `subCmd := flagShell` and both `if subCmd == ""` check stmts.
 func TestMainShellDispatch(t *testing.T) {
 	withExitFunc(t)
-	restore := saveEnvKeys("SEARCH_MODE", "MODE", "SHELL")
+	restore := saveEnvKeys("MODE", "MODE", "SHELL")
 	t.Cleanup(restore)
 	os.Setenv("SHELL", "/bin/bash")
 
@@ -519,7 +519,7 @@ func TestFlagUsageCallback(t *testing.T) {
 func TestApplyCliOverridesEnsureDirsError(t *testing.T) {
 	orig := flagData
 	flagData = "/dev/null/impossible"
-	restore := saveEnvKeys("SEARCH_DATA_DIR")
+	restore := saveEnvKeys("DATA_DIR")
 	t.Cleanup(func() {
 		flagData = orig
 		restore()
@@ -537,7 +537,7 @@ func TestApplyCliOverridesEnsureDirsError(t *testing.T) {
 func TestMainUpdateEmptySubCmd(t *testing.T) {
 	withExitFunc(t)
 	resetAllFlagVars()
-	restore := saveEnvKeys("SEARCH_MODE", "MODE")
+	restore := saveEnvKeys("MODE", "MODE")
 	t.Cleanup(restore)
 	withArgs(t, []string{"search", "--update", ""})
 	captureStdout(t, main)
@@ -552,7 +552,7 @@ func TestMainUpdateEmptySubCmd(t *testing.T) {
 func TestMainShellEmptySubCmd(t *testing.T) {
 	withExitFunc(t)
 	resetAllFlagVars()
-	restore := saveEnvKeys("SEARCH_MODE", "MODE", "SHELL")
+	restore := saveEnvKeys("MODE", "MODE", "SHELL")
 	t.Cleanup(restore)
 	withArgs(t, []string{"search", "--shell", ""})
 	out := captureStdout(t, main)

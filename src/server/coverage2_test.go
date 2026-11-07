@@ -603,7 +603,7 @@ func TestResolveGeneralPrefsWeatherUnits(t *testing.T) {
 	} {
 		t.Run(tc.cookie, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
-			req.AddCookie(&http.Cookie{Name: "search_widget_weather_units", Value: tc.cookie})
+			req.AddCookie(&http.Cookie{Name: "search_pref_weather_units", Value: tc.cookie})
 			if got := resolveGeneralPrefs(req).WeatherUnits; got != tc.want {
 				t.Errorf("WeatherUnits = %q, want %q", got, tc.want)
 			}

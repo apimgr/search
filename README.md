@@ -19,9 +19,9 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 
 - Privacy First: No third-party analytics by default, consent-aware preferences, self-hosted data control
 - Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
-- Portable Preferences: Save settings locally, export/import them, or share them with portable `prefs` links
+- Portable Preferences: Save supported theme, language, and search preferences locally, then export/import them with a sync URL or code
 - Search Engine Preferences: Select engines per search category and drag to set their priority
-- Tabbed Preferences: Manage general, interface, privacy, engine, and data settings with keyboard-accessible tabs
+- Server-rendered Preferences: Manage guest settings in a single form; use separate tools for custom CSS, bangs, filters, and OpenSearch
 - Search Alerts: Accountless alerts that activate at creation, with private RSS and webhook delivery
 - Embeddable Search Bar: Native HTML form snippet that works without JavaScript or third-party embeds ([integration guide](docs/integrations.md#search-bar-widget))
 - Browser Search: OpenSearch description and a copyable, customizable browser search URL
@@ -33,7 +33,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Mobile Friendly: Responsive design that works on all devices
 - Installable PWA: Add Search to your home screen with offline fallback support and desktop/mobile install previews
 - Dark, Light, and Auto Themes: Choose the theme, font size, results density, and accent color in Preferences
-- Custom CSS: Save a browser-local stylesheet override and include it in preference exports/imports
+- Custom CSS: Save a browser-local stylesheet override, excluded from preference exports/imports
 - File-only Configuration: All settings in `server.yml`; no admin web UI
 - Multi-Category Search: Web, images, videos, news, maps, files, music, science, IT, and social
 - Built-in SSL: Let's Encrypt integration for automatic HTTPS
@@ -199,10 +199,14 @@ server:
 
 # Enable search engines
 engines:
-  google: true
-  bing: true
-  duckduckgo: true
-  wikipedia: true
+  google:
+    enabled: true
+  bing:
+    enabled: true
+  duckduckgo:
+    enabled: true
+  wikipedia:
+    enabled: true
 ```
 
 ### Environment Variables
@@ -211,8 +215,11 @@ engines:
 MODE=production
 PORT=64080
 LISTEN="0.0.0.0"
-SEARCH_CONFIG_DIR="/etc/apimgr/search"
-SEARCH_DATA_DIR="/var/lib/apimgr/search"
+CONFIG_DIR="/etc/apimgr/search"
+DATA_DIR="/var/lib/apimgr/search"
+LOG_DIR="/var/log/apimgr/search"
+DATABASE_DIR="/var/lib/apimgr/search/db"
+BACKUP_DIR="/var/backups/apimgr/search"
 ```
 
 ### Operator Access
@@ -340,7 +347,7 @@ server:
 
 - No third-party tracking by default
 - No ads; clean result links with tracking params stripped
-- Preferences stored in client-side cookies with portable `/server/preferences/import` links
+- Preferences stored in client-side cookies; supported theme, language, and search settings transfer through `/server/preferences/import` links or codes
 - Optional image proxy
 - Full Tor support with per-engine routing and stream isolation
 
@@ -366,7 +373,7 @@ HSTS, CSP, X-Frame-Options (`SAMEORIGIN` by default), X-Content-Type-Options, ra
 
 Language resolved from: `?lang=` query param → `lang` cookie → `Accept-Language` header → English.
 
-Supported: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Hebrew, Persian, and Urdu.
+Enabled by default: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, and Arabic.
 
 ## Development
 
