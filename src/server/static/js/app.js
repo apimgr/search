@@ -370,18 +370,101 @@
     // ========================================================================
     // MOBILE NAVIGATION - CSS-only per AI.md PART 16
     // ========================================================================
-    // Navigation is handled purely via CSS checkbox hack (no JavaScript needed)
-    // The checkbox #nav-toggle controls menu state via :checked pseudo-class
-    // Kept as no-ops for backward compatibility if anything calls these
+    // The checkbox is the complete no-JS navigation baseline. These additions
+    // improve the wide-screen breakpoint and keyboard focus when scripts run.
     function toggleNav() {
-        // CSS-only: checkbox handles state via label click
+        const checkbox = document.getElementById('nav-toggle');
+        if (checkbox) checkbox.checked = !checkbox.checked;
     }
 
     function closeNav() {
-        // CSS-only: uncheck the checkbox to close
         const checkbox = document.getElementById('nav-toggle');
-        if (checkbox) checkbox.checked = false;
+        if (checkbox && checkbox.checked) {
+            checkbox.checked = false;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
     }
+
+    const navCheckbox = document.getElementById('nav-toggle');
+    const navPanel = document.getElementById('nav-panel');
+    const navToggle = document.querySelector('.nav-toggle');
+    const navLinks = document.querySelector('.nav-links');
+    const navActions = document.querySelector('.header-actions');
+
+    function navFocusableElements() {
+        if (!navPanel) return [];
+        return Array.from(navPanel.querySelectorAll('a[href], button, [tabindex="0"]'))
+            .filter(element => !element.disabled && element.getClientRects().length > 0);
+    }
+
+    function measureNavigation() {
+        if (!navLinks || !navActions) return;
+        const wide = window.innerWidth >= 768;
+        const linksRect = navLinks.getBoundingClientRect();
+        const actionsRect = navActions.getBoundingClientRect();
+        const overflow = navLinks.scrollWidth > navLinks.clientWidth + 1 || linksRect.right > actionsRect.left;
+        document.documentElement.classList.toggle('nav-collapsed', wide && overflow);
+    }
+
+    let navMeasureFrame = 0;
+    function scheduleNavigationMeasure() {
+        if (navMeasureFrame) cancelAnimationFrame(navMeasureFrame);
+        navMeasureFrame = requestAnimationFrame(function() {
+            navMeasureFrame = 0;
+            measureNavigation();
+        });
+    }
+
+    if (navCheckbox && navPanel) {
+        scheduleNavigationMeasure();
+        window.addEventListener('resize', scheduleNavigationMeasure, { passive: true });
+        window.addEventListener('load', scheduleNavigationMeasure, { once: true });
+
+        navCheckbox.addEventListener('change', function() {
+            const open = navCheckbox.checked;
+            if (navToggle) navToggle.setAttribute('aria-expanded', String(open));
+            document.querySelectorAll('.main-content, .footer, .subheader, [data-site-banner]').forEach(function(element) {
+                element.inert = open;
+            });
+            if (open) {
+                const focusable = navFocusableElements();
+                if (focusable.length) focusable[0].focus();
+            } else if (navToggle) {
+                navToggle.focus();
+            }
+        });
+    }
+
+    document.addEventListener('keydown', function(event) {
+        if (navToggle && event.target === navToggle && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            toggleNav();
+            navCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+            return;
+        }
+        if (!navCheckbox || !navCheckbox.checked || !navPanel) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeNav();
+            return;
+        }
+        const focusable = navFocusableElements();
+        if (event.key === 'Tab' && focusable.length) {
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        }
+        if ((event.key === 'Enter' || event.key === ' ') && event.target.classList.contains('nav-close')) {
+            event.preventDefault();
+            closeNav();
+        }
+    });
 
     // ========================================================================
     // ACCESSIBILITY (A11Y) - Per AI.md PART 31

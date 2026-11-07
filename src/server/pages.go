@@ -93,6 +93,41 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type dpoPageData struct {
+	PageData
+	DPOName  string
+	DPOEmail string
+}
+
+type dpoResponse struct {
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	PrivacyURL string `json:"privacy_url"`
+}
+
+func (s *Server) dpoContact(r *http.Request) dpoResponse {
+	name := strings.TrimSpace(s.config.Server.Contact.DPO.Name)
+	email := strings.TrimSpace(s.config.Server.Contact.DPO.Email)
+	if email == "" {
+		email = strings.TrimSpace(s.config.Server.Contact.General.Email)
+	}
+	return dpoResponse{Name: name, Email: email, PrivacyURL: httputil.BuildURL(r, "/server/privacy")}
+}
+
+func (s *Server) handleDPO(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/server/dpo" {
+		s.handleNotFound(w, r)
+		return
+	}
+	contact := s.dpoContact(r)
+	data := s.newPageData(w, r, "", "dpo")
+	data.Title = s.getI18nManager().T(data.Lang, "dpo.title")
+	pageData := dpoPageData{PageData: *data, DPOName: contact.Name, DPOEmail: contact.Email}
+	if err := s.renderer.Render(w, "dpo", &pageData); err != nil {
+		s.handleInternalError(w, r, "template render", err)
+	}
+}
+
 // handleContact renders the contact form and handles its submission.
 // Per AI.md PART 11 "Security Reports — Coordinated Disclosure Pipeline": the
 // same /server/contact route doubles as the vulnerability-report submission

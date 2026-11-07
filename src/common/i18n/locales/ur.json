@@ -4,7 +4,8 @@
     "name": "Urdu",
     "native_name": "اردو",
     "direction": "rtl",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "محفوظ کریں",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "منتظم نے غیر فعال کیا",
     "engines_order_help": "ترجیحی ترتیب بدلنے کے لیے انجن کھینچیں۔",
     "owner_tokens": {
-      "heading": "ٹوکنز",
+      "heading": "مالک کے ٹوکن",
       "primary_token": "بنیادی ٹوکن",
       "linked_tokens": "منسلک ٹوکنز",
       "reveal_notice": "اس ٹوکن کو ابھی نقل کریں۔ یہ دکھانے کے عمل کے ذریعے دستیاب رہے گا۔",
@@ -298,7 +299,7 @@
       "create_linked": "منسلک ٹوکن بنائیں",
       "restore_description": "مالک کے ٹوکن اس براؤزر سے بنائے گئے وسائل کا انتظام کرنے دیتے ہیں۔",
       "restore_existing": "موجودہ بنیادی ٹوکن استعمال کریں",
-      "restore_owner": "مالک بحال کریں",
+      "restore_owner": "شناخت بحال کریں",
       "revoke_linked_confirm": "یہ منسلک ٹوکن منسوخ کریں؟",
       "active": "فعال",
       "expired": "میعاد ختم",
@@ -311,7 +312,27 @@
       "expiry_7d": "۷ دن",
       "expiry_30d": "۳۰ دن",
       "expiry_90d": "۹۰ دن",
-      "expiry_1y": "۱ سال"
+      "expiry_1y": "۱ سال",
+      "shown_once": "صرف اس صفحے کے لوڈ ہونے پر ایک بار دکھایا جائے گا۔",
+      "primary_help": "آپ کے انتباہات تک مکمل رسائی۔ اس ٹوکن کو خفیہ رکھیں۔",
+      "name_help": "مثال کے طور پر: MCP کلائنٹ",
+      "expiry_custom": "حسبِ ضرورت تاریخ",
+      "custom_date": "حسبِ ضرورت تاریخ",
+      "expires_on": "میعاد ختم ہونے کی تاریخ",
+      "create": "ٹوکن بنائیں",
+      "this_browser": "یہ براؤزر",
+      "saved_in_browser": "مالک کا ٹوکن اس براؤزر میں محفوظ ہے۔",
+      "forget_note": "اس براؤزر کو بھولنے سے محفوظ مالک ٹوکن کی کوکی ہٹ جائے گی۔ آپ کے انتباہات حذف نہیں ہوں گے۔",
+      "forget_saved_token": "محفوظ ٹوکن بھولیں",
+      "forget_confirm": "کیا اس براؤزر میں محفوظ مالک ٹوکن بھول جائیں؟",
+      "no_linked_tokens": "ابھی کوئی منسلک ٹوکن نہیں۔",
+      "no_linked_tokens_help": "ہر ایپ کے لیے ایک بنائیں، مثلاً اپنے MCP کلائنٹ کے لیے۔",
+      "restore_hint": "بنیادی ٹوکن پیسٹ کریں",
+      "restore_success": "مالک کی شناخت بحال ہوگئی",
+      "forgot_saved_token": "محفوظ مالک ٹوکن بھلا دیا گیا",
+      "linked_revoked": "منسلک ٹوکن منسوخ ہوگیا",
+      "linked_updated": "منسلک ٹوکن اپ ڈیٹ ہوگیا",
+      "reveal": "ٹوکن دکھائیں"
     },
     "font_size": "فونٹ سائز",
     "font_size_small": "چھوٹا",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "اینڈ پوائنٹ صرف POST قبول کرتا ہے۔",
     "error_405_fix": "POST کے ذریعے JSON-RPC درخواست بھیجیں۔",
     "project_empty": "Search ٹولز کے لیے مخصوص رہنمائی ترتیب نہیں دی گئی۔"
+  },
+  "dpo": {
+    "title": "ڈیٹا پروٹیکشن آفیسر"
   }
 }

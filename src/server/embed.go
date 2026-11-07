@@ -575,10 +575,12 @@ type PageData struct {
 	HasConsentCookie   bool
 	ConsentPreferences bool
 	ConsentAnalytics   bool
-	// TrackingHTML is the analytics snippet for this request, or empty when
-	// server.tracking is unset or the visitor has not consented to analytics
-	// (AI.md PART 16). Rendered in <head>; empty means no third-party script.
+	// TrackingHTML contains only external tracking tags for this request; inline
+	// provider code is fetched from the same-origin /server/tracking.js endpoint.
 	TrackingHTML template.HTML
+	// TrackingNoscriptHTML is rendered as the first child of <body> when
+	// consented Simple Analytics tracking is enabled.
+	TrackingNoscriptHTML template.HTML
 	Extra        map[string]interface{}
 	ServerURL    string
 	// RequestPath is the current request's path+query, used to redirect the browser

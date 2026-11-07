@@ -4,7 +4,8 @@
     "name": "Hebrew",
     "native_name": "עברית",
     "direction": "rtl",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "שמור",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "הושבת על ידי המפעיל",
     "engines_order_help": "גררו מנועים כדי לשנות את סדר העדיפויות שלהם.",
     "owner_tokens": {
-      "heading": "אסימונים",
+      "heading": "אסימוני בעלים",
       "primary_token": "אסימון ראשי",
       "linked_tokens": "אסימונים מקושרים",
       "reveal_notice": "יש להעתיק את האסימון עכשיו. הוא יישאר זמין דרך פעולת ההצגה.",
@@ -298,7 +299,7 @@
       "create_linked": "יצירת אסימון מקושר",
       "restore_description": "אסימוני בעלים מאפשרים לנהל משאבים שנוצרו בדפדפן הזה.",
       "restore_existing": "שימוש באסימון ראשי קיים",
-      "restore_owner": "שחזור בעלים",
+      "restore_owner": "שחזור זהות",
       "revoke_linked_confirm": "לבטל את האסימון המקושר?",
       "active": "פעיל",
       "expired": "פג תוקף",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 ימים",
       "expiry_30d": "30 ימים",
       "expiry_90d": "90 ימים",
-      "expiry_1y": "שנה אחת"
+      "expiry_1y": "שנה אחת",
+      "shown_once": "מוצג פעם אחת בטעינת הדף הנוכחית.",
+      "primary_help": "גישה מלאה להתראות שלך. יש לשמור את האסימון פרטי.",
+      "name_help": "לדוגמה: לקוח MCP",
+      "expiry_custom": "תאריך מותאם אישית",
+      "custom_date": "תאריך מותאם אישית",
+      "expires_on": "תאריך תפוגה",
+      "create": "יצירת אסימון",
+      "this_browser": "דפדפן זה",
+      "saved_in_browser": "אסימון הבעלים נשמר בדפדפן זה.",
+      "forget_note": "שכחת דפדפן זה מסירה את קובץ ה-cookie השמור של אסימון הבעלים. ההתראות שלך לא יימחקו.",
+      "forget_saved_token": "שכחת האסימון השמור",
+      "forget_confirm": "לשכוח את אסימון הבעלים השמור בדפדפן זה?",
+      "no_linked_tokens": "אין עדיין אסימונים מקושרים.",
+      "no_linked_tokens_help": "יש ליצור אסימון לכל יישום, למשל ללקוח MCP שלך.",
+      "restore_hint": "הדבק את האסימון הראשי",
+      "restore_success": "זהות הבעלים שוחזרה",
+      "forgot_saved_token": "אסימון הבעלים השמור נשכח",
+      "linked_revoked": "האסימון המקושר בוטל",
+      "linked_updated": "האסימון המקושר עודכן",
+      "reveal": "הצגת האסימון"
     },
     "font_size": "גודל גופן",
     "font_size_small": "קטן",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "נקודת הקצה מקבלת POST בלבד.",
     "error_405_fix": "שלחו בקשת JSON-RPC באמצעות POST.",
     "project_empty": "לא הוגדרה הדרכה ייעודית לכלי Search."
+  },
+  "dpo": {
+    "title": "ממונה על הגנת מידע"
   }
 }

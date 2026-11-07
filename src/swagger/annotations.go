@@ -617,6 +617,21 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
+	paths[version.APIPrefix+"/server/dpo"] = PathItem{
+		Get: &Operation{
+			Summary:     "Data Protection Officer contact",
+			Description: "Return the public DPO contact and the request-resolved absolute privacy-policy URL",
+			Tags:        []string{"Server"},
+			Responses: map[string]Response{
+				"200": okResponse("DPO contact", &Schema{Type: "object", Properties: map[string]Schema{
+					"name":        {Type: "string"},
+					"email":       {Type: "string"},
+					"privacy_url": {Type: "string"},
+				}}),
+			},
+		},
+	}
+
 	paths[version.APIPrefix+"/server/preferences"] = PathItem{
 		Get: &Operation{
 			Summary:     "Get preferences",

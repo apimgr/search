@@ -2235,6 +2235,53 @@
         }
       }
     },
+    "/api/v1/server/dpo": {
+      "get": {
+        "operationId": "getApiV1ServerDpo",
+        "summary": "Data Protection Officer contact",
+        "description": "Return the public DPO contact and the request-resolved absolute privacy-policy URL",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "DPO contact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "email": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "privacy_url": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/server/geoip/ips": {
       "get": {
         "operationId": "getApiV1ServerGeoipIps",

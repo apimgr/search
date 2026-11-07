@@ -20,6 +20,7 @@ import (
 
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )
@@ -1726,6 +1727,11 @@ type ContactConfig struct {
 	Abuse ContactRoleConfig `yaml:"abuse"`
 	// General receives /server/contact form submissions — published when set
 	General ContactRoleConfig `yaml:"general"`
+	// DPO is the optional public Data Protection Officer contact.
+	DPO struct {
+		Name  string `yaml:"name"`
+		Email string `yaml:"email"`
+	} `yaml:"dpo"`
 }
 
 // SEOConfig represents SEO configuration
@@ -1859,7 +1865,7 @@ type I18nConfig struct {
 	// BCP 47 language tag (e.g., en, en-US, de)
 	DefaultLanguage string `yaml:"default_language"`
 	// List of supported languages
-	SupportedLanguages []string `yaml:"supported"`
+	SupportedLanguages []string `yaml:"available_languages"`
 	// Detect from Accept-Language header
 	AutoDetect bool `yaml:"auto_detect"`
 	// Show language selector in UI
@@ -1870,6 +1876,24 @@ type I18nConfig struct {
 	TranslationsDir string `yaml:"translations_dir"`
 	// Fallback if requested language not available
 	FallbackLanguage string `yaml:"fallback_language"`
+}
+
+// UnmarshalYAML accepts the former "supported" key while writing the
+// canonical "available_languages" key required by the current spec.
+func (c *I18nConfig) UnmarshalYAML(node *yaml.Node) error {
+	type plain I18nConfig
+	var value struct {
+		*plain          `yaml:",inline"`
+		LegacySupported []string `yaml:"supported"`
+	}
+	value.plain = (*plain)(c)
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	if len(c.SupportedLanguages) == 0 {
+		c.SupportedLanguages = value.LegacySupported
+	}
+	return nil
 }
 
 // SearchConfig represents search configuration
@@ -2566,10 +2590,10 @@ func DefaultConfig() *Config {
 			I18n: I18nConfig{
 				Enabled:            true,
 				DefaultLanguage:    "en",
-				SupportedLanguages: []string{"en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "ja", "zh", "ar"},
+				SupportedLanguages: i18n.DefaultSupportedLanguages(),
 				AutoDetect:         true,
 				ShowSelector:       true,
-				RTLLanguages:       []string{"ar", "he", "fa", "ur"},
+				RTLLanguages:       i18n.RTLLanguages(),
 				TranslationsDir:    "/data/translations",
 				FallbackLanguage:   "en",
 			},
@@ -3394,6 +3418,31 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 
 	var warnings []ValidationWarning
 
+	for i, language := range c.Server.I18n.SupportedLanguages {
+		c.Server.I18n.SupportedLanguages[i] = strings.ToLower(strings.TrimSpace(language))
+	}
+	c.Server.I18n.DefaultLanguage = strings.ToLower(strings.TrimSpace(c.Server.I18n.DefaultLanguage))
+	if len(c.Server.I18n.SupportedLanguages) == 0 {
+		c.Server.I18n.SupportedLanguages = i18n.DefaultSupportedLanguages()
+	}
+	if err := i18n.ValidateSupportedLanguages(c.Server.I18n.SupportedLanguages); err != nil {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.i18n.available_languages",
+			Message: fmt.Sprintf("Invalid supported-language set (%v), using all embedded locales", err),
+			Default: i18n.DefaultSupportedLanguages(),
+		})
+		c.Server.I18n.SupportedLanguages = i18n.DefaultSupportedLanguages()
+	}
+	if !containsLanguage(c.Server.I18n.SupportedLanguages, c.Server.I18n.DefaultLanguage) {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.i18n.default_language",
+			Message: "Default language is not enabled, using English",
+			Default: "en",
+		})
+		c.Server.I18n.DefaultLanguage = "en"
+	}
+	c.Server.I18n.RTLLanguages = i18n.RTLLanguages()
+
 	// Server title
 	if c.Server.Title == "" {
 		warnings = append(warnings, ValidationWarning{
@@ -3593,6 +3642,16 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 	}
 
 	return warnings
+}
+
+func containsLanguage(languages []string, target string) bool {
+	target = strings.ToLower(strings.TrimSpace(target))
+	for _, language := range languages {
+		if strings.ToLower(strings.TrimSpace(language)) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // LogValidationWarnings prints validation warnings to stdout

@@ -1,71 +1,182 @@
 {{define "content"}}
-<div class="static-page preferences-page">
+<div class="static-page owner-tokens-page">
     <header class="page-header">
+        <a class="owner-token-back" href="/server/preferences"><span aria-hidden="true">←</span> {{t "preferences.title"}}</a>
         <h1>{{t "preferences.owner_tokens.heading"}}</h1>
-        <p class="subtitle">{{t "preferences.owner_tokens.heading"}}</p>
-        <a href="/server/preferences">{{t "preferences.title"}}</a>
     </header>
-    {{with index .Data "ownerTokenMessage"}}<p role="status">{{.}}</p>{{end}}
-    {{with index .Data "ownerTokenRevealed"}}
-    <div class="token-reveal" role="alert">
-        <p>{{t "preferences.owner_tokens.reveal_notice"}}</p>
-        <code class="token-value">{{.}}</code>
+    {{if index .Data "HasOwner"}}
+    <div class="owner-token-layout">
+        <div class="owner-token-primary-column">
+            <section class="section-card owner-token-card" id="primary" aria-labelledby="primary-token-heading">
+                <h2 id="primary-token-heading">{{t "preferences.owner_tokens.primary_token"}}</h2>
+                <span class="owner-token-status owner-token-status-active">{{t "preferences.owner_tokens.active"}}</span>
+                {{if index .Data "PrimaryRevealed"}}
+                <code id="primary-token-value" class="copy-value">{{index .Data "PrimaryRevealedValue"}}</code>
+                <p>{{t "preferences.owner_tokens.shown_once"}}</p>
+                <button type="button" class="btn btn-secondary" data-copy-target="primary-token-value">{{t "common.copy"}}</button>
+                {{else}}
+                <code class="copy-value">{{index .Data "ownerPrimaryMasked"}}</code>
+                {{end}}
+                <p>{{t "preferences.owner_tokens.primary_help"}}</p>
+                <footer class="owner-token-actions">
+                    {{if not (index .Data "PrimaryRevealed")}}
+                    <form action="/server/preferences/token/reveal" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                        <button class="btn btn-secondary" type="submit">{{t "preferences.owner_tokens.reveal"}}</button>
+                    </form>
+                    {{end}}
+                    <button class="btn btn-secondary" type="button" popovertarget="rotate-primary-popover">{{t "preferences.owner_tokens.rotate"}}</button>
+                </footer>
+                <div id="rotate-primary-popover" class="owner-token-confirm" popover>
+                    <p>{{t "preferences.owner_tokens.rotate_primary_confirm"}}</p>
+                    <form action="/server/preferences/token/rotate" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                        <input type="hidden" name="confirm" value="rotate">
+                        <div class="actions">
+                            <button class="btn btn-secondary" type="button" popovertarget="rotate-primary-popover" popovertargetaction="hide">{{t "common.cancel"}}</button>
+                            <button class="btn btn-danger" type="submit">{{t "preferences.owner_tokens.rotate"}}</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section class="section-card owner-token-card" id="create-token" aria-labelledby="create-token-heading">
+                <h2 id="create-token-heading">{{t "preferences.owner_tokens.create_linked"}}</h2>
+                <form action="/server/preferences/tokens" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <label for="new-token-name">{{t "preferences.name_label"}}</label>
+                    <p class="form-help" id="new-token-name-help">{{t "preferences.owner_tokens.name_help"}}</p>
+                    <input id="new-token-name" name="name" maxlength="64" required aria-describedby="new-token-name-help">
+                    <label for="new-token-expiry">{{t "admin.tokens_page.expires"}}</label>
+                    <select id="new-token-expiry" name="expires_at">
+                        <option value="never">{{t "admin.tokens_page.never"}}</option>
+                        <option value="7d">{{t "preferences.owner_tokens.expiry_7d"}}</option>
+                        <option value="30d">{{t "preferences.owner_tokens.expiry_30d"}}</option>
+                        <option value="90d">{{t "preferences.owner_tokens.expiry_90d"}}</option>
+                        <option value="1y">{{t "preferences.owner_tokens.expiry_1y"}}</option>
+                        <option value="custom">{{t "preferences.owner_tokens.expiry_custom"}}</option>
+                    </select>
+                    <details class="owner-token-custom-date">
+                        <summary>{{t "preferences.owner_tokens.custom_date"}}</summary>
+                        <label for="new-token-expires-on">{{t "preferences.owner_tokens.expires_on"}}</label>
+                        <input id="new-token-expires-on" name="expires_on" type="date">
+                    </details>
+                    <div class="actions">
+                        <button class="btn btn-primary" type="submit">{{t "preferences.owner_tokens.create"}}</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="section-card owner-token-card" id="this-browser" aria-labelledby="this-browser-heading">
+                <h2 id="this-browser-heading">{{t "preferences.owner_tokens.this_browser"}}</h2>
+                <p>{{t "preferences.owner_tokens.saved_in_browser"}}</p>
+                <p>{{t "preferences.owner_tokens.forget_note"}}</p>
+                <button class="btn btn-ghost-danger" type="button" popovertarget="forget-owner-popover">{{t "preferences.owner_tokens.forget_saved_token"}}</button>
+                <div id="forget-owner-popover" class="owner-token-confirm" popover>
+                    <p>{{t "preferences.owner_tokens.forget_confirm"}}</p>
+                    <form action="/server/preferences/tokens/forget" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                        <div class="actions">
+                            <button class="btn btn-secondary" type="button" popovertarget="forget-owner-popover" popovertargetaction="hide">{{t "common.cancel"}}</button>
+                            <button class="btn btn-danger" type="submit">{{t "preferences.owner_tokens.forget_saved_token"}}</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+
+        <section class="section-card owner-token-linked-column" id="linked-tokens" aria-labelledby="linked-tokens-heading">
+            <h2 id="linked-tokens-heading">{{t "preferences.owner_tokens.linked_tokens"}} ({{index .Data "LinkedCount"}})</h2>
+            {{if index .Data "LinkedTokens"}}
+            <div class="owner-token-list">
+                {{range index .Data "LinkedTokens"}}
+                <article class="owner-token-item" id="token-{{.ID}}">
+                    <header class="owner-token-item-header">
+                        <h3>{{.Name}}</h3>
+                        <span class="owner-token-status owner-token-status-{{.Status}}">{{.StatusLabel}}</span>
+                    </header>
+                    {{if .Revealed}}
+                    <code id="token-value-{{.ID}}" class="copy-value">{{.RevealedValue}}</code>
+                    <p>{{t "preferences.owner_tokens.shown_once"}}</p>
+                    <button type="button" class="btn btn-secondary" data-copy-target="token-value-{{.ID}}">{{t "common.copy"}}</button>
+                    {{else}}
+                    <code class="copy-value">{{.Masked}}</code>
+                    {{end}}
+                    <dl>
+                        <div><dt>{{t "admin.tokens_page.created"}}</dt><dd>{{.CreatedAt}}</dd></div>
+                        <div><dt>{{t "admin.tokens_page.last_used"}}</dt><dd>{{.LastUsedAt}}</dd></div>
+                        <div><dt>{{t "admin.tokens_page.expires"}}</dt><dd>{{.ExpiresAt}}</dd></div>
+                    </dl>
+                    <footer class="owner-token-actions">
+                        {{if not .Revealed}}
+                        <form action="/server/preferences/tokens/{{.ID}}/reveal" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <button class="btn btn-secondary" type="submit">{{t "preferences.owner_tokens.reveal"}}</button>
+                        </form>
+                        {{end}}
+                        <button class="btn btn-secondary" type="button" popovertarget="rotate-token-{{.ID}}">{{t "preferences.owner_tokens.rotate"}}</button>
+                        <details class="owner-token-edit">
+                            <summary class="btn btn-secondary">{{t "common.edit"}}</summary>
+                            <form action="/server/preferences/tokens/{{.ID}}/update" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <label for="token-name-{{.ID}}">{{t "preferences.name_label"}}</label>
+                                <input id="token-name-{{.ID}}" name="name" value="{{.Name}}" maxlength="64" required>
+                                <label for="token-expiry-{{.ID}}">{{t "admin.tokens_page.expires"}}</label>
+                                <select id="token-expiry-{{.ID}}" name="expires_at">
+                                    <option value="never"{{if eq .ExpiryValue "never"}} selected{{end}}>{{t "admin.tokens_page.never"}}</option>
+                                    <option value="7d"{{if eq .ExpiryValue "7d"}} selected{{end}}>{{t "preferences.owner_tokens.expiry_7d"}}</option>
+                                    <option value="30d"{{if eq .ExpiryValue "30d"}} selected{{end}}>{{t "preferences.owner_tokens.expiry_30d"}}</option>
+                                    <option value="90d"{{if eq .ExpiryValue "90d"}} selected{{end}}>{{t "preferences.owner_tokens.expiry_90d"}}</option>
+                                    <option value="1y"{{if eq .ExpiryValue "1y"}} selected{{end}}>{{t "preferences.owner_tokens.expiry_1y"}}</option>
+                                    <option value="custom"{{if eq .ExpiryValue "custom"}} selected{{end}}>{{t "preferences.owner_tokens.expiry_custom"}}</option>
+                                </select>
+                                <details class="owner-token-custom-date"{{if eq .ExpiryValue "custom"}} open{{end}}>
+                                    <summary>{{t "preferences.owner_tokens.custom_date"}}</summary>
+                                    <label for="token-expires-on-{{.ID}}">{{t "preferences.owner_tokens.expires_on"}}</label>
+                                    <input id="token-expires-on-{{.ID}}" name="expires_on" type="date" value="{{.ExpiresOn}}">
+                                </details>
+                                <div class="actions"><button class="btn btn-primary" type="submit">{{t "common.save"}}</button></div>
+                            </form>
+                        </details>
+                    <button class="btn btn-ghost-danger" type="button" popovertarget="revoke-token-{{.ID}}">{{t "admin.tokens_page.revoke"}}</button>
+                    <div id="revoke-token-{{.ID}}" class="owner-token-confirm" popover>
+                                <p>{{t "preferences.owner_tokens.revoke_linked_confirm"}}</p>
+                                <form action="/server/preferences/tokens/{{.ID}}/revoke" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                    <div class="actions">
+                                        <button class="btn btn-secondary" type="button" popovertarget="revoke-token-{{.ID}}" popovertargetaction="hide">{{t "common.cancel"}}</button>
+                                        <button class="btn btn-danger" type="submit">{{t "admin.tokens_page.revoke"}}</button>
+                                    </div>
+                                </form>
+                    </div>
+                    </footer>
+                    <div id="rotate-token-{{.ID}}" class="owner-token-confirm" popover>
+                        <p>{{t "preferences.owner_tokens.rotate_linked_confirm"}}</p>
+                        <form action="/server/preferences/tokens/{{.ID}}/rotate" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <div class="actions">
+                                <button class="btn btn-secondary" type="button" popovertarget="rotate-token-{{.ID}}" popovertargetaction="hide">{{t "common.cancel"}}</button>
+                                <button class="btn btn-danger" type="submit">{{t "preferences.owner_tokens.rotate"}}</button>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+                {{end}}
+            </div>
+            {{else}}
+            <p>{{t "preferences.owner_tokens.no_linked_tokens"}}</p>
+            <p>{{t "preferences.owner_tokens.no_linked_tokens_help"}}</p>
+            {{end}}
+        </section>
     </div>
-    {{end}}
-    {{with index .Data "ownerTokens"}}
-    <section class="preferences-section">
-        <h2>{{t "preferences.owner_tokens.primary_token"}}</h2>
-        <code>{{index $.Data "ownerPrimaryMasked"}}</code>
-        <form action="/server/preferences/token/reveal" method="POST">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-            <button type="submit">{{t "preferences.owner_tokens.reveal_primary"}}</button>
-        </form>
-        <details class="confirm-disclosure">
-            <summary>{{t "preferences.owner_tokens.rotate_primary"}}</summary>
-            <p>{{t "preferences.owner_tokens.rotate_primary_confirm"}}</p>
-            <form action="/server/preferences/token/rotate" method="POST">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="confirm" value="rotate">
-                <button type="submit">{{t "preferences.owner_tokens.rotate"}}</button>
-            </form>
-        </details>
-        <h2>{{t "preferences.owner_tokens.linked_tokens"}}</h2>
-        {{range .}}
-        {{if eq .Kind "linked"}}
-        <article class="owner-token-item">
-            <h3>{{.Name}}</h3>
-            <code>{{.Masked}}</code>
-            <p>{{t "health.status"}}: {{if eq .Status "active"}}{{t "preferences.owner_tokens.active"}}{{else if eq .Status "expired"}}{{t "preferences.owner_tokens.expired"}}{{else}}{{t "preferences.owner_tokens.revoked"}}{{end}} · {{t "admin.tokens_page.created"}} {{.CreatedAt}} · {{t "admin.tokens_page.last_used"}} {{.LastUsedAt}} · {{t "admin.tokens_page.expires"}} {{.ExpiresAt}}</p>
-            <form action="/server/preferences/tokens/{{.ID}}/reveal" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">{{t "common.show"}}</button></form>
-            <details class="confirm-disclosure">
-                <summary>{{t "preferences.owner_tokens.rotate"}}</summary>
-                <p>{{t "preferences.owner_tokens.rotate_linked_confirm"}}</p>
-                <form action="/server/preferences/tokens/{{.ID}}/rotate" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">{{t "preferences.owner_tokens.rotate"}}</button></form>
-            </details>
-            <form action="/server/preferences/tokens/{{.ID}}/update" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>{{t "preferences.name_label"}} <input name="name" value="{{.Name}}" maxlength="64" required></label><label>{{t "admin.tokens_page.expires"}} <select name="expires_at"><option value="never">{{t "admin.tokens_page.never"}}</option><option value="7d">{{t "preferences.owner_tokens.expiry_7d"}}</option><option value="30d">{{t "preferences.owner_tokens.expiry_30d"}}</option><option value="90d">{{t "preferences.owner_tokens.expiry_90d"}}</option><option value="1y">{{t "preferences.owner_tokens.expiry_1y"}}</option></select></label><button type="submit">{{t "common.save"}}</button></form>
-            <details class="confirm-disclosure">
-                <summary>{{t "admin.tokens_page.revoke"}}</summary>
-                <p>{{t "preferences.owner_tokens.revoke_linked_confirm"}}</p>
-                <form action="/server/preferences/tokens/{{.ID}}/revoke" method="POST"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit">{{t "admin.tokens_page.revoke"}}</button></form>
-            </details>
-        </article>
-        {{end}}
-        {{end}}
-        <form action="/server/preferences/tokens" method="POST">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-            <label>{{t "preferences.name_label"}} <input name="name" maxlength="64" required></label>
-            <label>{{t "admin.tokens_page.expires"}} <select name="expires_at"><option value="never">{{t "admin.tokens_page.never"}}</option><option value="7d">{{t "preferences.owner_tokens.expiry_7d"}}</option><option value="30d">{{t "preferences.owner_tokens.expiry_30d"}}</option><option value="90d">{{t "preferences.owner_tokens.expiry_90d"}}</option><option value="1y">{{t "preferences.owner_tokens.expiry_1y"}}</option></select></label>
-            <button type="submit">{{t "preferences.owner_tokens.create_linked"}}</button>
-        </form>
-    </section>
     {{else}}
-    <section class="preferences-section">
-        <p>{{t "preferences.owner_tokens.restore_description"}}</p>
+    <section class="section-card owner-token-restore" id="restore">
         <form action="/server/preferences/token/restore" method="POST">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <label for="restore-owner-token">{{t "preferences.owner_tokens.restore_existing"}}</label>
-            <input id="restore-owner-token" name="token" type="password" autocomplete="off" required>
-            <button type="submit">{{t "preferences.owner_tokens.restore_owner"}}</button>
+            <label for="restore-owner-token">{{t "preferences.owner_tokens.primary_token"}}</label>
+            <p class="form-help" id="restore-owner-token-help">{{t "preferences.owner_tokens.restore_description"}}</p>
+            <input id="restore-owner-token" name="token" type="password" autocomplete="off" placeholder="{{t "preferences.owner_tokens.restore_hint"}}" required aria-describedby="restore-owner-token-help">
+            <div class="actions"><button class="btn btn-primary" type="submit">{{t "preferences.owner_tokens.restore_owner"}}</button></div>
         </form>
     </section>
     {{end}}

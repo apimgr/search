@@ -31,6 +31,26 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+func TestNoJSNavigationDrawer(t *testing.T) {
+	site := newTestSite(t)
+	ctx := newBrowserContext(t)
+	var visible bool
+	var links []string
+	if err := chromedp.Run(ctx,
+		emulation.SetScriptExecutionDisabled(true),
+		emulation.SetDeviceMetricsOverride(390, 844, 1, false),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Click(".nav-toggle", chromedp.ByQuery),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('#nav-panel')).visibility === 'visible'`, &visible),
+		chromedp.Evaluate(`Array.from(document.querySelectorAll('#nav-panel a')).map(link => link.getAttribute('href'))`, &links),
+	); err != nil {
+		t.Fatalf("open no-JS navigation drawer: %v", err)
+	}
+	if !visible || len(links) != 3 {
+		t.Fatalf("no-JS drawer visible=%t links=%v, want visible with all three navigation links", visible, links)
+	}
+}
+
 // runNoJS is the Tier 2 entry point: launches a tab, disables JS, and hands
 // the caller a context to drive with chromedp.Run.
 func runNoJS(t *testing.T, steps ...chromedp.Action) string {
@@ -367,6 +387,7 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	site := newTestSite(t)
 	var primary, linked, updated, rotated string
 	var status string
+	var managementHidden bool
 	primary = createAPIAlertOwner(t, site, "owner token nojs fixture")
 	ctx := newBrowserContext(t)
 	if err := chromedp.Run(ctx, emulation.SetScriptExecutionDisabled(true)); err != nil {
@@ -379,13 +400,13 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 				WithSameSite(network.CookieSameSiteStrict).Do(ctx)
 			return err
 		}),
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
+		chromedp.WaitVisible(`.owner-tokens-page h1`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("load API-created owner in a no-JS browser: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] input[name=name]`, "nojs-linked", chromedp.ByQuery),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] select[name=expires_at]`, "7d", chromedp.ByQuery),
 	); err != nil {
@@ -395,8 +416,8 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		t.Fatalf("submit linked token creation without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &linked, chromedp.ByQuery),
+		chromedp.WaitVisible("#linked-tokens .owner-token-item code[id^='token-value-']", chromedp.ByQuery),
+		chromedp.Text("#linked-tokens .owner-token-item code[id^='token-value-']", &linked, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("create linked token without JavaScript: %v", err)
 	}
@@ -419,6 +440,7 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	}
 	var action string
 	if err := chromedp.Run(ctx,
+		chromedp.Click(`.owner-token-edit > summary`, chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('.owner-token-item form[action$="/update"]').action`, &action),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] input[name=name]`, "nojs-renamed", chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] select[name=expires_at]`, "30d", chromedp.ByQuery),
@@ -429,10 +451,10 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		t.Fatalf("submit linked-token update without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitReady(`.owner-token-item h4`, chromedp.ByQuery),
-		chromedp.Poll(`document.querySelector('.owner-token-item h4')?.textContent.trim() === 'nojs-renamed'`, nil,
+		chromedp.WaitReady(`.owner-token-item h3`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('.owner-token-item h3')?.textContent.trim() === 'nojs-renamed'`, nil,
 			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Text(`.owner-token-item h4`, &updated, chromedp.ByQuery),
+		chromedp.Text(`.owner-token-item h3`, &updated, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("rename and update linked-token expiry without JavaScript: %v", err)
 	}
@@ -443,23 +465,23 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		t.Fatalf("submit linked-token rotation without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
+		chromedp.WaitVisible("#linked-tokens .owner-token-item code[id^='token-value-']", chromedp.ByQuery),
+		chromedp.Text("#linked-tokens .owner-token-item code[id^='token-value-']", &rotated, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("rotate linked token without JavaScript: %v", err)
 	}
 	if rotated == "" || rotated == linked {
 		t.Fatalf("linked token rotation did not replace credential: old=%t new=%t", linked != "", rotated != "")
 	}
-	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/server/preferences")); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/server/preferences/tokens")); err != nil {
 		t.Fatalf("reload preferences before revealing owner token: %v", err)
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/reveal"] button`); err != nil {
 		t.Fatalf("submit primary-token reveal without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &status, chromedp.ByQuery),
+		chromedp.WaitVisible("#primary-token-value", chromedp.ByQuery),
+		chromedp.Text("#primary-token-value", &status, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("reveal primary token without JavaScript: %v", err)
 	}
@@ -473,12 +495,15 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	); err != nil {
 		t.Fatalf("read linked-token revoke route: %v", err)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button`); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Click(`.owner-token-item button[popovertarget^="revoke-token-"]`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open linked-token revoke confirmation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button[type="submit"]`); err != nil {
 		t.Fatalf("submit linked-token revoke without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
-		chromedp.Text(`.owner-token-item p`, &linkedStatus, chromedp.ByQuery),
+		chromedp.WaitVisible(`.owner-token-item`, chromedp.ByQuery),
+		chromedp.Text(`.owner-token-item .owner-token-status`, &linkedStatus, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("revoke linked token without JavaScript: %v", err)
 	}
@@ -488,12 +513,15 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if !strings.Contains(strings.ToLower(linkedStatus), "revoked") {
 		t.Fatalf("linked token after revocation has status %q", linkedStatus)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/rotate"] button`); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Click(`button[popovertarget="rotate-primary-popover"]`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open primary-token rotation confirmation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/rotate"] button[type="submit"]`); err != nil {
 		t.Fatalf("submit primary-token rotation without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
+		chromedp.WaitVisible("#primary-token-value", chromedp.ByQuery),
+		chromedp.Text("#primary-token-value", &rotated, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("rotate primary token without JavaScript: %v", err)
 	}
@@ -515,7 +543,7 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		network.ClearBrowserCookies(),
-		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
 		chromedp.SetValue(`#restore-owner-token`, rotated, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("prepare restored owner token without JavaScript: %v", err)
@@ -524,9 +552,24 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		t.Fatalf("submit restored owner token without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(`#owner-tokens-heading`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.owner-tokens-page h1`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("restore rotated primary token without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Click(`button[popovertarget="forget-owner-popover"]`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open saved-token forget confirmation without JavaScript: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/tokens/forget"] button[type="submit"]`); err != nil {
+		t.Fatalf("forget saved owner token without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`#restore-owner-token`, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#linked-tokens') === null`, &managementHidden),
+	); err != nil {
+		t.Fatalf("verify restore-only state after forgetting browser token: %v", err)
+	}
+	if !managementHidden {
+		t.Fatal("owner-token page showed management content after forgetting the browser token")
 	}
 }
 

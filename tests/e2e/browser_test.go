@@ -881,14 +881,12 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		chromedp.Click("form.alert-form button[type=submit]", chromedp.ByQuery),
 		chromedp.WaitVisible(".owner-token-issued .token-value", chromedp.ByQuery),
 		chromedp.Text(".owner-token-issued .token-value", &primary, chromedp.ByQuery),
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] input[name=name]`, "browser-linked", chromedp.ByQuery),
 		chromedp.SetValue(`form[action="/server/preferences/tokens"] select[name=expires_at]`, "7d", chromedp.ByQuery),
 		chromedp.Click(`form[action="/server/preferences/tokens"] button[type=submit]`, chromedp.ByQuery),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &linked, chromedp.ByQuery),
+		chromedp.WaitVisible("#linked-tokens .owner-token-item code[id^='token-value-']", chromedp.ByQuery),
+		chromedp.Text("#linked-tokens .owner-token-item code[id^='token-value-']", &linked, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("create owner and linked token in browser: %v", err)
 	}
@@ -897,14 +895,13 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	var linkedName string
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
+		chromedp.Click(`.owner-token-edit > summary`, chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] input[name=name]`, "browser-renamed", chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] select[name=expires_at]`, "30d", chromedp.ByQuery),
 		chromedp.Click(`.owner-token-item form[action$="/update"] button[type=submit]`, chromedp.ByQuery),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.WaitVisible(`.owner-token-item h4`, chromedp.ByQuery),
-		chromedp.Text(`.owner-token-item h4`, &linkedName, chromedp.ByQuery),
+		chromedp.WaitVisible(`.owner-token-item h3`, chromedp.ByQuery),
+		chromedp.Text(`.owner-token-item h3`, &linkedName, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("update linked token in browser: %v", err)
 	}
@@ -913,10 +910,8 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Click(`.owner-token-item form[action$="/reveal"] button`, chromedp.ByQuery),
-		chromedp.WaitReady(`.token-reveal .token-value`, chromedp.ByQuery),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &status, chromedp.ByQuery),
+		chromedp.WaitReady(`#linked-tokens .owner-token-item code[id^='token-value-']`, chromedp.ByQuery),
+		chromedp.Text(`#linked-tokens .owner-token-item code[id^='token-value-']`, &status, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("reveal linked token in browser: %v", err)
 	}
@@ -924,13 +919,17 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		t.Fatal("revealed linked token differs from issued token")
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.Click(`.owner-token-item form[action$="/rotate"] button`, chromedp.ByQuery),
-		chromedp.WaitReady(`.token-reveal .token-value`, chromedp.ByQuery),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.WaitVisible(".token-reveal .token-value", chromedp.ByQuery),
-		chromedp.Text(".token-reveal .token-value", &rotated, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
+		chromedp.Click(`.owner-token-item button[popovertarget^="rotate-token-"]`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("open linked-token rotation confirmation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/rotate"] button[type="submit"]`); err != nil {
+		t.Fatalf("submit linked-token rotation: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitReady(`#linked-tokens .owner-token-item code[id^='token-value-']`, chromedp.ByQuery),
+		chromedp.Text(`#linked-tokens .owner-token-item code[id^='token-value-']`, &rotated, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("rotate linked token in browser: %v", err)
 	}
@@ -938,21 +937,21 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		t.Fatal("linked token rotation did not replace the credential")
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.Evaluate(`window.confirm = () => true`, nil),
+		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
 	); err != nil {
 		t.Fatalf("prepare linked token revocation: %v", err)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button`); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Click(`.owner-token-item button[popovertarget^="revoke-token-"]`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open linked-token revoke confirmation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button[type="submit"]`); err != nil {
 		t.Fatalf("submit linked token revocation: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitReady(`#owner-tokens-heading`, chromedp.ByQuery),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.Poll(`document.querySelector('.owner-token-item p')?.textContent.toLowerCase().includes('revoked')`, nil,
+		chromedp.WaitReady(`.owner-token-item .owner-token-status`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('.owner-token-item .owner-token-status')?.textContent.toLowerCase().includes('revoked')`, nil,
 			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Text(`.owner-token-item p`, &status, chromedp.ByQuery),
+		chromedp.Text(`.owner-token-item .owner-token-status`, &status, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("revoke linked token in browser: %v", err)
 	}

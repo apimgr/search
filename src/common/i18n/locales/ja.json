@@ -4,7 +4,8 @@
     "name": "Japanese",
     "native_name": "日本語",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "保存",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "運用者により無効",
     "engines_order_help": "エンジンをドラッグして優先順位を変更します。",
     "owner_tokens": {
-      "heading": "トークン",
+      "heading": "オーナートークン",
       "primary_token": "プライマリトークン",
       "linked_tokens": "リンク済みトークン",
       "reveal_notice": "このトークンを今すぐコピーしてください。表示操作から引き続き確認できます。",
@@ -298,7 +299,7 @@
       "create_linked": "リンク済みトークンを作成",
       "restore_description": "オーナートークンを使うと、このブラウザーで作成したリソースを管理できます。",
       "restore_existing": "既存のプライマリトークンを使用",
-      "restore_owner": "オーナーを復元",
+      "restore_owner": "本人確認を復元",
       "revoke_linked_confirm": "このリンク済みトークンを取り消しますか？",
       "active": "有効",
       "expired": "期限切れ",
@@ -311,7 +312,27 @@
       "expiry_7d": "7日",
       "expiry_30d": "30日",
       "expiry_90d": "90日",
-      "expiry_1y": "1年"
+      "expiry_1y": "1年",
+      "shown_once": "このページの読み込み時に一度だけ表示されます。",
+      "primary_help": "アラートに完全にアクセスできます。このトークンは秘密にしてください。",
+      "name_help": "例: MCP クライアント",
+      "expiry_custom": "カスタム日付",
+      "custom_date": "カスタム日付",
+      "expires_on": "有効期限",
+      "create": "トークンを作成",
+      "this_browser": "このブラウザー",
+      "saved_in_browser": "所有者トークンはこのブラウザーに保存されています。",
+      "forget_note": "このブラウザーを忘れると、保存された所有者トークンの Cookie が削除されます。アラートは削除されません。",
+      "forget_saved_token": "保存済みトークンを忘れる",
+      "forget_confirm": "このブラウザーに保存された所有者トークンを忘れますか？",
+      "no_linked_tokens": "リンク済みトークンはまだありません。",
+      "no_linked_tokens_help": "MCP クライアントなど、アプリごとに作成してください。",
+      "restore_hint": "プライマリトークンを貼り付け",
+      "restore_success": "所有者の情報を復元しました",
+      "forgot_saved_token": "保存済み所有者トークンを削除しました",
+      "linked_revoked": "リンク済みトークンを失効しました",
+      "linked_updated": "リンク済みトークンを更新しました",
+      "reveal": "トークンを表示"
     },
     "font_size": "フォントサイズ",
     "font_size_small": "小",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "このエンドポイントは POST のみ受け付けます。",
     "error_405_fix": "POST で JSON-RPC リクエストを送信してください。",
     "project_empty": "Search 専用ツールの案内は設定されていません。"
+  },
+  "dpo": {
+    "title": "データ保護責任者"
   }
 }

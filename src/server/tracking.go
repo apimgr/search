@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"html"
 	"html/template"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,10 +14,6 @@ import (
 
 // ConsentCookie is the parsed form of the cookie_consent cookie, per AI.md
 // PART 16 "Consent Logic (Granular)".
-//
-// The cookie is stored percent-encoded JSON so it survives net/http's cookie
-// sanitization and round-trips through the client's
-// decodeURIComponent + JSON.parse (AI.md PART 16 readConsentCookie).
 type ConsentCookie struct {
 	Essential   bool  `json:"essential"`
 	Preferences bool  `json:"preferences"`
@@ -23,10 +21,6 @@ type ConsentCookie struct {
 	Timestamp   int64 `json:"timestamp"`
 }
 
-// consentFromRequest reads and decodes the cookie_consent cookie. It returns
-// nil when the cookie is absent, empty, malformed, or not valid JSON — a
-// cookie the client cannot parse is treated as no consent at all, so a corrupt
-// value can never unlock tracking.
 func consentFromRequest(r *http.Request) *ConsentCookie {
 	if r == nil {
 		return nil
@@ -35,10 +29,6 @@ func consentFromRequest(r *http.Request) *ConsentCookie {
 	if err != nil || c.Value == "" {
 		return nil
 	}
-	// The client writes the value with encodeURIComponent; decode with the
-	// matching unescape before handing it to the JSON parser. An unencoded
-	// (legacy, unquoted) value simply fails to parse and yields nil, which is
-	// the safe outcome.
 	raw, err := url.PathUnescape(c.Value)
 	if err != nil {
 		raw = c.Value
@@ -46,16 +36,12 @@ func consentFromRequest(r *http.Request) *ConsentCookie {
 	return parseConsentJSON(raw)
 }
 
-// CanSetPreferenceCookie reports whether this request explicitly allows UI
-// preference cookies. Missing, malformed, or declined consent never grants it.
+// CanSetPreferenceCookie reports whether the visitor explicitly permits UI preference cookies.
 func CanSetPreferenceCookie(r *http.Request) bool {
 	consent := consentFromRequest(r)
 	return consent != nil && consent.Preferences
 }
 
-// parseConsentJSON decodes a consent cookie payload. The essential flag is
-// forced true on a successful parse: essential cookies are required for the app
-// to function and can never be switched off (AI.md PART 16 cookie categories).
 func parseConsentJSON(raw string) *ConsentCookie {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -68,159 +54,225 @@ func parseConsentJSON(raw string) *ConsentCookie {
 	return &c
 }
 
-// CheckTrackingAllowed reports whether analytics may be loaded for this
-// request. Per AI.md PART 16 it returns true only when the visitor explicitly
-// accepted the analytics category AND server.tracking names a provider.
-//
-// The spec spells this as a free function reading a global config; this server
-// threads *config.Config through the Server instead, so the provider check
-// takes s.config rather than calling config.Get().
-//
-// No cookie means no consent, so a first-time visitor gets no tracking — the
-// "Decline" row of the spec's decline-behavior table ("NEVER loaded").
-func (s *Server) CheckTrackingAllowed(r *http.Request) bool {
-	consent := consentFromRequest(r)
-	if consent == nil || !consent.Analytics {
-		return false
-	}
-	if s == nil || s.config == nil {
-		return false
-	}
-	t := s.config.Server.Tracking.Type
-	return t != "" && t != "none"
+// tracker is the provider contribution. Script bodies are served from the
+// same-origin endpoint and are never inserted inline into an HTML page.
+type tracker struct {
+	tags string
+	body string
 }
 
-// trackingScript returns the analytics snippet to inject for this request, or
-// an empty template when the visitor has not consented. It is the single
-// injection point: the layout renders {{.TrackingHTML}}, so no other template
-// can smuggle a third-party script past the consent gate.
+// jsString serializes a value as a JavaScript string literal.
+func jsString(v string) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+func trackerFor(cfg config.TrackingConfig) (tracker, bool) {
+	typeName := strings.ToLower(strings.TrimSpace(cfg.Type))
+	id := html.EscapeString(cfg.ID)
+	base := strings.TrimSuffix(strings.TrimSpace(cfg.URL), "/")
+	switch typeName {
+	case "google":
+		if strings.TrimSpace(cfg.ID) == "" {
+			return tracker{}, false
+		}
+		if strings.HasPrefix(cfg.ID, "G-") {
+			return tracker{
+				tags: `<script async src="https://www.googletagmanager.com/gtag/js?id=` + url.QueryEscape(cfg.ID) + `"></script>`,
+				body: "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}" +
+					"gtag('js',new Date());gtag('config'," + jsString(cfg.ID) + ");",
+			}, true
+		}
+		return tracker{
+			tags: `<script async src="https://www.google-analytics.com/analytics.js"></script>`,
+			body: "window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;" +
+				"ga('create'," + jsString(cfg.ID) + ",'auto');ga('send','pageview');",
+		}, true
+	case "matomo", "piwik":
+		if strings.TrimSpace(cfg.ID) == "" || base == "" {
+			return tracker{}, false
+		}
+		return tracker{body: "var _paq=window._paq=window._paq||[];_paq.push(['trackPageView']);" +
+			"_paq.push(['enableLinkTracking']);_paq.push(['setTrackerUrl'," + jsString(base+"/matomo.php") + "]);" +
+			"_paq.push(['setSiteId'," + jsString(cfg.ID) + "]);var g=document.createElement('script');" +
+			"g.async=true;g.src=" + jsString(base+"/matomo.js") + ";document.head.appendChild(g);"}, true
+	case "owa":
+		if strings.TrimSpace(cfg.ID) == "" || base == "" {
+			return tracker{}, false
+		}
+		return tracker{body: "var owa_baseUrl=" + jsString(base+"/") + ";var owa_cmds=window.owa_cmds=window.owa_cmds||[];" +
+			"owa_cmds.push(['setSiteId'," + jsString(cfg.ID) + "]);owa_cmds.push(['trackPageView']);owa_cmds.push(['trackClicks']);" +
+			"var o=document.createElement('script');o.async=true;o.src=owa_baseUrl+'modules/base/js/owa.tracker-combined-min.js';" +
+			"document.head.appendChild(o);"}, true
+	case "fathom":
+		if strings.TrimSpace(cfg.ID) == "" {
+			return tracker{}, false
+		}
+		src := "https://cdn.usefathom.com/script.js"
+		if base != "" {
+			src = base + "/tracker.js"
+		}
+		return tracker{tags: `<script src="` + html.EscapeString(src) + `" data-site="` + id + `" defer></script>`}, true
+	case "plausible":
+		if strings.TrimSpace(cfg.ID) == "" {
+			return tracker{}, false
+		}
+		src := "https://plausible.io/js/script.js"
+		if base != "" {
+			src = base + "/js/script.js"
+		}
+		return tracker{tags: `<script defer data-domain="` + id + `" src="` + html.EscapeString(src) + `"></script>`}, true
+	case "umami":
+		if strings.TrimSpace(cfg.ID) == "" || base == "" {
+			return tracker{}, false
+		}
+		return tracker{tags: `<script defer src="` + html.EscapeString(base) + `/script.js" data-website-id="` + id + `"></script>`}, true
+	case "simple":
+		return tracker{tags: `<script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>`}, true
+	case "cloudflare":
+		if strings.TrimSpace(cfg.ID) == "" {
+			return tracker{}, false
+		}
+		return tracker{tags: `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "` + id + `"}'></script>`}, true
+	case "", "none":
+		return tracker{}, false
+	default:
+		return tracker{}, false
+	}
+}
+
+func trackingCSP(csp string, cfg config.TrackingConfig) string {
+	add := func(directive, source string) {
+		csp = appendCSPDirectiveSources(csp, directive, source)
+	}
+	addHost := func(raw string) string {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+			return ""
+		}
+		return u.Scheme + "://" + u.Host
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Type)) {
+	case "google":
+		if strings.HasPrefix(cfg.ID, "G-") {
+			add("script-src", "https://www.googletagmanager.com")
+		} else {
+			add("script-src", "https://www.google-analytics.com")
+		}
+		add("connect-src", "https://www.google-analytics.com")
+	case "matomo", "piwik", "owa", "umami":
+		if host := addHost(cfg.URL); host != "" {
+			add("script-src", host)
+			add("connect-src", host)
+		}
+	case "fathom":
+		host := "https://cdn.usefathom.com"
+		if cfg.URL != "" {
+			host = addHost(cfg.URL)
+		}
+		if host != "" {
+			add("script-src", host)
+			add("connect-src", host)
+		}
+	case "plausible":
+		host := "https://plausible.io"
+		if cfg.URL != "" {
+			host = addHost(cfg.URL)
+		}
+		if host != "" {
+			add("script-src", host)
+			add("connect-src", host)
+		}
+	case "simple":
+		add("script-src", "https://scripts.simpleanalyticscdn.com")
+		add("img-src", "https://queue.simpleanalyticscdn.com")
+	case "cloudflare":
+		add("script-src", "https://static.cloudflareinsights.com")
+		add("connect-src", "https://cloudflareinsights.com")
+	}
+	return csp
+}
+
+// TrackingScript returns provider external tags and a same-origin body loader.
+func TrackingScript(cfg config.TrackingConfig) template.HTML {
+	t, ok := trackerFor(cfg)
+	if !ok {
+		return ""
+	}
+	out := t.tags
+	if t.body != "" {
+		out += `<script async src="/server/tracking.js"></script>`
+	}
+	return template.HTML(out)
+}
+
+// TrackingScriptBody returns the provider JavaScript served by the same-origin endpoint.
+func TrackingScriptBody(cfg config.TrackingConfig) string {
+	t, ok := trackerFor(cfg)
+	if !ok {
+		return ""
+	}
+	return t.body
+}
+
+// TrackingNoscript returns the Simple Analytics pixel for placement at body start.
+func TrackingNoscript(cfg config.TrackingConfig) template.HTML {
+	if strings.ToLower(strings.TrimSpace(cfg.Type)) != "simple" {
+		return ""
+	}
+	return template.HTML(`<noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>`)
+}
+
+func (s *Server) trackingAllowed(r *http.Request) bool {
+	consent := consentFromRequest(r)
+	if consent == nil || !consent.Analytics || s == nil || s.config == nil || isOnionRequest(s.config, r) || isI2PRequest(r) {
+		return false
+	}
+	_, ok := trackerFor(s.config.Server.Tracking)
+	return ok
+}
+
+func isI2PRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	host := r.Host
+	if parsed, _, err := net.SplitHostPort(host); err == nil {
+		host = parsed
+	}
+	host = strings.Trim(strings.ToLower(host), "[]")
+	return strings.HasSuffix(host, ".i2p")
+}
+
+// CheckTrackingAllowed reports whether this request may load the configured tracker.
+func (s *Server) CheckTrackingAllowed(r *http.Request) bool { return s.trackingAllowed(r) }
+
 func (s *Server) trackingScript(r *http.Request) template.HTML {
-	if !s.CheckTrackingAllowed(r) {
+	if !s.trackingAllowed(r) {
 		return ""
 	}
 	return TrackingScript(s.config.Server.Tracking)
 }
 
-// TrackingScript returns the provider-specific analytics markup for cfg, per
-// AI.md PART 12 "Analytics / Tracking". An empty or "none" type, or a type with
-// no site ID where one is required, returns nothing rather than a broken
-// snippet.
-//
-// The returned value is template.HTML, which bypasses html/template escaping.
-// Every interpolated value comes from the operator's own config file and is
-// passed through the escaping helpers used below.
-func TrackingScript(cfg config.TrackingConfig) template.HTML {
-	t := strings.ToLower(strings.TrimSpace(cfg.Type))
-	if t == "" || t == "none" {
+func (s *Server) handleTrackingScript(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet || !s.trackingAllowed(r) {
+		http.NotFound(w, r)
+		return
+	}
+	body := TrackingScriptBody(s.config.Server.Tracking)
+	if body == "" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	writeResponseText(w, body)
+}
+
+func (s *Server) trackingNoscript(r *http.Request) template.HTML {
+	if !s.trackingAllowed(r) {
 		return ""
 	}
-
-	// esc escapes a value for use inside a double-quoted HTML attribute or a
-	// single-quoted JS string literal. html/template's escaper is not in play
-	// here because the whole block is template.HTML, so the values are escaped
-	// explicitly at the point of interpolation.
-	attr := template.HTMLEscapeString
-	js := func(s string) string {
-		return template.JSEscapeString(s)
-	}
-	// base trims a trailing slash from a configured base URL so the callers can
-	// append a path with a single separator.
-	base := func(s string) string { return strings.TrimSuffix(strings.TrimSpace(s), "/") }
-
-	switch t {
-	case "google":
-		if cfg.ID == "" {
-			return ""
-		}
-		id := js(cfg.ID)
-		if strings.HasPrefix(cfg.ID, "G-") {
-			// GA4
-			return template.HTML(`<script async src="https://www.googletagmanager.com/gtag/js?id=` + attr(cfg.ID) + `"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '` + id + `');
-</script>`)
-		}
-		// Universal Analytics (legacy)
-		return template.HTML(`<script async src="https://www.google-analytics.com/analytics.js"></script>
-<script>
-  window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
-  ga('create', '` + id + `', 'auto');
-  ga('send', 'pageview');
-</script>`)
-
-	case "matomo", "piwik":
-		if cfg.ID == "" || cfg.URL == "" {
-			return ""
-		}
-		u := base(cfg.URL)
-		return template.HTML(`<script>
-  var _paq = window._paq = window._paq || [];
-  _paq.push(['trackPageView']);
-  _paq.push(['enableLinkTracking']);
-  (function() {
-    var u="` + js(u) + `/";
-    _paq.push(['setTrackerUrl', u+'matomo.php']);
-    _paq.push(['setSiteId', '` + js(cfg.ID) + `']);
-    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-    g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
-  })();
-</script>`)
-
-	case "owa":
-		if cfg.ID == "" || cfg.URL == "" {
-			return ""
-		}
-		u := base(cfg.URL)
-		return template.HTML(`<script>
-  var owa_baseUrl = '` + js(u) + `/';
-  var owa_cmds = owa_cmds || [];
-  owa_cmds.push(['setSiteId', '` + js(cfg.ID) + `']);
-  owa_cmds.push(['trackPageView']);
-  owa_cmds.push(['trackClicks']);
-  (function() {
-    var _owa = document.createElement('script'); _owa.type = 'text/javascript'; _owa.async = true;
-    _owa.src = owa_baseUrl + 'modules/base/js/owa.tracker-combined-min.js';
-    var _owa_s = document.getElementsByTagName('script')[0]; _owa_s.parentNode.insertBefore(_owa, _owa_s);
-  })();
-</script>`)
-
-	case "fathom":
-		scriptURL := "https://cdn.usefathom.com/script.js"
-		if cfg.URL != "" {
-			// Self-hosted Fathom Lite
-			scriptURL = base(cfg.URL) + "/tracker.js"
-		}
-		return template.HTML(`<script src="` + attr(scriptURL) + `" data-site="` + attr(cfg.ID) + `" defer></script>`)
-
-	case "plausible":
-		domain := cfg.ID
-		scriptURL := "https://plausible.io/js/script.js"
-		if cfg.URL != "" {
-			scriptURL = base(cfg.URL) + "/js/script.js"
-		}
-		return template.HTML(`<script defer data-domain="` + attr(domain) + `" src="` + attr(scriptURL) + `"></script>`)
-
-	case "umami":
-		if cfg.ID == "" || cfg.URL == "" {
-			return ""
-		}
-		return template.HTML(`<script defer src="` + attr(base(cfg.URL)+"/script.js") + `" data-website-id="` + attr(cfg.ID) + `"></script>`)
-
-	case "simple":
-		return template.HTML(`<script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
-<noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>`)
-
-	case "cloudflare":
-		if cfg.ID == "" {
-			return ""
-		}
-		return template.HTML(`<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "` + attr(cfg.ID) + `"}'></script>`)
-	}
-
-	// Unknown provider: config validation rejects these, but never emit a
-	// half-built snippet if one slips through.
-	return ""
+	return TrackingNoscript(s.config.Server.Tracking)
 }

@@ -4,7 +4,8 @@
     "name": "Spanish",
     "native_name": "Español",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "Guardar",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "Desactivado por el operador",
     "engines_order_help": "Arrastra los motores para cambiar su orden de prioridad.",
     "owner_tokens": {
-      "heading": "Tokens",
+      "heading": "Tokens del propietario",
       "primary_token": "Token principal",
       "linked_tokens": "Tokens vinculados",
       "reveal_notice": "Copia este token ahora. Podrás volver a verlo con la opción de mostrar.",
@@ -298,7 +299,7 @@
       "create_linked": "Crear token vinculado",
       "restore_description": "Los tokens de propietario te permiten administrar los recursos creados con este navegador.",
       "restore_existing": "Usar un token principal existente",
-      "restore_owner": "Restaurar propietario",
+      "restore_owner": "Restaurar identidad",
       "revoke_linked_confirm": "¿Revocar este token vinculado?",
       "active": "Activo",
       "expired": "Caducado",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 días",
       "expiry_30d": "30 días",
       "expiry_90d": "90 días",
-      "expiry_1y": "1 año"
+      "expiry_1y": "1 año",
+      "shown_once": "Se muestra una sola vez al cargar esta página.",
+      "primary_help": "Acceso completo a tus alertas. Mantén este token en privado.",
+      "name_help": "Por ejemplo: cliente MCP",
+      "expiry_custom": "Fecha personalizada",
+      "custom_date": "Fecha personalizada",
+      "expires_on": "Vence el",
+      "create": "Crear token",
+      "this_browser": "Este navegador",
+      "saved_in_browser": "El token de propietario se guarda en este navegador.",
+      "forget_note": "Al olvidar este navegador se elimina la cookie guardada del token de propietario. Tus alertas no se eliminan.",
+      "forget_saved_token": "Olvidar token guardado",
+      "forget_confirm": "¿Olvidar el token de propietario guardado en este navegador?",
+      "no_linked_tokens": "Aún no hay tokens vinculados.",
+      "no_linked_tokens_help": "Crea uno por aplicación, por ejemplo, para tu cliente MCP.",
+      "restore_hint": "Pega el token principal",
+      "restore_success": "Identidad de propietario restaurada",
+      "forgot_saved_token": "Se olvidó el token de propietario guardado",
+      "linked_revoked": "Token vinculado revocado",
+      "linked_updated": "Token vinculado actualizado",
+      "reveal": "Mostrar token"
     },
     "font_size": "Tamaño de fuente",
     "font_size_small": "Pequeño",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "El endpoint solo acepta POST.",
     "error_405_fix": "Envía una solicitud JSON-RPC mediante POST.",
     "project_empty": "No se configuró orientación específica de Search para las herramientas."
+  },
+  "dpo": {
+    "title": "Delegado de protección de datos"
   }
 }

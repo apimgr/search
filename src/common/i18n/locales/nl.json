@@ -4,7 +4,8 @@
     "name": "Dutch",
     "native_name": "Nederlands",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "Opslaan",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "Uitgeschakeld door beheerder",
     "engines_order_help": "Sleep zoekmachines om hun prioriteitsvolgorde te wijzigen.",
     "owner_tokens": {
-      "heading": "Tokens",
+      "heading": "Owner-tokens",
       "primary_token": "Primair token",
       "linked_tokens": "Gekoppelde tokens",
       "reveal_notice": "Kopieer dit token nu. Het blijft beschikbaar via de weergaveactie.",
@@ -298,7 +299,7 @@
       "create_linked": "Gekoppeld token maken",
       "restore_description": "Met eigenaarstokens beheer je bronnen die met deze browser zijn gemaakt.",
       "restore_existing": "Bestaand primair token gebruiken",
-      "restore_owner": "Eigenaar herstellen",
+      "restore_owner": "Identiteit herstellen",
       "revoke_linked_confirm": "Dit gekoppelde token intrekken?",
       "active": "Actief",
       "expired": "Verlopen",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 dagen",
       "expiry_30d": "30 dagen",
       "expiry_90d": "90 dagen",
-      "expiry_1y": "1 jaar"
+      "expiry_1y": "1 jaar",
+      "shown_once": "Eenmalig getoond bij het laden van deze pagina.",
+      "primary_help": "Volledige toegang tot uw waarschuwingen. Houd dit token privé.",
+      "name_help": "Bijvoorbeeld: MCP-client",
+      "expiry_custom": "Aangepaste datum",
+      "custom_date": "Aangepaste datum",
+      "expires_on": "Verloopt op",
+      "create": "Token maken",
+      "this_browser": "Deze browser",
+      "saved_in_browser": "Het eigenaarstoken is in deze browser opgeslagen.",
+      "forget_note": "Deze browser vergeten verwijdert de opgeslagen cookie met het eigenaarstoken. Uw waarschuwingen worden niet verwijderd.",
+      "forget_saved_token": "Opgeslagen token vergeten",
+      "forget_confirm": "Het in deze browser opgeslagen eigenaarstoken vergeten?",
+      "no_linked_tokens": "Nog geen gekoppelde tokens.",
+      "no_linked_tokens_help": "Maak er één per app, bijvoorbeeld voor uw MCP-client.",
+      "restore_hint": "Plak het primaire token",
+      "restore_success": "Eigenaaridentiteit hersteld",
+      "forgot_saved_token": "Opgeslagen eigenaarstoken vergeten",
+      "linked_revoked": "Gekoppeld token ingetrokken",
+      "linked_updated": "Gekoppeld token bijgewerkt",
+      "reveal": "Token tonen"
     },
     "font_size": "Lettergrootte",
     "font_size_small": "Klein",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "Het eindpunt accepteert alleen POST.",
     "error_405_fix": "Stuur een JSON-RPC-verzoek met POST.",
     "project_empty": "Er is geen Search-specifieke tooluitleg ingesteld."
+  },
+  "dpo": {
+    "title": "Functionaris voor gegevensbescherming"
   }
 }

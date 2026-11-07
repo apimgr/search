@@ -4,7 +4,8 @@
     "name": "Chinese",
     "native_name": "中文",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "保存",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "管理员已禁用",
     "engines_order_help": "拖动引擎以更改其优先顺序。",
     "owner_tokens": {
-      "heading": "令牌",
+      "heading": "所有者令牌",
       "primary_token": "主令牌",
       "linked_tokens": "关联令牌",
       "reveal_notice": "请立即复制此令牌。之后仍可通过显示操作查看。",
@@ -298,7 +299,7 @@
       "create_linked": "创建关联令牌",
       "restore_description": "所有者令牌可管理通过此浏览器创建的资源。",
       "restore_existing": "使用现有主令牌",
-      "restore_owner": "恢复所有者",
+      "restore_owner": "恢复身份",
       "revoke_linked_confirm": "要撤销此关联令牌吗？",
       "active": "有效",
       "expired": "已过期",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 天",
       "expiry_30d": "30 天",
       "expiry_90d": "90 天",
-      "expiry_1y": "1 年"
+      "expiry_1y": "1 年",
+      "shown_once": "仅在本次页面加载时显示一次。",
+      "primary_help": "可完全访问你的提醒。请妥善保密此令牌。",
+      "name_help": "例如：MCP 客户端",
+      "expiry_custom": "自定义日期",
+      "custom_date": "自定义日期",
+      "expires_on": "到期日期",
+      "create": "创建令牌",
+      "this_browser": "此浏览器",
+      "saved_in_browser": "所有者令牌已保存在此浏览器中。",
+      "forget_note": "忘记此浏览器会移除已保存的所有者令牌 Cookie。你的提醒不会被删除。",
+      "forget_saved_token": "忘记已保存的令牌",
+      "forget_confirm": "要忘记保存在此浏览器中的所有者令牌吗？",
+      "no_linked_tokens": "尚无关联令牌。",
+      "no_linked_tokens_help": "为每个应用创建一个，例如为 MCP 客户端创建。",
+      "restore_hint": "粘贴主令牌",
+      "restore_success": "所有者身份已恢复",
+      "forgot_saved_token": "已忘记保存的所有者令牌",
+      "linked_revoked": "已撤销关联令牌",
+      "linked_updated": "已更新关联令牌",
+      "reveal": "显示令牌"
     },
     "font_size": "字体大小",
     "font_size_small": "小",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "此端点仅接受 POST。",
     "error_405_fix": "使用 POST 发送 JSON-RPC 请求。",
     "project_empty": "尚未配置 Search 专用工具说明。"
+  },
+  "dpo": {
+    "title": "数据保护官"
   }
 }

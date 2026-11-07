@@ -137,6 +137,9 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 					csp = contactCaptchaCSP(csp, mode)
 				}
 			}
+			if consent := consentFromRequest(r); consent != nil && consent.Analytics && !isOnion && !isI2PRequest(r) {
+				csp = trackingCSP(csp, m.config.Server.Tracking)
+			}
 			if isOnion {
 				// Tor hidden service has no HTTPS listener — upgrading requests
 				// would break every form submission and link on the .onion site.

@@ -4,7 +4,8 @@
     "name": "Italian",
     "native_name": "Italiano",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "Salva",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "Disattivato dall’operatore",
     "engines_order_help": "Trascina i motori per modificarne l’ordine di priorità.",
     "owner_tokens": {
-      "heading": "Token",
+      "heading": "Token proprietario",
       "primary_token": "Token principale",
       "linked_tokens": "Token collegati",
       "reveal_notice": "Copia subito questo token. Rimarrà disponibile tramite l’azione di visualizzazione.",
@@ -298,7 +299,7 @@
       "create_linked": "Crea token collegato",
       "restore_description": "I token proprietario consentono di gestire le risorse create con questo browser.",
       "restore_existing": "Usa un token principale esistente",
-      "restore_owner": "Ripristina proprietario",
+      "restore_owner": "Ripristina identità",
       "revoke_linked_confirm": "Revocare questo token collegato?",
       "active": "Attivo",
       "expired": "Scaduto",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 giorni",
       "expiry_30d": "30 giorni",
       "expiry_90d": "90 giorni",
-      "expiry_1y": "1 anno"
+      "expiry_1y": "1 anno",
+      "shown_once": "Visualizzato una sola volta al caricamento di questa pagina.",
+      "primary_help": "Accesso completo ai tuoi avvisi. Mantieni privato questo token.",
+      "name_help": "Ad esempio: client MCP",
+      "expiry_custom": "Data personalizzata",
+      "custom_date": "Data personalizzata",
+      "expires_on": "Scade il",
+      "create": "Crea token",
+      "this_browser": "Questo browser",
+      "saved_in_browser": "Il token proprietario è salvato in questo browser.",
+      "forget_note": "Dimenticare questo browser rimuove il cookie salvato del token proprietario. Gli avvisi non vengono eliminati.",
+      "forget_saved_token": "Dimentica token salvato",
+      "forget_confirm": "Dimenticare il token proprietario salvato in questo browser?",
+      "no_linked_tokens": "Nessun token collegato.",
+      "no_linked_tokens_help": "Creane uno per app, ad esempio per il client MCP.",
+      "restore_hint": "Incolla il token principale",
+      "restore_success": "Identità proprietario ripristinata",
+      "forgot_saved_token": "Token proprietario salvato dimenticato",
+      "linked_revoked": "Token collegato revocato",
+      "linked_updated": "Token collegato aggiornato",
+      "reveal": "Mostra token"
     },
     "font_size": "Dimensione carattere",
     "font_size_small": "Piccolo",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "L’endpoint accetta solo POST.",
     "error_405_fix": "Invia una richiesta JSON-RPC tramite POST.",
     "project_empty": "Non è configurata una guida specifica per gli strumenti Search."
+  },
+  "dpo": {
+    "title": "Responsabile della protezione dei dati"
   }
 }

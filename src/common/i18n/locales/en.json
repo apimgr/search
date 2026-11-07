@@ -4,7 +4,8 @@
     "name": "English",
     "native_name": "English",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "Save",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "Disabled by operator",
     "engines_order_help": "Drag engines to change their priority order.",
     "owner_tokens": {
-      "heading": "Tokens",
+      "heading": "Owner tokens",
       "primary_token": "Primary token",
       "linked_tokens": "Linked tokens",
       "reveal_notice": "Copy this token now. It remains available through the reveal action.",
@@ -298,7 +299,7 @@
       "create_linked": "Create linked token",
       "restore_description": "Owner tokens let you manage resources created with this browser.",
       "restore_existing": "Use an existing primary token",
-      "restore_owner": "Restore owner",
+      "restore_owner": "Restore identity",
       "revoke_linked_confirm": "Revoke this linked token?",
       "active": "Active",
       "expired": "Expired",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 days",
       "expiry_30d": "30 days",
       "expiry_90d": "90 days",
-      "expiry_1y": "1 year"
+      "expiry_1y": "1 year",
+      "shown_once": "Shown once, on this page load.",
+      "primary_help": "Full access to your alerts. Keep this token private.",
+      "name_help": "For example: MCP client",
+      "expiry_custom": "Custom date",
+      "custom_date": "Custom date",
+      "expires_on": "Expires on",
+      "create": "Create token",
+      "this_browser": "This browser",
+      "saved_in_browser": "The owner token is saved in this browser.",
+      "forget_note": "Forgetting this browser removes its saved owner-token cookie. Your alerts are not deleted.",
+      "forget_saved_token": "Forget saved token",
+      "forget_confirm": "Forget the owner token saved in this browser?",
+      "no_linked_tokens": "No linked tokens yet.",
+      "no_linked_tokens_help": "Create one per app, for example your MCP client.",
+      "restore_hint": "Paste your primary token",
+      "restore_success": "Owner identity restored",
+      "forgot_saved_token": "Saved owner token forgotten",
+      "linked_revoked": "Linked token revoked",
+      "linked_updated": "Linked token updated",
+      "reveal": "Reveal"
     },
     "font_size": "Font Size",
     "font_size_small": "Small",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "The endpoint accepts POST only.",
     "error_405_fix": "Send a JSON-RPC request with POST.",
     "project_empty": "Project-specific Search tool guidance is not configured."
+  },
+  "dpo": {
+    "title": "Data Protection Officer"
   }
 }

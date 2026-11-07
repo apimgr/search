@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -85,6 +86,8 @@ type Server struct {
 	dbManager         *database.DatabaseManager
 	alertManager      *alert.Manager
 	ownerManager      *owner.Manager
+	ownerFlashMu      sync.Mutex
+	ownerFlashes      map[string]ownerTokenFlash
 	blocklistManager  *security.BlocklistManager
 	cveManager        *security.CVEManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
@@ -458,11 +461,11 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	rl.SetMetrics(metrics)
 
 	// Initialize i18n manager per AI.md PART 32
-	i18nMgr, err := i18n.DefaultManager()
+	i18nMgr, err := i18n.NewConfiguredManager(cfg.Server.I18n.DefaultLanguage, cfg.Server.I18n.SupportedLanguages)
 	if err != nil {
 		slog.Warn("i18n manager initialization failed, falling back to key passthrough", "err", err)
 	} else {
-		slog.Info("i18n translations loaded", "language_count", len(i18n.DefaultSupportedLanguages()))
+		slog.Info("i18n translations loaded", "language_count", len(i18nMgr.SupportedLanguageCodes()))
 	}
 
 	renderer = NewTemplateRenderer(cfg, i18nMgr)
@@ -1081,6 +1084,7 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	// Analytics injection is gated on the same consent, per AI.md PART 16:
 	// no valid analytics consent means no third-party script in the page.
 	data.TrackingHTML = s.trackingScript(r)
+	data.TrackingNoscriptHTML = s.trackingNoscript(r)
 	// Reflect the CCPA "Do Not Sell" opt-out cookie so the privacy page can render
 	// the correct toggle state (opt-out vs opt-in) without JavaScript.
 	if c, err := r.Cookie("ccpa_opt_out"); err == nil && c.Value == "true" {
@@ -1108,7 +1112,14 @@ func (s *Server) getI18nManager() *i18n.Manager {
 	if s.i18nManager != nil {
 		return s.i18nManager
 	}
-	return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
+	if s.config == nil {
+		return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
+	}
+	manager, err := i18n.NewConfiguredManager(s.config.Server.I18n.DefaultLanguage, s.config.Server.I18n.SupportedLanguages)
+	if err != nil {
+		return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
+	}
+	return manager
 }
 
 // createPIDFile creates a PID file with stale PID detection
@@ -1214,6 +1225,8 @@ func (s *Server) setupRoutes() http.Handler {
 		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
 	})
 	r.HandleFunc("/server/privacy", s.handlePrivacy)
+	r.Get("/server/dpo", s.handleDPO)
+	r.Get("/server/tracking.js", s.handleTrackingScript)
 	r.HandleFunc("/server/contact", s.csrfProtect(s.handleContact))
 	r.HandleFunc("/server/help", s.handleHelp)
 	r.HandleFunc("/server/help/mcp", s.handleMCPHelp)
@@ -1278,6 +1291,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Post("/server/preferences/token/reveal", s.csrfProtect(s.handleOwnerPrimaryReveal))
 	r.Post("/server/preferences/token/rotate", s.csrfProtect(s.handleOwnerPrimaryRotate))
 	r.Post("/server/preferences/token/restore", s.csrfProtect(s.handleOwnerRestore))
+	r.Post("/server/preferences/tokens/forget", s.csrfProtect(s.handleOwnerTokenForget))
 	r.Post("/server/preferences/tokens", s.csrfProtect(s.handleOwnerLinkedCreate))
 	r.Post("/server/preferences/tokens/{id}/reveal", s.csrfProtect(s.handleOwnerLinkedReveal))
 	r.Post("/server/preferences/tokens/{id}/rotate", s.csrfProtect(s.handleOwnerLinkedRotate))
@@ -1430,6 +1444,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/search", "0.9", "daily"},
 		{"/server/about", "0.5", "monthly"},
 		{"/server/privacy", "0.3", "monthly"},
+		{"/server/dpo", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
 		{"/server/terms", "0.3", "monthly"},
 		{"/server/docs/swagger", "0.4", "weekly"},

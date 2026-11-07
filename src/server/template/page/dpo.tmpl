@@ -1,0 +1,13 @@
+{{define "content"}}
+<article class="static-page dpo-page section-card">
+  <header class="page-header">
+    <h1>{{t "dpo.title"}}</h1>
+  </header>
+  {{if .DPOName}}<p>{{.DPOName}}</p>{{end}}
+  {{if .DPOEmail}}<p><a href="mailto:{{.DPOEmail}}">{{.DPOEmail}}</a></p>{{else}}<p><a href="/server/contact">{{t "contact.page_title"}}</a></p>{{end}}
+  <nav aria-label="{{t "dpo.title"}}">
+    <a href="/server/privacy">{{t "footer.privacy_policy"}}</a>
+    <a href="/server/contact">{{t "contact.page_title"}}</a>
+  </nav>
+</article>
+{{end}}

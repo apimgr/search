@@ -201,27 +201,27 @@ func TestTrackingScriptProviders(t *testing.T) {
 		{
 			name:   "google ga4",
 			cfg:    config.TrackingConfig{Type: "google", ID: "G-ABC123"},
-			wantIn: []string{"googletagmanager.com/gtag/js?id=G-ABC123", "gtag('config', 'G-ABC123')"},
+			wantIn: []string{"googletagmanager.com/gtag/js?id=G-ABC123", `/server/tracking.js`},
 		},
 		{
 			name:   "google universal analytics",
 			cfg:    config.TrackingConfig{Type: "google", ID: "UA-1234-1"},
-			wantIn: []string{"google-analytics.com/analytics.js", "ga('create', 'UA-1234-1', 'auto')"},
+			wantIn: []string{"google-analytics.com/analytics.js", `/server/tracking.js`},
 		},
 		{
 			name:   "matomo",
 			cfg:    config.TrackingConfig{Type: "matomo", ID: "1", URL: "https://matomo.example.com/"},
-			wantIn: []string{`var u="https://matomo.example.com/";`, "matomo.php", "setSiteId', '1'"},
+			wantIn: []string{`/server/tracking.js`},
 		},
 		{
 			name:   "piwik shares the matomo branch",
 			cfg:    config.TrackingConfig{Type: "piwik", ID: "2", URL: "https://piwik.example.com"},
-			wantIn: []string{"https://piwik.example.com/", "setSiteId', '2'"},
+			wantIn: []string{`/server/tracking.js`},
 		},
 		{
 			name:   "owa",
 			cfg:    config.TrackingConfig{Type: "owa", ID: "3", URL: "https://owa.example.com"},
-			wantIn: []string{"owa_baseUrl = 'https://owa.example.com/'", "owa.tracker-combined-min.js"},
+			wantIn: []string{`/server/tracking.js`},
 		},
 		{
 			name:   "fathom hosted",
@@ -280,10 +280,15 @@ func TestTrackingScriptProviders(t *testing.T) {
 			if got == "" {
 				t.Fatal("TrackingScript = empty, want markup")
 			}
+			body := TrackingScriptBody(tt.cfg)
+			combined := got + body
 			for _, want := range tt.wantIn {
-				if !strings.Contains(got, want) {
-					t.Errorf("TrackingScript = %q, want it to contain %q", got, want)
+				if !strings.Contains(combined, want) {
+					t.Errorf("tracking markup/body = %q%q, want it to contain %q", got, body, want)
 				}
+			}
+			if strings.Contains(got, "<script>") {
+				t.Errorf("TrackingScript emitted an inline script: %q", got)
 			}
 		})
 	}
@@ -302,11 +307,55 @@ func TestTrackingScriptEscapesConfig(t *testing.T) {
 		t.Errorf("plausible site id was not escaped: %q", got)
 	}
 
-	gotJS := string(TrackingScript(config.TrackingConfig{
+	gotJS := TrackingScriptBody(config.TrackingConfig{
 		Type: "google",
 		ID:   "G-';alert(1);//",
-	}))
+	})
 	if strings.Contains(gotJS, "'G-';alert(1);//'") {
 		t.Errorf("google measurement id was not JS-escaped: %q", gotJS)
+	}
+}
+
+func TestTrackingScriptBodyHandlerRequiresConsentAndSkipsHiddenServices(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	s.config.Server.Tracking = config.TrackingConfig{Type: "google", ID: "G-ABC123"}
+	for _, tc := range []struct {
+		name    string
+		host    string
+		consent bool
+		want    int
+	}{
+		{name: "no consent", host: "example.test", want: http.StatusNotFound},
+		{name: "consented clearnet", host: "example.test", consent: true, want: http.StatusOK},
+		{name: "onion", host: "site.onion", consent: true, want: http.StatusNotFound},
+		{name: "i2p", host: "site.i2p", consent: true, want: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "http://"+tc.host+"/server/tracking.js", nil)
+			if tc.consent {
+				r.AddCookie(consentRequest(t, true, true).Cookies()[0])
+			}
+			w := httptest.NewRecorder()
+			s.handleTrackingScript(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d", w.Code, tc.want)
+			}
+			if tc.want == http.StatusOK {
+				if w.Header().Get("Content-Type") != "application/javascript; charset=utf-8" || w.Header().Get("Cache-Control") != "no-cache" {
+					t.Errorf("unexpected headers: %v", w.Header())
+				}
+			}
+		})
+	}
+}
+
+func TestTrackingCSPAddsOnlyProviderSources(t *testing.T) {
+	base := "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'"
+	got := trackingCSP(base, config.TrackingConfig{Type: "plausible", ID: "example.test"})
+	if !strings.Contains(got, "script-src 'self' https://plausible.io") || !strings.Contains(got, "connect-src 'self' https://plausible.io") {
+		t.Fatalf("tracking sources missing from CSP: %s", got)
+	}
+	if strings.Contains(got, "unsafe-inline") || strings.Contains(got, "nonce-") {
+		t.Fatalf("tracking CSP weakened inline script policy: %s", got)
 	}
 }

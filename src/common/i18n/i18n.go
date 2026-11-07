@@ -24,15 +24,11 @@ type Manager struct {
 
 // NewManager creates a new i18n manager
 func NewManager(defaultLang string, supported []string) *Manager {
-	rtl := map[string]bool{
-		// Arabic
-		"ar": true,
-		// Hebrew
-		"he": true,
-		// Persian/Farsi
-		"fa": true,
-		// Urdu
-		"ur": true,
+	rtl := make(map[string]bool)
+	for code, language := range Languages {
+		if language.RTL {
+			rtl[code] = true
+		}
 	}
 
 	return &Manager{

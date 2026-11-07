@@ -2,7 +2,9 @@ package i18n
 
 import (
 	"embed"
+	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -19,6 +21,29 @@ var (
 // Uses the default supported languages and loads from embedded locales
 func DefaultManager() (*Manager, error) {
 	return newManagerFromFS(localesFS, "locales", "en", DefaultSupportedLanguages())
+}
+
+// NewConfiguredManager loads an operator-selected language subset after
+// checking it against the one supported-language registry.
+func NewConfiguredManager(defaultLang string, supported []string) (*Manager, error) {
+	if len(supported) == 0 {
+		supported = DefaultSupportedLanguages()
+	}
+	selected := make([]string, 0, len(supported))
+	for _, code := range supported {
+		selected = append(selected, strings.ToLower(strings.TrimSpace(code)))
+	}
+	if err := ValidateSupportedLanguages(selected); err != nil {
+		return nil, err
+	}
+	defaultLang = strings.ToLower(strings.TrimSpace(defaultLang))
+	if defaultLang == "" {
+		defaultLang = "en"
+	}
+	if !containsLanguageCode(selected, defaultLang) {
+		return nil, fmt.Errorf("default language %q is not enabled", defaultLang)
+	}
+	return newManagerFromFS(localesFS, "locales", defaultLang, selected)
 }
 
 // CachedDefaultManager returns a singleton default manager loaded from the

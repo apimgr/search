@@ -11,6 +11,7 @@
     {{if .TrackingHTML}}{{.TrackingHTML}}{{end}}
 </head>
 <body class="public-page {{.Page}}-page">
+    {{if .TrackingNoscriptHTML}}{{.TrackingNoscriptHTML}}{{end}}
     {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
     <a href="#main-content" class="skip-link">{{t "accessibility.skip_to_main_content"}}</a>
 
@@ -50,6 +51,15 @@
         {{/* Main content area */}}
         {{block "content" .}}{{end}}
     </main>
+
+    {{/* Body-level siblings keep fixed drawer and scrim viewport-relative, per AI.md PART 16. */}}
+    <nav class="nav-panel" id="nav-panel" aria-label="{{t "accessibility.keyboard_navigation_heading"}}">
+        <label for="nav-toggle" class="nav-close" tabindex="0" role="button" aria-label="{{t "accessibility.close_menu"}}">&times;</label>
+        <a href="/" class="nav-panel-link{{if eq .Page "home"}} active{{end}}"{{if eq .Page "home"}} aria-current="page"{{end}}>{{t "nav.home"}}</a>
+        <a href="/server/about" class="nav-panel-link{{if eq .Page "about"}} active{{end}}"{{if eq .Page "about"}} aria-current="page"{{end}}>{{t "nav.about"}}</a>
+        <a href="/server/help" class="nav-panel-link{{if eq .Page "help"}} active{{end}}"{{if eq .Page "help"}} aria-current="page"{{end}}>{{t "nav.help"}}</a>
+    </nav>
+    <label for="nav-toggle" class="nav-overlay" aria-label="{{t "accessibility.close_menu"}}"></label>
 
     {{/* Public footer */}}
     {{template "public/footer" .}}

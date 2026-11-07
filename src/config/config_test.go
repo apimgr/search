@@ -4,8 +4,38 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+func TestI18nConfigLanguageKeys(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		yaml string
+	}{
+		{name: "canonical", yaml: "available_languages: [en, es]"},
+		{name: "legacy alias", yaml: "supported: [en, es]"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var cfg I18nConfig
+			if err := yaml.Unmarshal([]byte(test.yaml), &cfg); err != nil {
+				t.Fatalf("decode i18n config: %v", err)
+			}
+			if len(cfg.SupportedLanguages) != 2 || cfg.SupportedLanguages[0] != "en" || cfg.SupportedLanguages[1] != "es" {
+				t.Fatalf("languages = %v, want [en es]", cfg.SupportedLanguages)
+			}
+			encoded, err := yaml.Marshal(cfg)
+			if err != nil {
+				t.Fatalf("encode i18n config: %v", err)
+			}
+			if !strings.Contains(string(encoded), "available_languages:") || strings.Contains(string(encoded), "supported:") {
+				t.Fatalf("encoded i18n config uses non-canonical key: %s", encoded)
+			}
+		})
+	}
+}
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()

@@ -282,6 +282,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	// Server info pages (per AI.md PART 16)
 	r.Get(APIPrefix+"/server/about", h.handleServerAbout)
 	r.Get(APIPrefix+"/server/privacy", h.handleServerPrivacy)
+	r.Get(APIPrefix+"/server/dpo", h.handleServerDPO)
 	r.Get(APIPrefix+"/server/help", h.handleServerHelp)
 	r.Get(APIPrefix+"/server/help/mcp", h.handleMCPHelp)
 	r.Get(APIPrefix+"/server/terms", h.handleServerTerms)
@@ -2040,6 +2041,35 @@ type ServerPageResponse struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
+type ServerDPOResponse struct {
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	PrivacyURL string `json:"privacy_url"`
+}
+
+// handleServerDPO returns the configured public DPO contact, falling back to
+// the general public contact address and never exposing the admin address.
+func (h *Handler) handleServerDPO(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+	name := strings.TrimSpace(h.config.Server.Contact.DPO.Name)
+	email := strings.TrimSpace(h.config.Server.Contact.DPO.Email)
+	if email == "" {
+		email = strings.TrimSpace(h.config.Server.Contact.General.Email)
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: ServerDPOResponse{
+			Name:       name,
+			Email:      email,
+			PrivacyURL: httputil.BuildURL(r, "/server/privacy"),
+		},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
 // PageSection represents a section of a server info page
 type PageSection struct {
 	ID      string `json:"id"`
@@ -2213,7 +2243,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 		{
 			ID:      "api_documentation",
 			Title:   "API Documentation",
-			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/widgets, /api/v1/server/help, /api/v1/server/about, /api/v1/server/privacy, /api/v1/server/contact, /api/v1/server/terms, /api/graphql, /server/docs/graphql, /server/docs/swagger (Swagger UI), and /api/swagger (OpenAPI spec).",
+			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/widgets, /api/v1/server/help, /api/v1/server/about, /api/v1/server/privacy, /api/v1/server/dpo, /api/v1/server/contact, /api/v1/server/terms, /api/graphql, /server/docs/graphql, /server/docs/swagger (Swagger UI), and /api/swagger (OpenAPI spec).",
 		},
 	}
 
@@ -2527,6 +2557,12 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 // validation. Loaded translations aren't needed here - only the supported
 // language list, which NewManager populates without loading locale files.
 func (h *Handler) syncI18nManager() *i18n.Manager {
+	if h != nil && h.config != nil {
+		manager, err := i18n.NewConfiguredManager(h.config.Server.I18n.DefaultLanguage, h.config.Server.I18n.SupportedLanguages)
+		if err == nil {
+			return manager
+		}
+	}
 	return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
 }
 

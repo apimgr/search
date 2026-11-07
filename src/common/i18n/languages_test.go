@@ -1,13 +1,18 @@
 package i18n
 
-import "testing"
+import (
+	"io/fs"
+	"strings"
+	"testing"
+)
 
 func TestLanguageStruct(t *testing.T) {
 	lang := Language{
-		Code:       "en",
-		Name:       "English",
-		NativeName: "English",
-		RTL:        false,
+		Code:             "en",
+		Name:             "English",
+		NativeName:       "English",
+		RTL:              false,
+		PluralCategories: []string{"one", "other"},
 	}
 
 	if lang.Code != "en" {
@@ -25,17 +30,13 @@ func TestLanguageStruct(t *testing.T) {
 }
 
 func TestLanguagesMap(t *testing.T) {
-	// Verify required languages exist
-	required := []string{
-		"en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "ja", "zh", "ko",
-		"ar", "he", "fa", "ur", "tr", "vi", "th", "id", "uk", "cs", "sv", "da",
-		"fi", "no", "hu", "el", "ro", "bg", "sk", "hr", "sr", "sl", "et", "lv", "lt",
-	}
-
-	for _, code := range required {
+	for _, code := range []string{"en", "es", "zh", "fr", "ar", "de", "ja"} {
 		if _, ok := Languages[code]; !ok {
-			t.Errorf("Languages missing required code: %q", code)
+			t.Errorf("Languages registry is missing required minimum code %q", code)
 		}
+	}
+	if _, ok := Languages["ko"]; ok {
+		t.Error("Korean must not be registered without an embedded locale file")
 	}
 }
 
@@ -82,8 +83,8 @@ func TestLanguagesData(t *testing.T) {
 func TestDefaultSupportedLanguages(t *testing.T) {
 	defaults := DefaultSupportedLanguages()
 
-	if len(defaults) < 10 {
-		t.Errorf("DefaultSupportedLanguages() returned %d, want at least 10", len(defaults))
+	if len(defaults) != len(Languages) {
+		t.Errorf("DefaultSupportedLanguages() returned %d, want every registry language (%d)", len(defaults), len(Languages))
 	}
 
 	// Check that English is first
@@ -223,5 +224,77 @@ func TestLanguagesConsistency(t *testing.T) {
 		if lang.NativeName == "" {
 			t.Errorf("Language %q has empty NativeName", code)
 		}
+		if len(lang.PluralCategories) == 0 {
+			t.Errorf("Language %q has no CLDR plural categories", code)
+		}
 	}
+}
+
+func TestLanguageRegistryMatchesEmbeddedLocalesAndDefaults(t *testing.T) {
+	entries, err := fs.ReadDir(LocalesFS(), "locales")
+	if err != nil {
+		t.Fatalf("read embedded locales: %v", err)
+	}
+	localeCodes := make(map[string]bool)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		code := strings.TrimSuffix(entry.Name(), ".json")
+		localeCodes[code] = true
+		if _, ok := Languages[code]; !ok {
+			t.Errorf("embedded locale %q has no registry entry", code)
+		}
+	}
+	for code := range Languages {
+		if !localeCodes[code] {
+			t.Errorf("registry language %q has no embedded locale", code)
+		}
+	}
+	defaults := DefaultSupportedLanguages()
+	if len(defaults) != len(localeCodes) {
+		t.Fatalf("runtime defaults have %d languages; embedded locales have %d", len(defaults), len(localeCodes))
+	}
+	for _, code := range defaults {
+		if !localeCodes[code] {
+			t.Errorf("runtime default language %q has no embedded locale", code)
+		}
+	}
+	for code, language := range Languages {
+		if language.Required && !containsCode(defaults, code) {
+			t.Errorf("runtime defaults omit required minimum language %q", code)
+		}
+	}
+}
+
+func TestValidateSupportedLanguages(t *testing.T) {
+	minimum := []string{"en", "es", "fr", "ar", "de", "it"}
+	tests := []struct {
+		name      string
+		languages []string
+		wantErr   bool
+	}{
+		{name: "spec minimum", languages: minimum},
+		{name: "all registered defaults", languages: DefaultSupportedLanguages()},
+		{name: "missing required language", languages: []string{"en", "es", "fr", "ar", "de"}, wantErr: true},
+		{name: "unsupported locale", languages: append(append([]string{}, minimum...), "ko"), wantErr: true},
+		{name: "duplicate locale", languages: append(append([]string{}, minimum...), "en"), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSupportedLanguages(tt.languages)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateSupportedLanguages() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func containsCode(codes []string, target string) bool {
+	for _, code := range codes {
+		if code == target {
+			return true
+		}
+	}
+	return false
 }

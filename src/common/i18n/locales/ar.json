@@ -4,7 +4,8 @@
     "name": "Arabic",
     "native_name": "العربية",
     "direction": "rtl",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "حفظ",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "معطّل من المشغّل",
     "engines_order_help": "اسحب المحركات لتغيير ترتيب الأولوية.",
     "owner_tokens": {
-      "heading": "الرموز",
+      "heading": "رموز المالك",
       "primary_token": "الرمز الأساسي",
       "linked_tokens": "الرموز المرتبطة",
       "reveal_notice": "انسخ هذا الرمز الآن. سيظل متاحًا عبر إجراء الإظهار.",
@@ -298,7 +299,7 @@
       "create_linked": "إنشاء رمز مرتبط",
       "restore_description": "تتيح لك رموز المالك إدارة الموارد التي أُنشئت باستخدام هذا المتصفح.",
       "restore_existing": "استخدام رمز أساسي موجود",
-      "restore_owner": "استعادة المالك",
+      "restore_owner": "استعادة الهوية",
       "revoke_linked_confirm": "هل تريد إلغاء هذا الرمز المرتبط؟",
       "active": "نشط",
       "expired": "منتهي الصلاحية",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 أيام",
       "expiry_30d": "30 يومًا",
       "expiry_90d": "90 يومًا",
-      "expiry_1y": "سنة واحدة"
+      "expiry_1y": "سنة واحدة",
+      "shown_once": "تظهر مرة واحدة في تحميل هذه الصفحة.",
+      "primary_help": "وصول كامل إلى تنبيهاتك. احتفظ بهذا الرمز سريًا.",
+      "name_help": "مثال: عميل MCP",
+      "expiry_custom": "تاريخ مخصص",
+      "custom_date": "تاريخ مخصص",
+      "expires_on": "تنتهي صلاحيته في",
+      "create": "إنشاء رمز",
+      "this_browser": "هذا المتصفح",
+      "saved_in_browser": "يُحفظ رمز المالك في هذا المتصفح.",
+      "forget_note": "نسيان هذا المتصفح يزيل ملف تعريف ارتباط رمز المالك المحفوظ. لن تُحذف تنبيهاتك.",
+      "forget_saved_token": "نسيان الرمز المحفوظ",
+      "forget_confirm": "هل تريد نسيان رمز المالك المحفوظ في هذا المتصفح؟",
+      "no_linked_tokens": "لا توجد رموز مرتبطة بعد.",
+      "no_linked_tokens_help": "أنشئ رمزًا لكل تطبيق، مثل عميل MCP.",
+      "restore_hint": "الصق الرمز الأساسي",
+      "restore_success": "تمت استعادة هوية المالك",
+      "forgot_saved_token": "تم نسيان رمز المالك المحفوظ",
+      "linked_revoked": "تم إبطال الرمز المرتبط",
+      "linked_updated": "تم تحديث الرمز المرتبط",
+      "reveal": "إظهار الرمز"
     },
     "font_size": "حجم الخط",
     "font_size_small": "صغير",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "تقبل نقطة النهاية POST فقط.",
     "error_405_fix": "أرسل طلب JSON-RPC باستخدام POST.",
     "project_empty": "لم يتم إعداد إرشادات خاصة بأدوات Search."
+  },
+  "dpo": {
+    "title": "مسؤول حماية البيانات"
   }
 }

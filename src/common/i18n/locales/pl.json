@@ -4,7 +4,8 @@
     "name": "Polish",
     "native_name": "Polski",
     "direction": "ltr",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translators": []
   },
   "common": {
     "save": "Zapisz",
@@ -286,7 +287,7 @@
     "engine_operator_disabled": "Wyłączone przez operatora",
     "engines_order_help": "Przeciągnij wyszukiwarki, aby zmienić ich kolejność priorytetów.",
     "owner_tokens": {
-      "heading": "Tokeny",
+      "heading": "Tokeny właściciela",
       "primary_token": "Token główny",
       "linked_tokens": "Powiązane tokeny",
       "reveal_notice": "Skopiuj ten token teraz. Pozostanie dostępny przez opcję wyświetlenia.",
@@ -298,7 +299,7 @@
       "create_linked": "Utwórz powiązany token",
       "restore_description": "Tokeny właściciela pozwalają zarządzać zasobami utworzonymi w tej przeglądarce.",
       "restore_existing": "Użyj istniejącego tokenu głównego",
-      "restore_owner": "Przywróć właściciela",
+      "restore_owner": "Przywróć tożsamość",
       "revoke_linked_confirm": "Unieważnić ten powiązany token?",
       "active": "Aktywny",
       "expired": "Wygasły",
@@ -311,7 +312,27 @@
       "expiry_7d": "7 dni",
       "expiry_30d": "30 dni",
       "expiry_90d": "90 dni",
-      "expiry_1y": "1 rok"
+      "expiry_1y": "1 rok",
+      "shown_once": "Wyświetlane raz przy wczytaniu tej strony.",
+      "primary_help": "Pełny dostęp do alertów. Zachowaj ten token dla siebie.",
+      "name_help": "Na przykład: klient MCP",
+      "expiry_custom": "Niestandardowa data",
+      "custom_date": "Niestandardowa data",
+      "expires_on": "Wygasa",
+      "create": "Utwórz token",
+      "this_browser": "Ta przeglądarka",
+      "saved_in_browser": "Token właściciela jest zapisany w tej przeglądarce.",
+      "forget_note": "Zapomnienie tej przeglądarki usuwa zapisany plik cookie tokenu właściciela. Alerty nie zostaną usunięte.",
+      "forget_saved_token": "Zapomnij zapisany token",
+      "forget_confirm": "Zapomnieć token właściciela zapisany w tej przeglądarce?",
+      "no_linked_tokens": "Brak powiązanych tokenów.",
+      "no_linked_tokens_help": "Utwórz osobny token dla każdej aplikacji, na przykład klienta MCP.",
+      "restore_hint": "Wklej token główny",
+      "restore_success": "Przywrócono tożsamość właściciela",
+      "forgot_saved_token": "Zapomniano zapisany token właściciela",
+      "linked_revoked": "Unieważniono powiązany token",
+      "linked_updated": "Zaktualizowano powiązany token",
+      "reveal": "Pokaż token"
     },
     "font_size": "Rozmiar czcionki",
     "font_size_small": "Mały",
@@ -2203,5 +2224,8 @@
     "error_405_cause": "Punkt końcowy akceptuje tylko POST.",
     "error_405_fix": "Wyślij żądanie JSON-RPC metodą POST.",
     "project_empty": "Nie skonfigurowano wskazówek dotyczących narzędzi Search."
+  },
+  "dpo": {
+    "title": "Inspektor ochrony danych"
   }
 }
