@@ -50,6 +50,7 @@ For Docker, open [http://172.17.0.1:64580](http://172.17.0.1:64580). The binary 
 - [Integrations](integrations.md) - Discovery protocols and integrations
 - [Search](search.md) - Search operators and direct-answer syntax
 - [Development](development.md) - Build, test, and contribution guide
+- [Translation guide](translating.md) - How to contribute or review a language
 
 ## Supported Platforms
 

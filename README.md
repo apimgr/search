@@ -393,6 +393,8 @@ All 15 embedded locales are enabled by default: English, German, French, Spanish
 | `he` | Hebrew | עברית | RTL | one, two, other |
 | `ur` | Urdu | اردو | RTL | one, other |
 
+See the [translation guide](docs/translating.md) to contribute or review a locale.
+
 ## Development
 
 Development instructions are for contributors only.
