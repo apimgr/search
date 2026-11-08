@@ -61,8 +61,12 @@ key set as English and must not contain empty values.
   names, configuration keys, URLs, and literal user-entered values unchanged.
 - Follow local typography, including spacing before punctuation and quotation
   marks. Locale-aware numbers and dates come from the application formatter.
-- Machine translation may be used for a first draft only. A fluent human must
-  review every translated string before it is merged.
+- AI translation is expected and encouraged. The AI writes natural, idiomatic
+  translations for languages it can translate reliably; those languages do
+  not wait for a native speaker before shipping. If the AI cannot produce a
+  reliable translation for a language, wait for a human translation instead
+  of shipping guesses. Human translators may refine or correct translations
+  at any time, and their corrections take precedence in later updates.
 
 ### Glossary
 
@@ -80,12 +84,13 @@ key set as English and must not contain empty values.
 
 ## Review checklist
 
-Before merging, a maintainer or second fluent reviewer checks the translation,
-placeholders, plural categories, glossary, and layout. Review the page in the
-target language at 320, 768, and 1280 CSS pixels. Check right-to-left languages
-in their mirrored direction. Long translations must not clip, overflow, or
-break controls. Scripts that the system font stack may not cover need an
-appropriate `--font-family` entry and a check that long unspaced text wraps.
+Before merging, a maintainer checks tests, placeholders, plural categories,
+glossary use, and layout. Native-speaker review is welcome but is not a merge
+requirement. Review the page in the target language at 320, 768, and 1280 CSS
+pixels. Check right-to-left languages in their mirrored direction. Long
+translations must not clip, overflow, or break controls. Scripts that the
+system font stack may not cover need an appropriate `--font-family` entry and
+a check that long unspaced text wraps.
 
 Run the project test suite in Docker to verify locale keys, placeholders,
 plural categories, and embedded locale files. Record reviewer sign-off in the
