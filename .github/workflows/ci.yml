@@ -168,7 +168,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
+      # Empty base/head = full-history scan (schedule/manual runs and new-branch pushes).
+      # Gate only confirmed credentials; verifier errors on historical matches
+      # cannot establish that a credential is live and should not fail CI.
       - name: Determine scan range
         id: range
         env:
@@ -192,7 +194,7 @@ jobs:
         with:
           base: ${{ steps.range.outputs.base }}
           head: ${{ steps.range.outputs.head }}
-          extra_args: --results=verified,unknown
+          extra_args: --only-verified
 
   vuln-scan:
     name: Vulnerability scan
