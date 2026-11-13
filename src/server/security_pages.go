@@ -111,15 +111,7 @@ type SecurityReportStatusPageData struct {
 // handleSecurityReportStatus renders /server/security/report/{tracking_id},
 // the researcher status page, per AI.md PART 11 "Public Pages" table. Access
 // requires the one-shot token issued in the acknowledgment email; the token
-// is checked against report_token_hash and rejected once the report has been
-// closed for more than 30 days.
-//
-// Judgment call: the schema (report_token_hash, no last-accessed column)
-// has no per-day access counter, so "single-use-per-day" is interpreted as
-// "the token remains valid once per calendar day" rather than a strict
-// one-time-ever token — this matches the stored schema without requiring a
-// new column, and still satisfies the 30-day-after-close expiry rule, which
-// IS enforced below via ReportStatus.TokenExpired.
+// is accepted once per UTC calendar day and expires 30 days after report closure.
 func (s *Server) handleSecurityReportStatus(w http.ResponseWriter, r *http.Request) {
 	trackingID := chi.URLParam(r, "tracking_id")
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
@@ -145,12 +137,23 @@ func (s *Server) handleSecurityReportStatus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if status.TokenExpired(time.Now()) {
+	now := time.Now()
+	if status.TokenExpired(now) {
 		s.handleNotFound(w, r)
 		return
 	}
 
-	if security.HashReportToken(token) != status.ReportTokenHash {
+	if !security.ReportTokenMatches(token, status.ReportTokenHash) {
+		s.handleNotFound(w, r)
+		return
+	}
+	accessDate := now.UTC().Format("2006-01-02")
+	allowed, err := security.RecordReportStatusAccess(r.Context(), s.dbManager.ServerDB(), trackingID, accessDate)
+	if err != nil {
+		s.handleInternalError(w, r, "record security report status access", err)
+		return
+	}
+	if !allowed {
 		s.handleNotFound(w, r)
 		return
 	}

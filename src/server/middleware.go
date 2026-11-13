@@ -69,6 +69,20 @@ func (m *Middleware) SetNotificationManager(manager *notify.Manager) {
 	m.notifyManager = manager
 }
 
+// MaxBodySize limits request bodies using the configured server limit.
+func (m *Middleware) MaxBodySize(next http.Handler) http.Handler {
+	maxBytes := m.config.Server.Limits.GetMaxBodySizeBytes()
+	if maxBytes <= 0 {
+		maxBytes = 10 * 1024 * 1024
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Chain chains multiple middleware handlers together
 func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {

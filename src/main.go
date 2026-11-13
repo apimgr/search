@@ -402,9 +402,10 @@ func runServerServiceBody() {
 		// Parent exits in daemonize(), only child continues
 	}
 
-	// Per AI.md PART 8: If running as root, setup system resources then drop privileges
-	// Skip privilege dropping in container mode - container entrypoint handles this
-	if service.IsRunningAsRoot() && !config.IsRunningInContainer() {
+	// Per AI.md PART 8 and PART 26: root performs privileged setup and then
+	// drops to the dedicated service account on hosts and inside containers.
+	if service.IsRunningAsRoot() {
+		containerMode := config.IsRunningInContainer()
 		slog.Info("Running as root - performing privileged setup")
 
 		// Step 8a: Create system user
@@ -416,11 +417,13 @@ func runServerServiceBody() {
 		slog.Info("System user ready", "user", svcUser.Name, "uid", svcUser.UID, "gid", svcUser.GID)
 
 		// Step 8b-d: Create directories and set ownership (while still root)
-		if err := config.EnsureSystemDirectories("search"); err != nil {
-			slog.Error("Failed to create system directories", "err", err)
-			exitFunc(1)
+		if !containerMode {
+			if err := config.EnsureSystemDirectories(config.InternalName); err != nil {
+				slog.Error("Failed to create system directories", "err", err)
+				exitFunc(1)
+			}
+			slog.Info("System directories created")
 		}
-		slog.Info("System directories created")
 
 		// Step 8b-c: Create and chown the ACTUAL resolved runtime directories
 		// (these honor --data/--config/--cache/--log/--backup/--pid CLI flags
@@ -442,17 +445,19 @@ func runServerServiceBody() {
 		// Only applies to the default system paths — custom overrides (already
 		// applied via config.SetXDirOverride above) take precedence and are
 		// left untouched here.
-		if flagData == "" {
-			config.SetDataDirOverride("/var/lib/apimgr/search")
-		}
-		if flagConfig == "" {
-			config.SetConfigDirOverride("/etc/apimgr/search")
-		}
-		if flagLog == "" {
-			config.SetLogDirOverride("/var/log/apimgr/search")
-		}
-		if flagCache == "" {
-			config.SetCacheDirOverride("/var/cache/apimgr/search")
+		if !containerMode {
+			if flagData == "" {
+				config.SetDataDirOverride("/var/lib/" + config.InternalOrg + "/" + config.InternalName)
+			}
+			if flagConfig == "" {
+				config.SetConfigDirOverride("/etc/" + config.InternalOrg + "/" + config.InternalName)
+			}
+			if flagLog == "" {
+				config.SetLogDirOverride("/var/log/" + config.InternalOrg + "/" + config.InternalName)
+			}
+			if flagCache == "" {
+				config.SetCacheDirOverride("/var/cache/" + config.InternalOrg + "/" + config.InternalName)
+			}
 		}
 		if err := os.Setenv("HOME", config.GetDataDir()); err != nil {
 			slog.Warn("failed to set service HOME", "error", err)

@@ -9,7 +9,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Store a raw API token — hash with SHA-256
 - Hardcode credentials anywhere in the code
 - Build SQL by string concatenation — prepared statements only
-- Require a manual schema step — migrations run automatically on startup
+- Keep schema setup self-creating and idempotent; do not add migration files or schema version tracking
 - Emit stack traces outside development mode
 - Log sensitive data (tokens, credentials, internal paths, secrets)
 - Execute or serve untrusted user content as active content on the app origin

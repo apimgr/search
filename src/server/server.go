@@ -1388,6 +1388,8 @@ func (s *Server) setupRoutes() http.Handler {
 		r,
 		// outermost: catches all panics
 		s.middleware.Recovery,
+		// Apply the configured request-body limit to every route before parsing.
+		s.middleware.MaxBodySize,
 		// Add build-scoped validators to rendered HTML without changing private cache policy.
 		HTMLCacheHeaders,
 		// 1. normalize URLs (trailing slash, etc.)

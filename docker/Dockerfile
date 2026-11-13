@@ -53,7 +53,8 @@ RUN apk add --no-cache \
     curl \
     bash \
     tini \
-    tor
+    tor \
+    shadow
 
 # NO directory creation - binary handles ALL setup based on env vars
 # This allows users to override CONFIG_DIR, DATA_DIR, etc.
@@ -72,11 +73,8 @@ COPY docker/Dockerfile /root/Dockerfile
 # Make all binaries/scripts in /usr/local/bin executable (755)
 RUN chmod 755 /usr/local/bin/*
 
-# Non-root runtime user: documented exception (see IDEA.md § Docker Non-Root
-# Exception) — binary binds privileged port 80 AND must create/chown
-# /config and /data on first run for the zero-config Docker Volume Mapping
-# contract (PART 26); entrypoint.sh is spec-prohibited from doing that setup
-# itself, so privilege drop cannot happen before exec. Runtime stays root.
+# The binary creates the service account, prepares and owns the runtime paths,
+# binds port 80, then drops privileges before serving requests.
 
 # Set environment
 # Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31)

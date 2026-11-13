@@ -379,7 +379,7 @@ func TestDB_Exec_Query_Begin_Ping_Ready(t *testing.T) {
 	}
 }
 
-// --- InitSchema (migrations) ---
+// --- InitSchema (schema) ---
 
 func TestInitSchema_CreatesAllTables(t *testing.T) {
 	dm := newManagerTempDir(t)

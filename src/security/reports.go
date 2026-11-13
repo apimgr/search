@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -80,6 +81,16 @@ func HashReportToken(rawToken string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// ReportTokenMatches compares a submitted token with its stored SHA-256 hash.
+func ReportTokenMatches(rawToken, storedHash string) bool {
+	stored, err := hex.DecodeString(storedHash)
+	if err != nil || len(stored) != sha256.Size {
+		return false
+	}
+	presented := sha256.Sum256([]byte(rawToken))
+	return subtle.ConstantTimeCompare(presented[:], stored) == 1
+}
+
 // InsertReport persists a new security report row into {prefix}security_reports.
 // The report body must already be encrypted (see EncryptMessageToArmoredKey /
 // EncryptAESGCM) — plaintext is never written to disk, per AI.md PART 11.
@@ -110,6 +121,7 @@ type ReportStatus struct {
 	Status          string
 	ReportTokenHash string
 	ClosedAt        *time.Time
+	LastAccessDate  string
 }
 
 // LookupReportStatus fetches the researcher-visible status fields for a
@@ -118,13 +130,16 @@ type ReportStatus struct {
 func LookupReportStatus(ctx context.Context, db *database.DB, trackingID string) (*ReportStatus, error) {
 	table := database.ServerTableName(db, "security_reports")
 	row := db.QueryRow(ctx, fmt.Sprintf(
-		`SELECT tracking_id, status, report_token_hash, closed_at FROM %s WHERE tracking_id = ?`, table),
+		`SELECT tracking_id, status, report_token_hash, closed_at, last_status_access_date FROM %s WHERE tracking_id = ?`, table),
 		trackingID)
 
 	var status ReportStatus
-	var closedAt *string
-	if err := row.Scan(&status.TrackingID, &status.Status, &status.ReportTokenHash, &closedAt); err != nil {
+	var closedAt, lastAccessDate *string
+	if err := row.Scan(&status.TrackingID, &status.Status, &status.ReportTokenHash, &closedAt, &lastAccessDate); err != nil {
 		return nil, err
+	}
+	if lastAccessDate != nil {
+		status.LastAccessDate = *lastAccessDate
 	}
 	if closedAt != nil && *closedAt != "" {
 		if parsed, err := time.Parse(time.RFC3339, *closedAt); err == nil {
@@ -134,6 +149,25 @@ func LookupReportStatus(ctx context.Context, db *database.DB, trackingID string)
 		}
 	}
 	return &status, nil
+}
+
+// RecordReportStatusAccess permits one successful researcher status lookup
+// per UTC calendar day, atomically across concurrent requests.
+func RecordReportStatusAccess(ctx context.Context, db *database.DB, trackingID, accessDate string) (bool, error) {
+	table := database.ServerTableName(db, "security_reports")
+	result, err := db.Exec(ctx, fmt.Sprintf(
+		`UPDATE %s SET last_status_access_date = ?
+		WHERE tracking_id = ? AND (last_status_access_date IS NULL OR last_status_access_date <> ?)`, table),
+		accessDate, trackingID, accessDate,
+	)
+	if err != nil {
+		return false, fmt.Errorf("record security report status access: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("read security report status access result: %w", err)
+	}
+	return count == 1, nil
 }
 
 // TokenExpired reports whether a report's one-shot status-page token has

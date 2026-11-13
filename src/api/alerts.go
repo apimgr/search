@@ -50,6 +50,15 @@ type alertPauseRequest struct {
 
 var errAlertStorageUnavailable = errors.New("alert storage is unavailable")
 
+func (h *Handler) writeAlertJSONDecodeError(w http.ResponseWriter, err error) {
+	var maxBytesError *http.MaxBytesError
+	if errors.As(err, &maxBytesError) {
+		h.writeError(w, "REQUEST_TOO_LARGE", "Request body exceeds the configured limit", http.StatusRequestEntityTooLarge)
+		return
+	}
+	h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+}
+
 // AlertCreateForGraphQL creates an alert with the same request metadata and response fields as REST.
 func (h *Handler) AlertCreateForGraphQL(ctx context.Context, r *http.Request, req alert.CreateRequest) (map[string]interface{}, error) {
 	if h.alertManager == nil {
@@ -179,7 +188,7 @@ func (h *Handler) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 	var req alertCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+		h.writeAlertJSONDecodeError(w, err)
 		return
 	}
 
@@ -293,7 +302,7 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPatch:
 			var req alertUpdateRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+				h.writeAlertJSONDecodeError(w, err)
 				return
 			}
 			alertInfo, err := h.alertManager.Update(r.Context(), token, alert.UpdateRequest{

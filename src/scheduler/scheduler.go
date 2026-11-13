@@ -1225,7 +1225,7 @@ func (s *Scheduler) initDatabase() {
 		slog.Error("Failed to create tasks table", "err", err)
 	}
 
-	// Idempotent migrations — add columns missing from older schema versions
+	// Idempotent schema updates — add columns missing from older schema versions
 	// SQLite silently errors if the column already exists; errors are intentionally ignored
 	for _, column := range []struct{ name, definition string }{
 		{"task_name", "TEXT"}, {"schedule", "TEXT"}, {"last_status", "TEXT"},
@@ -1234,13 +1234,13 @@ func (s *Scheduler) initDatabase() {
 	} {
 		query := "ALTER TABLE scheduler_tasks ADD COLUMN " + column.name + " " + column.definition
 		if _, err := s.db.ExecContext(initCtx, query); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			slog.Warn("failed to apply scheduler schema migration", "column", column.name, "error", err)
+			slog.Warn("failed to apply scheduler schema update", "column", column.name, "error", err)
 		}
 	}
 
 	// Execution history per AI.md PART 18 (task detail "RECENT HISTORY" and
 	// the `scheduler history <id>` CLI command). Schema matches the
-	// scheduler_history migration in src/database/migrations.go.
+	// scheduler_history schema in src/database/schema.go.
 	historyQuery := `
 		CREATE TABLE IF NOT EXISTS scheduler_history (
 			id TEXT PRIMARY KEY,
@@ -1255,8 +1255,8 @@ func (s *Scheduler) initDatabase() {
 		slog.Error("Failed to create scheduler history table", "err", err)
 	}
 
-	// Idempotent migration — status distinguishes skipped runs from failures,
-	// which the migration's success flag alone cannot express
+	// Idempotent schema update — status distinguishes skipped runs from failures,
+	// which the table's success flag alone cannot express
 	if _, err := s.db.ExecContext(initCtx, "ALTER TABLE scheduler_history ADD COLUMN status TEXT"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
 		slog.Warn("failed to add scheduler history status column", "error", err)
 	}
@@ -1357,7 +1357,7 @@ func (s *Scheduler) saveTaskState(task *Task) {
 }
 
 // newHistoryID generates the random identifier for a history row. The
-// scheduler_history table keys on a TEXT id (see src/database/migrations.go).
+// scheduler_history table keys on a TEXT id (see src/database/schema.go).
 func newHistoryID() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {

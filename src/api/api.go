@@ -2625,20 +2625,28 @@ func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 // bearer token. Per AI.md PART 14: operator-gated endpoints use Bearer auth.
 // Token comparison is constant-time over SHA-256 digests to prevent timing leaks.
 func (h *Handler) operatorAuthError(r *http.Request) error {
+	started := time.Now()
+	fail := func(reason string) error {
+		slog.Debug("operator authentication rejected", "reason", reason)
+		if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
+			time.Sleep(100*time.Millisecond - elapsed)
+		}
+		return errors.New("operator authorization required")
+	}
 	expected := h.config.Get().Token
 	if expected == "" {
-		return errors.New("operator token not configured")
+		return fail("not_configured")
 	}
 	hdr := r.Header.Get("Authorization")
 	const prefix = "Bearer "
 	if len(hdr) <= len(prefix) || !strings.EqualFold(hdr[:len(prefix)], prefix) {
-		return errors.New("operator token required")
+		return fail("missing_token")
 	}
 	presented := strings.TrimSpace(hdr[len(prefix):])
 	expectedSum := sha256.Sum256([]byte(expected))
 	presentedSum := sha256.Sum256([]byte(presented))
 	if subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
-		return errors.New("invalid operator token")
+		return fail("invalid_token")
 	}
 	return nil
 }
@@ -2684,17 +2692,8 @@ func (h *Handler) serverConfigData() map[string]interface{} {
 func (h *Handler) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h.operatorAuthError(r); err != nil {
-			if err.Error() != "operator token not configured" {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
-			}
-			message := "Operator token not configured"
-			if err.Error() == "operator token required" {
-				message = "Operator token required"
-			}
-			if err.Error() == "invalid operator token" {
-				message = "Invalid operator token"
-			}
-			h.errorResponse(w, http.StatusUnauthorized, message, "")
+			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
+			h.errorResponse(w, http.StatusUnauthorized, "Invalid credentials", "")
 			return
 		}
 		next(w, r)
