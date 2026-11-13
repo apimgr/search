@@ -72,17 +72,22 @@ func TestIsHttpTool(t *testing.T) {
 		want      bool
 	}{
 		{"curl/7.68.0", true},
+		{"xh/0.24.0", true},
+		{"python-httpx/0.27.0", true},
+		{"reqwest/0.12", true},
+		{"undici", true},
+		{"OkHttp/4.12", true},
+		{"PostmanRuntime/7.0", true},
 		{"wget/1.21", true},
 		{"HTTPie/2.4.0", true},
 		{"python-requests/2.25.1", true},
 		{"Go-http-client/1.1", true},
 		{"axios/0.21.1", true},
 		{"node-fetch/2.6.1", true},
-		{"Postman Runtime", true},
 		{"insomnia/2021.3.0", true},
 		{"Mozilla/5.0 Chrome", false},
 		{"Lynx/2.8.9", false},
-		{"", false},
+		{"", true},
 	}
 
 	for _, tt := range tests {
@@ -178,7 +183,10 @@ func TestDetectClientType(t *testing.T) {
 		{"http tool", "curl/7.68.0", "", ClientTypeHttpTool},
 		{"api client", "Custom Agent", "application/json", ClientTypeAPI},
 		{"browser", "Mozilla/5.0 Chrome", "", ClientTypeBrowser},
-		{"unknown", "Unknown", "", ClientTypeUnknown},
+		{"unknown defaults to browser", "Unknown", "", ClientTypeBrowser},
+		{"JSON Accept overrides CLI", "search-cli/1.0.0", "application/json", ClientTypeAPI},
+		{"HTML Accept overrides HTTP tool", "curl/7.68.0", "text/html", ClientTypeBrowser},
+		{"plain Accept", "Mozilla/5.0", "text/plain", ClientTypePlainText},
 	}
 
 	for _, tt := range tests {
@@ -208,11 +216,13 @@ func TestGetPreferredFormat(t *testing.T) {
 		{"json accept", version.APIPrefix + "/status", "", "application/json", "application/json"},
 		{"plain accept", version.APIPrefix + "/status", "", "text/plain", "text/plain"},
 		{"html accept", "/page", "", "text/html", "text/html"},
+		{"html takes precedence over plain", "/page", "", "text/html, text/plain", "text/html"},
+		{"JSON takes precedence over HTML", "/page", "curl/7.68.0", "application/json, text/html", "application/json"},
 		{"our cli", version.APIPrefix + "/status", "search-cli/1.0.0", "", "application/json"},
 		{"http tool", version.APIPrefix + "/status", "curl/7.68.0", "", "text/plain"},
 		{"browser", "/page", "Mozilla/5.0 Chrome", "", "text/html"},
-		{"api path", version.APIPrefix + "/status", "", "", "application/json"},
-		{"default", "/page", "", "", "text/html"},
+		{"api path without User-Agent", version.APIPrefix + "/status", "", "", "text/plain"},
+		{"frontend without User-Agent", "/page", "", "", "text/plain"},
 	}
 
 	for _, tt := range tests {

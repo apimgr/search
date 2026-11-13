@@ -38,17 +38,22 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.newPageData(w, r, "", "home")
+	format := httputil.GetPreferredFormat(r)
+	if format == "application/json" {
+		respondJSON(w, http.StatusOK, api.APIResponse{
+			OK:   true,
+			Data: s.apiHandler.Info(),
+			Meta: &api.APIMeta{Version: api.APIVersion},
+		})
+		return
+	}
 
-	// Text browsers receive a JavaScript-free home page (just a search form).
-	// Per AI.md PART 14: text browsers are INTERACTIVE, no JS.
-	if httputil.IsTextBrowser(r) {
+	if httputil.IsTextBrowser(r) && format == "text/html" {
 		s.renderNoJSHome(w, r, data)
 		return
 	}
 
-	// HTTP tools fetching the home page receive plain text via HTML2TextConverter.
-	// Per AI.md PART 14: HTTP tools are NON-INTERACTIVE, just dump output.
-	if httputil.IsHttpTool(r) {
+	if format == "text/plain" {
 		s.renderHTMLToText(w, "index", data)
 		return
 	}

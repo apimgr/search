@@ -6,6 +6,14 @@ Examples use the public service at `https://scour.li`. For a self-hosted
 instance, replace that origin with the public base URL configured for your
 server.
 
+Frontend routes honor `Accept` preferences in this order: JSON, HTML, then
+plain text. With no explicit preference, `search-cli` receives JSON, text
+browsers receive JavaScript-free HTML, known HTTP tools (including requests
+with no User-Agent) receive formatted text, and other clients receive HTML.
+API routes default to JSON; `.txt`, `Accept: text/plain`, or a known HTTP tool
+selects plain text. Supported explicit `Accept` preferences take precedence
+over client detection.
+
 ## Endpoints
 
 | Endpoint | Method | Description |

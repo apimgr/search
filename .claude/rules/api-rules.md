@@ -21,6 +21,9 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 - Serve REST under `/api/{api_version}/` with a consistent response envelope and proper HTTP status codes
 - Paginate every list endpoint and support filter/sort/search parameters
 - Rate-limit per endpoint type
+- Determine frontend response type in order: explicit `Accept` (`application/json`, `text/html`, `text/plain`), companion CLI, text browser, known HTTP tool, then browser HTML
+- Treat HTTP tool detection as a User-Agent denylist; empty User-Agent and unrecognized clients follow the documented defaults
+- Keep API negotiation separate: `.txt`, explicit JSON/plain-text, HTTP tool, then JSON default
 - Support Let's Encrypt HTTP-01 and TLS-ALPN-01 (DNS-01 optional) plus manual certificates
 - Support DNS-01 with provider credentials encrypted at rest; validate them at startup and before certificate requests
 - Resolve request hosts only through the documented trusted proxy policy; static FQDN uses DOMAIN, hostname, public IPs, then localhost
@@ -39,7 +42,7 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 ## TERMINOLOGY
 | Term | Meaning |
 |------|---------|
-| smart detection | Content negotiation: browser gets HTML, CLI gets text |
+| smart detection | Frontend content negotiation: CLI gets JSON, text browsers get no-JS HTML, HTTP tools get formatted text, browsers get HTML |
 | `{api_version}` | Version segment in the API URL path |
 | `official_site` | `https://scour.li` — the public URL used in all docs |
 

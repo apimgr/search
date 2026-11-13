@@ -1499,6 +1499,7 @@ func (s *Server) resolveWeatherUnits(r *http.Request) string {
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	responseFormat := httputil.GetPreferredFormat(r)
 	prefs := parseSearchPreferences(r.URL.Query().Get("prefs"))
 
 	// Sanitize and validate input
@@ -1630,16 +1631,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	results, err := s.aggregator.Search(ctx, query)
 
 	if err != nil && !errors.Is(err, model.ErrNoResults) {
-		// For HTTP tools, render the error as plain text
-		if httputil.IsHttpTool(r) {
+		if responseFormat == "text/plain" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			writeResponseFormatted(w, "Search error: %v\n", err)
+			writeResponseText(w, i18n.RequestString(r, "errors.server_error_message")+"\n")
 			return
 		}
-		// For our CLI, encode the error as JSON
-		if httputil.IsOurCliClient(r) {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			writeResponseFormatted(w, `{"ok":false,"error":"SEARCH_ERROR","message":%q}`+"\n", err.Error())
+		if responseFormat == "application/json" {
+			respondError(w, http.StatusBadGateway, i18n.RequestString(r, "errors.server_error_message"))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1647,15 +1645,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Our CLI client — INTERACTIVE, receives JSON, renders its own TUI/GUI
-	if httputil.IsOurCliClient(r) {
+	if responseFormat == "application/json" {
 		s.renderJSONSearchResults(w, results)
 		return
 	}
 
 	// 2. Text browsers (lynx, w3m, links, elinks) — INTERACTIVE, NO JavaScript
 	//    Serve completely different HTML: server-rendered, forms via GET, nav via <a href>
-	if httputil.IsTextBrowser(r) {
+	if httputil.IsTextBrowser(r) && responseFormat == "text/html" {
 		data := s.buildSearchPageData(w, r, queryStr, results, category, instantAnswer)
 		s.renderNoJSSearch(w, r, data)
 		return
@@ -1663,7 +1660,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// 3. HTTP tools (curl, wget, httpie) — NON-INTERACTIVE, just dump output
 	//    Render full HTML first, then convert to terminal-friendly plain text
-	if httputil.IsHttpTool(r) {
+	if responseFormat == "text/plain" {
 		data := s.buildSearchPageData(w, r, queryStr, results, category, instantAnswer)
 		s.renderHTMLToText(w, "search", data)
 		return

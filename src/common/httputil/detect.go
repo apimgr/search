@@ -62,15 +62,20 @@ func IsHttpTool(r *http.Request) bool {
 	ua := strings.ToLower(r.Header.Get("User-Agent"))
 
 	httpTools := []string{
-		"curl/", "wget/", "httpie/",
-		"libcurl/", "python-requests/",
-		"go-http-client/", "axios/", "node-fetch/",
-		"postman", "insomnia", "paw/",
+		"curl/", "wget/", "httpie/", "xh/", "hurl/", "libcurl/",
+		"python-requests/", "python-urllib/", "python-httpx/", "aiohttp/", "urllib3/",
+		"go-http-client/", "go-resty/", "fasthttp", "reqwest/", "ureq/", "hyper/",
+		"axios/", "node-fetch/", "undici", "superagent/", "deno/", "bun/",
+		"okhttp/", "apache-httpclient/", "java/", "guzzlehttp/", "libwww-perl/", "lwp-trivial/", "faraday", "dart/", "windowspowershell/",
+		"postmanruntime/", "insomnia/", "bruno-runtime/", "k6/",
 	}
 	for _, tool := range httpTools {
 		if strings.Contains(ua, tool) {
 			return true
 		}
+	}
+	if ua == "" {
+		return true
 	}
 	return false
 }
@@ -112,9 +117,11 @@ func IsBrowser(r *http.Request) bool {
 		}
 	}
 
-	// Default to browser if Accept header suggests HTML
-	accept := r.Header.Get("Accept")
-	return strings.Contains(accept, "text/html")
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	if strings.Contains(accept, "application/json") || strings.Contains(accept, "text/plain") {
+		return false
+	}
+	return true
 }
 
 // DetectClientType returns the type of client making the request
@@ -133,6 +140,8 @@ const (
 	ClientTypeOurCLI
 	// API client - gets JSON
 	ClientTypeAPI
+	// Explicit plain-text preference
+	ClientTypePlainText
 )
 
 // String returns the string representation of ClientType
@@ -148,6 +157,8 @@ func (c ClientType) String() string {
 		return "our_cli"
 	case ClientTypeAPI:
 		return "api"
+	case ClientTypePlainText:
+		return "plain_text"
 	default:
 		return "unknown"
 	}
@@ -156,6 +167,16 @@ func (c ClientType) String() string {
 // DetectClientType determines the type of client from the request
 // Per AI.md PART 14: Client Type Detection & Response
 func DetectClientType(r *http.Request) ClientType {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	switch {
+	case strings.Contains(accept, "application/json"):
+		return ClientTypeAPI
+	case strings.Contains(accept, "text/html"):
+		return ClientTypeBrowser
+	case strings.Contains(accept, "text/plain"):
+		return ClientTypePlainText
+	}
+
 	// Check for our CLI client first
 	if IsOurCliClient(r) {
 		return ClientTypeOurCLI
@@ -171,40 +192,39 @@ func DetectClientType(r *http.Request) ClientType {
 		return ClientTypeHttpTool
 	}
 
-	// Check if this is an API request (Accept: application/json)
-	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		return ClientTypeAPI
-	}
-
 	// Check if it's a browser
 	if IsBrowser(r) {
 		return ClientTypeBrowser
 	}
 
-	return ClientTypeUnknown
+	return ClientTypeBrowser
 }
 
 // GetPreferredFormat returns the preferred response format based on client type
 // Per AI.md PART 14: Content Negotiation Priority
 func GetPreferredFormat(r *http.Request) string {
-	// 1. Check for .txt extension - ALWAYS returns text
 	if strings.HasSuffix(r.URL.Path, ".txt") {
 		return "text/plain"
 	}
 
-	// 2. Check Accept header explicitly
-	accept := r.Header.Get("Accept")
-	if accept != "" {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	if strings.HasPrefix(r.URL.Path, "/api/") {
 		if strings.Contains(accept, "application/json") {
 			return "application/json"
 		}
-		if strings.Contains(accept, "text/plain") {
+		if strings.Contains(accept, "text/plain") || IsNonInteractiveClient(r) {
 			return "text/plain"
 		}
-		if strings.Contains(accept, "text/html") {
-			return "text/html"
-		}
+		return "application/json"
+	}
+
+	switch {
+	case strings.Contains(accept, "application/json"):
+		return "application/json"
+	case strings.Contains(accept, "text/html"):
+		return "text/html"
+	case strings.Contains(accept, "text/plain"):
+		return "text/plain"
 	}
 
 	// 3. Detect client type and return appropriate format
@@ -214,6 +234,8 @@ func GetPreferredFormat(r *http.Request) string {
 	case ClientTypeOurCLI, ClientTypeAPI:
 		return "application/json"
 	case ClientTypeHttpTool:
+		return "text/plain"
+	case ClientTypePlainText:
 		return "text/plain"
 	case ClientTypeTextBrowser, ClientTypeBrowser:
 		return "text/html"

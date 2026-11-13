@@ -53,6 +53,50 @@ func TestHandleSearchForwardsAdvancedFilters(t *testing.T) {
 	}
 }
 
+func TestHandleSearchAcceptJSONOverridesHTTPTool(t *testing.T) {
+	s := newTestServer(t)
+	previous := s.aggregator
+	engineConfig := model.NewEngineConfig("json-fixture")
+	engineConfig.Categories = []string{"general"}
+	capture := &queryCaptureEngine{BaseEngine: search.NewBaseEngine(engineConfig), queries: make(chan model.Query, 1)}
+	s.aggregator = search.NewAggregator([]search.Engine{capture}, search.AggregatorConfig{})
+	t.Cleanup(func() { s.aggregator = previous })
+
+	request := httptest.NewRequest(http.MethodGet, "/search?q=privacy", nil)
+	request.Header.Set("User-Agent", "curl/8.0")
+	request.Header.Set("Accept", "application/json")
+	recorder := httptest.NewRecorder()
+	s.handleSearch(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("handleSearch status = %d, want %d; body: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if contentType := recorder.Header().Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", contentType)
+	}
+	if !strings.Contains(recorder.Body.String(), `"ok":true`) {
+		t.Fatalf("JSON response missing success envelope: %s", recorder.Body.String())
+	}
+}
+
+func TestHandleHomeAcceptJSON(t *testing.T) {
+	s := newTestServer(t)
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "application/json")
+	recorder := httptest.NewRecorder()
+	s.handleHome(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("handleHome status = %d, want %d; body: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if contentType := recorder.Header().Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", contentType)
+	}
+	if !strings.Contains(recorder.Body.String(), `"ok":true`) {
+		t.Fatalf("JSON response missing success envelope: %s", recorder.Body.String())
+	}
+}
+
 // Tests for Middleware
 
 func TestNewMiddleware(t *testing.T) {
