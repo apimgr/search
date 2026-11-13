@@ -61,6 +61,21 @@ SOFTWARE.
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | 2011-2019 Canonical Ltd |
 | modernc.org/sqlite | v1.53.0 | BSD-3-Clause | 2017 The Sqlite Authors |
 
+### BSD-3-Clause non-endorsement notices
+
+- **filippo.io/edwards25519 v1.2.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **github.com/fsnotify/fsnotify v1.10.1** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **github.com/google/uuid v1.6.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **github.com/refraction-networking/utls v1.8.2** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/crypto v0.58.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/image v0.42.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/net v0.60.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/sys v0.49.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/term v0.47.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/text v0.43.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **golang.org/x/time v0.15.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+- **modernc.org/sqlite v1.53.0** — Neither the name of any copyright holder listed above nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
 Full license texts available at: https://spdx.org/licenses/
 
 ---
