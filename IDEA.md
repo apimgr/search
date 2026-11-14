@@ -86,7 +86,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 | Goal | Vector | Defense / explicit non-goal |
 |------|--------|-----------------------------|
-| De-anonymize a query to a specific user | Query logs, IP logs | No server-side query/IP logging (per AI.md PART 11). Image proxy strips Referer. |
+| De-anonymize a query to a specific user | Query logs, IP logs | No server-side user/IP/session mapping. The public recent-search feeds may retain only filtered query text and time in bounded memory; entries are never persisted and sensitive-looking queries are dropped (per AI.md). Image proxy strips Referer. |
 | Scrape the public service as free metasearch | High-volume bots | Rate limiting (per AI.md PART 1). Engine rotation. Optional CAPTCHA on abuse signals. |
 | Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Per-email cap. |
 | Phish via alert manage links | Signed-token forgery, link confusion | Alert manage tokens are cryptographically signed and unguessable; emails sent from the configured sender address. |
