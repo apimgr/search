@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -35,7 +36,8 @@ type Metrics struct {
 
 	// registry is this instance's private collector registry. Handler gathers
 	// from it, so the served output covers exactly the collectors below.
-	registry *prometheus.Registry
+	registry     *prometheus.Registry
+	ownerManager *owner.Manager
 
 	// Per AI.md PART 13: Atomic counters for health endpoint stats
 	// These are separate from Prometheus counters for easy access
@@ -114,6 +116,7 @@ type Metrics struct {
 	torRunning            prometheus.Gauge
 	torCircuitEstablished prometheus.Gauge
 	torRequestsTotal      prometheus.Counter
+	ownerTokensActive     *prometheus.GaugeVec
 
 	// Runtime GC deltas, only touched by the collector goroutine
 	lastGC    uint32
@@ -157,9 +160,10 @@ func NewMetrics(cfg *config.Config) *Metrics {
 	taskBuckets := []float64{0.1, 0.5, 1, 5, 10, 30, 60, 300, 600}
 
 	m := &Metrics{
-		config:    cfg,
-		startTime: time.Now(),
-		registry:  reg,
+		config:            cfg,
+		startTime:         time.Now(),
+		registry:          reg,
+		ownerTokensActive: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{Name: "search_owner_tokens_active", Help: "Active owner tokens (not revoked or expired)"}, []string{"kind"}),
 
 		// HTTP metrics per AI.md PART 20
 		httpRequestsTotal: promauto.With(reg).NewCounterVec(
@@ -726,7 +730,25 @@ func (m *Metrics) GetActiveConnections() int64 {
 // Handler returns an HTTP handler for Prometheus metrics
 // Per AI.md PART 20: Uses promhttp.Handler()
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	handler := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.refreshOwnerTokenMetrics(r)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func (m *Metrics) SetOwnerManager(manager *owner.Manager) { m.ownerManager = manager }
+
+func (m *Metrics) refreshOwnerTokenMetrics(r *http.Request) {
+	if m.ownerManager == nil || m.ownerTokensActive == nil {
+		return
+	}
+	counts, err := m.ownerManager.ActiveCounts(r.Context())
+	if err != nil {
+		return
+	}
+	m.ownerTokensActive.WithLabelValues("primary").Set(float64(counts["primary"]))
+	m.ownerTokensActive.WithLabelValues("linked").Set(float64(counts["linked"]))
 }
 
 // MetricsMiddleware creates middleware for recording request metrics

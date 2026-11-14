@@ -7,7 +7,15 @@
     <div class="page-content">
         <section class="security-section">
             <p>{{t "security.thanks_intro"}}</p>
+            {{if .Entries}}
+            <ul class="security-thanks-list">
+                {{range .Entries}}
+                <li>{{.Credit}} ({{.Date}} · {{.Severity}})</li>
+                {{end}}
+            </ul>
+            {{else}}
             <p class="security-thanks-empty">{{t "security.thanks_empty"}}</p>
+            {{end}}
         </section>
     </div>
 </div>

@@ -346,6 +346,32 @@ func (c *Client) GetVersion() (string, error) {
 	return health.Version, nil
 }
 
+func (c *Client) CheckAuth() (string, error) {
+	resp, err := c.get(searchapi.APIPrefix + "/server/auth")
+	if err != nil {
+		return "", err
+	}
+	defer closeutil.Close(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", ErrAuthentication
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("authentication check returned HTTP %d", resp.StatusCode)
+	}
+	var result struct {
+		Data struct {
+			Kind string `json:"kind"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode authentication check: %w", err)
+	}
+	if result.Data.Kind == "" {
+		return "", errors.New("authentication check returned no token kind")
+	}
+	return result.Data.Kind, nil
+}
+
 // GetInfo returns server information from GET /api/v1/info
 func (c *Client) GetInfo() (*InfoResponse, error) {
 	resp, err := c.get(searchapi.APIPrefix + "/info")

@@ -611,7 +611,7 @@ func runServerServiceBody() {
 		AppName:   "Search",
 		Version:   config.Version,
 		Mode:      cfg.Server.Mode,
-		Debug:     mode.IsDebugEnabled(),
+		Debug:     serverBannerDebugEnabled(cfg),
 		URLs:      urls,
 		ShowSetup: showSetup,
 	})
@@ -625,6 +625,10 @@ func runServerServiceBody() {
 		return
 	}
 	exitFunc(0)
+}
+
+func serverBannerDebugEnabled(cfg *config.Config) bool {
+	return cfg != nil && cfg.IsDebug()
 }
 
 func printVersion() {

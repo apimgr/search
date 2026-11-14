@@ -124,6 +124,7 @@
     },
     "/api/healthz": {
       "get": {
+        "operationId": "getApiHealthz",
         "summary": "Health check",
         "description": "Returns server health status. Canonical route: /server/healthz",
         "tags": [
@@ -1876,6 +1877,78 @@
         }
       }
     },
+    "/api/v1/server/auth": {
+      "get": {
+        "operationId": "getApiV1ServerAuth",
+        "summary": "Validate an operator or owner token",
+        "description": "Checks the bearer token kind without returning the token",
+        "tags": [
+          "Authentication"
+        ],
+        "responses": {
+          "200": {
+            "description": "Token kind",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "operator",
+                            "owner"
+                          ]
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/server/config": {
       "get": {
         "operationId": "getApiV1ServerConfig",
@@ -2372,9 +2445,200 @@
         }
       }
     },
+    "/api/v1/server/geoip/ips.txt": {
+      "get": {
+        "operationId": "getApiV1ServerGeoipIpsTxt",
+        "summary": "GeoIP lookup",
+        "description": "Look up the requester address or an explicit public IP address",
+        "tags": [
+          "GeoIP"
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoIP result with data-source attribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IP address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "GeoIP database unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/server/geoip/ips/{ip}": {
       "get": {
         "operationId": "getApiV1ServerGeoipIpsIp",
+        "summary": "GeoIP lookup",
+        "description": "Look up the requester address or an explicit public IP address",
+        "tags": [
+          "GeoIP"
+        ],
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "path",
+            "description": "IP address to look up",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoIP result with data-source attribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IP address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "GeoIP database unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/geoip/ips/{ip}.txt": {
+      "get": {
+        "operationId": "getApiV1ServerGeoipIpsIpTxt",
         "summary": "GeoIP lookup",
         "description": "Look up the requester address or an explicit public IP address",
         "tags": [
@@ -5344,6 +5608,114 @@
             "operatorToken": []
           }
         ]
+      }
+    },
+    "/api/v1/server/security": {
+      "get": {
+        "operationId": "getApiV1ServerSecurity",
+        "summary": "Security disclosure contacts and metadata",
+        "description": "Security disclosure contacts and metadata as public structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Security disclosure contacts and metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/security/policy": {
+      "get": {
+        "operationId": "getApiV1ServerSecurityPolicy",
+        "summary": "Security disclosure policy",
+        "description": "Security disclosure policy as public structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Security disclosure policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/security/thanks": {
+      "get": {
+        "operationId": "getApiV1ServerSecurityThanks",
+        "summary": "Security researcher acknowledgments",
+        "description": "Security researcher acknowledgments as public structured data",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Security researcher acknowledgments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/server/status": {

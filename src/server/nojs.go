@@ -111,7 +111,7 @@ func (s *Server) renderNoJSSearch(w http.ResponseWriter, r *http.Request, data *
 	results, _ := data.Results.([]model.Result)
 
 	if data.TotalResults > 0 {
-		resultCountMsg := im.T(lang, "search.result_count_other", data.TotalResults)
+		resultCountMsg := im.Tf(lang, "search.result_count_other", "count", itoa(data.TotalResults))
 		b.WriteString(`<p class="result-count">` + html.EscapeString(resultCountMsg) + `</p>` + "\n")
 	}
 

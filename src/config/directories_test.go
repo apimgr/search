@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -281,6 +282,64 @@ func TestGetBinaryPath(t *testing.T) {
 	got := GetBinaryPath()
 	if got == "" {
 		t.Error("GetBinaryPath() should not be empty")
+	}
+}
+
+func TestNativeOnDiskPathsUseFrozenIdentity(t *testing.T) {
+	originalContainerOverride := containerDetectionOverride
+	container := false
+	containerDetectionOverride = &container
+	t.Cleanup(func() {
+		containerDetectionOverride = originalContainerOverride
+	})
+
+	for _, key := range []string{"CONFIG_DIR", "DATA_DIR", "LOG_DIR", "DATABASE_DIR"} {
+		t.Setenv(key, "")
+	}
+	SetConfigDirOverride("")
+	SetDataDirOverride("")
+	SetLogDirOverride("")
+	SetCacheDirOverride("")
+	SetDatabaseDirOverride("")
+	SetPIDFileOverride("")
+	t.Cleanup(func() {
+		SetConfigDirOverride("")
+		SetDataDirOverride("")
+		SetLogDirOverride("")
+		SetCacheDirOverride("")
+		SetDatabaseDirOverride("")
+		SetPIDFileOverride("")
+	})
+
+	paths := map[string]string{
+		"config":   GetConfigDir(),
+		"data":     GetDataDir(),
+		"logs":     GetLogDir(),
+		"cache":    GetCacheDir(),
+		"database": GetDatabaseDir(),
+		"pid":      GetPIDFile(),
+	}
+	for name, path := range paths {
+		if !strings.Contains(path, InternalName) {
+			t.Errorf("%s path %q does not use frozen internal name %q", name, path, InternalName)
+		}
+		if !strings.Contains(path, InternalOrg) {
+			t.Errorf("%s path %q does not use frozen internal organization %q", name, path, InternalOrg)
+		}
+	}
+
+	if runtime.GOOS != "windows" && !strings.Contains(GetServiceFile(), InternalName) {
+		t.Errorf("service path %q does not use frozen internal name %q", GetServiceFile(), InternalName)
+	}
+
+	if runtime.GOOS == "windows" {
+		binaryPath := GetBinaryPath()
+		if !strings.Contains(binaryPath, InternalOrg) || !strings.Contains(binaryPath, InternalName) {
+			t.Errorf("Windows binary path %q does not use frozen install-directory identity %q/%q", binaryPath, InternalOrg, InternalName)
+		}
+		if filepath.Base(binaryPath) != ProjectName+".exe" {
+			t.Errorf("Windows binary filename = %q, want %q.exe", filepath.Base(binaryPath), ProjectName)
+		}
 	}
 }
 

@@ -90,6 +90,7 @@ type Schema struct {
 	Properties map[string]Schema `json:"properties,omitempty"`
 	Items      *Schema           `json:"items,omitempty"`
 	Example    interface{}       `json:"example,omitempty"`
+	Enum       []interface{}     `json:"enum,omitempty"`
 }
 
 type Components struct {
@@ -152,7 +153,9 @@ func assignOperationIDs(paths map[string]PathItem) {
 	}
 	for _, path := range pathNames {
 		item := paths[path]
-		if !strings.HasPrefix(path, version.APIPrefix+"/") || strings.Contains(path, "/server/mcp") || strings.Contains(path, "/server/preferences/tokens") {
+		versionedAPIPath := strings.HasPrefix(path, version.APIPrefix+"/")
+		healthAlias := path == "/api/healthz"
+		if (!versionedAPIPath && !healthAlias) || strings.Contains(path, "/server/mcp") || strings.Contains(path, "/server/preferences/tokens") {
 			continue
 		}
 		for _, method := range methods {

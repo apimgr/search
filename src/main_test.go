@@ -24,6 +24,30 @@ func TestRunServerStartsBodyOnRegularProcess(t *testing.T) {
 	}
 }
 
+func TestServerBannerDebugStateUsesConfigMode(t *testing.T) {
+	debugValue, debugSet := os.LookupEnv("DEBUG")
+	if err := os.Unsetenv("DEBUG"); err != nil {
+		t.Fatalf("unset DEBUG: %v", err)
+	}
+	t.Cleanup(func() {
+		if debugSet {
+			if err := os.Setenv("DEBUG", debugValue); err != nil {
+				t.Errorf("restore DEBUG: %v", err)
+			}
+			return
+		}
+		if err := os.Unsetenv("DEBUG"); err != nil {
+			t.Errorf("restore unset DEBUG: %v", err)
+		}
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.Server.Mode = "debug"
+	if !serverBannerDebugEnabled(cfg) {
+		t.Fatal("server banner did not enable debug state from server.mode=debug")
+	}
+}
+
 // ============================================================
 // formatUptime
 // ============================================================

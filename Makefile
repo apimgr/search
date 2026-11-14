@@ -235,6 +235,8 @@ test:
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD)
 	@echo "Running tests with coverage..." && \
 	COVDIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
+	mkdir -p "$$COVDIR/testtmp" && \
+	trap 'case "$$COVDIR" in "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-"*) rm -rf -- "$$COVDIR" ;; esac' EXIT && \
 	docker run --rm \
 		--name $(PROJECTNAME)-test-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
 		--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
@@ -245,6 +247,7 @@ test:
 		-w /app \
 		-e CGO_ENABLED=0 \
 		-e GOFLAGS=-buildvcs=false \
+		-e TMPDIR=/tmp/covout/testtmp \
 		casjaysdev/go:latest \
 		ash -c 'set -e; go mod download; go run ./src/cmd/apigen; go test -v -cover -coverprofile=/tmp/covout/coverage.out $(TEST_PACKAGES); COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep "^total:" | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 60" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 60%"; exit 1; fi'
 	@echo "Tests complete"

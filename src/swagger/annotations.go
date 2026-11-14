@@ -617,6 +617,25 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
+	for _, page := range []struct {
+		path, summary string
+	}{
+		{"security", "Security disclosure contacts and metadata"},
+		{"security/policy", "Security disclosure policy"},
+		{"security/thanks", "Security researcher acknowledgments"},
+	} {
+		paths[version.APIPrefix+"/server/"+page.path] = PathItem{
+			Get: &Operation{
+				Summary:     page.summary,
+				Description: page.summary + " as public structured data",
+				Tags:        []string{"Server"},
+				Responses: map[string]Response{
+					"200": okResponse(page.summary, &Schema{Type: "object"}),
+				},
+			},
+		}
+	}
+
 	paths[version.APIPrefix+"/server/dpo"] = PathItem{
 		Get: &Operation{
 			Summary:     "Data Protection Officer contact",
@@ -698,6 +717,8 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
+	paths[version.APIPrefix+"/server/auth"] = PathItem{Get: &Operation{Summary: "Validate an operator or owner token", Description: "Checks the bearer token kind without returning the token", Tags: []string{"Authentication"}, Responses: map[string]Response{"200": okResponse("Token kind", &Schema{Type: "object", Properties: map[string]Schema{"kind": {Type: "string", Enum: []interface{}{"operator", "owner"}}}}), "401": errorResponse("Missing or invalid token")}}}
+
 	paths[version.APIPrefix+"/server/config"] = PathItem{
 		Get: &Operation{
 			Summary:     "Operator server config",
@@ -717,7 +738,9 @@ func generatePaths() map[string]PathItem {
 		Responses:  map[string]Response{"200": okResponse("GeoIP result with data-source attribution", &Schema{Type: "object"}), "400": errorResponse("Invalid IP address"), "503": errorResponse("GeoIP database unavailable")},
 	}
 	paths[version.APIPrefix+"/server/geoip/ips"] = PathItem{Get: &Operation{Summary: geoIPLookup.Summary, Description: geoIPLookup.Description, Tags: geoIPLookup.Tags, Responses: geoIPLookup.Responses}}
+	paths[version.APIPrefix+"/server/geoip/ips.txt"] = paths[version.APIPrefix+"/server/geoip/ips"]
 	paths[version.APIPrefix+"/server/geoip/ips/{ip}"] = PathItem{Get: geoIPLookup}
+	paths[version.APIPrefix+"/server/geoip/ips/{ip}.txt"] = PathItem{Get: geoIPLookup}
 
 	presetList := &Operation{Summary: "List GeoIP presets", Description: "List saved country-list presets; operator bearer token required", Tags: []string{"GeoIP", "Operator"}, Security: operatorSecurity(), Responses: map[string]Response{"200": okResponse("Saved presets", &Schema{Type: "array", Items: &Schema{Type: "object"}}), "401": errorResponse("Missing or invalid operator token")}}
 	presetCreate := &Operation{Summary: "Save GeoIP preset", Description: "Save a named country list without applying it; operator bearer token required", Tags: []string{"GeoIP", "Operator"}, Security: operatorSecurity(), RequestBody: &RequestBody{Required: true, Content: map[string]MediaType{"application/json": {Schema: &Schema{Type: "object", Properties: map[string]Schema{"name": {Type: "string"}, "codes": {Type: "array", Items: &Schema{Type: "string"}}, "from": {Type: "string", Example: "deny_countries"}}}}}}, Responses: map[string]Response{"200": okResponse("Saved preset", &Schema{Type: "object"}), "400": errorResponse("Invalid preset input"), "401": errorResponse("Missing or invalid operator token")}}

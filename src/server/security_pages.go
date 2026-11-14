@@ -1,13 +1,16 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/security"
 	"github.com/go-chi/chi/v5"
 )
@@ -22,6 +25,112 @@ type SecurityOverviewPageData struct {
 	HasPGPKey      bool
 	PGPKeyURL      string
 	SecurityTxtURL string
+}
+
+type SecurityAcknowledgment struct {
+	Credit   string `json:"credit"`
+	Date     string `json:"date"`
+	Severity string `json:"severity"`
+}
+
+func (s *Server) SecurityOverview(r *http.Request) interface{} {
+	webSecurity := s.config.Server.Web.Security
+	baseURL := s.getBaseURL(r)
+	securityID := security.GenerateSecurityID(s.config.Server.Security.InstallationSecret, time.Now().Unix())
+	contacts := make([]string, 0, 3)
+	if webSecurity.ReportURL != "" {
+		contacts = append(contacts, webSecurity.ReportURL)
+	}
+	contacts = append(contacts, baseURL+"/server/contact?security_id="+securityID)
+	contact := webSecurity.Contact
+	if contact == "" {
+		contact = s.config.Server.Contact.Security.Email
+	}
+	if contact == "" {
+		contact = s.config.Server.Contact.Admin.Email
+	}
+	if contact != "" {
+		if !strings.HasPrefix(contact, "mailto:") && strings.Contains(contact, "@") {
+			contact = "mailto:" + contact
+		}
+		contacts = append(contacts, contact)
+	}
+	pgp := map[string]interface{}{"available": false, "url": "", "fingerprint": ""}
+	if webSecurity.PublishPGPKey {
+		if armor, err := security.LoadPublicKey(config.GetConfigDir()); err == nil && armor != "" {
+			fingerprint, _ := security.KeyFingerprint(armor)
+			pgp = map[string]interface{}{"available": true, "url": baseURL + "/.well-known/pgp-key.asc", "fingerprint": fingerprint}
+		}
+	}
+	expires := webSecurity.Expires
+	if expires == "" {
+		expires = time.Now().AddDate(1, 0, 0).UTC().Format(time.RFC3339)
+	}
+	return map[string]interface{}{
+		"contacts": contacts, "expires": expires, "pgp": pgp,
+		"policy_url": baseURL + "/server/security/policy", "thanks_url": baseURL + "/server/security/thanks",
+	}
+}
+
+func (s *Server) SecurityPolicy(r *http.Request) interface{} {
+	policy := s.config.Server.Web.Security.Policy
+	if policy == "" {
+		lang := s.getI18nManager().ResolveLanguage(nil, r)
+		im := s.getI18nManager()
+		policy = strings.Join([]string{
+			"## " + im.T(lang, "security.policy_scope_heading"), im.T(lang, "security.policy_scope_description"),
+			"## " + im.T(lang, "security.policy_disclosure_window_heading"), im.T(lang, "security.policy_disclosure_window_description"),
+			"## " + im.T(lang, "security.policy_in_scope_heading"), "- " + im.T(lang, "security.policy_in_scope_item_deployed"), "- " + im.T(lang, "security.policy_in_scope_item_api"), "- " + im.T(lang, "security.policy_in_scope_item_auth"),
+			"## " + im.T(lang, "security.policy_out_of_scope_heading"), "- " + im.T(lang, "security.policy_out_of_scope_item_dos"), "- " + im.T(lang, "security.policy_out_of_scope_item_social"), "- " + im.T(lang, "security.policy_out_of_scope_item_physical"), "- " + im.T(lang, "security.policy_out_of_scope_item_third_party"),
+			"## " + im.T(lang, "security.policy_safe_harbor_heading"), im.T(lang, "security.policy_safe_harbor_description"),
+		}, "\n\n")
+	}
+	return map[string]string{"policy": policy}
+}
+
+func (s *Server) SecurityThanks(ctx context.Context) (interface{}, error) {
+	entries := make([]SecurityAcknowledgment, 0)
+	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return entries, nil
+	}
+	table := database.ServerTableName(s.dbManager.ServerDB(), "security_reports")
+	rows, err := s.dbManager.ServerDB().Query(ctx, fmt.Sprintf(
+		`SELECT credit_preference, credit_name, credit_handle, created_at, severity FROM %s WHERE status = ? ORDER BY created_at`, table), "disclosed")
+	if err != nil {
+		return nil, err
+	}
+	anonymous := 0
+	for rows.Next() {
+		var preference, name, handle, created, severity sql.NullString
+		if err := rows.Scan(&preference, &name, &handle, &created, &severity); err != nil {
+			return nil, err
+		}
+		credit := ""
+		switch preference.String {
+		case "real_name":
+			credit = name.String
+		case "handle":
+			credit = handle.String
+		case "anonymous":
+			anonymous++
+			credit = fmt.Sprintf("Anonymous Researcher #%d", anonymous)
+		}
+		if credit == "" {
+			continue
+		}
+		date := created.String
+		if len(date) >= 4 {
+			date = date[:4]
+		}
+		entries = append(entries, SecurityAcknowledgment{Credit: credit, Date: date, Severity: severity.String})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // handleSecurityOverview renders /server/security — a human-readable
@@ -81,6 +190,16 @@ func (s *Server) handleSecurityOverview(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "security-policy")
 	data.Title = s.getI18nManager().T(data.Lang, "security.policy_title")
+	if s.config.Server.Web.Security.Policy != "" {
+		custom := struct {
+			PageData
+			PolicyMarkdown string
+		}{PageData: *data, PolicyMarkdown: s.config.Server.Web.Security.Policy}
+		if err := s.renderer.Render(w, "security_policy_custom", custom); err != nil {
+			s.handleInternalError(w, r, "template render", err)
+		}
+		return
+	}
 
 	if err := s.renderer.Render(w, "security_policy", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
@@ -94,8 +213,20 @@ func (s *Server) handleSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSecurityThanks(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "security-thanks")
 	data.Title = s.getI18nManager().T(data.Lang, "security.thanks_title")
+	entries, err := s.SecurityThanks(r.Context())
+	if err != nil {
+		s.handleInternalError(w, r, "load security acknowledgments", err)
+		return
+	}
+	pageData := struct {
+		PageData
+		Entries []SecurityAcknowledgment
+	}{PageData: *data}
+	if values, ok := entries.([]SecurityAcknowledgment); ok {
+		pageData.Entries = values
+	}
 
-	if err := s.renderer.Render(w, "security_thanks", data); err != nil {
+	if err := s.renderer.Render(w, "security_thanks", pageData); err != nil {
 		s.handleInternalError(w, r, "template render", err)
 	}
 }

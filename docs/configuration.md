@@ -386,7 +386,7 @@ Options:
   --port PORT            Listen port
   --baseurl URL          Public base URL override
   --lang CODE            Default language
-  --color MODE           Color output (always|never|auto)
+  --color MODE           Color output (auto|yes|no; respects NO_COLOR)
   --pid FILE             Write PID to file
   --status               Show server status
   --service CMD          Service management

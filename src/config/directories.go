@@ -241,30 +241,30 @@ func GetConfigDir() string {
 	switch GetOS() {
 	case "linux":
 		if isRoot {
-			return "/etc/" + ProjectOrg + "/" + ProjectName
+			return "/etc/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.config/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.config/" + InternalOrg + "/" + InternalName)
 
 	case "darwin":
 		if isRoot {
-			return "/Library/Application Support/" + ProjectOrg + "/" + ProjectName
+			return "/Library/Application Support/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/Library/Application Support/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/Library/Application Support/" + InternalOrg + "/" + InternalName)
 
 	case "windows":
 		if isRoot {
-			return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName)
+			return filepath.Join(os.Getenv("ProgramData"), InternalOrg, InternalName)
 		}
-		return filepath.Join(os.Getenv("AppData"), ProjectOrg, ProjectName)
+		return filepath.Join(os.Getenv("AppData"), InternalOrg, InternalName)
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
-			return "/usr/local/etc/" + ProjectOrg + "/" + ProjectName
+			return "/usr/local/etc/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.config/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.config/" + InternalOrg + "/" + InternalName)
 
 	default:
-		return os.ExpandEnv("$HOME/.config/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.config/" + InternalOrg + "/" + InternalName)
 	}
 }
 
@@ -290,30 +290,30 @@ func GetDataDir() string {
 	switch GetOS() {
 	case "linux":
 		if isRoot {
-			return "/var/lib/" + ProjectOrg + "/" + ProjectName
+			return "/var/lib/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.local/share/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.local/share/" + InternalOrg + "/" + InternalName)
 
 	case "darwin":
 		if isRoot {
-			return "/Library/Application Support/" + ProjectOrg + "/" + ProjectName + "/data"
+			return "/Library/Application Support/" + InternalOrg + "/" + InternalName + "/data"
 		}
-		return os.ExpandEnv("$HOME/Library/Application Support/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/Library/Application Support/" + InternalOrg + "/" + InternalName)
 
 	case "windows":
 		if isRoot {
-			return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName, "data")
+			return filepath.Join(os.Getenv("ProgramData"), InternalOrg, InternalName, "data")
 		}
-		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName)
+		return filepath.Join(os.Getenv("LocalAppData"), InternalOrg, InternalName)
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
-			return "/var/db/" + ProjectOrg + "/" + ProjectName
+			return "/var/db/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.local/share/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.local/share/" + InternalOrg + "/" + InternalName)
 
 	default:
-		return os.ExpandEnv("$HOME/.local/share/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.local/share/" + InternalOrg + "/" + InternalName)
 	}
 }
 
@@ -339,30 +339,30 @@ func GetLogDir() string {
 	switch GetOS() {
 	case "linux":
 		if isRoot {
-			return "/var/log/" + ProjectOrg + "/" + ProjectName
+			return "/var/log/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.local/log/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.local/log/" + InternalOrg + "/" + InternalName)
 
 	case "darwin":
 		if isRoot {
-			return "/Library/Logs/" + ProjectOrg + "/" + ProjectName
+			return "/Library/Logs/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/Library/Logs/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/Library/Logs/" + InternalOrg + "/" + InternalName)
 
 	case "windows":
 		if isRoot {
-			return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName, "logs")
+			return filepath.Join(os.Getenv("ProgramData"), InternalOrg, InternalName, "logs")
 		}
-		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName, "logs")
+		return filepath.Join(os.Getenv("LocalAppData"), InternalOrg, InternalName, "logs")
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
-			return "/var/log/" + ProjectOrg + "/" + ProjectName
+			return "/var/log/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.local/log/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.local/log/" + InternalOrg + "/" + InternalName)
 
 	default:
-		return os.ExpandEnv("$HOME/.local/log/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.local/log/" + InternalOrg + "/" + InternalName)
 	}
 }
 
@@ -383,24 +383,24 @@ func GetCacheDir() string {
 	switch GetOS() {
 	case "linux":
 		if isRoot {
-			return "/var/cache/" + ProjectOrg + "/" + ProjectName
+			return "/var/cache/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.cache/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.cache/" + InternalOrg + "/" + InternalName)
 
 	case "darwin":
-		return os.ExpandEnv("$HOME/Library/Caches/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/Library/Caches/" + InternalOrg + "/" + InternalName)
 
 	case "windows":
-		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName, "cache")
+		return filepath.Join(os.Getenv("LocalAppData"), InternalOrg, InternalName, "cache")
 
 	case "freebsd", "openbsd", "netbsd":
 		if isRoot {
-			return "/var/cache/" + ProjectOrg + "/" + ProjectName
+			return "/var/cache/" + InternalOrg + "/" + InternalName
 		}
-		return os.ExpandEnv("$HOME/.cache/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.cache/" + InternalOrg + "/" + InternalName)
 
 	default:
-		return os.ExpandEnv("$HOME/.cache/" + ProjectOrg + "/" + ProjectName)
+		return os.ExpandEnv("$HOME/.cache/" + InternalOrg + "/" + InternalName)
 	}
 }
 
@@ -478,9 +478,9 @@ func GetPIDFile() string {
 		return "/data/" + ProjectName + ".pid"
 	}
 	if startedElevated && (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd") {
-		return "/var/run/" + ProjectOrg + "/" + ProjectName + ".pid"
+		return "/var/run/" + InternalOrg + "/" + InternalName + ".pid"
 	}
-	return filepath.Join(GetDataDir(), ProjectName+".pid")
+	return filepath.Join(GetDataDir(), InternalName+".pid")
 }
 
 // GetSSLDir returns the SSL certificate directory.
@@ -503,14 +503,14 @@ func GetDatabaseDir() string {
 		return "/data/db"
 	}
 	if runtime.GOOS == "linux" && startedElevated {
-		return "/var/lib/" + ProjectOrg + "/" + ProjectName + "/db"
+		return "/var/lib/" + InternalOrg + "/" + InternalName + "/db"
 	}
 	if runtime.GOOS == "windows" && startedElevated {
-		return filepath.Join(os.Getenv("ProgramData"), ProjectOrg, ProjectName, "db")
+		return filepath.Join(os.Getenv("ProgramData"), InternalOrg, InternalName, "db")
 	}
 	if runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" {
 		if startedElevated {
-			return "/var/db/" + ProjectOrg + "/" + ProjectName + "/db"
+			return "/var/db/" + InternalOrg + "/" + InternalName + "/db"
 		}
 	}
 	return filepath.Join(GetDataDir(), "db")
@@ -677,18 +677,18 @@ func ensureDir(path string, perm os.FileMode) error {
 func EnsureSystemDirectories(userName string) error {
 	// System directories with 0755 permissions
 	systemDirs := []string{
-		"/etc/" + ProjectOrg + "/" + ProjectName,
-		"/var/lib/" + ProjectOrg + "/" + ProjectName,
-		"/var/lib/" + ProjectOrg + "/" + ProjectName + "/db",
-		"/var/log/" + ProjectOrg + "/" + ProjectName,
-		"/var/cache/" + ProjectOrg + "/" + ProjectName,
+		"/etc/" + InternalOrg + "/" + InternalName,
+		"/var/lib/" + InternalOrg + "/" + InternalName,
+		"/var/lib/" + InternalOrg + "/" + InternalName + "/db",
+		"/var/log/" + InternalOrg + "/" + InternalName,
+		"/var/cache/" + InternalOrg + "/" + InternalName,
 	}
 
 	// Sensitive directories with 0700 permissions
 	sensitiveDirs := []string{
-		"/etc/" + ProjectOrg + "/" + ProjectName + "/security",
-		"/etc/" + ProjectOrg + "/" + ProjectName + "/ssl",
-		"/etc/" + ProjectOrg + "/" + ProjectName + "/tor",
+		"/etc/" + InternalOrg + "/" + InternalName + "/security",
+		"/etc/" + InternalOrg + "/" + InternalName + "/ssl",
+		"/etc/" + InternalOrg + "/" + InternalName + "/tor",
 	}
 
 	// Create standard system directories
@@ -713,7 +713,7 @@ func EnsureSystemDirectories(userName string) error {
 	}
 
 	// Create PID directory
-	pidDir := "/var/run/" + ProjectOrg
+	pidDir := "/var/run/" + InternalOrg
 	if err := os.MkdirAll(pidDir, 0755); err != nil {
 		return err
 	}
@@ -774,20 +774,20 @@ func EnsureSensitiveFile(path string) error {
 func GetServiceFile() string {
 	switch GetOS() {
 	case "linux":
-		return "/etc/systemd/system/" + ProjectName + ".service"
+		return "/etc/systemd/system/" + InternalName + ".service"
 
 	case "darwin":
 		if IsPrivileged() {
-			return "/Library/LaunchDaemons/io.github." + ProjectOrg + "." + ProjectName + ".plist"
+			return "/Library/LaunchDaemons/io.github." + InternalOrg + "." + InternalName + ".plist"
 		}
-		return os.ExpandEnv("$HOME/Library/LaunchAgents/io.github." + ProjectOrg + "." + ProjectName + ".plist")
+		return os.ExpandEnv("$HOME/Library/LaunchAgents/io.github." + InternalOrg + "." + InternalName + ".plist")
 
 	// Windows uses Service Manager, not a file
 	case "windows":
 		return ""
 
 	case "freebsd", "openbsd", "netbsd":
-		return "/usr/local/etc/rc.d/" + ProjectName
+		return "/usr/local/etc/rc.d/" + InternalName
 
 	default:
 		return ""
@@ -811,9 +811,9 @@ func GetBinaryPath() string {
 
 	case "windows":
 		if IsPrivileged() {
-			return filepath.Join(os.Getenv("ProgramFiles"), ProjectOrg, ProjectName, ProjectName+".exe")
+			return filepath.Join(os.Getenv("ProgramFiles"), InternalOrg, InternalName, ProjectName+".exe")
 		}
-		return filepath.Join(os.Getenv("LocalAppData"), ProjectOrg, ProjectName, ProjectName+".exe")
+		return filepath.Join(os.Getenv("LocalAppData"), InternalOrg, InternalName, ProjectName+".exe")
 
 	case "freebsd", "openbsd", "netbsd":
 		return "/usr/local/bin/" + ProjectName

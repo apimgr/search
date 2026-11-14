@@ -65,6 +65,15 @@ func RequestString(r *http.Request, key string, args ...interface{}) string {
 	return manager.T(manager.DetectLanguage(r), key, args...)
 }
 
+// RequestFormat replaces named tokens in a request-localized translation.
+func RequestFormat(r *http.Request, key string, args ...interface{}) string {
+	manager, err := CachedDefaultManager()
+	if err != nil || manager == nil {
+		return key
+	}
+	return manager.Tf(manager.DetectLanguage(r), key, args...)
+}
+
 // T translates a key using the cached embedded locale manager with the specified language.
 // Use this for non-HTTP contexts (e.g., email notifications, scheduled tasks).
 // Per AI.md PART 30: All user-facing text must use i18n keys.
@@ -74,6 +83,15 @@ func T(lang, key string, args ...interface{}) string {
 		return key
 	}
 	return manager.T(lang, key, args...)
+}
+
+// Tf translates a key using the specified language with named literal replacements.
+func Tf(lang, key string, args ...interface{}) string {
+	manager, err := CachedDefaultManager()
+	if err != nil || manager == nil {
+		return key
+	}
+	return manager.Tf(lang, key, args...)
 }
 
 // TDefault translates a key using the default language.

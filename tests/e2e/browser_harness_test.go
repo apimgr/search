@@ -34,6 +34,10 @@ import (
 // available; that is a container property, not something the tests under
 // test can see or depend on.
 func newBrowserContext(t *testing.T) context.Context {
+	return newBrowserContextWithTimeout(t, 30*time.Second)
+}
+
+func newBrowserContextWithTimeout(t *testing.T, timeout time.Duration) context.Context {
 	t.Helper()
 
 	base := context.Background()
@@ -71,7 +75,7 @@ func newBrowserContext(t *testing.T) context.Context {
 
 	t.Cleanup(cancelBrowser)
 
-	tctx, tcancel := context.WithTimeout(ctx, 30*time.Second)
+	tctx, tcancel := context.WithTimeout(ctx, timeout)
 	t.Cleanup(tcancel)
 	return tctx
 }

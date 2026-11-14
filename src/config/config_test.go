@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1339,7 +1340,7 @@ func TestLoadNormalizesLegacyUpdateChannels(t *testing.T) {
 	} {
 		t.Run(test.branch, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "server.yml")
-			content := "server:\n  update:\n    branch: " + test.branch + "\n"
+			content := "server:\n  update:\n    branch: " + strconv.Quote(test.branch) + "\n"
 			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 				t.Fatal(err)
 			}

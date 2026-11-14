@@ -31,7 +31,7 @@
                     <span class="toggle-track"><span class="toggle-thumb"></span></span>
                     <span class="toggle-label">{{t "privacy.analytics_heading"}}</span>
                 </label>
-                <p>{{if .Config.Server.Tracking.Type}}{{t "privacy.analytics_provider" .Config.Server.Tracking.Type}}{{else}}{{t "privacy.analytics_none"}}{{end}}</p>
+                <p>{{if .Config.Server.Tracking.Type}}{{tf "privacy.analytics_provider" "provider" .Config.Server.Tracking.Type}}{{else}}{{t "privacy.analytics_none"}}{{end}}</p>
             </div>
     </section>
 

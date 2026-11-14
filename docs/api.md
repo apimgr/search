@@ -193,12 +193,36 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/server/terms` | GET | Terms of service (JSON) |
 | `/api/v1/server/help` | GET | Help content (JSON) |
 | `/api/v1/server/contact` | GET, POST | Contact information and message submission (JSON) |
+| `/api/v1/server/security` | GET | Security contacts in preference order, expiry, PGP metadata, and public page links |
+| `/api/v1/server/security/policy` | GET | Configured disclosure policy Markdown |
+| `/api/v1/server/security/thanks` | GET | Opt-in acknowledgments for disclosed reports |
 
-`GET /api/v1/server/contact` reports whether the contact form is enabled. `POST`
-accepts a JSON object with required `name`, `email`, `subject`, and `message`
-fields. The message is queued for the configured general contact recipient,
-falling back to the admin recipient. Invalid input returns `400`; disabled
+`GET /api/v1/server/contact` reports whether the form is enabled, its public
+abuse email (never the admin address), the security-policy URL, and the active
+form fields. It also returns a CAPTCHA descriptor. For the default `simple`
+provider, the descriptor includes a single-use `challenge_id` and arithmetic
+`question`; submit the answer as `captcha_answer`. reCAPTCHA and hCaptcha
+descriptors include the public `site_key`, and submissions include the
+provider's response token. A CAPTCHA is required on every submission.
+
+For a standard contact message, `POST` accepts `name` (100 characters), `email`
+(254), `subject` (200), `message` (5000), and the CAPTCHA fields. The message is
+queued for the configured general contact recipient, falling back to the admin
+recipient. Invalid input or a missing/expired CAPTCHA returns `400`; disabled
 contact or unavailable delivery returns a standard API error.
+
+When `GET` receives a currently valid `security_id`, `security_mode` is true
+and the returned `fields` describe the coordinated-disclosure form instead of
+the standard subject and message fields. Its submission additionally accepts
+`researcher_gpg` (up to 16,384 characters, or 2,048 for an HTTPS URL),
+`affected_component` (255), `affected_endpoint` (2,048), `severity` (`critical`,
+`high`, `medium`, `low`, or `informational`), `summary` (200),
+`steps_to_reproduce` (10,000), `impact` (5,000), optional `suggested_fix`
+(5,000), `cve_requested`, `disclosure_days`, `credit_preference`, optional
+`credit_name` or conditional `credit_handle` (100), and required
+`agreed_to_disclosure`. Name and email remain required. Invalid or expired
+security IDs use the standard contact form; security IDs are never returned in
+errors or logs.
 
 `GET /api/v1/server/dpo` is public and always returns the standard success
 envelope. Its `email` uses `server.contact.dpo.email`, falling back to

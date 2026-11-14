@@ -134,15 +134,19 @@ disclosure and health monitoring:
 | `/.well-known/change-password` | `404` because this project has no user passwords or account system |
 | `/server/security` | Human-readable security overview and how to report |
 | `/server/security/policy` | Full security/disclosure policy |
+| `/server/security/thanks` | Publicly credited, completed disclosures |
+| `/api/v1/server/security` | Security contact order, expiry, PGP metadata, and policy/thanks links (JSON) |
+| `/api/v1/server/security/policy` | Configured disclosure policy Markdown (JSON) |
+| `/api/v1/server/security/thanks` | Opt-in credits for disclosed reports (JSON) |
 | `/server/contact` | Contact form (supports `security_id` deep links) |
 | `/server/healthz` | Public health check |
 | `/api/v1/server/healthz` | Public health check (JSON) |
 
-The browser contact form uses a non-interactive honeypot and initially renders
-without a CAPTCHA. After a failed form attempt, it sets a short-lived signed
-cookie and requires the built-in arithmetic challenge on subsequent attempts.
-The cookie is scoped to `/server/contact`, HttpOnly, SameSite=Strict, and Secure
-when the server's cookie policy requires it.
+The contact form includes a honeypot and requires a single-use CAPTCHA on every
+submission. The default `simple` challenge is self-hosted and works without
+JavaScript, including over Tor. Operators may configure reCAPTCHA or hCaptcha
+with their site and secret keys; secret keys stay server-side. Tor requests use
+the built-in challenge even when an external provider is configured.
 
 ## Well-Known Namespace
 
@@ -168,6 +172,8 @@ vulnerability-reporting page. Operators can set `server.web.security.report_url`
 and `server.web.security.contact`. PGP publication is controlled by
 `server.web.security.publish_pgp_key`; manage the keypair with
 `search --maintenance pgp generate`, `publish`, or `export public`.
+Set `server.web.security.policy` to Markdown to replace the built-in disclosure
+policy shown at `/server/security/policy` and returned by its API endpoint.
 
 ## Security Logs
 
@@ -180,7 +186,10 @@ environment.
 
 ## Tor Hidden Service
 
-For enhanced privacy, Search automatically enables a Tor hidden service when the `tor` binary is found on PATH:
+For enhanced privacy, Search automatically starts and manages an isolated Tor
+process for its hidden service when a Tor binary is found on `PATH` or configured
+in `server.tor.binary`. It does not attach to or manage the host's system Tor
+daemon. Install the Tor binary on the deployment host yourself:
 
 Install Tor on the deployment host yourself; do not have an AI agent execute
 the package-manager command below.
@@ -189,7 +198,7 @@ the package-manager command below.
 # Install Tor
 apt-get install tor
 
-# Start search — it will auto-detect Tor and create a .onion address
+# Start Search — it launches its own Tor process and creates an .onion address
 search
 ```
 

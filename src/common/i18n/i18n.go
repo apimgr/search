@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 )
+
+var printfDirective = regexp.MustCompile(`%[#+\- 0]*[0-9]*(\.[0-9]+)?[a-zA-Z]`)
 
 // Manager handles translations and language detection
 type Manager struct {
@@ -100,33 +103,74 @@ func (m *Manager) LoadFromMap(lang string, translations map[string]string) {
 	m.translations[lang] = translations
 }
 
-// T translates a key with optional format arguments
+// T translates a key and applies the legacy printf-style arguments.
 func (m *Manager) T(lang, key string, args ...interface{}) string {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	value := key
+	if translations, ok := m.translations[lang]; ok {
+		if translated, ok := translations[key]; ok {
+			value = translated
+		}
+	}
+	if value == key {
+		if translations, ok := m.translations[m.defaultLang]; ok {
+			if translated, ok := translations[key]; ok {
+				value = translated
+			}
+		}
+	}
+	m.mu.RUnlock()
+	if len(args) == 0 {
+		return value
+	}
+	if printfDirective.MatchString(value) {
+		return fmt.Sprintf(value, args...)
+	}
+	for _, arg := range args {
+		start := strings.IndexByte(value, '{')
+		if start < 0 {
+			break
+		}
+		end := strings.IndexByte(value[start+1:], '}')
+		if end < 0 {
+			break
+		}
+		end += start + 1
+		value = value[:start] + fmt.Sprint(arg) + value[end+1:]
+	}
+	return value
+}
+
+// Tf translates a key and replaces named {token} placeholders from key/value
+// pairs. Values without a matching token are ignored.
+func (m *Manager) Tf(lang, key string, args ...interface{}) string {
+	m.mu.RLock()
+	value := key
 
 	// Try requested language
 	if trans, ok := m.translations[lang]; ok {
 		if val, ok := trans[key]; ok {
-			if len(args) > 0 {
-				return fmt.Sprintf(val, args...)
-			}
-			return val
+			value = val
 		}
 	}
 
 	// Fallback to default language
-	if trans, ok := m.translations[m.defaultLang]; ok {
-		if val, ok := trans[key]; ok {
-			if len(args) > 0 {
-				return fmt.Sprintf(val, args...)
+	if value == key {
+		if trans, ok := m.translations[m.defaultLang]; ok {
+			if val, ok := trans[key]; ok {
+				value = val
 			}
-			return val
 		}
 	}
 
 	// Return key if not found
-	return key
+	m.mu.RUnlock()
+	for i := 0; i+1 < len(args); i += 2 {
+		name := fmt.Sprint(args[i])
+		replacement := fmt.Sprint(args[i+1])
+		value = strings.ReplaceAll(value, "{"+name+"}", replacement)
+	}
+	return value
 }
 
 // DetectLanguage detects the preferred language from the request
@@ -333,6 +377,11 @@ func (t *Translator) T(key string, args ...interface{}) string {
 	return t.manager.T(t.lang, key, args...)
 }
 
+// Tf translates a key with named literal replacements.
+func (t *Translator) Tf(key string, args ...interface{}) string {
+	return t.manager.Tf(t.lang, key, args...)
+}
+
 // Lang returns the current language code
 func (t *Translator) Lang() string {
 	return t.lang
@@ -362,6 +411,9 @@ func (m *Manager) TemplateFuncs(lang string) template.FuncMap {
 	return template.FuncMap{
 		"t": func(key string, args ...interface{}) string {
 			return t.T(key, args...)
+		},
+		"tf": func(key string, kv ...interface{}) string {
+			return t.Tf(key, kv...)
 		},
 		"lang": func() string {
 			return t.Lang()

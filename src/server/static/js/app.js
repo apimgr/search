@@ -3217,6 +3217,13 @@
                 if (status) status.textContent = t('preferences.clear_history', 'Clear history');
             });
         });
+        if (!getStoredSearchPreferences().save_history) {
+            try {
+                localStorage.removeItem(SEARCH_HISTORY_KEY);
+            } catch (error) {
+                // Storage can be unavailable in private browsing modes.
+            }
+        }
         recordSearchHistory();
         renderSearchHistory();
     }
@@ -4861,7 +4868,7 @@
     function renderCalculatorWidget(container) {
         container.innerHTML =
             '<div class="calculator-widget">' +
-                '<input type="text" class="calc-display" id="calc-display" readonly placeholder="0">' +
+                '<input type="text" class="calc-display" id="calc-display" aria-label="Calculator display" readonly placeholder="0">' +
                 '<div class="calc-buttons">' +
                     '<button data-calc="7">7</button><button data-calc="8">8</button><button data-calc="9">9</button><button data-calc="/" class="calc-op">/</button>' +
                     '<button data-calc="4">4</button><button data-calc="5">5</button><button data-calc="6">6</button><button data-calc="*" class="calc-op">*</button>' +

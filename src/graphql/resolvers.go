@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -166,14 +165,6 @@ func resolveRelatedSearches(p graphql.ResolveParams) (interface{}, error) {
 
 func resolvePreferences(p graphql.ResolveParams) (interface{}, error) {
 	resolver := dependenciesFromContext(p.Context).Preferences
-	if resolver == nil {
-		return nil, errors.New("preferences are unavailable")
-	}
-	return resolver(), nil
-}
-
-func resolveSavePreferences(p graphql.ResolveParams) (interface{}, error) {
-	resolver := dependenciesFromContext(p.Context).SavePreferences
 	if resolver == nil {
 		return nil, errors.New("preferences are unavailable")
 	}
@@ -390,41 +381,6 @@ func resolveEngine(params graphql.ResolveParams) (interface{}, error) {
 	return nil, nil
 }
 
-func alertInputString(input map[string]interface{}, key string) string {
-	value, _ := input[key].(string)
-	return value
-}
-
-func alertInputBool(input map[string]interface{}, key string) bool {
-	value, _ := input[key].(bool)
-	return value
-}
-
-func alertInputInt(input map[string]interface{}, key string) int {
-	switch value := input[key].(type) {
-	case int:
-		return value
-	case float64:
-		return int(value)
-	}
-	return 0
-}
-
-func alertInputStrings(input map[string]interface{}, key string) []string {
-	values := make([]string, 0)
-	switch list := input[key].(type) {
-	case []interface{}:
-		for _, value := range list {
-			if text, ok := value.(string); ok {
-				values = append(values, text)
-			}
-		}
-	case []string:
-		values = append(values, list...)
-	}
-	return values
-}
-
 func graphQLAlertError(err error) error {
 	switch {
 	case errors.Is(err, alert.ErrNotFound), errors.Is(err, alert.ErrInvalidToken):
@@ -481,66 +437,6 @@ func resolveAlertFeed(p graphql.ResolveParams) (interface{}, error) {
 	return map[string]interface{}{"items": feed.Items, "feedUrl": feed.FeedURL}, nil
 }
 
-func resolveCreateAlert(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("alert service is unavailable")
-	}
-	input, _ := p.Args["input"].(map[string]interface{})
-	created, err := deps.API.AlertCreateForGraphQL(p.Context, request, alert.CreateRequest{Query: alertInputString(input, "query"), Category: alertInputString(input, "category"), Language: alertInputString(input, "language"), Region: alertInputString(input, "region"), Engines: alertInputStrings(input, "engines"), SafeSearch: alertInputInt(input, "safe_search"), Frequency: alert.Frequency(alertInputString(input, "frequency")), Email: alertInputString(input, "email"), DeliverEmail: alertInputBool(input, "deliver_email"), DeliverRSS: alertInputBool(input, "deliver_rss"), DeliverWebhook: alertInputBool(input, "deliver_webhook"), WebhookURL: alertInputString(input, "webhook_url")})
-	if err != nil {
-		return nil, graphQLAlertError(err)
-	}
-	if writer := responseWriterFromContext(p.Context); writer != nil {
-		writer.Header().Set("Cache-Control", "no-store")
-	}
-	return created, nil
-}
-
-func resolveUpdateAlert(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("alert service is unavailable")
-	}
-	input, _ := p.Args["input"].(map[string]interface{})
-	token, _ := p.Args["manageToken"].(string)
-	updated, err := deps.API.AlertUpdateForGraphQL(p.Context, request, token, alert.UpdateRequest{Query: alertInputString(input, "query"), Category: alertInputString(input, "category"), Language: alertInputString(input, "language"), Region: alertInputString(input, "region"), Engines: alertInputStrings(input, "engines"), Frequency: alert.Frequency(alertInputString(input, "frequency")), SafeSearch: alertInputInt(input, "safe_search"), DeliverEmail: alertInputBool(input, "deliver_email"), DeliverRSS: alertInputBool(input, "deliver_rss"), DeliverWebhook: alertInputBool(input, "deliver_webhook"), WebhookURL: alertInputString(input, "webhook_url")})
-	if err != nil {
-		return nil, graphQLAlertError(err)
-	}
-	if writer := responseWriterFromContext(p.Context); writer != nil {
-		writer.Header().Set("Cache-Control", "no-store")
-	}
-	return updated, nil
-}
-
-func resolvePauseAlert(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	if deps.API == nil {
-		return nil, errors.New("alert service is unavailable")
-	}
-	token, _ := p.Args["manageToken"].(string)
-	paused, _ := p.Args["paused"].(bool)
-	if err := deps.API.AlertPauseForGraphQL(p.Context, token, paused); err != nil {
-		return nil, graphQLAlertError(err)
-	}
-	return map[string]bool{"paused": paused}, nil
-}
-
-func resolveDeleteAlert(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	if deps.API == nil {
-		return nil, errors.New("alert service is unavailable")
-	}
-	token, _ := p.Args["manageToken"].(string)
-	if err := deps.API.AlertDeleteForGraphQL(p.Context, token); err != nil {
-		return nil, graphQLAlertError(err)
-	}
-	return map[string]bool{"deleted": true}, nil
-}
-
 func graphQLSchedulerError(err error) error {
 	if strings.Contains(err.Error(), "operator token") || strings.Contains(err.Error(), "operator authorization") {
 		return errors.New("operator authorization required")
@@ -589,41 +485,6 @@ func resolveSchedulerHistory(p graphql.ResolveParams) (interface{}, error) {
 	return result, nil
 }
 
-func resolveSetSchedulerTaskEnabled(p graphql.ResolveParams, enabled bool) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("scheduler service is unavailable")
-	}
-	id, _ := p.Args["task"].(string)
-	result, err := deps.API.SetSchedulerTaskEnabledForGraphQL(request, id, enabled)
-	if err != nil {
-		return nil, graphQLSchedulerError(err)
-	}
-	return result, nil
-}
-
-func resolveEnableSchedulerTask(p graphql.ResolveParams) (interface{}, error) {
-	return resolveSetSchedulerTaskEnabled(p, true)
-}
-func resolveDisableSchedulerTask(p graphql.ResolveParams) (interface{}, error) {
-	return resolveSetSchedulerTaskEnabled(p, false)
-}
-
-func resolveRunSchedulerTask(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("scheduler service is unavailable")
-	}
-	id, _ := p.Args["task"].(string)
-	result, err := deps.API.RunSchedulerTaskForGraphQL(request, id)
-	if err != nil {
-		return nil, graphQLSchedulerError(err)
-	}
-	return result, nil
-}
-
 func graphQLGeoIPPresetError(err error) error {
 	if strings.Contains(err.Error(), "operator token") || strings.Contains(err.Error(), "operator authorization") {
 		return errors.New("operator authorization required")
@@ -661,75 +522,6 @@ func resolveGeoIPPreset(p graphql.ResolveParams) (interface{}, error) {
 	return result, nil
 }
 
-func resolveSaveGeoIPPreset(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("GeoIP preset service is unavailable")
-	}
-	input, _ := p.Args["input"].(map[string]interface{})
-	response, err := deps.API.SaveGeoIPPresetForGraphQL(request, api.GeoIPPresetSaveInput{Name: alertInputString(input, "name"), Codes: alertInputStrings(input, "codes"), From: alertInputString(input, "from")})
-	if err != nil {
-		return nil, graphQLGeoIPPresetError(err)
-	}
-	return response, nil
-}
-
-func resolveDeleteGeoIPPreset(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("GeoIP preset service is unavailable")
-	}
-	name, _ := p.Args["name"].(string)
-	result, err := deps.API.DeleteGeoIPPresetForGraphQL(request, name)
-	if err != nil {
-		return nil, graphQLGeoIPPresetError(err)
-	}
-	return result, nil
-}
-
-func resolveSaveContactWebhook(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("contact webhook configuration service is unavailable")
-	}
-	input, _ := p.Args["input"].(map[string]interface{})
-	result, err := deps.API.ContactWebhookForGraphQL(p.Context, request, input)
-	if err != nil {
-		return nil, errors.New("contact webhook configuration failed; operator authorization is required")
-	}
-	if writer := responseWriterFromContext(p.Context); writer != nil {
-		writer.Header().Set("Cache-Control", "no-store")
-	}
-	return result, nil
-}
-
-func resolveAPIRequest(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("REST API bridge is unavailable")
-	}
-	method, _ := p.Args["method"].(string)
-	path, _ := p.Args["path"].(string)
-	result, err := deps.API.APIRequestForGraphQL(p.Context, request, method, path, p.Args["input"])
-	if err != nil {
-		return nil, errors.New("REST API request is invalid or unavailable")
-	}
-	if body, ok := result["body"].(map[string]interface{}); ok {
-		if data, ok := body["data"].(map[string]interface{}); ok {
-			if _, hasSecret := data["secret"]; hasSecret {
-				if writer := responseWriterFromContext(p.Context); writer != nil {
-					writer.Header().Set("Cache-Control", "no-store")
-				}
-			}
-		}
-	}
-	return result, nil
-}
-
 func resolveOwnerTokenOperation(p graphql.ResolveParams, operation string) (interface{}, error) {
 	deps := dependenciesFromContext(p.Context)
 	request := requestFromContext(p.Context)
@@ -752,34 +544,6 @@ func resolveOwnerTokenOperation(p graphql.ResolveParams, operation string) (inte
 
 func resolveOwnerTokens(p graphql.ResolveParams) (interface{}, error) {
 	return resolveOwnerTokenOperation(p, "list")
-}
-
-func resolveRevealPrimaryToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "revealPrimary")
-}
-
-func resolveRotatePrimaryToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "rotatePrimary")
-}
-
-func resolveCreateOwnerToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "create")
-}
-
-func resolveRevealOwnerToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "reveal")
-}
-
-func resolveRotateOwnerToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "rotate")
-}
-
-func resolveUpdateOwnerToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "update")
-}
-
-func resolveRevokeOwnerToken(p graphql.ResolveParams) (interface{}, error) {
-	return resolveOwnerTokenOperation(p, "revoke")
 }
 
 func resolveServerPage(p graphql.ResolveParams) (interface{}, error) {
@@ -809,20 +573,6 @@ func resolveContactInfo(p graphql.ResolveParams) (interface{}, error) {
 	return contact, nil
 }
 
-func resolveSubmitContact(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("contact service is unavailable")
-	}
-	input, _ := p.Args["input"].(map[string]interface{})
-	result, err := deps.API.ContactForGraphQL(p.Context, request, http.MethodPost, input)
-	if err != nil {
-		return nil, errors.New("contact submission could not be accepted")
-	}
-	return result, nil
-}
-
 func resolveFavicon(p graphql.ResolveParams) (interface{}, error) {
 	deps := dependenciesFromContext(p.Context)
 	request := requestFromContext(p.Context)
@@ -846,30 +596,6 @@ func resolveExportPreferences(p graphql.ResolveParams) (interface{}, error) {
 	result, err := deps.API.PreferencesExportForGraphQL(p.Context, request)
 	if err != nil {
 		return nil, errors.New("preferences are unavailable")
-	}
-	return result, nil
-}
-
-func resolveImportPreferences(p graphql.ResolveParams) (interface{}, error) {
-	deps := dependenciesFromContext(p.Context)
-	request := requestFromContext(p.Context)
-	if deps.API == nil || request == nil {
-		return nil, errors.New("preferences are unavailable")
-	}
-	values := make(url.Values)
-	for _, key := range []string{"theme", "lang", "code"} {
-		if value, ok := p.Args[key].(string); ok && value != "" {
-			values.Set(key, value)
-		}
-	}
-	result, cookies, err := deps.API.PreferencesImportForGraphQL(p.Context, request, values)
-	if err != nil {
-		return nil, errors.New("preferences could not be imported")
-	}
-	if writer := responseWriterFromContext(p.Context); writer != nil {
-		for _, cookie := range cookies {
-			writer.Header().Add("Set-Cookie", cookie)
-		}
 	}
 	return result, nil
 }

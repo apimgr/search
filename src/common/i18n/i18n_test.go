@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -72,7 +73,7 @@ func TestManagerT(t *testing.T) {
 	m := NewManager("en", []string{"en", "de"})
 	m.LoadFromMap("en", map[string]string{
 		"hello":   "Hello",
-		"welcome": "Welcome, %s!",
+		"welcome": "Welcome, {name}!",
 	})
 	m.LoadFromMap("de", map[string]string{
 		"hello":   "Hallo",
@@ -333,7 +334,7 @@ func TestTranslatorT(t *testing.T) {
 	m := NewManager("en", []string{"en"})
 	m.LoadFromMap("en", map[string]string{
 		"hello":   "Hello",
-		"welcome": "Welcome, %s!",
+		"welcome": "Welcome, {name}!",
 	})
 
 	tr := m.NewTranslator("en")
@@ -341,8 +342,8 @@ func TestTranslatorT(t *testing.T) {
 	if tr.T("hello") != "Hello" {
 		t.Errorf("T(hello) = %q, want %q", tr.T("hello"), "Hello")
 	}
-	if tr.T("welcome", "User") != "Welcome, User!" {
-		t.Errorf("T(welcome, User) = %q, want %q", tr.T("welcome", "User"), "Welcome, User!")
+	if tr.Tf("welcome", "name", "User") != "Welcome, User!" {
+		t.Errorf("Tf(welcome, name, User) = %q, want %q", tr.Tf("welcome", "name", "User"), "Welcome, User!")
 	}
 }
 
@@ -770,7 +771,7 @@ func TestTemplateFuncsWithRTL(t *testing.T) {
 func TestTemplateFuncsTWithArgs(t *testing.T) {
 	m := NewManager("en", []string{"en"})
 	m.LoadFromMap("en", map[string]string{
-		"welcome": "Welcome, %s!",
+		"welcome": "Welcome, {name}!",
 		"count":   "You have %d items",
 	})
 
@@ -812,12 +813,12 @@ func TestSupportedLanguagesWithUnknownCode(t *testing.T) {
 func TestTWithFormatArgsInFallback(t *testing.T) {
 	m := NewManager("en", []string{"en", "de"})
 	m.LoadFromMap("en", map[string]string{
-		"welcome": "Welcome, %s!",
+		"welcome": "Welcome, {name}!",
 	})
 	// de translations don't have "welcome" key
 
-	// Should fall back to English and use format args
-	got := m.T("de", "welcome", "User")
+	// Should fall back to English and use literal named replacement.
+	got := m.Tf("de", "welcome", "name", "User")
 	if got != "Welcome, User!" {
 		t.Errorf("T with fallback = %q, want %q", got, "Welcome, User!")
 	}
@@ -1078,6 +1079,70 @@ func TestKeyConsistency(t *testing.T) {
 		for k := range langKeys {
 			if _, ok := enKeys[k]; !ok {
 				t.Errorf("lang %s: extra key %q (not in en.json)", lang, k)
+			}
+		}
+	}
+}
+
+func TestNamedInterpolationIsLiteral(t *testing.T) {
+	m := NewManager("en", []string{"en"})
+	m.LoadFromMap("en", map[string]string{"message": "{name} has {count}% and {missing}; %s stays literal"})
+	got := m.Tf("en", "message", "name", "100%", "count", "%d")
+	want := "100% has %d% and {missing}; %s stays literal"
+	if got != want {
+		t.Fatalf("Tf() = %q, want %q", got, want)
+	}
+}
+
+func TestLocaleInterpolationTokenParity(t *testing.T) {
+	files, err := fs.ReadDir(LocalesFS(), "locales")
+	if err != nil {
+		t.Fatalf("read locales: %v", err)
+	}
+	tokens := regexp.MustCompile(`\{([a-zA-Z][a-zA-Z0-9_]*)\}`)
+	readTokens := func(name string) map[string]string {
+		t.Helper()
+		data, err := fs.ReadFile(LocalesFS(), "locales/"+name)
+		if err != nil {
+			t.Errorf("read %s: %v", name, err)
+			return nil
+		}
+		var raw interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Errorf("parse %s: %v", name, err)
+			return nil
+		}
+		flat := make(map[string]string)
+		flattenTranslations("", raw, flat)
+		current := make(map[string]string)
+		for key, value := range flat {
+			found := tokens.FindAllStringSubmatch(value, -1)
+			if len(found) == 0 {
+				continue
+			}
+			var names []string
+			for _, match := range found {
+				names = append(names, match[1])
+			}
+			sort.Strings(names)
+			current[key] = strings.Join(names, ",")
+		}
+		return current
+	}
+	reference := readTokens("en.json")
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") || file.Name() == "en.json" {
+			continue
+		}
+		current := readTokens(file.Name())
+		for key, names := range reference {
+			if current[key] != names {
+				t.Errorf("%s: interpolation tokens for %q = %q, want %q", file.Name(), key, current[key], names)
+			}
+		}
+		for key, names := range current {
+			if reference[key] != names {
+				t.Errorf("%s: unexpected interpolation tokens for %q: %q", file.Name(), key, names)
 			}
 		}
 	}

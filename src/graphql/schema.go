@@ -510,38 +510,10 @@ func initSchemaImpl() error {
 		},
 	})
 
-	rootMutation := graphql.NewObject(graphql.ObjectConfig{
-		Name: "Mutation",
-		Fields: graphql.Fields{
-			"apiRequest":           &graphql.Field{Type: jsonScalar, Description: "Execute an API REST request through the same routes, authentication, and validation as HTTP", Args: graphql.FieldConfigArgument{"method": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}, "path": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}, "input": &graphql.ArgumentConfig{Type: jsonScalar}}, Resolve: resolveAPIRequest},
-			"saveContactWebhook":   &graphql.Field{Type: jsonScalar, Description: "Save an operator contact webhook; a new signing secret is returned once", Args: graphql.FieldConfigArgument{"input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveSaveContactWebhook},
-			"savePreferences":      &graphql.Field{Type: jsonScalar, Description: "Acknowledge client-side preference saves, matching POST /api/v1/server/preferences", Resolve: resolveSavePreferences},
-			"importPreferences":    &graphql.Field{Type: jsonScalar, Description: "Import preferences using the REST handler and apply response cookies", Args: graphql.FieldConfigArgument{"theme": &graphql.ArgumentConfig{Type: graphql.String}, "lang": &graphql.ArgumentConfig{Type: graphql.String}, "code": &graphql.ArgumentConfig{Type: graphql.String}}, Resolve: resolveImportPreferences},
-			"submitContact":        &graphql.Field{Type: jsonScalar, Description: "Submit a public contact message through the REST handler", Args: graphql.FieldConfigArgument{"input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveSubmitContact},
-			"createAlert":          &graphql.Field{Type: jsonScalar, Description: "Create an accountless alert subscription", Args: graphql.FieldConfigArgument{"input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveCreateAlert},
-			"updateAlert":          &graphql.Field{Type: jsonScalar, Description: "Update an alert using its private manage token", Args: graphql.FieldConfigArgument{"manageToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}, "input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveUpdateAlert},
-			"pauseAlert":           &graphql.Field{Type: jsonScalar, Description: "Pause or resume an alert using its private manage token", Args: graphql.FieldConfigArgument{"manageToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}, "paused": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Boolean)}}, Resolve: resolvePauseAlert},
-			"deleteAlert":          &graphql.Field{Type: jsonScalar, Description: "Delete an alert using its private manage token", Args: graphql.FieldConfigArgument{"manageToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveDeleteAlert},
-			"runSchedulerTask":     &graphql.Field{Type: jsonScalar, Description: "Operator-only manual scheduler run; writes the standard audit event", Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveRunSchedulerTask},
-			"enableSchedulerTask":  &graphql.Field{Type: jsonScalar, Description: "Operator-only scheduler task enable operation", Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveEnableSchedulerTask},
-			"disableSchedulerTask": &graphql.Field{Type: jsonScalar, Description: "Operator-only scheduler task disable operation", Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveDisableSchedulerTask},
-			"saveGeoIPPreset":      &graphql.Field{Type: jsonScalar, Description: "Save a named operator-authored country list without applying it", Args: graphql.FieldConfigArgument{"input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveSaveGeoIPPreset},
-			"deleteGeoIPPreset":    &graphql.Field{Type: jsonScalar, Description: "Delete a saved GeoIP country-list preset", Args: graphql.FieldConfigArgument{"name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveDeleteGeoIPPreset},
-			"revealPrimaryToken":   &graphql.Field{Type: jsonScalar, Description: "Reveal the primary token; requires the primary bearer token", Resolve: resolveRevealPrimaryToken},
-			"rotatePrimaryToken":   &graphql.Field{Type: jsonScalar, Description: "Rotate the primary token; requires the primary bearer token", Resolve: resolveRotatePrimaryToken},
-			"createOwnerToken":     &graphql.Field{Type: jsonScalar, Description: "Create a linked token; requires the primary bearer token", Args: graphql.FieldConfigArgument{"input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveCreateOwnerToken},
-			"revealOwnerToken":     &graphql.Field{Type: jsonScalar, Description: "Reveal a linked token; requires the primary bearer token", Args: graphql.FieldConfigArgument{"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveRevealOwnerToken},
-			"rotateOwnerToken":     &graphql.Field{Type: jsonScalar, Description: "Rotate a linked token; requires the primary bearer token", Args: graphql.FieldConfigArgument{"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveRotateOwnerToken},
-			"updateOwnerToken":     &graphql.Field{Type: jsonScalar, Description: "Update a linked token; requires the primary bearer token", Args: graphql.FieldConfigArgument{"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}, "input": &graphql.ArgumentConfig{Type: graphql.NewNonNull(jsonScalar)}}, Resolve: resolveUpdateOwnerToken},
-			"revokeOwnerToken":     &graphql.Field{Type: jsonScalar, Description: "Revoke a linked token; requires the primary bearer token", Args: graphql.FieldConfigArgument{"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveRevokeOwnerToken},
-		},
-	})
-
 	// Create schema
 	var err error
 	Schema, err = graphql.NewSchema(graphql.SchemaConfig{
-		Query:    rootQuery,
-		Mutation: rootMutation,
+		Query: rootQuery,
 	})
 
 	return err

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/security"
@@ -66,8 +67,7 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 
 	// Add sitemap URL per AI.md spec
 	writeResponseText(w, "\n")
-	baseURL := s.getBaseURL(r)
-	writeResponseFormatted(w, "Sitemap: %s/sitemap.xml\n", baseURL)
+	writeResponseFormatted(w, "Sitemap: %s\n", httputil.BuildURL(r, "/sitemap.xml"))
 }
 
 // handleSecurityTxtEnhanced serves security.txt per RFC 9116 and AI.md PART 11.

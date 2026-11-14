@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/apimgr/search/src/common/i18n"
@@ -70,7 +71,7 @@ func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 		if err != nil {
 			return &Answer{
 				Type: AnswerTypeQR, Query: query, Title: i18n.T(lang, "instant.qr_generator_title"),
-				Content: i18n.T(lang, "instant.qr_generate_error", err),
+				Content: i18n.Tf(lang, "instant.qr_generate_error", "error", err.Error()),
 			}, nil
 		}
 		pngImages[size] = base64.StdEncoding.EncodeToString(png)
@@ -91,7 +92,7 @@ func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 	fmt.Fprintf(&content, `<img src="data:image/png;base64,%s" alt="%s" class="qr-code-preview" width="256" height="256"><br>`, mainPNG, escapeHTML(label))
 	fmt.Fprintf(&content, `<div class="qr-download-options"><strong>%s</strong> `, escapeHTML(i18n.T(lang, "direct.qr_download_png")))
 	for _, size := range imageSizes {
-		fmt.Fprintf(&content, `<a href="data:image/png;base64,%s" download="qr-%d.png">%s</a> `, pngImages[size], size, escapeHTML(i18n.T(lang, "direct.qr_size_pixels", size)))
+		fmt.Fprintf(&content, `<a href="data:image/png;base64,%s" download="qr-%d.png">%s</a> `, pngImages[size], size, escapeHTML(i18n.Tf(lang, "direct.qr_size_pixels", "size", strconv.Itoa(size))))
 	}
 	fmt.Fprintf(&content, `<br><a href="data:image/svg+xml;base64,%s" download="qr.svg">%s</a></div>`, base64.StdEncoding.EncodeToString(vector), escapeHTML(i18n.T(lang, "direct.qr_download_svg")))
 	fmt.Fprintf(&content, `<details><summary>%s</summary><pre class="qr-ascii">%s</pre></details></div>`, i18n.T(lang, "instant.qr_ascii_version"), escapeHTML(ascii))

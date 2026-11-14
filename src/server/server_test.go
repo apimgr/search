@@ -97,6 +97,28 @@ func TestHandleHomeAcceptJSON(t *testing.T) {
 	}
 }
 
+func TestPublicHomeHasSkipLinksForMainAndNavigation(t *testing.T) {
+	server := newTestServer(t)
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("User-Agent", "Mozilla/5.0")
+	response := httptest.NewRecorder()
+	server.handleHome(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("home status = %d, want %d", response.Code, http.StatusOK)
+	}
+	body := response.Body.String()
+	mainSkip := strings.Index(body, `href="#main-content" class="skip-link"`)
+	navigationSkip := strings.Index(body, `href="#navigation" class="skip-link"`)
+	navigationTarget := strings.Index(body, `id="navigation"`)
+	if mainSkip < 0 || navigationSkip < 0 || navigationTarget < 0 {
+		t.Fatalf("home page is missing a skip link or target: main=%d navigation-link=%d navigation-target=%d", mainSkip, navigationSkip, navigationTarget)
+	}
+	if mainSkip > navigationSkip || navigationSkip > navigationTarget {
+		t.Fatalf("skip links and navigation target are out of order: main=%d navigation-link=%d navigation-target=%d", mainSkip, navigationSkip, navigationTarget)
+	}
+}
+
 // Tests for Middleware
 
 func TestNewMiddleware(t *testing.T) {

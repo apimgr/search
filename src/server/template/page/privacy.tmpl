@@ -26,7 +26,7 @@
 
         <section class="privacy-section">
             <h2>{{t "privacy.data_collection_heading"}}</h2>
-            <p>{{t "privacy.data_collection_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <p>{{tf "privacy.data_collection_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
             <ul>
                 <li><strong>{{t "privacy.search_queries_label"}}:</strong> {{t "privacy.search_queries_description"}}</li>
                 <li><strong>{{t "privacy.ip_addresses_label"}}:</strong> {{t "privacy.ip_addresses_description"}}</li>
@@ -71,7 +71,7 @@
             <h3>{{t "privacy.analytics_heading"}}</h3>
             {{if and .Config.Server.Tracking.Type (ne .Config.Server.Tracking.Type "none")}}
             <p>{{if .DataSold}}{{t "privacy.analytics_suffix_sold"}}{{else}}{{t "privacy.analytics_suffix_not_sold"}}{{end}}</p>
-            <p>{{t "privacy.analytics_provider" (title .Config.Server.Tracking.Type)}}</p>
+            <p>{{tf "privacy.analytics_provider" "provider" (title .Config.Server.Tracking.Type)}}</p>
             {{else}}
             <p>{{t "privacy.analytics_none"}}</p>
             {{end}}

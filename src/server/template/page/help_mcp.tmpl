@@ -21,7 +21,7 @@
 
   <section id="overview">
     <h2>{{t "mcp_help.overview_title"}}</h2>
-    <p>{{t "mcp_help.overview_body" .Config.Server.Branding.Title}}</p>
+    <p>{{tf "mcp_help.overview_body" "app_name" .Config.Server.Branding.Title}}</p>
   </section>
 
   <section id="endpoint">
@@ -101,7 +101,7 @@
       <li>{{t "mcp_help.limit_no_sessions"}}</li>
       <li>{{t "mcp_help.limit_rate_audit"}}</li>
       <li>{{t "mcp_help.limit_origin"}}</li>
-      <li>{{t "mcp_help.limit_versions" (join .MCPProtocolVersions ", ")}}</li>
+      <li>{{tf "mcp_help.limit_versions" "versions" (join .MCPProtocolVersions ", ")}}</li>
     </ul>
   </section>
 

@@ -2,7 +2,7 @@
 <div class="static-page help-page">
     <header class="page-header help-header">
         <h1>{{t "help.title"}}</h1>
-        <p class="subtitle">{{t "help.subtitle" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+        <p class="subtitle">{{tf "help.subtitle" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
     </header>
 
     {{if .Config.Server.Pages.Help.Content}}
@@ -31,7 +31,7 @@
         {{/* Getting Started */}}
         <section id="getting-started" class="help-section">
             <h2>{{t "help.getting_started.heading"}}</h2>
-            <p>{{t "help.getting_started.intro_prefix" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}} <kbd>Enter</kbd> {{t "help.getting_started.intro_suffix"}}</p>
+            <p>{{tf "help.getting_started.intro_prefix" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}} <kbd>Enter</kbd> {{t "help.getting_started.intro_suffix"}}</p>
             <p>{{t "help.getting_started.no_tracking"}}</p>
         </section>
 

@@ -131,6 +131,25 @@ func runWizard(in io.Reader, out io.Writer) error {
 		}
 		probe := api.NewClient(serverAddr, tokenVal, 10)
 		if _, err := probe.GetVersion(); err == nil {
+			if tokenVal != "" {
+				kind, authErr := probe.CheckAuth()
+				if authErr != nil {
+					if _, writeErr := fmt.Fprintf(out, "Authentication failed: %v\n", authErr); writeErr != nil {
+						return writeErr
+					}
+					retry, promptErr := promptChoice(reader, out, "Try another server or token", "yes", []string{"yes", "no"})
+					if promptErr != nil {
+						return promptErr
+					}
+					if retry == "no" {
+						return fmt.Errorf("setup canceled because the supplied token is invalid")
+					}
+					continue
+				}
+				if _, writeErr := fmt.Fprintf(out, "Authentication valid (%s token).\n", kind); writeErr != nil {
+					return writeErr
+				}
+			}
 			break
 		} else {
 			if _, err := fmt.Fprintf(out, "Connection failed: %v\n", err); err != nil {

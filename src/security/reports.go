@@ -45,6 +45,7 @@ type Report struct {
 	EncryptionMethod  string
 	CreditPreference  string
 	CreditName        string
+	CreditHandle      string
 	DisclosureDays    int
 	CVERequested      bool
 	ReportTokenHash   string
@@ -100,12 +101,12 @@ func InsertReport(ctx context.Context, db *database.DB, report Report) error {
 		`INSERT INTO %s (
 			tracking_id, security_id_used, affected_component, affected_endpoint,
 			severity, summary, encrypted_body, encryption_method,
-			credit_preference, credit_name, disclosure_days, cve_requested,
+			credit_preference, credit_name, credit_handle, disclosure_days, cve_requested,
 			report_token_hash
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, table),
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, table),
 		report.TrackingID, report.SecurityIDUsed, report.AffectedComponent, report.AffectedEndpoint,
 		report.Severity, report.Summary, report.EncryptedBody, report.EncryptionMethod,
-		report.CreditPreference, report.CreditName, report.DisclosureDays, boolToInt(report.CVERequested),
+		report.CreditPreference, report.CreditName, report.CreditHandle, report.DisclosureDays, boolToInt(report.CVERequested),
 		report.ReportTokenHash,
 	)
 	if err != nil {

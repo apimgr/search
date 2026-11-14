@@ -14,7 +14,6 @@ import (
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/search/engine"
-	"github.com/go-chi/chi/v5"
 	gql "github.com/graphql-go/graphql"
 )
 
@@ -848,31 +847,20 @@ func TestGraphQLHealthQueryAllFields(t *testing.T) {
 	}
 }
 
-func TestGraphQLPreferenceImportAppliesRESTCookies(t *testing.T) {
+func TestGraphQLPreferenceImportMutationIsDisabled(t *testing.T) {
 	if err := InitSchema(); err != nil {
 		t.Fatal(err)
 	}
-	cfg := &config.Config{}
-	dependencies := testGraphQLDependencies()
-	dependencies.API = api.NewHandler(cfg, nil, nil)
-	handler := Handler(cfg, dependencies)
-	query := map[string]interface{}{"query": `mutation { importPreferences(theme: "light", lang: "fr") }`}
-	body, _ := json.Marshal(query)
-	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+	handler := Handler(&config.Config{}, testGraphQLDependencies())
+	request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"mutation { importPreferences(theme: \"light\", lang: \"fr\") }"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"errors"`) {
+		t.Fatalf("mutation response = %d %s, want GraphQL validation error", response.Code, response.Body.String())
 	}
-	if !strings.Contains(strings.Join(rec.Header().Values("Set-Cookie"), "\n"), "theme=light") {
-		t.Errorf("Set-Cookie = %v, want theme=light", rec.Header().Values("Set-Cookie"))
-	}
-	if !strings.Contains(strings.Join(rec.Header().Values("Set-Cookie"), "\n"), "lang=fr") {
-		t.Errorf("Set-Cookie = %v, want lang=fr", rec.Header().Values("Set-Cookie"))
-	}
-	if strings.Contains(rec.Body.String(), `"errors"`) {
-		t.Errorf("GraphQL response has errors: %s", rec.Body.String())
+	if len(response.Header().Values("Set-Cookie")) != 0 {
+		t.Fatalf("disabled mutation set cookies: %v", response.Header().Values("Set-Cookie"))
 	}
 }
 
@@ -1880,35 +1868,19 @@ func TestGraphQLOperatorGeoIPAndSchedulerFieldsRequireBearerToken(t *testing.T) 
 	}
 }
 
-func TestGraphQLRESTBridgeUsesRegisteredAPIRouter(t *testing.T) {
+func TestGraphQLRESTBridgeMutationIsDisabled(t *testing.T) {
 	cfg := config.DefaultConfig()
-	apiHandler := api.NewHandler(cfg, engine.NewRegistry(), nil)
-	router := chi.NewRouter()
-	apiHandler.RegisterRoutes(router)
-	dependencies := testGraphQLDependencies()
-	dependencies.API = apiHandler
-	handler := Handler(cfg, dependencies)
-	req := httptest.NewRequest(http.MethodPost, "/api/graphql", strings.NewReader(`{"query":"mutation { apiRequest(method: \"GET\", path: \"/api/v1/info\") }"}`))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler(rec, req)
-	var payload struct {
-		Data   map[string]interface{}   `json:"data"`
-		Errors []map[string]interface{} `json:"errors"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
-		t.Fatal(err)
-	}
-	if len(payload.Errors) != 0 {
-		t.Fatalf("GraphQL REST bridge errors: %v", payload.Errors)
-	}
-	result, ok := payload.Data["apiRequest"].(map[string]interface{})
-	if !ok || result["status"] != float64(http.StatusOK) {
-		t.Fatalf("REST bridge response = %#v", payload.Data["apiRequest"])
+	handler := Handler(cfg, testGraphQLDependencies())
+	request := httptest.NewRequest(http.MethodPost, "/api/graphql", strings.NewReader(`{"query":"mutation { apiRequest(method: \"GET\", path: \"/api/v1/info\") }"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler(response, request)
+	if !strings.Contains(response.Body.String(), `"errors"`) {
+		t.Fatalf("GraphQL response = %s, want mutation validation error", response.Body.String())
 	}
 }
 
-func TestGraphQLPreferencesQueryAndMutation(t *testing.T) {
+func TestGraphQLPreferencesQueryOnly(t *testing.T) {
 	if err := InitSchema(); err != nil {
 		t.Fatal(err)
 	}
@@ -1924,6 +1896,12 @@ func TestGraphQLPreferencesQueryAndMutation(t *testing.T) {
 		}
 		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
+		}
+		if strings.Contains(query, "mutation") {
+			if len(payload.Errors) == 0 {
+				t.Fatalf("mutation %s was accepted", query)
+			}
+			continue
 		}
 		if len(payload.Errors) != 0 {
 			t.Fatalf("query %s errors: %v", query, payload.Errors)

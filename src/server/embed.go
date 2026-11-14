@@ -69,6 +69,14 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 			// Key not found in i18n; return key as-is
 			return key
 		},
+		"tf": func(key string, args ...interface{}) string {
+			if i18nFuncs != nil {
+				if tfFunc, ok := i18nFuncs["tf"].(func(string, ...interface{}) string); ok {
+					return tfFunc(key, args...)
+				}
+			}
+			return key
+		},
 		"lang": func() string {
 			if i18nFuncs != nil {
 				if f, ok := i18nFuncs["lang"].(func() string); ok {
@@ -581,8 +589,8 @@ type PageData struct {
 	// TrackingNoscriptHTML is rendered as the first child of <body> when
 	// consented Simple Analytics tracking is enabled.
 	TrackingNoscriptHTML template.HTML
-	Extra        map[string]interface{}
-	ServerURL    string
+	Extra                map[string]interface{}
+	ServerURL            string
 	// RequestPath is the current request's path+query, used to redirect the browser
 	// back to the same page after a no-JS form POST (e.g. the header theme-switch form).
 	RequestPath string
@@ -786,6 +794,7 @@ type ContactPageData struct {
 	DisclosureDays     int
 	CreditPreference   string
 	CreditName         string
+	CreditHandle       string
 	AgreedToDisclosure bool
 
 	// Hidden auto-filled fields, per AI.md PART 11 "Security-mode form

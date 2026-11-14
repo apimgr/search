@@ -12,7 +12,7 @@
         {{default (t "common.search") .Config.Server.Branding.Title}}
     </a>
 
-    <nav class="nav-links" aria-label="{{t "accessibility.keyboard_navigation_heading"}}">
+    <nav class="nav-links" id="navigation" aria-label="{{t "accessibility.keyboard_navigation_heading"}}">
         <a href="/"{{if eq .Page "home"}} aria-current="page"{{end}}>{{t "nav.home"}}</a>
         <a href="/server/about"{{if eq .Page "about"}} aria-current="page"{{end}}>{{t "nav.about"}}</a>
         <a href="/server/help"{{if eq .Page "help"}} aria-current="page"{{end}}>{{t "nav.help"}}</a>

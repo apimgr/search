@@ -298,12 +298,16 @@
     padding: 0.5rem 1rem;
     display: flex;
     justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
 }
 
 .subheader-form {
     display: flex;
     align-items: stretch;
     width: 100%;
+    min-width: 0;
     max-width: 700px;
     box-shadow: 0 2px 8px var(--color-shadow);
     border-radius: 22px;
@@ -1361,11 +1365,12 @@ body:has(.nav-checkbox:checked) {
 
 .search-categories {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     padding: 0.75rem 0;
     margin-bottom: 1rem;
     border-bottom: 1px solid var(--color-border);
-    overflow-x: auto;
+    overflow-x: visible;
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
@@ -1784,6 +1789,8 @@ body:has(.nav-checkbox:checked) {
     color: var(--color-primary);
     text-decoration: none;
     transition: color 0.2s;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .result-title a:hover {
@@ -7689,6 +7696,16 @@ body:has(.nav-checkbox:checked) {
     padding: 15px;
     margin-bottom: 20px;
     overflow-x: auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.direct-content input,
+.direct-content select,
+.direct-content textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* Tablet+ direct content enhancement */
@@ -7806,6 +7823,42 @@ body:has(.nav-checkbox:checked) {
 .direct-content th {
     background: var(--color-bg-secondary);
     font-weight: 600;
+}
+
+.mcp-help-page,
+.security-page {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.mcp-help-page pre,
+.mcp-help-page code,
+.mcp-help-page .long-string {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.mcp-help-page pre.code-block code {
+    white-space: pre-wrap;
+}
+
+.static-page a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.mcp-help-page table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.mcp-help-page th,
+.mcp-help-page td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .chmod-table td:not(:first-child) {

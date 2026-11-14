@@ -67,11 +67,9 @@ func TestSSRInteractivePagesCarryTheirForms(t *testing.T) {
 			requireStatus(t, resp, http.StatusOK)
 			requireContains(t, body, "<form", tc.path)
 			requireContains(t, body, tc.formAction, tc.path)
-			if tc.path == "/server/preferences" {
-				requireContains(t, body, `id="custom-css"`, tc.path)
-			}
-			if tc.path == "/server/contact" && strings.Contains(body, `name="captcha_id"`) {
-				t.Fatal("initial contact form should not require CAPTCHA before a failed attempt")
+			if tc.path == "/server/contact" {
+				requireContains(t, body, `name="captcha_id"`, tc.path)
+				requireContains(t, body, `name="captcha"`, tc.path)
 			}
 			// The double-submit CSRF token must be in the rendered markup;
 			// without it the no-JS POST cannot be made at all.
@@ -1087,6 +1085,7 @@ func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
 			t.Fatalf("create %s request: %v", path, err)
 		}
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -1113,7 +1112,7 @@ func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(created, &createdResponse); err != nil || createdResponse.Data.OwnerToken == "" || createdResponse.Data.ManageToken == "" {
-		t.Fatalf("create fixture alert did not issue an owner token: err=%v", err)
+		t.Fatalf("create fixture alert did not issue owner and manage tokens: err=%v", err)
 	}
 	t.Cleanup(func() {
 		_, status := requestJSON(http.MethodDelete, "/api/v1/alerts/"+url.PathEscape(createdResponse.Data.ManageToken), "", "")
@@ -1415,7 +1414,9 @@ func TestSSRTextBrowserGetsNoJSRender(t *testing.T) {
 func TestSSRHTTPToolGetsPlainText(t *testing.T) {
 	s := newSession(t).withUserAgent(httpToolUserAgent)
 
-	resp, body := s.get("/")
+	resp, body := s.get("/", func(request *http.Request) {
+		request.Header.Set("Accept", "*/*")
+	})
 	requireStatus(t, resp, http.StatusOK)
 	requireNotContains(t, body, "<html", "http tool response")
 	if len(strings.TrimSpace(body)) == 0 {

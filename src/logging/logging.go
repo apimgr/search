@@ -3,6 +3,7 @@ package logging
 import (
 	"bufio"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -1418,6 +1420,11 @@ func cefEscape(s string) string {
 // All formats emit a single raw-text line (no ANSI/emoji/control chars) per
 // AI.md PART 11.
 func (l *SecurityLogger) formatEntry(entry SecurityEntry) string {
+	entry.Event = SecurityEvent(sanitizeSecurityLogField(string(entry.Event)))
+	entry.IP = sanitizeSecurityLogField(entry.IP)
+	entry.User = sanitizeSecurityLogField(entry.User)
+	entry.Path = sanitizeSecurityLogField(entry.Path)
+	entry.Details = sanitizeSecurityLogField(entry.Details)
 	switch l.format {
 	case "json":
 		data, _ := json.Marshal(entry)
@@ -1501,6 +1508,15 @@ func (l *SecurityLogger) formatEntry(entry SecurityEntry) string {
 		}
 		return line
 	}
+}
+
+func sanitizeSecurityLogField(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, value)
 }
 
 func (l *SecurityLogger) openFile() error {
@@ -1624,16 +1640,15 @@ func (l *SecurityLogger) LogCSRFViolation(ip, path string) {
 }
 
 // LogSecurityIDInvalid logs a failed/expired {security_id} validation attempt
-// against /server/contact. Per AI.md PART 11: IP, user-agent, and the supplied
-// id are the only fields — the id itself is never a secret worth masking here,
-// since it is already rejected and rotates every 48h.
+// against /server/contact without recording the supplied identifier.
 func (l *SecurityLogger) LogSecurityIDInvalid(ip, userAgent, suppliedID string) {
+	idHash := sha256.Sum256([]byte(suppliedID))
 	l.Log(SecurityEntry{
 		Timestamp: time.Now(),
 		Event:     SecurityEventSecurityIDInvalid,
 		IP:        ip,
 		Path:      "/server/contact",
-		Details:   fmt.Sprintf("user_agent=%q security_id=%q", userAgent, suppliedID),
+		Details:   fmt.Sprintf("user_agent=%q security_id_sha256=%x", userAgent, idHash[:4]),
 	})
 }
 

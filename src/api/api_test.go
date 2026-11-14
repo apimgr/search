@@ -24,6 +24,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type testContactCaptcha struct{}
+
+func (testContactCaptcha) NewContactChallenge(*http.Request) (string, string) {
+	return "test-id", "1 + 1"
+}
+func (testContactCaptcha) VerifyContactChallenge(_ *http.Request, id, answer string) bool {
+	return id == "test-id" && answer == "2"
+}
+
 type testContactSubmitter struct {
 	calls int
 	last  ContactMessage
@@ -2511,8 +2520,8 @@ func TestRegisterRoutes(t *testing.T) {
 		{"/api/autodiscover", http.MethodGet},
 		{"/api/v1/server/healthz", http.MethodGet},
 		{"/api/v1/server/healthz.txt", http.MethodGet},
+		{"/api/v1/server/auth", http.MethodGet},
 		{"/api/v1/info", http.MethodGet},
-		{"/api/v1/info.txt", http.MethodGet},
 		{"/api/v1/categories", http.MethodGet},
 		{"/api/v1/engines", http.MethodGet},
 		{"/api/v1/bangs", http.MethodGet},
@@ -2520,6 +2529,8 @@ func TestRegisterRoutes(t *testing.T) {
 		{"/api/v1/widgets", http.MethodGet},
 		{"/api/v1/instant", http.MethodGet},
 		{"/api/v1/search/related", http.MethodGet},
+		{APIPrefix + "/server/geoip/ips.txt", http.MethodGet},
+		{APIPrefix + "/server/geoip/ips/203.0.113.1.txt", http.MethodGet},
 	}
 
 	for _, route := range routes {
@@ -2531,6 +2542,30 @@ func TestRegisterRoutes(t *testing.T) {
 			// All routes should return either 200, 400, or 503 (but not 404)
 			if w.Code == http.StatusNotFound {
 				t.Errorf("Route %s not registered", route.path)
+			}
+		})
+	}
+}
+
+func TestVersionedHealthzTxtAliasReturnsPlainText(t *testing.T) {
+	handler := newTestHandler()
+	mux := chi.NewRouter()
+	handler.RegisterRoutes(mux)
+
+	for _, path := range []string{APIPrefix + "/server/healthz.txt"} {
+		t.Run(path, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, request)
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("health request status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			if contentType := recorder.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+				t.Fatalf("Content-Type = %q, want text/plain", contentType)
+			}
+			if !strings.Contains(recorder.Body.String(), "status: ") {
+				t.Fatalf("health text response missing status field: %s", recorder.Body.String())
 			}
 		})
 	}
@@ -3023,7 +3058,7 @@ func TestHandleServerContactGETJSON(t *testing.T) {
 	}
 }
 
-func TestHandleServerContactGETRedirect(t *testing.T) {
+func TestHandleServerContactGETHTMLAcceptStillReturnsAPIData(t *testing.T) {
 	handler := newTestHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/contact", nil)
@@ -3032,8 +3067,8 @@ func TestHandleServerContactGETRedirect(t *testing.T) {
 
 	handler.handleServerContact(w, req)
 
-	if w.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want %d (should redirect for HTML request)", http.StatusSeeOther, w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
 
@@ -3089,8 +3124,9 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 	handler := NewHandler(cfg, registry, aggregator)
 	submitter := &testContactSubmitter{}
 	handler.SetContactSubmitter(submitter)
+	handler.SetContactCaptchaProvider(testContactCaptcha{})
 
-	body := `{"name":"Alice","email":"alice@example.com","subject":"Bug Report","message":"Found a bug"}`
+	body := `{"name":"Alice","email":"alice@example.com","subject":"Bug Report","message":"Found a bug","captcha_id":"test-id","captcha_answer":"2"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

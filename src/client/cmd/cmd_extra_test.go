@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/apimgr/search/src/client/clicfg"
@@ -139,6 +140,32 @@ func TestApplyColorModeFromConfig(t *testing.T) {
 	got := os.Getenv("SEARCH_COLOR")
 	if got != "no" {
 		t.Errorf("applyColorMode() SEARCH_COLOR = %q, want 'no' (from config)", got)
+	}
+}
+
+func TestInitConfigLoadsColorBeforeApplyingPriority(t *testing.T) {
+	originalConfigFile := cfgFile
+	originalColorMode := colorMode
+	t.Cleanup(func() {
+		cfgFile = originalConfigFile
+		colorMode = originalColorMode
+		clicfg.Reset()
+	})
+
+	configPath := filepath.Join(t.TempDir(), "cli.yml")
+	if err := os.WriteFile(configPath, []byte("output:\n  color: no\n"), 0600); err != nil {
+		t.Fatalf("write client config: %v", err)
+	}
+	cfgFile = configPath
+	colorMode = "auto"
+	clicfg.Reset()
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("SEARCH_COLOR", "")
+
+	initConfig()
+
+	if got := os.Getenv("SEARCH_COLOR"); got != "no" {
+		t.Fatalf("SEARCH_COLOR = %q, want no from the loaded output.color config", got)
 	}
 }
 

@@ -19,6 +19,11 @@ search --version
 search --status
 ```
 
+The shared `--color` option accepts `auto`, `yes`, or `no`; `auto` detects
+terminal support. A non-empty `NO_COLOR` disables colors unless explicitly
+overridden with `--color=yes`. The shared `--lang` option selects a supported
+language, and `--shell` prints shell integration instructions.
+
 ### Running the Server
 
 ```bash

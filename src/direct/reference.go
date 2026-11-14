@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1119,7 +1120,7 @@ func formatQRContent(lang, text string, pngImages map[int]string, svg []byte, co
 	html.WriteString(escapeHTML(text))
 	fmt.Fprintf(&html, `</code></pre><h2>%s</h2><ul>`, escapeHTML(i18n.T(lang, "direct.qr_download_png")))
 	for _, size := range []int{128, 256, 512, 1024} {
-		fmt.Fprintf(&html, `<li><a href="data:image/png;base64,%s" download="qr-%d.png">%s</a></li>`, pngImages[size], size, escapeHTML(i18n.T(lang, "direct.qr_size_pixels", size)))
+		fmt.Fprintf(&html, `<li><a href="data:image/png;base64,%s" download="qr-%d.png">%s</a></li>`, pngImages[size], size, escapeHTML(i18n.Tf(lang, "direct.qr_size_pixels", "size", strconv.Itoa(size))))
 	}
 	fmt.Fprintf(&html, `</ul><h2>%s</h2><ul>`, escapeHTML(i18n.T(lang, "direct.qr_download_svg")))
 	fmt.Fprintf(&html, `<li><a href="data:image/svg+xml;base64,%s" download="qr.svg">M</a></li>`, base64.StdEncoding.EncodeToString(svg))

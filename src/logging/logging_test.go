@@ -2,7 +2,9 @@ package logging
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -12,6 +14,48 @@ import (
 	"testing"
 	"time"
 )
+
+func TestLogSecurityIDInvalidHashesSuppliedID(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "security.log")
+	logger := NewSecurityLogger(logPath)
+	suppliedID := "invalid-security-id-secret"
+	logger.LogSecurityIDInvalid("192.0.2.1", "test-agent", suppliedID)
+	if err := logger.Close(); err != nil {
+		t.Fatalf("close security logger: %v", err)
+	}
+
+	contents, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read security log: %v", err)
+	}
+	hash := sha256.Sum256([]byte(suppliedID))
+	want := "security_id_sha256=" + hex.EncodeToString(hash[:4])
+	if !strings.Contains(string(contents), want) {
+		t.Fatalf("security log = %q, want hash prefix %q", contents, want)
+	}
+	if strings.Contains(string(contents), suppliedID) {
+		t.Fatal("security log contains the supplied security id")
+	}
+}
+
+func TestSecurityLogFormatsRemoveControlCharacters(t *testing.T) {
+	for _, format := range []string{"fail2ban", "syslog", "cef", "json", "text"} {
+		t.Run(format, func(t *testing.T) {
+			logger := NewSecurityLogger("")
+			logger.SetFormat(format)
+			line := logger.formatEntry(SecurityEntry{
+				Timestamp: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+				Event:     SecurityEventSecurityIDInvalid,
+				IP:        "192.0.2.1\r\nINJECTED",
+				Path:      "/server/contact\nforged",
+				Details:   "agent=bad\r\nforged",
+			})
+			if strings.ContainsAny(line, "\r\n\x00") {
+				t.Fatalf("formatted log contains control characters: %q", line)
+			}
+		})
+	}
+}
 
 func closeLoggerOnCleanup(t *testing.T, closeLogger func() error) {
 	t.Helper()

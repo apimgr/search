@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"net/mail"
 	"net/url"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/httputil"
@@ -149,6 +151,46 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	s.renderContactForm(w, r, securityID, securityMode, "")
 }
 
+func (s *Server) ValidContactSecurityID(r *http.Request, securityID string) bool {
+	return s.validateSecurityIDOrLog(r, securityID)
+}
+
+func (s *Server) SubmitSecurityContact(original *http.Request, message api.SecurityContactMessage) (string, error) {
+	form := url.Values{
+		"security_id": {message.SecurityID}, "name": {message.Name}, "email": {message.Email},
+		"researcher_gpg": {message.ResearcherGPG}, "affected_component": {message.AffectedComponent},
+		"affected_endpoint": {message.AffectedEndpoint}, "severity": {message.Severity}, "summary": {message.Summary},
+		"steps_to_reproduce": {message.StepsToReproduce}, "impact": {message.Impact}, "suggested_fix": {message.SuggestedFix},
+		"cve_requested": {strconv.FormatBool(message.CVERequested)}, "disclosure_days": {strconv.Itoa(message.DisclosureDays)},
+		"credit_preference": {message.CreditPreference}, "credit_handle": {message.CreditHandle},
+		"agreed_to_disclosure": {strconv.FormatBool(message.AgreedToDisclosure)},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/server/contact", strings.NewReader(form.Encode())).WithContext(original.Context())
+	req.Header = original.Header.Clone()
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.PostForm = form
+	req.Form = form
+	req.RemoteAddr = original.RemoteAddr
+	recorder := httptest.NewRecorder()
+	s.handleSecurityReportSubmit(recorder, req, message.SecurityID)
+	if recorder.Code != http.StatusOK {
+		return "", fmt.Errorf("security report handler returned HTTP %d", recorder.Code)
+	}
+	var response struct {
+		Data struct {
+			TrackingID string `json:"tracking_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		return "", fmt.Errorf("decode security report response: %w", err)
+	}
+	if response.Data.TrackingID == "" {
+		return "", fmt.Errorf("security report handler returned no tracking id")
+	}
+	return response.Data.TrackingID, nil
+}
+
 // validateSecurityIDOrLog validates a supplied {security_id} per AI.md PART 11.
 // An invalid/expired id falls back to normal contact mode silently, but is
 // logged to security.log as security.security_id_invalid.
@@ -189,15 +231,23 @@ func (s *Server) previousInstallationSecret() string {
 
 // renderContactForm renders the contact page in standard or security mode.
 func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, securityID string, securityMode bool, contactError string) {
-	captchaRequired := s.contactCaptchaRequired(r)
+	captchaRequired := true
 	var a, b int
 	var captchaID string
 	mode, siteKey, secretKey := s.configuredContactCaptcha()
 	onionRequest := isOnionRequest(s.config, r)
 	externalCaptcha := captchaRequired && !onionRequest && (mode == "recaptcha" || mode == "hcaptcha") && siteKey != "" && secretKey != ""
 	if captchaRequired && (mode == "simple" || onionRequest) {
-		captchaA, _ := rand.Int(rand.Reader, big.NewInt(10))
-		captchaB, _ := rand.Int(rand.Reader, big.NewInt(10))
+		captchaA, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			s.handleInternalError(w, r, "contact captcha challenge", err)
+			return
+		}
+		captchaB, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			s.handleInternalError(w, r, "contact captcha challenge", err)
+			return
+		}
 		a = int(captchaA.Int64()) + 1
 		b = int(captchaB.Int64()) + 1
 		captchaID = s.signCaptcha(a + b)
@@ -247,6 +297,7 @@ func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, secur
 // disclosure pipeline per AI.md PART 11 "Submission Flow"; otherwise the
 // standard contact-form path is preserved (out of scope for this pipeline).
 func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := r.ParseForm(); err != nil {
 		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
@@ -255,11 +306,6 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 	securityID := strings.TrimSpace(r.PostFormValue("security_id"))
 	securityMode := securityID != "" && s.validateSecurityIDOrLog(r, securityID)
 	lang := s.newPageData(w, r, "", "contact").Lang
-	if s.contactCaptchaRequired(r) && !s.verifyConfiguredContactCaptcha(r) {
-		s.markContactCaptchaRequired(w, r)
-		s.renderContactForm(w, r, securityID, securityMode, s.getI18nManager().T(lang, "errors.bad_request"))
-		return
-	}
 	if strings.TrimSpace(r.PostFormValue("website")) != "" {
 		s.clearContactCaptchaRequirement(w, r)
 		if strings.Contains(r.Header.Get("Accept"), "application/json") {
@@ -267,6 +313,11 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
 		}
+		return
+	}
+	if !s.verifyConfiguredContactCaptcha(r) {
+		s.markContactCaptchaRequired(w, r)
+		s.renderContactForm(w, r, securityID, securityMode, s.getI18nManager().T(lang, "errors.bad_request"))
 		return
 	}
 	if securityMode {
@@ -278,7 +329,22 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 	address, addressErr := mail.ParseAddress(strings.TrimSpace(r.PostFormValue("email")))
 	subject := strings.TrimSpace(r.PostFormValue("subject"))
 	message := strings.TrimSpace(r.PostFormValue("message"))
-	if name == "" || addressErr != nil || address.Address != strings.TrimSpace(r.PostFormValue("email")) || subject == "" || message == "" || len(name) > 200 || len(subject) > 300 || len(message) > 10000 {
+	for _, field := range []struct {
+		name, value string
+		max         int
+	}{{"name", name, 100}, {"email", strings.TrimSpace(r.PostFormValue("email")), 254}, {"subject", subject, 200}, {"message", message, 5000}} {
+		if utf8.RuneCountInString(field.value) <= field.max {
+			continue
+		}
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Field exceeds maximum length", Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
+		} else {
+			s.markContactCaptchaRequired(w, r)
+			s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
+		}
+		return
+	}
+	if name == "" || addressErr != nil || address.Address != strings.TrimSpace(r.PostFormValue("email")) || subject == "" || message == "" || utf8.RuneCountInString(name) > 100 || utf8.RuneCountInString(address.Address) > 254 || utf8.RuneCountInString(subject) > 200 || utf8.RuneCountInString(message) > 5000 {
 		s.markContactCaptchaRequired(w, r)
 		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
 		return
@@ -399,6 +465,15 @@ func (s *Server) dispatchExactNotification(event notify.Event) {
 // disclosure Submission Flow.
 func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Request, securityID string) {
 	lang := s.newPageData(w, r, "", "contact").Lang
+	if strings.TrimSpace(r.PostFormValue("website")) != "" {
+		s.clearContactCaptchaRequirement(w, r)
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "received"}})
+		} else {
+			http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
+		}
+		return
+	}
 
 	affectedComponent := strings.TrimSpace(r.PostFormValue("affected_component"))
 	affectedEndpoint := strings.TrimSpace(r.PostFormValue("affected_endpoint"))
@@ -409,8 +484,20 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 	suggestedFix := strings.TrimSpace(r.PostFormValue("suggested_fix"))
 	researcherGPG := strings.TrimSpace(r.PostFormValue("researcher_gpg"))
 	researcherEmail := strings.TrimSpace(r.PostFormValue("email"))
+	researcherName := strings.TrimSpace(r.PostFormValue("name"))
 	creditPreference := strings.TrimSpace(r.PostFormValue("credit_preference"))
-	creditName := strings.TrimSpace(r.PostFormValue("credit_name"))
+	creditName := ""
+	creditHandle := strings.TrimSpace(r.PostFormValue("credit_handle"))
+	switch creditPreference {
+	case "handle":
+		if creditHandle == "" || utf8.RuneCountInString(creditHandle) > 100 {
+			s.markContactCaptchaRequired(w, r)
+			s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"))
+			return
+		}
+	case "real_name":
+		creditName = researcherName
+	}
 	cveRequested := config.IsTruthy(r.PostFormValue("cve_requested"))
 	agreedToDisclosure := config.IsTruthy(r.PostFormValue("agreed_to_disclosure"))
 
@@ -421,7 +508,27 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	if summary == "" || severity == "" || affectedComponent == "" || stepsToReproduce == "" || impact == "" || !agreedToDisclosure {
+	gpgLimit := 16384
+	if strings.HasPrefix(strings.ToLower(researcherGPG), "https://") {
+		gpgLimit = 2048
+	}
+	for _, field := range []struct {
+		name, value string
+		max         int
+	}{{"researcher_gpg", researcherGPG, gpgLimit}, {"affected_component", affectedComponent, 255}, {"affected_endpoint", affectedEndpoint, 2048}, {"summary", summary, 200}, {"steps_to_reproduce", stepsToReproduce, 10000}, {"impact", impact, 5000}, {"suggested_fix", suggestedFix, 5000}} {
+		if utf8.RuneCountInString(field.value) <= field.max {
+			continue
+		}
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Field exceeds maximum length", Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
+		} else {
+			s.markContactCaptchaRequired(w, r)
+			s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "errors.bad_request"))
+		}
+		return
+	}
+	parsedEmail, emailErr := mail.ParseAddress(researcherEmail)
+	if researcherName == "" || utf8.RuneCountInString(researcherName) > 100 || emailErr != nil || parsedEmail.Address != researcherEmail || utf8.RuneCountInString(researcherEmail) > 254 || summary == "" || severity == "" || affectedComponent == "" || stepsToReproduce == "" || impact == "" || !agreedToDisclosure {
 		s.markContactCaptchaRequired(w, r)
 		s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"))
 		return
@@ -442,7 +549,8 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 
 	plaintextBody := composeSecurityReportBody(s.notificationLang(), trackingID, affectedComponent,
 		affectedEndpoint, severity, summary, stepsToReproduce, impact, suggestedFix,
-		researcherEmail, researcherGPG, creditPreference, creditName, disclosureDays, cveRequested)
+		researcherEmail, researcherGPG, creditPreference, creditName, disclosureDays, cveRequested,
+		researcherName, config.Version, config.CommitID, time.Now().UTC().Format(time.RFC3339), r.UserAgent())
 
 	// Step 3: encrypt the report body at rest — PGP if a project keypair
 	// exists, otherwise AES-256-GCM with server.security.encryption_key.
@@ -464,6 +572,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 		EncryptionMethod:  encryptionMethod,
 		CreditPreference:  creditPreference,
 		CreditName:        creditName,
+		CreditHandle:      creditHandle,
 		DisclosureDays:    disclosureDays,
 		CVERequested:      cveRequested,
 		ReportTokenHash:   tokenHash,
@@ -519,10 +628,17 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 // before rendering — no hardcoded English strings.
 func composeSecurityReportBody(lang, trackingID, affectedComponent, affectedEndpoint, severity, summary,
 	stepsToReproduce, impact, suggestedFix, researcherEmail, researcherGPG,
-	creditPreference, creditName string, disclosureDays int, cveRequested bool) string {
+	creditPreference, creditName string, disclosureDays int, cveRequested bool, researcherNames ...string) string {
 	t := func(key string, args ...interface{}) string { return i18n.T(lang, key, args...) }
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_tracking_id"), trackingID)
+	if len(researcherNames) > 0 && researcherNames[0] != "" {
+		fmt.Fprintf(&b, "Name: %s\n", researcherNames[0])
+	}
+	if len(researcherNames) > 4 {
+		fmt.Fprintf(&b, "app_version: %s\ncommit_hash: %s\ntimestamp: %s\nrequest_user_agent: %s\n",
+			researcherNames[1], researcherNames[2], researcherNames[3], researcherNames[4])
+	}
 	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_component"), affectedComponent)
 	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_endpoint"), affectedEndpoint)
 	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_severity"), severity)
@@ -1386,7 +1502,7 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) clearPreferenceCookies(w http.ResponseWriter, r *http.Request) {
 	for _, name := range []string{
-		"theme", "lang", widgetCookieName, "search_pref_weather_units",
+		"theme", "lang", widgetCookieName, "search_pref_weather_units", "search_widget_weather_units",
 		"search_pref_category", "search_pref_safe_search", "search_pref_results_per_page",
 		"search_pref_units", "search_pref_new_tab", "search_pref_infinite_scroll",
 		"search_pref_keyboard_shortcuts", "search_pref_save_history", "search_pref_video_previews",

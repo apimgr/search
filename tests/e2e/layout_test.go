@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
@@ -15,9 +16,28 @@ import (
 
 func TestBrowserLayoutContract(t *testing.T) {
 	site := newTestSite(t)
-	ctx := newBrowserContext(t)
+	ctx := newBrowserContextWithTimeout(t, 15*time.Minute)
 	viewports := [][2]int{{320, 640}, {375, 812}, {390, 844}, {768, 1024}, {820, 1180}, {1024, 768}, {1280, 800}, {1440, 900}, {1920, 1080}}
-	paths := []string{"/", "/server/about", "/server/help", "/server/dpo", "/server/preferences/tokens"}
+	paths := []string{
+		"/",
+		"/search?q=layout+contract",
+		"/direct/math:2%2B2",
+		"/alerts/new?q=layout+contract",
+		"/server/about",
+		"/server/privacy",
+		"/server/contact",
+		"/server/help",
+		"/server/help/mcp",
+		"/server/terms",
+		"/server/dpo",
+		"/server/healthz",
+		"/server/security",
+		"/server/security/policy",
+		"/server/security/thanks",
+		"/server/preferences",
+		"/server/preferences/tools",
+		"/server/preferences/tokens",
+	}
 
 	for _, viewport := range viewports {
 		for _, path := range paths {
@@ -46,7 +66,11 @@ func TestBrowserLayoutContract(t *testing.T) {
 						badElements: Array.from(document.body.querySelectorAll('*')).filter(visible).filter(element => {
 							const rect = element.getBoundingClientRect();
 							return rect.left < -1 || rect.right > window.innerWidth + 1;
-						}).map(element => element.tagName.toLowerCase() + (element.id ? '#' + element.id : '')).slice(0, 12),
+						}).map(element => {
+							const rect = element.getBoundingClientRect();
+							const classes = typeof element.className === 'string' ? '.' + element.className.trim().split(/\s+/).filter(Boolean).join('.') : '';
+							return element.tagName.toLowerCase() + (element.id ? '#' + element.id : '') + classes + '@' + Math.round(rect.left) + ':' + Math.round(rect.right);
+						}).slice(0, 12),
 						badFields: Array.from(document.querySelectorAll('input:not([type="hidden"]),select,textarea')).filter(element => !element.labels?.length && !element.getAttribute('aria-label')).map(element => element.id || element.outerHTML.slice(0, 80)),
 						emptySelect: Array.from(document.querySelectorAll('select')).filter(element => !element.options.length).map(element => element.id || 'unnamed select')
 					};

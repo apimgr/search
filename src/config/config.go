@@ -1,12 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -72,6 +74,8 @@ type Config struct {
 	configPath string
 	// True if this is first run (no config existed)
 	firstRun bool
+	// needsSave records normalization performed while loading a config file.
+	needsSave bool
 	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
 	debugEnabled bool
 	// reloadHooks are called after every successful Reload(); guarded by reloadHooksMu
@@ -226,29 +230,9 @@ func (c *Config) Reload() error {
 		return fmt.Errorf("config path not set, cannot reload")
 	}
 
-	file, err := os.Open(path)
+	newCfg, err := Load(path)
 	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-	defer closeutil.Close(file)
-
-	// Warn on unknown fields but never crash — AI.md PART 12: never crash on config
-	var strictCheck Config
-	strictDecoder := yaml.NewDecoder(file)
-	strictDecoder.KnownFields(true)
-	if err := strictDecoder.Decode(&strictCheck); err != nil {
-		slog.Warn("server.yml contains unrecognized fields (ignored)", "detail", err)
-	}
-
-	// Seek back and decode leniently so unknown fields never prevent startup
-	if _, err := file.Seek(0, 0); err != nil {
-		return fmt.Errorf("failed to re-read config file: %w", err)
-	}
-
-	var newCfg Config
-	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&newCfg); err != nil {
-		return fmt.Errorf("failed to parse config file: %w", err)
+		return err
 	}
 
 	// Fold the root-level `tor:` overlay into Server.Tor (AI.md PART 12) so
@@ -347,9 +331,17 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 		return fmt.Errorf("failed to create config file watcher: %w", err)
 	}
 
-	if err := watcher.Add(path); err != nil {
+	configDir := filepath.Dir(path)
+	if err := watcher.Add(configDir); err != nil {
 		closeutil.Close(watcher)
-		return fmt.Errorf("failed to watch config file %s: %w", path, err)
+		return fmt.Errorf("failed to watch config directory %s: %w", configDir, err)
+	}
+	dropInDir := filepath.Join(configDir, "yaml.d")
+	if info, statErr := os.Stat(dropInDir); statErr == nil && info.IsDir() {
+		if err := watcher.Add(dropInDir); err != nil {
+			closeutil.Close(watcher)
+			return fmt.Errorf("failed to watch drop-in directory %s: %w", dropInDir, err)
+		}
 	}
 
 	go func() {
@@ -369,7 +361,14 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 				if !ok {
 					return
 				}
-				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				cleanName := filepath.Clean(event.Name)
+				inDropIns := filepath.Dir(cleanName) == dropInDir
+				if cleanName == dropInDir && event.Has(fsnotify.Create) {
+					if err := watcher.Add(dropInDir); err != nil {
+						slog.Error("config watcher could not watch yaml.d", "err", err, "path", dropInDir)
+					}
+				}
+				if (cleanName == path || inDropIns || cleanName == dropInDir) && (event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
 					if debounce != nil {
 						debounce.Stop()
 					}
@@ -1054,6 +1053,8 @@ type WebConfig struct {
 		Contact string `yaml:"contact"`
 		// Expiration date (auto-calculated 1 year from now if not set)
 		Expires string `yaml:"expires"`
+		// Policy is optional Markdown content for the public disclosure policy page.
+		Policy string `yaml:"policy"`
 		// Keyservers is the list of OpenPGP keyservers the PGP public key is
 		// published to on generate/rotate (e.g. https://keys.openpgp.org). Per
 		// AI.md PART 11 "GPG Keypair Management" Publish action.
@@ -1749,7 +1750,13 @@ type SEOConfig struct {
 	// Set noindex on search results
 	NoIndex bool `yaml:"noindex"`
 	// Generate sitemap.xml
-	Sitemap bool `yaml:"sitemap"`
+	Sitemap bool       `yaml:"sitemap"`
+	Feed    FeedConfig `yaml:"feed"`
+}
+
+type FeedConfig struct {
+	MaxItems int    `yaml:"max_items"`
+	Title    string `yaml:"title"`
 }
 
 // OpenGraphConfig represents OpenGraph meta tags
@@ -2340,6 +2347,7 @@ func DefaultConfig() *Config {
 					ReportURL     string   `yaml:"report_url"`
 					Contact       string   `yaml:"contact"`
 					Expires       string   `yaml:"expires"`
+					Policy        string   `yaml:"policy"`
 					Keyservers    []string `yaml:"keyservers"`
 					PublishPGPKey bool     `yaml:"publish_pgp_key"`
 				}{
@@ -2559,6 +2567,7 @@ func DefaultConfig() *Config {
 				// Don't index search results by default
 				NoIndex: true,
 				Sitemap: false,
+				Feed:    FeedConfig{MaxItems: 50},
 			},
 			Compression: CompressionConfig{
 				Enabled: true,
@@ -2806,29 +2815,71 @@ func NormalizeUpdateBranch(branch string) string {
 }
 
 func Load(path string) (*Config, error) {
-	file, err := os.Open(path)
+	root, err := yamlNodeFromConfig(path)
 	if err != nil {
 		return nil, err
 	}
-	defer closeutil.Close(file)
-
-	// Warn on unknown fields but never crash — AI.md PART 12: never crash on config
+	winners := make(map[string]string)
+	if err := recordConfigSources(root, "", path, winners, false); err != nil {
+		return nil, err
+	}
+	dropInDir := filepath.Join(filepath.Dir(path), "yaml.d")
+	entries, err := os.ReadDir(dropInDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read drop-in directory %s: %w", dropInDir, err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		isYAML := strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml")
+		isBackup := strings.HasSuffix(name, ".bak") || strings.HasSuffix(name, ".orig") || strings.HasSuffix(name, "~")
+		if strings.HasPrefix(name, ".") || !isYAML || isBackup {
+			continue
+		}
+		filePath := filepath.Join(dropInDir, name)
+		info, err := os.Lstat(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("stat drop-in %s: %w", filePath, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := filepath.EvalSymlinks(filePath)
+			if err != nil {
+				return nil, fmt.Errorf("resolve drop-in %s: %w", filePath, err)
+			}
+			rel, err := filepath.Rel(dropInDir, target)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return nil, fmt.Errorf("drop-in %s symlink target must stay inside yaml.d", filePath)
+			}
+			info, err = os.Stat(filePath)
+			if err != nil {
+				return nil, fmt.Errorf("stat drop-in target %s: %w", filePath, err)
+			}
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		if info.Mode().Perm()&0022 != 0 {
+			return nil, fmt.Errorf("drop-in %s is group or world writable", filePath)
+		}
+		node, err := yamlNodeFromConfig(filePath)
+		if err != nil {
+			return nil, err
+		}
+		mergeConfigNodes(root, node, "", filePath, winners)
+		slog.Info("loaded configuration drop-in", "path", filePath)
+	}
+	encoded, err := yaml.Marshal(root)
+	if err != nil {
+		return nil, fmt.Errorf("encode merged configuration: %w", err)
+	}
 	var strictCheck Config
-	strictDecoder := yaml.NewDecoder(file)
+	strictDecoder := yaml.NewDecoder(bytes.NewReader(encoded))
 	strictDecoder.KnownFields(true)
 	if err := strictDecoder.Decode(&strictCheck); err != nil {
-		slog.Warn("server.yml contains unrecognized fields (ignored)", "detail", err)
+		slog.Warn("merged config contains unrecognized fields (ignored)", "detail", err)
 	}
-
-	// Seek back and decode leniently so unknown fields never prevent startup
-	if _, err := file.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("failed to re-read config file: %w", err)
-	}
-
-	var cfg Config
-	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(encoded, cfg); err != nil {
+		return nil, fmt.Errorf("decode merged configuration: %w", err)
 	}
 
 	cfg.Server.Update.Branch = NormalizeUpdateBranch(cfg.Server.Update.Branch)
@@ -2840,8 +2891,154 @@ func Load(path string) (*Config, error) {
 
 	// Store path for reload
 	cfg.configPath = path
+	for key, file := range winners {
+		if file != path {
+			slog.Debug("configuration key overridden by drop-in", "key", key, "path", file)
+		}
+	}
+	warnings := cfg.ValidateAndApplyDefaults()
+	cfg.needsSave = len(warnings) > 0
+	for _, warning := range warnings {
+		slog.Warn("merged configuration validation warning", "field", warning.Field, "message", warning.Message)
+	}
 
-	return &cfg, nil
+	return cfg, nil
+}
+
+func yamlNodeFromConfig(path string) (*yaml.Node, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat config file %s: %w", path, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config file %s: %w", path, err)
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return nil, fmt.Errorf("parse config file %s: %w", path, err)
+	}
+	if len(document.Content) == 0 {
+		document.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	}
+	if err := validateConfigNode(document.Content[0], path, ""); err != nil {
+		return nil, err
+	}
+	if containsSensitiveConfigKey(document.Content[0]) && info.Mode().Perm()&0077 != 0 {
+		return nil, fmt.Errorf("config %s contains secret settings but is not owner-only (mode %04o)", path, info.Mode().Perm())
+	}
+	return &document, nil
+}
+
+func containsSensitiveConfigKey(node *yaml.Node) bool {
+	if node.Kind != yaml.MappingNode {
+		for _, child := range node.Content {
+			if containsSensitiveConfigKey(child) {
+				return true
+			}
+		}
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := strings.ToLower(strings.ReplaceAll(node.Content[i].Value, "-", "_"))
+		if strings.Contains(key, "password") || strings.Contains(key, "secret") || strings.Contains(key, "token") || strings.Contains(key, "private_key") || strings.Contains(key, "api_key") || strings.Contains(key, "encryption_key") || strings.Contains(key, "credential") {
+			return true
+		}
+		if containsSensitiveConfigKey(node.Content[i+1]) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateConfigNode(node *yaml.Node, file, path string) error {
+	if node.Tag == "!!null" {
+		return fmt.Errorf("config %s:%d key %q: null is not allowed", file, node.Line, path)
+	}
+	if node.Kind == yaml.MappingNode {
+		seen := make(map[string]bool)
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i]
+			name := key.Value
+			next := name
+			if path != "" {
+				next = path + "." + name
+			}
+			if seen[name] {
+				return fmt.Errorf("config %s:%d key %q: duplicate key", file, key.Line, next)
+			}
+			seen[name] = true
+			if err := validateConfigNode(node.Content[i+1], file, next); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, child := range node.Content {
+		if err := validateConfigNode(child, file, path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mergeConfigNodes(dst, src *yaml.Node, path, file string, winners map[string]string) {
+	if len(dst.Content) == 0 || len(src.Content) == 0 {
+		return
+	}
+	dm, sm := dst.Content[0], src.Content[0]
+	if dm.Kind != yaml.MappingNode || sm.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(sm.Content); i += 2 {
+		key, value := sm.Content[i], sm.Content[i+1]
+		full := key.Value
+		if path != "" {
+			full = path + "." + key.Value
+		}
+		found := -1
+		for j := 0; j+1 < len(dm.Content); j += 2 {
+			if dm.Content[j].Value == key.Value {
+				found = j
+				break
+			}
+		}
+		if found < 0 {
+			dm.Content = append(dm.Content, key, value)
+			markConfigWinners(value, full, file, winners)
+			continue
+		}
+		old := dm.Content[found+1]
+		if old.Kind == yaml.MappingNode && value.Kind == yaml.MappingNode {
+			mergeConfigNodes(&yaml.Node{Content: []*yaml.Node{old}}, &yaml.Node{Content: []*yaml.Node{value}}, full, file, winners)
+			continue
+		}
+		dm.Content[found+1] = value
+		markConfigWinners(value, full, file, winners)
+	}
+}
+
+func markConfigWinners(node *yaml.Node, path, file string, winners map[string]string) {
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i].Value
+			next := key
+			if path != "" {
+				next = path + "." + key
+			}
+			markConfigWinners(node.Content[i+1], next, file, winners)
+		}
+		return
+	}
+	winners[path] = file
+}
+
+func recordConfigSources(node *yaml.Node, path, file string, winners map[string]string, _ bool) error {
+	if len(node.Content) == 0 {
+		return nil
+	}
+	markConfigWinners(node.Content[0], path, file, winners)
+	return nil
 }
 
 // applyTorOverlay folds the root-level `tor:` overlay (AI.md PART 12 "Tor
@@ -3022,11 +3219,15 @@ func LoadOrCreate(path string) (*Config, bool, error) {
 	}
 
 	// If file doesn't exist, create default
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		cfg = DefaultConfig()
 		// Store path for reload
 		cfg.configPath = path
 		if err := cfg.Save(path); err != nil {
+			return nil, false, err
+		}
+		cfg, err = Load(path)
+		if err != nil {
 			return nil, false, err
 		}
 		return cfg, true, nil
@@ -3284,10 +3485,11 @@ func Initialize() (*Config, error) {
 	}
 	warnings := cfg.ValidateAndApplyDefaults()
 	LogValidationWarnings(warnings)
-	if created || len(warnings) > 0 {
+	if created || len(warnings) > 0 || cfg.needsSave {
 		if err := cfg.Save(configPath); err != nil {
 			return nil, fmt.Errorf("failed to persist initialized configuration: %w", err)
 		}
+		cfg.needsSave = false
 	}
 
 	normalizeHTTPSMode(cfg)

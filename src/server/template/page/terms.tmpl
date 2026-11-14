@@ -10,16 +10,16 @@
     </div>
     {{else}}
     <div class="page-content">
-        <p class="last-updated">{{t "terms.last_updated" .BuildDate}}</p>
+        <p class="last-updated">{{tf "terms.last_updated" "date" .BuildDate}}</p>
 
         <section class="terms-section">
             <h2>{{t "terms.acceptance_heading"}}</h2>
-            <p>{{t "terms.acceptance_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <p>{{tf "terms.acceptance_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
         </section>
 
         <section class="terms-section">
             <h2>{{t "terms.description_heading"}}</h2>
-            <p>{{t "terms.description_body" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <p>{{tf "terms.description_body" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
         </section>
 
         <section class="terms-section">
@@ -41,7 +41,7 @@
 
         <section class="terms-section">
             <h2>{{t "terms.intellectual_property_heading"}}</h2>
-            <p>{{t "terms.intellectual_property_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <p>{{tf "terms.intellectual_property_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
             <p>{{t "terms.intellectual_property_followup"}}</p>
         </section>
 
@@ -62,7 +62,7 @@
 
         <section class="terms-section">
             <h2>{{t "terms.limitation_heading"}}</h2>
-            <p>{{t "terms.limitation_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <p>{{tf "terms.limitation_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
         </section>
 
         <section class="terms-section">

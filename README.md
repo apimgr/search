@@ -328,7 +328,9 @@ Quick redirects with `!` prefix: `!g` Google, `!w` Wikipedia, `!gh` GitHub, `!yt
 
 ### Tor Integration
 
-Search auto-detects a running Tor daemon and enables the hidden service. Configuration in `server.yml`:
+When the Tor binary is available, Search starts and manages its own isolated Tor
+process for the hidden service; it does not use a system Tor daemon. The binary
+is discovered from `server.tor.binary` or `PATH`. Configuration in `server.yml`:
 
 ```yaml
 server:

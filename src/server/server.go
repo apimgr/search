@@ -88,6 +88,10 @@ type Server struct {
 	ownerManager      *owner.Manager
 	ownerFlashMu      sync.Mutex
 	ownerFlashes      map[string]ownerTokenFlash
+	feedQueriesMu     sync.RWMutex
+	feedQueries       []feedQuery
+	apiCaptchasMu     sync.Mutex
+	apiCaptchas       map[string]apiContactCaptcha
 	blocklistManager  *security.BlocklistManager
 	cveManager        *security.CVEManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
@@ -531,6 +535,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	s := &Server{
 		config:            cfg,
+		apiCaptchas:       make(map[string]apiContactCaptcha),
 		publicIPProviders: providers,
 		registry:          registry,
 		aggregator:        aggregator,
@@ -573,8 +578,12 @@ func newServer(cfg *config.Config, providers []string) *Server {
 		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath)
 	}
 
-	// Share contact delivery with the REST and GraphQL APIs.
+	// Share contact delivery and captcha validation with the REST API.
 	s.apiHandler.SetContactSubmitter(s)
+	s.apiHandler.SetContactCaptchaProvider(s)
+	s.apiHandler.SetSecurityContactSubmitter(s)
+	s.apiHandler.SetSecurityPagesProvider(s)
+	s.metrics.SetOwnerManager(ownerMgr)
 	if s.config.Server.ImageProxy.Enabled {
 		s.apiHandler.SetThumbnailRewriter(s.proxyImageURL)
 	}
@@ -1164,8 +1173,12 @@ func (s *Server) csrfProtect(h http.HandlerFunc) http.HandlerFunc {
 // setupRoutes sets up HTTP routes with middleware
 func (s *Server) setupRoutes() http.Handler {
 	r := chi.NewRouter()
+	r.Use(s.contentNegotiationMiddleware)
 	if s.metrics != nil {
 		r.Use(s.metrics.MetricsMiddleware)
+	}
+	if s.apiHandler != nil {
+		r.Use(s.apiHandler.ContentNegotiationMiddleware)
 	}
 	// Store router reference for debug route introspection per AI.md PART 6
 	s.router = r
@@ -1246,7 +1259,12 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// robots.txt, sitemap.xml, and security.txt (/.well-known/ only per RFC 9116)
 	r.HandleFunc("/robots.txt", s.handleRobotsTxt)
-	r.HandleFunc("/sitemap.xml", s.handleSitemap)
+	r.MethodFunc(http.MethodGet, "/sitemap.xml", s.handleSitemap)
+	r.MethodFunc(http.MethodHead, "/sitemap.xml", s.handleSitemap)
+	r.MethodFunc(http.MethodGet, "/feed.xml", s.handleAtomFeed)
+	r.MethodFunc(http.MethodHead, "/feed.xml", s.handleAtomFeed)
+	r.MethodFunc(http.MethodGet, "/rss.xml", s.handleRSSFeed)
+	r.MethodFunc(http.MethodHead, "/rss.xml", s.handleRSSFeed)
 	r.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
 	// Project's PGP public key per AI.md PART 11 "Public Pages" table
 	r.HandleFunc("/.well-known/pgp-key.asc", s.handlePGPKeyAsc)
@@ -1423,16 +1441,20 @@ func (s *Server) setupRoutes() http.Handler {
 
 // handleSitemap serves sitemap.xml per AI.md spec
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	// Cache for 1 day
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "public, max-age=300")
 
-	baseURL := s.getBaseURL(r)
 	lastMod := time.Now().Format("2006-01-02")
 
 	// XML header
-	writeResponseText(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-	writeResponseText(w, "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
+	var output strings.Builder
+	output.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	output.WriteString("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
 
 	// Define sitemap entries with priority and change frequency
 	type sitemapEntry struct {
@@ -1448,10 +1470,13 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/privacy", "0.3", "monthly"},
 		{"/server/dpo", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
+		{"/server/help/mcp", "0.5", "monthly"},
 		{"/server/terms", "0.3", "monthly"},
 		{"/server/docs/swagger", "0.4", "weekly"},
 		{"/server/docs/graphql", "0.4", "weekly"},
-		{"/server/healthz", "0.2", "always"},
+		{"/server/security", "0.4", "monthly"},
+		{"/server/security/policy", "0.4", "monthly"},
+		{"/server/security/thanks", "0.3", "yearly"},
 	}
 
 	// Add contact page if enabled
@@ -1459,17 +1484,24 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, sitemapEntry{"/server/contact", "0.4", "monthly"})
 	}
 
-	// Write each URL entry
+	// The sitemap only includes anonymous HTML pages allowed by robots.txt.
 	for _, entry := range entries {
-		writeResponseText(w, "  <url>\n")
-		writeResponseText(w, fmt.Sprintf("    <loc>%s%s</loc>\n", baseURL, entry.loc))
-		writeResponseText(w, fmt.Sprintf("    <lastmod>%s</lastmod>\n", lastMod))
-		writeResponseText(w, fmt.Sprintf("    <changefreq>%s</changefreq>\n", entry.changefreq))
-		writeResponseText(w, fmt.Sprintf("    <priority>%s</priority>\n", entry.priority))
-		writeResponseText(w, "  </url>\n")
+		if !sitemapRobotsAllows(entry.loc, s.config.Server.Web.Robots.Allow, s.config.Server.Web.Robots.Deny) {
+			continue
+		}
+		fmt.Fprint(&output, "  <url>\n")
+		fmt.Fprintf(&output, "    <loc>%s</loc>\n", xmlText(httputil.BuildURL(r, entry.loc)))
+		fmt.Fprintf(&output, "    <lastmod>%s</lastmod>\n", lastMod)
+		fmt.Fprintf(&output, "    <changefreq>%s</changefreq>\n", entry.changefreq)
+		fmt.Fprintf(&output, "    <priority>%s</priority>\n", entry.priority)
+		fmt.Fprint(&output, "  </url>\n")
 	}
 
-	writeResponseText(w, "</urlset>\n")
+	output.WriteString("</urlset>\n")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
+	if r.Method == http.MethodGet {
+		_, _ = w.Write([]byte(output.String()))
+	}
 }
 
 // handleSearch handles search requests
@@ -1544,6 +1576,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "search.error_title"), i18n.RequestString(r, "search.empty_query"))
 		return
 	}
+	s.recordFeedQuery(queryStr, time.Now().UTC())
 
 	// Check for bang commands
 	if s.config.Search.Bangs.Enabled {
@@ -1816,7 +1849,7 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 			if err := r.ParseMultipartForm(2 << 20); err != nil {
-				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), "Invalid QR customization form")
+				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.bad_request"))
 				return
 			}
 			if r.MultipartForm != nil {
@@ -1831,11 +1864,11 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 				logo, err = io.ReadAll(io.LimitReader(file, (1<<20)+1))
 				_ = file.Close()
 				if err != nil || len(logo) > 1<<20 || qr.ValidateLogo(logo) != nil {
-					s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), "QR logo must be a PNG or JPEG image no larger than 512 by 512 pixels and 1 MiB")
+					s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.bad_request"))
 					return
 				}
 			} else if !errors.Is(fileErr, http.ErrMissingFile) {
-				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), "Invalid QR logo upload")
+				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.bad_request"))
 				return
 			}
 		}
@@ -1876,7 +1909,7 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 		if config.IsTruthy(getOption("shorten_url")) {
 			code, shortErr := s.createQRShortlink(ctx, term)
 			if shortErr != nil {
-				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), shortErr.Error())
+				s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.bad_request"))
 				return
 			}
 			term = s.getBaseURL(r) + "/s/" + code
@@ -1894,7 +1927,7 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	answer, err := s.directManager.ProcessType(ctx, answerType, term)
 	if err != nil {
 		if answerType == direct.AnswerTypeQR {
-			s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), err.Error())
+			s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.bad_request"))
 			return
 		}
 		s.handleInternalError(w, r, "direct answer processing", err)

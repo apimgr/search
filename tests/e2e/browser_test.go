@@ -22,7 +22,6 @@ import (
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/chromedp/chromedp/kb"
 )
 
 // TestBrowserHomeSearchFlow drives the real JS-enhanced search box end to
@@ -432,8 +431,7 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 		}
 	}
 	runStage("create preferences",
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tools"),
 	)
 	runStage("store custom shortcut",
 		chromedp.SetValue(`#bang-shortcut`, "fixture", chromedp.ByQuery),
@@ -572,18 +570,16 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 			return nil
 		}),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.Click(`#copy-sync-prefs`, chromedp.ByQuery),
-		chromedp.Poll(`document.querySelector('#sync-url').value.length > 0`, nil, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.WaitVisible(`#sync-code`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("export preferences from source device: %v", err)
 	}
-	var syncURL string
-	if err := chromedp.Run(source, chromedp.Value(`#sync-url`, &syncURL, chromedp.ByQuery)); err != nil {
-		t.Fatalf("read exported preference URL: %v", err)
+	var syncCode string
+	if err := chromedp.Run(source, chromedp.Text(`#sync-code`, &syncCode, chromedp.ByQuery)); err != nil {
+		t.Fatalf("read exported preference code: %v", err)
 	}
-	if syncURL == "" {
-		t.Fatal("copy preferences did not populate the export URL")
+	if syncCode == "" {
+		t.Fatal("preferences page did not render the export code")
 	}
 
 	receiver := newBrowserContext(t)
@@ -593,13 +589,11 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	if err := chromedp.Run(receiver,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.SetValue(`#sync-paste`, syncURL, chromedp.ByQuery),
-		chromedp.Click(`#apply-sync-prefs`, chromedp.ByQuery),
+		chromedp.SetValue(`#sync-paste`, syncCode, chromedp.ByQuery),
+		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
 		chromedp.OuterHTML("html", &homepage),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#infinite-scroll').checked`, &infiniteScrollEnabled),
 	); err != nil {
 		t.Fatalf("import preferences on receiver device: %v", err)
@@ -1062,7 +1056,6 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.SetValue(`#lang`, "de", chromedp.ByQuery),
-		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
 		chromedp.SetValue(`#font-size`, "small", chromedp.ByQuery),
 		chromedp.SetValue(`#results-density`, "spacious", chromedp.ByQuery),
 		chromedp.SetValue(`#accent-color`, "#a1b2c3", chromedp.ByQuery),
@@ -1095,46 +1088,24 @@ func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
-	var firstValue, importedValue, savedCSS, exportedCSS string
+	var firstValue, importedValue, savedCSS string
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tools"),
 		chromedp.WaitVisible(`#custom-css`, chromedp.ByQuery),
 		chromedp.SetValue(`#custom-css`, `:root { --custom-css-fixture: "saved"; }`, chromedp.ByQuery),
 		chromedp.Click(`#save-custom-css`, chromedp.ByQuery),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &firstValue),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &savedCSS),
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.Evaluate(`(() => {
-			const OriginalBlob = window.Blob;
-			window.Blob = class extends OriginalBlob {
-				constructor(parts, options) {
-					super(parts, options);
-					window.__exportedPreferences = parts.join('');
-				}
-			};
-		})()`, nil),
-		chromedp.Click(`#export-prefs`, chromedp.ByQuery),
-		chromedp.Evaluate(`JSON.parse(window.__exportedPreferences).custom_css`, &exportedCSS),
-		chromedp.Evaluate(`(() => {
-			const payload = JSON.stringify({custom_css: ':root { --custom-css-fixture: "imported"; }'});
-			const file = new File([payload], 'preferences.json', {type: 'application/json'});
-			const transfer = new DataTransfer();
-			transfer.items.add(file);
-			const input = document.querySelector('#import-file');
-			input.files = transfer.files;
-			input.dispatchEvent(new Event('change', {bubbles: true}));
-			return true;
-		})()`, nil),
-		chromedp.Sleep(150*time.Millisecond),
+		chromedp.Navigate(site.URL+"/server/preferences/tools"),
+		chromedp.SetValue(`#custom-css`, `:root { --custom-css-fixture: "imported"; }`, chromedp.ByQuery),
+		chromedp.Click(`#save-custom-css`, chromedp.ByQuery),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &importedValue),
 	); err != nil {
 		t.Fatalf("custom CSS preference flow: %v", err)
 	}
-	if firstValue != `"saved"` || savedCSS != `"saved"` || exportedCSS != `:root { --custom-css-fixture: "saved"; }` || importedValue != `"imported"` {
-		t.Errorf("custom CSS values after save, reload, export, and import = %q, %q, %q, %q", firstValue, savedCSS, exportedCSS, importedValue)
+	if firstValue != `"saved"` || savedCSS != `"saved"` || importedValue != `"imported"` {
+		t.Errorf("custom CSS values after save, reload, and replacement = %q, %q, %q", firstValue, savedCSS, importedValue)
 	}
 	requireNoFailures(t, pf, "custom CSS preference save and import")
 }
@@ -1151,15 +1122,14 @@ func TestBrowserResetPreferencesRequiresConfirmationAndClearsLocalData(t *testin
 		network.SetCookie("search_widgets", "none").WithURL(site.URL),
 		network.SetCookie("search_widget_weather_units", "imperial").WithURL(site.URL),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => { localStorage.setItem('search_custom_css', '.fixture { color: red; }'); localStorage.setItem('search_history', '[{"query":"private fixture"}]'); localStorage.setItem('search_custom_bangs', '[{"name":"fixture"}]'); })()`, nil),
 	); err != nil {
 		t.Fatalf("prepare browser preference reset: %v", err)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`#reset-prefs`, chromedp.ByQuery), chromedp.WaitVisible(`#confirm-dialog[open]`, chromedp.ByQuery)); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Click(`#reset-prefs`, chromedp.ByQuery), chromedp.WaitVisible(`#reset-preferences:popover-open`, chromedp.ByQuery)); err != nil {
 		t.Fatalf("open preference reset confirmation: %v", err)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `#confirm-dialog [data-action="confirm"]`); err != nil {
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#reset-preferences button[type=submit]`); err != nil {
 		t.Fatalf("confirm browser preference reset: %v", err)
 	}
 	if err := chromedp.Run(ctx,
@@ -1180,8 +1150,7 @@ func TestBrowserOpenSearchCanBeCopiedFromPreferences(t *testing.T) {
 	pf := watchForFailures(ctx)
 	var copiedURL, displayedURL string
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-interface`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/tools"),
 		chromedp.SetValue(`#custom-engine-name`, "Fixture Search", chromedp.ByQuery),
 		chromedp.Evaluate(`Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: value => { window.__copiedOpenSearchURL = value; return Promise.resolve(); }}})`, nil),
 		chromedp.Click(`#copy-opensearch`, chromedp.ByQuery),
@@ -1206,23 +1175,6 @@ func TestBrowserEnginePreferencesPersistSelectionAndPriority(t *testing.T) {
 	if err := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Evaluate(`String(document.querySelector('#preferences-tab-general').getAttribute('aria-selected') === 'true' && document.querySelector('#engine-preference-list').closest('[data-preference-tab]').hidden)`, &state),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			if state != "true" {
-				return fmt.Errorf("preferences tabs did not start on General with Engines hidden: %s", state)
-			}
-			return nil
-		}),
-		chromedp.Click(`#preferences-tab-general`, chromedp.ByQuery),
-		chromedp.KeyEvent(kb.ArrowRight),
-		chromedp.Evaluate(`String(document.querySelector('#preferences-tab-interface').getAttribute('aria-selected') === 'true')`, &state),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			if state != "true" {
-				return fmt.Errorf("right-arrow did not select the next preferences tab: %s", state)
-			}
-			return nil
-		}),
-		chromedp.Click(`#preferences-tab-engines`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#engine-preference-list`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => {
 			const list = document.querySelector('#engine-preference-list');
@@ -1263,7 +1215,6 @@ func TestBrowserEnginePreferencesPersistSelectionAndPriority(t *testing.T) {
 		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-engines`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#engine-preference-list`, chromedp.ByQuery),
 		chromedp.Evaluate(`JSON.stringify({order: document.querySelector('#search-pref-engine-order').value, selected: Array.from(document.querySelectorAll('input[name="search_pref_engine"][value$=":general"]:checked')).map(input => input.value.split(':')[0])})`, &state),
 	); err != nil {
@@ -2107,39 +2058,22 @@ func TestBrowserInstantAnswerControls(t *testing.T) {
 	requireNoFailures(t, pf, "instant-answer calculator, color, password, random, and QR controls")
 }
 
-func TestBrowserSearchHistoryImportRespectsOptOut(t *testing.T) {
+func TestBrowserSearchHistoryOptOutClearsStoredHistory(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	var stored string
 	if err := chromedp.Run(ctx,
+		network.SetCookie("search_pref_save_history", "0").WithURL(site.URL),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.Click(`#preferences-tab-data`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#export-prefs`, chromedp.ByQuery),
-		chromedp.Evaluate(`(() => {
-			const payload = JSON.stringify({preferences: {save_history: false}, search_history: [{query: "must be removed", category: "general"}]});
-			const file = new File([payload], "preferences.json", {type: "application/json"});
-			const transfer = new DataTransfer();
-			transfer.items.add(file);
-			const input = document.querySelector("#import-file");
-			input.files = transfer.files;
-			input.dispatchEvent(new Event("change", {bubbles: true}));
-			return true;
-		})()`, nil),
-		chromedp.Sleep(150*time.Millisecond),
-		chromedp.Evaluate(`JSON.stringify({saveHistory: document.cookie.match(/(?:^|;\s*)search_pref_save_history=([^;]*)/)?.[1] === '1', history: localStorage.getItem('search_history')})`, &stored),
+		chromedp.Evaluate(`localStorage.setItem('search_history', '[{"query":"must be removed","category":"general"}]')`, nil),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.Evaluate(`localStorage.getItem('search_history') || ''`, &stored),
 	); err != nil {
-		t.Fatalf("import preferences with history disabled: %v", err)
+		t.Fatalf("load homepage with history disabled: %v", err)
 	}
-	var importedState struct {
-		SaveHistory bool   `json:"saveHistory"`
-		History     string `json:"history"`
+	if stored != "" {
+		t.Fatalf("stored history after opt-out = %q, want empty", stored)
 	}
-	if err := json.Unmarshal([]byte(stored), &importedState); err != nil {
-		t.Fatalf("decode imported local state: %v", err)
-	}
-	if importedState.SaveHistory || importedState.History != "" {
-		t.Fatalf("imported local state = %s, want history disabled and cleared", stored)
-	}
-	requireNoFailures(t, pf, "history import respects local opt-out")
+	requireNoFailures(t, pf, "history opt-out clears stored queries")
 }

@@ -699,10 +699,6 @@ func initConfig() {
 		}
 	}
 
-	// Per AI.md PART 8: apply --color / NO_COLOR priority chain.
-	// Priority: --color flag → config output.color → NO_COLOR env → TTY auto-detect.
-	applyColorMode()
-
 	if cfgFile != "" {
 		// Resolve config path (handles relative/absolute paths and extensions).
 		resolvedPath, err := path.ResolveConfigPath(cfgFile)
@@ -767,6 +763,10 @@ func initConfig() {
 	if err := clicfg.ReadInConfig(); err != nil {
 		slog.Debug("failed to read CLI configuration", "error", err)
 	}
+
+	// Apply color after loading cli.yml so config output.color participates in
+	// the AI.md PART 8 priority chain: --color, config, NO_COLOR, then TTY.
+	applyColorMode()
 
 	// Per AI.md PART 32: apply --debug/SEARCH_DEBUG priority chain.
 	// Debug mode enables verbose request/response tracing and TUI resize logging.

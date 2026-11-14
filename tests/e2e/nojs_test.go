@@ -389,7 +389,7 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	var status string
 	var managementHidden bool
 	primary = createAPIAlertOwner(t, site, "owner token nojs fixture")
-	ctx := newBrowserContext(t)
+	ctx := newBrowserContextWithTimeout(t, 2*time.Minute)
 	if err := chromedp.Run(ctx, emulation.SetScriptExecutionDisabled(true)); err != nil {
 		t.Fatalf("disable script execution: %v", err)
 	}
@@ -461,7 +461,10 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if updated != "nojs-renamed" {
 		t.Fatalf("linked token name after update = %q", updated)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/rotate"] button`); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Click(`.owner-token-item button[popovertarget^="rotate-token-"]`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open linked-token rotation confirmation without JavaScript: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/rotate"] button[type=submit]`); err != nil {
 		t.Fatalf("submit linked-token rotation without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
@@ -587,6 +590,7 @@ func createAPIAlertOwner(t *testing.T, site *httptest.Server, query string) stri
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("create API alert owner: %v", err)
@@ -742,7 +746,7 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	var enginePreferencesState string
 	var engineExpectedFirst string
 	var videoPreviewsEnabled bool
-	ctx := newBrowserContext(t)
+	ctx := newBrowserContextWithTimeout(t, 2*time.Minute)
 	if err := chromedp.Run(ctx,
 		emulation.SetScriptExecutionDisabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
@@ -801,9 +805,11 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	if len(enginePreferences.Selected) != 1 || len(enginePreferences.Order) == 0 || enginePreferences.Order[0] != engineExpectedFirst {
 		t.Errorf("no-JS engine selection/order did not persist: %#v", enginePreferences)
 	}
+	toolsResponse, toolsHTML := newSession(t).get("/server/preferences/tools")
+	requireStatus(t, toolsResponse, http.StatusOK)
 	for _, marker := range []string{`id="custom-css"`, `id="save-custom-css"`, `id="clear-custom-css"`} {
-		if !strings.Contains(preferencesHTML, marker) {
-			t.Errorf("no-JS preferences page omitted custom CSS control %q", marker)
+		if !strings.Contains(toolsHTML, marker) {
+			t.Errorf("no-JS preferences tools page omitted custom CSS control %q", marker)
 		}
 	}
 }
@@ -824,7 +830,10 @@ func TestNoJSPreferencesResetUsesNativePost(t *testing.T) {
 	); err != nil {
 		t.Fatalf("prepare no-JS preference reset: %v", err)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `#reset-prefs`); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Click(`#reset-prefs`, chromedp.ByQuery)); err != nil {
+		t.Fatalf("open no-JS preference reset confirmation: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#reset-preferences button[type=submit]`); err != nil {
 		t.Fatalf("submit no-JS preference reset: %v", err)
 	}
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.cookie`, &cookies)); err != nil {
@@ -840,24 +849,27 @@ func TestNoJSPreferencesResetUsesNativePost(t *testing.T) {
 func TestNoJSCookieConsentSettingsSaveFromPreferences(t *testing.T) {
 	site := newTestSite(t)
 	var preferencesHTML string
-	ctx := newBrowserContext(t)
+	ctx := newBrowserContextWithTimeout(t, 2*time.Minute)
 	if err := chromedp.Run(ctx,
 		emulation.SetScriptExecutionDisabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.WaitVisible(`#cookie-preferences-form`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.Evaluate(`document.querySelector('#consent-preferences').checked = true`, nil),
 		chromedp.Evaluate(`document.querySelector('#consent-analytics').checked = false`, nil),
-		chromedp.Click(`#save-cookie-preferences`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#cookie-preferences-form`, chromedp.ByQuery),
-		chromedp.OuterHTML("html", &preferencesHTML),
 	); err != nil {
-		t.Fatalf("no-JS cookie consent settings save: %v", err)
+		t.Fatalf("prepare no-JS cookie consent settings: %v", err)
 	}
-	if !strings.Contains(preferencesHTML, `id="consent-preferences" name="preferences" value="true" role="switch" aria-checked="true" checked`) {
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#save-preferences`); err != nil {
+		t.Fatalf("submit no-JS cookie consent settings: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/server/preferences"), chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery), chromedp.OuterHTML("html", &preferencesHTML)); err != nil {
+		t.Fatalf("read no-JS cookie consent settings: %v", err)
+	}
+	if !strings.Contains(preferencesHTML, `id="consent-preferences" name="consent_preferences" value="on" form="general-settings" role="switch" aria-checked="true" checked`) {
 		t.Errorf("saved preference-cookie consent is not checked: %s", snippet(preferencesHTML, `id="consent-preferences"`))
 	}
-	if !strings.Contains(preferencesHTML, `id="consent-analytics" name="analytics" value="true" role="switch" aria-checked="false"`) {
+	if !strings.Contains(preferencesHTML, `id="consent-analytics" name="consent_analytics" value="on" form="general-settings" role="switch" aria-checked="false"`) {
 		t.Errorf("saved analytics consent is not unchecked: %s", snippet(preferencesHTML, `id="consent-analytics"`))
 	}
 }
@@ -888,8 +900,13 @@ func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.SetValue(`#sync-paste`, code, chromedp.ByQuery),
-		chromedp.Click(`#apply-sync-prefs`, chromedp.ByQuery),
-		chromedp.WaitVisible(`body`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare no-JS cross-device preference import: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#save-preferences`); err != nil {
+		t.Fatalf("submit no-JS cross-device preference import: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.OuterHTML("html", &homepage),
 		chromedp.Navigate(site.URL+"/server/preferences"),

@@ -58,10 +58,10 @@
     </div>
     {{else if .Results}}
     <div class="search-info">
-        <span class="result-count">{{if eq .TotalResults 1}}{{t "search.result_count_one" .TotalResults}}{{else}}{{t "search.result_count_other" .TotalResults}}{{end}}</span>
+        <span class="result-count">{{if eq .TotalResults 1}}{{tf "search.result_count_one" "count" .TotalResults}}{{else}}{{tf "search.result_count_other" "count" .TotalResults}}{{end}}</span>
         <span class="search-info-sep">·</span>
         {{if .Engines}}
-        <span class="search-engines">{{if eq (len .Engines) 1}}{{t "search.engines_used_one" (len .Engines) (join .Engines ", ")}}{{else}}{{t "search.engines_used_other" (len .Engines) (join .Engines ", ")}}{{end}}</span>
+        <span class="search-engines">{{if eq (len .Engines) 1}}{{tf "search.engines_used_one" "count" (len .Engines) "engines" (join .Engines ", ")}}{{else}}{{tf "search.engines_used_other" "count" (len .Engines) "engines" (join .Engines ", ")}}{{end}}</span>
         <span class="search-info-sep">·</span>
         {{end}}
         <span class="search-time">{{humanDuration .SearchTime}}</span>
@@ -127,7 +127,7 @@
                 <div class="video-meta">
                     <span class="video-engine">{{.Engine}}</span>
                     {{if .ViewCount}}
-                    <span class="video-views">{{t "search.views_count" (formatViewCount .ViewCount)}}</span>
+                    <span class="video-views">{{tf "search.views_count" "count" (formatViewCount .ViewCount)}}</span>
                     {{end}}
                     {{if .Author}}
                     <span class="video-author">{{.Author}}</span>
@@ -199,7 +199,7 @@
     {{else}}
     <div class="results-list" id="results-container" aria-live="polite"></div>
     <div class="no-results">
-        <p>{{t "search.no_results_for" .Query}}</p>
+        <p>{{tf "search.no_results_for" "query" .Query}}</p>
         <p class="no-results-hint">{{t "search.no_results_hint"}}</p>
     </div>
     {{end}}

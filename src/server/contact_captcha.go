@@ -2,16 +2,87 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
 )
+
+type apiContactCaptcha struct {
+	answer    string
+	expiresAt time.Time
+}
+
+func (s *Server) NewContactChallenge(r *http.Request) (string, string) {
+	mode, _, _ := s.configuredContactCaptcha()
+	if mode != "simple" && !isOnionRequest(s.config, r) {
+		return "", ""
+	}
+	a, errA := rand.Int(rand.Reader, big.NewInt(10))
+	b, errB := rand.Int(rand.Reader, big.NewInt(10))
+	idBytes := make([]byte, 16)
+	if errA != nil || errB != nil {
+		return "", ""
+	}
+	if _, err := rand.Read(idBytes); err != nil {
+		return "", ""
+	}
+	aInt, bInt := int(a.Int64())+1, int(b.Int64())+1
+	id := hex.EncodeToString(idBytes)
+	s.apiCaptchasMu.Lock()
+	if s.apiCaptchas == nil {
+		s.apiCaptchas = make(map[string]apiContactCaptcha)
+	}
+	now := time.Now()
+	for key, challenge := range s.apiCaptchas {
+		if now.After(challenge.expiresAt) {
+			delete(s.apiCaptchas, key)
+		}
+	}
+	if len(s.apiCaptchas) >= 500 {
+		var oldestID string
+		var oldestExpiry time.Time
+		for key, challenge := range s.apiCaptchas {
+			if oldestID == "" || challenge.expiresAt.Before(oldestExpiry) {
+				oldestID, oldestExpiry = key, challenge.expiresAt
+			}
+		}
+		delete(s.apiCaptchas, oldestID)
+	}
+	s.apiCaptchas[id] = apiContactCaptcha{answer: strconv.Itoa(aInt + bInt), expiresAt: now.Add(10 * time.Minute)}
+	s.apiCaptchasMu.Unlock()
+	return id, fmt.Sprintf("What is %d + %d?", aInt, bInt)
+}
+
+func (s *Server) VerifyContactChallenge(r *http.Request, id, answer string) bool {
+	mode, siteKey, secretKey := s.configuredContactCaptcha()
+	if mode != "simple" && !isOnionRequest(s.config, r) {
+		if (mode != "recaptcha" && mode != "hcaptcha") || siteKey == "" || secretKey == "" || strings.TrimSpace(answer) == "" {
+			return false
+		}
+		verifier := newContactCaptchaVerifier(nil, "https://www.google.com/recaptcha/api/siteverify", "https://api.hcaptcha.com/siteverify")
+		return verifier.verify(r.Context(), mode, secretKey, answer, getClientIPSimple(r))
+	}
+	s.apiCaptchasMu.Lock()
+	challenge, ok := s.apiCaptchas[id]
+	delete(s.apiCaptchas, id)
+	s.apiCaptchasMu.Unlock()
+	if !ok || time.Now().After(challenge.expiresAt) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(challenge.answer), []byte(strings.TrimSpace(answer))) == 1
+}
 
 const maxCaptchaResponseBytes = 16 << 10
 

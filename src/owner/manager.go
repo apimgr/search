@@ -203,6 +203,31 @@ func (m *Manager) List(ctx context.Context, identity Identity) (items []Token, e
 	return items, rows.Err()
 }
 
+func (m *Manager) ActiveCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := m.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM `+m.table+` WHERE active = 1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) GROUP BY kind`, m.clock().Unix())
+	if err != nil {
+		return nil, err
+	}
+	counts := map[string]int{"primary": 0, "linked": 0}
+	for rows.Next() {
+		var kind string
+		var count int
+		if err := rows.Scan(&kind, &count); err != nil {
+			return nil, err
+		}
+		if kind == "primary" || kind == "linked" {
+			counts[kind] = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return counts, nil
+}
+
 func (m *Manager) Reveal(ctx context.Context, identity Identity, tokenID int64) (string, error) {
 	if identity.Kind != "primary" {
 		return "", ErrForbidden

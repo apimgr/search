@@ -310,6 +310,9 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	if err := ensureColumn(ctx, db, prefix+"security_reports", "last_status_access_date", "TEXT"); err != nil {
 		return fmt.Errorf("add security report status access column: %w", err)
 	}
+	if err := ensureColumn(ctx, db, prefix+"security_reports", "credit_handle", "TEXT"); err != nil {
+		return fmt.Errorf("add security report credit handle column: %w", err)
+	}
 	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_search_alerts_owner ON `+prefix+`search_alerts(owner_id)`); err != nil {
 		return fmt.Errorf("create search alert owner index: %w", err)
 	}

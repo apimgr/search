@@ -89,6 +89,30 @@ type ContactSubmitter interface {
 	SubmitContact(context.Context, ContactMessage) error
 }
 
+type ContactCaptchaProvider interface {
+	NewContactChallenge(*http.Request) (string, string)
+	VerifyContactChallenge(*http.Request, string, string) bool
+}
+
+type SecurityContactMessage struct {
+	SecurityID, Name, Email, ResearcherGPG, AffectedComponent, AffectedEndpoint string
+	Severity, Summary, StepsToReproduce, Impact, SuggestedFix                   string
+	CVERequested, AgreedToDisclosure                                            bool
+	DisclosureDays                                                              int
+	CreditPreference, CreditHandle                                              string
+}
+
+type SecurityContactSubmitter interface {
+	ValidContactSecurityID(*http.Request, string) bool
+	SubmitSecurityContact(*http.Request, SecurityContactMessage) (string, error)
+}
+
+type SecurityPagesProvider interface {
+	SecurityOverview(*http.Request) interface{}
+	SecurityPolicy(*http.Request) interface{}
+	SecurityThanks(context.Context) (interface{}, error)
+}
+
 // Handler handles API requests
 type Handler struct {
 	config          *config.Config
@@ -107,6 +131,9 @@ type Handler struct {
 	healthMetrics     HealthMetrics
 	healthProvider    HealthProvider
 	contactSubmitter  ContactSubmitter
+	contactCaptcha    ContactCaptchaProvider
+	securityContact   SecurityContactSubmitter
+	securityPages     SecurityPagesProvider
 	alertManager      *alert.Manager
 	ownerManager      *owner.Manager
 	apiRoutes         http.Handler
@@ -155,6 +182,18 @@ func (h *Handler) SetHealthProvider(provider HealthProvider) {
 
 func (h *Handler) SetContactSubmitter(submitter ContactSubmitter) {
 	h.contactSubmitter = submitter
+}
+
+func (h *Handler) SetContactCaptchaProvider(provider ContactCaptchaProvider) {
+	h.contactCaptcha = provider
+}
+
+func (h *Handler) SetSecurityContactSubmitter(submitter SecurityContactSubmitter) {
+	h.securityContact = submitter
+}
+
+func (h *Handler) SetSecurityPagesProvider(provider SecurityPagesProvider) {
+	h.securityPages = provider
 }
 
 // SetAuditLogger sets the audit logger for the API handler
@@ -250,7 +289,6 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get(APIPrefix+"/server/healthz.txt", h.handleHealthz)
 	r.Get("/api/healthz", h.handleHealthz)
 	r.Get(APIPrefix+"/info", h.handleInfo)
-	// Per AI.md PART 14
 	r.Get(APIPrefix+"/info.txt", h.handleInfo)
 
 	// Search
@@ -288,6 +326,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get(APIPrefix+"/server/terms", h.handleServerTerms)
 	r.Get(APIPrefix+"/server/contact", h.handleServerContact)
 	r.Post(APIPrefix+"/server/contact", h.handleServerContact)
+	r.Get(APIPrefix+"/server/security", h.handleServerSecurity)
+	r.Get(APIPrefix+"/server/security/policy", h.handleServerSecurityPolicy)
+	r.Get(APIPrefix+"/server/security/thanks", h.handleServerSecurityThanks)
+	r.Get(APIPrefix+"/server/auth", h.handleAuthCheck)
 	r.Get(APIPrefix+"/server/preferences", h.handlePreferences)
 	r.Post(APIPrefix+"/server/preferences", h.handlePreferences)
 	r.Get(APIPrefix+"/server/preferences/export", h.handleServerPreferencesExport)
@@ -324,6 +366,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	// Lookup is public (it only exposes the requester's own or an explicitly
 	// supplied address); presets live in server.yml and are operator-gated.
 	r.Get(APIPrefix+"/server/geoip/ips", h.handleGeoIPLookup)
+	r.Get(APIPrefix+"/server/geoip/ips.txt", h.handleGeoIPLookup)
 	r.Get(APIPrefix+"/server/geoip/ips/{ip}", h.handleGeoIPLookup)
 	r.Get(APIPrefix+"/server/geoip/presets", h.requireOperator(h.handleGeoIPPresets))
 	r.Post(APIPrefix+"/server/geoip/presets", h.requireOperator(h.handleGeoIPPresetSave))
@@ -901,7 +944,7 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 		h.jsonResponse(w, http.StatusMethodNotAllowed, &APIResponse{
 			OK:      false,
 			Error:   "METHOD_NOT_ALLOWED",
-			Message: "Only GET method allowed",
+			Message: i18n.RequestString(r, "errors.method_not_allowed"),
 		})
 		return
 	}
@@ -2434,19 +2477,61 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 // GET: returns contact form availability and config.
 // POST: submits a contact message (JSON body); same validation as web form.
 func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
-	accept := r.Header.Get("Accept")
-	wantsJSON := strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/html")
 	contactEnabled := h.config.Server.Pages.Contact.Enabled &&
 		(h.config.Server.Contact.General.Email != "" || h.config.Server.Contact.Admin.Email != "" || notify.HasConfiguredWebhook(h.config.Server.Contact, "general"))
 
 	if r.Method == http.MethodGet {
-		if !wantsJSON {
-			http.Redirect(w, r, "/server/contact", http.StatusSeeOther)
-			return
+		cfg := h.config.Get()
+		abuseEmail := cfg.Contact.Abuse.Email
+		if abuseEmail == "" {
+			abuseEmail = cfg.Contact.General.Email
+		}
+		fields := []map[string]interface{}{
+			{"name": "name", "type": "text", "required": true, "max_length": 100},
+			{"name": "email", "type": "email", "required": true, "max_length": 254},
+			{"name": "captcha", "type": "captcha", "required": true, "max_length": nil},
+		}
+		securityID := strings.TrimSpace(r.URL.Query().Get("security_id"))
+		securityMode := securityID != "" && h.securityContact != nil && h.securityContact.ValidContactSecurityID(r, securityID)
+		if securityMode {
+			fields = append(fields,
+				map[string]interface{}{"name": "researcher_gpg", "type": "text", "required": false, "max_length": 16384, "max_length_when": []map[string]interface{}{{"prefix": "https://", "max_length": 2048}}},
+				map[string]interface{}{"name": "affected_component", "type": "text", "required": true, "max_length": 255},
+				map[string]interface{}{"name": "affected_endpoint", "type": "text", "required": false, "max_length": 2048},
+				map[string]interface{}{"name": "severity", "type": "enum", "required": true, "max_length": nil, "values": []string{"critical", "high", "medium", "low", "informational"}},
+				map[string]interface{}{"name": "summary", "type": "text", "required": true, "max_length": 200},
+				map[string]interface{}{"name": "steps_to_reproduce", "type": "textarea", "required": true, "max_length": 10000},
+				map[string]interface{}{"name": "impact", "type": "textarea", "required": true, "max_length": 5000},
+				map[string]interface{}{"name": "suggested_fix", "type": "textarea", "required": false, "max_length": 5000},
+				map[string]interface{}{"name": "cve_requested", "type": "checkbox", "required": false, "max_length": nil},
+				map[string]interface{}{"name": "disclosure_days", "type": "number", "required": false, "max_length": nil},
+				map[string]interface{}{"name": "credit_preference", "type": "enum", "required": true, "max_length": nil, "values": []string{"real_name", "handle", "no", "anonymous"}},
+				map[string]interface{}{"name": "credit_handle", "type": "text", "required": false, "max_length": 100, "required_when": map[string]string{"field": "credit_preference", "equals": "handle"}},
+				map[string]interface{}{"name": "agreed_to_disclosure", "type": "checkbox", "required": true, "max_length": nil},
+			)
+		} else {
+			fields = append(fields, map[string]interface{}{"name": "subject", "type": "text", "required": true, "max_length": 200}, map[string]interface{}{"name": "message", "type": "textarea", "required": true, "max_length": 5000})
+		}
+		captcha := map[string]interface{}{"provider": "simple"}
+		if strings.EqualFold(cfg.Pages.Contact.Captcha, "recaptcha") || strings.EqualFold(cfg.Pages.Contact.Captcha, "hcaptcha") {
+			captcha = map[string]interface{}{"provider": strings.ToLower(cfg.Pages.Contact.Captcha), "site_key": cfg.Pages.Contact.CaptchaSiteKey}
+			if h.contactCaptcha != nil {
+				if id, question := h.contactCaptcha.NewContactChallenge(r); id != "" {
+					captcha["challenge_id"], captcha["question"] = id, question
+				}
+			}
+		} else if h.contactCaptcha != nil {
+			id, question := h.contactCaptcha.NewContactChallenge(r)
+			captcha["challenge_id"] = id
+			captcha["question"] = question
 		}
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			OK:   true,
-			Data: map[string]interface{}{"enabled": contactEnabled, "title": "Contact"},
+			OK: true,
+			Data: map[string]interface{}{
+				"enabled": contactEnabled, "title": "Contact", "fields": fields, "captcha": captcha,
+				"security_url": httputil.BuildURL(r, "/server/security"), "abuse_email": abuseEmail,
+				"security_mode": securityMode,
+			},
 		})
 		return
 	}
@@ -2460,12 +2545,28 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name    string `json:"name"`
-		Email   string `json:"email"`
-		Subject string `json:"subject"`
-		Message string `json:"message"`
+		Name               string `json:"name"`
+		Email              string `json:"email"`
+		Subject            string `json:"subject"`
+		Message            string `json:"message"`
+		CaptchaID          string `json:"captcha_id"`
+		CaptchaAnswer      string `json:"captcha_answer"`
+		SecurityID         string `json:"security_id"`
+		ResearcherGPG      string `json:"researcher_gpg"`
+		AffectedComponent  string `json:"affected_component"`
+		AffectedEndpoint   string `json:"affected_endpoint"`
+		Severity           string `json:"severity"`
+		Summary            string `json:"summary"`
+		StepsToReproduce   string `json:"steps_to_reproduce"`
+		Impact             string `json:"impact"`
+		SuggestedFix       string `json:"suggested_fix"`
+		CVERequested       bool   `json:"cve_requested"`
+		DisclosureDays     int    `json:"disclosure_days"`
+		CreditPreference   string `json:"credit_preference"`
+		CreditHandle       string `json:"credit_handle"`
+		AgreedToDisclosure bool   `json:"agreed_to_disclosure"`
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
 		return
@@ -2474,9 +2575,114 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 	body.Email = strings.TrimSpace(body.Email)
 	body.Subject = strings.TrimSpace(body.Subject)
 	body.Message = strings.TrimSpace(body.Message)
+	body.SecurityID = strings.TrimSpace(body.SecurityID)
+	body.ResearcherGPG = strings.TrimSpace(body.ResearcherGPG)
+	body.AffectedComponent = strings.TrimSpace(body.AffectedComponent)
+	body.AffectedEndpoint = strings.TrimSpace(body.AffectedEndpoint)
+	body.Severity = strings.ToLower(strings.TrimSpace(body.Severity))
+	body.Summary = strings.TrimSpace(body.Summary)
+	body.StepsToReproduce = strings.TrimSpace(body.StepsToReproduce)
+	body.Impact = strings.TrimSpace(body.Impact)
+	body.SuggestedFix = strings.TrimSpace(body.SuggestedFix)
+	body.CreditPreference = strings.ToLower(strings.TrimSpace(body.CreditPreference))
+	body.CreditHandle = strings.TrimSpace(body.CreditHandle)
+	if h.contactCaptcha == nil || !h.contactCaptcha.VerifyContactChallenge(r, body.CaptchaID, body.CaptchaAnswer) {
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Captcha challenge is invalid or expired", Details: map[string]interface{}{"field": "captcha", "rule": "invalid"}})
+		return
+	}
+	securityMode := body.SecurityID != "" && h.securityContact != nil && h.securityContact.ValidContactSecurityID(r, body.SecurityID)
 	address, err := mail.ParseAddress(body.Email)
-	if body.Name == "" || err != nil || address.Address != body.Email || body.Subject == "" || body.Message == "" || len(body.Name) > 200 || len(body.Subject) > 300 || len(body.Message) > 10000 {
-		h.writeError(w, "BAD_REQUEST", "Name, valid email, subject, and message are required", http.StatusBadRequest)
+	field, max := "", 0
+	limits := []struct {
+		name, value string
+		max         int
+	}{{"name", body.Name, 100}, {"email", body.Email, 254}}
+	if securityMode {
+		gpgMax := 16384
+		if strings.HasPrefix(strings.ToLower(body.ResearcherGPG), "https://") {
+			gpgMax = 2048
+		}
+		limits = append(limits,
+			struct {
+				name, value string
+				max         int
+			}{"researcher_gpg", body.ResearcherGPG, gpgMax},
+			struct {
+				name, value string
+				max         int
+			}{"affected_component", body.AffectedComponent, 255},
+			struct {
+				name, value string
+				max         int
+			}{"affected_endpoint", body.AffectedEndpoint, 2048},
+			struct {
+				name, value string
+				max         int
+			}{"summary", body.Summary, 200},
+			struct {
+				name, value string
+				max         int
+			}{"steps_to_reproduce", body.StepsToReproduce, 10000},
+			struct {
+				name, value string
+				max         int
+			}{"impact", body.Impact, 5000},
+			struct {
+				name, value string
+				max         int
+			}{"suggested_fix", body.SuggestedFix, 5000},
+			struct {
+				name, value string
+				max         int
+			}{"credit_handle", body.CreditHandle, 100},
+		)
+	} else {
+		limits = append(limits, struct {
+			name, value string
+			max         int
+		}{"subject", body.Subject, 200}, struct {
+			name, value string
+			max         int
+		}{"message", body.Message, 5000})
+	}
+	for _, item := range limits {
+		if utf8.RuneCountInString(item.value) > item.max {
+			field, max = item.name, item.max
+			break
+		}
+	}
+	if field != "" {
+		rule := "max_length"
+		if field == "researcher_gpg" && strings.HasPrefix(strings.ToLower(body.ResearcherGPG), "https://") {
+			rule = "url_max_length"
+		}
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Field exceeds maximum length", Details: map[string]interface{}{"field": field, "rule": rule, "max_length": max}})
+		return
+	}
+	if body.Name == "" || err != nil || address.Address != body.Email || (!securityMode && (body.Subject == "" || body.Message == "")) {
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "A required contact field is invalid", Details: map[string]interface{}{"field": "contact", "rule": "required_or_format"}})
+		return
+	}
+	if securityMode && body.CreditPreference == "handle" && body.CreditHandle == "" {
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Credit handle is required for handle attribution", Details: map[string]interface{}{"field": "credit_handle", "rule": "required"}})
+		return
+	}
+	if securityMode {
+		validSeverity := map[string]bool{"critical": true, "high": true, "medium": true, "low": true, "informational": true}
+		validCredit := map[string]bool{"real_name": true, "handle": true, "no": true, "anonymous": true}
+		if !validSeverity[body.Severity] || !validCredit[body.CreditPreference] || body.AffectedComponent == "" || body.Summary == "" || body.StepsToReproduce == "" || body.Impact == "" || !body.AgreedToDisclosure || body.DisclosureDays < 0 {
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "A required security report field is invalid", Details: map[string]interface{}{"field": "security_report", "rule": "required_or_format"}})
+			return
+		}
+		if body.DisclosureDays == 0 {
+			body.DisclosureDays = 90
+		}
+		trackingID, submitErr := h.securityContact.SubmitSecurityContact(r, SecurityContactMessage{SecurityID: body.SecurityID, Name: body.Name, Email: address.Address, ResearcherGPG: body.ResearcherGPG, AffectedComponent: body.AffectedComponent, AffectedEndpoint: body.AffectedEndpoint, Severity: body.Severity, Summary: body.Summary, StepsToReproduce: body.StepsToReproduce, Impact: body.Impact, SuggestedFix: body.SuggestedFix, CVERequested: body.CVERequested, DisclosureDays: body.DisclosureDays, CreditPreference: body.CreditPreference, CreditHandle: body.CreditHandle, AgreedToDisclosure: body.AgreedToDisclosure})
+		if submitErr != nil {
+			h.writeError(w, "DELIVERY_UNAVAILABLE", "Security report could not be submitted", http.StatusServiceUnavailable)
+			return
+		}
+		h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"tracking_id": trackingID}})
 		return
 	}
 	if h.contactSubmitter == nil {
@@ -2488,6 +2694,72 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"status": "received"}})
+}
+
+func (h *Handler) handleServerSecurity(w http.ResponseWriter, r *http.Request) {
+	if h.securityPages == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Security page unavailable", "Security page data is not initialized")
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.securityPages.SecurityOverview(r), Meta: &APIMeta{Version: APIVersion}})
+}
+
+func (h *Handler) handleServerSecurityPolicy(w http.ResponseWriter, r *http.Request) {
+	if h.securityPages == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Security policy unavailable", "Security page data is not initialized")
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.securityPages.SecurityPolicy(r), Meta: &APIMeta{Version: APIVersion}})
+}
+
+func (h *Handler) handleServerSecurityThanks(w http.ResponseWriter, r *http.Request) {
+	if h.securityPages == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Security acknowledgments unavailable", "Security page data is not initialized")
+		return
+	}
+	data, err := h.securityPages.SecurityThanks(r.Context())
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, "Security acknowledgments unavailable", "Security acknowledgment data could not be loaded")
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: data, Meta: &APIMeta{Version: APIVersion}})
+}
+
+func (h *Handler) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
+	kind := ""
+	if h.config != nil {
+		expected := h.config.Get().Token
+		const prefix = "Bearer "
+		header := r.Header.Get("Authorization")
+		if expected != "" && len(header) > len(prefix) && strings.EqualFold(header[:len(prefix)], prefix) {
+			presented := strings.TrimSpace(header[len(prefix):])
+			expectedHash := sha256.Sum256([]byte(expected))
+			presentedHash := sha256.Sum256([]byte(presented))
+			if subtle.ConstantTimeCompare(expectedHash[:], presentedHash[:]) == 1 {
+				kind = "operator"
+			}
+		}
+		if kind == "" && h.ownerManager != nil {
+			if _, err := h.ownerManager.Resolve(r.Context(), bearerToken(r)); err == nil {
+				kind = "owner"
+			}
+		}
+	}
+	if kind == "" {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="server"`)
+		h.jsonResponse(w, http.StatusUnauthorized, &APIResponse{OK: false, Error: "UNAUTHORIZED", Message: "Invalid credentials"})
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"kind": kind}})
+}
+
+func bearerToken(r *http.Request) string {
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return ""
+	}
+	return strings.TrimSpace(header[len(prefix):])
 }
 
 // handlePreferences handles GET|POST /api/v1/server/preferences per AI.md PART 1.
@@ -2763,7 +3035,7 @@ type geoIPPresetRequest struct {
 // resolved IP is used. Per AI.md PART 19 private addresses are never
 // looked up and the response always carries the required attribution.
 func (h *Handler) handleGeoIPLookup(w http.ResponseWriter, r *http.Request) {
-	target := strings.TrimSuffix(chi.URLParam(r, "ip"), ".txt")
+	target := stripTxtExtension(chi.URLParam(r, "ip"))
 	if target == "" {
 		target = httputil.GetClientIP(r)
 	}
