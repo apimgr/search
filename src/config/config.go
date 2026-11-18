@@ -442,6 +442,8 @@ type ServerConfig struct {
 
 	// SSL/TLS
 	SSL SSLConfig `yaml:"ssl"`
+	// CORS controls cross-origin requests for every route.
+	CORS CORSConfig `yaml:"cors"`
 
 	// Operator/Server bearer token (Authorization: Bearer tok_...)
 	// Auto-generated on first run if empty. Validated by SHA-256 comparison.
@@ -546,6 +548,13 @@ type ServerConfig struct {
 	// Gated by the debug flag (--debug CLI > DEBUG env > MODE=debug default),
 	// NOT by development mode.
 	Debug DebugConfig `yaml:"debug"`
+}
+
+// CORSConfig defines allowed browser origins and credential behavior.
+type CORSConfig struct {
+	AllowedOrigins   []string `yaml:"allowed_origins"`
+	AllowCredentials bool     `yaml:"allow_credentials"`
+	MaxAge           int      `yaml:"max_age"`
 }
 
 type OwnerTokensConfig struct {
@@ -2059,6 +2068,7 @@ func DefaultConfig() *Config {
 			BaseURL: "",
 			// Empty = auto-detected from hostname at runtime
 			FQDN: "",
+			CORS: CORSConfig{AllowedOrigins: []string{"*"}, AllowCredentials: true, MaxAge: 86400},
 			// API version prefix used in /api/{api_version}/ routes
 			APIVersion: "v1",
 			// "true" = create PID file at default platform path
@@ -2880,6 +2890,25 @@ func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	if err := yaml.Unmarshal(encoded, cfg); err != nil {
 		return nil, fmt.Errorf("decode merged configuration: %w", err)
+	}
+	var configuredKeys map[string]map[string]any
+	if err := yaml.Unmarshal(encoded, &configuredKeys); err != nil {
+		return nil, fmt.Errorf("inspect merged configuration: %w", err)
+	}
+	if _, hasCORS := configuredKeys["server"]["cors"]; !hasCORS {
+		legacy := strings.TrimSpace(cfg.Server.Web.CORS)
+		if legacy == "" {
+			cfg.Server.CORS.AllowedOrigins = []string{""}
+		} else {
+			cfg.Server.CORS.AllowedOrigins = nil
+			for _, origin := range strings.Split(legacy, ",") {
+				if origin = strings.TrimSpace(origin); origin != "" {
+					cfg.Server.CORS.AllowedOrigins = append(cfg.Server.CORS.AllowedOrigins, origin)
+				}
+			}
+			cfg.Server.CORS.AllowCredentials = legacy != "*"
+		}
+		cfg.needsSave = true
 	}
 
 	cfg.Server.Update.Branch = NormalizeUpdateBranch(cfg.Server.Update.Branch)

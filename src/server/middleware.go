@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"path"
 	"runtime/debug"
 	"strconv"
@@ -54,11 +56,13 @@ type Middleware struct {
 	logManager       *logging.Manager
 	blocklistManager *security.BlocklistManager
 	notifyManager    *notify.Manager
+	corsMu           sync.RWMutex
+	learnedCORS      map[string]struct{}
 }
 
 // NewMiddleware creates a new middleware instance
 func NewMiddleware(cfg *config.Config, logMgr *logging.Manager) *Middleware {
-	return &Middleware{config: cfg, logManager: logMgr}
+	return &Middleware{config: cfg, logManager: logMgr, learnedCORS: make(map[string]struct{})}
 }
 
 func (m *Middleware) SetBlocklistManager(manager *security.BlocklistManager) {
@@ -161,6 +165,9 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 				csp = strings.ReplaceAll(csp, "upgrade-insecure-requests", "")
 			}
 			csp = appendCSPDirectiveSources(csp, "frame-src", m.config.Web.CSP.FrameSrcExtra)
+			if origins, disabled, _ := m.resolvedCORSOrigins(); !disabled {
+				csp = appendCSPDirectiveSources(csp, "connect-src", strings.Join(origins, " "))
+			}
 			w.Header().Set(cspHeader, csp)
 		}
 
@@ -272,33 +279,102 @@ func appendCSPDirectiveSources(policy, directive, extra string) string {
 // - "a,b,..."  → AllowedOrigins: listed origins; credentials allowed
 // - ""         → CORS middleware not applied (same-origin only)
 func (m *Middleware) CORS(next http.Handler) http.Handler {
-	corsPolicy := m.config.Server.Web.CORS
-	if corsPolicy == "" {
-		return next
-	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if host := trustedForwardedHost(r, m.config.Server.TrustedProxies.Additional); host != "" {
+			m.corsMu.Lock()
+			if m.learnedCORS == nil {
+				m.learnedCORS = make(map[string]struct{})
+			}
+			m.learnedCORS["https://"+host] = struct{}{}
+			m.corsMu.Unlock()
+		}
 
-	var allowedOrigins []string
-	allowCredentials := false
-	if corsPolicy == "*" {
-		allowedOrigins = []string{"*"}
-	} else {
-		for _, o := range strings.Split(corsPolicy, ",") {
-			if trimmed := strings.TrimSpace(o); trimmed != "" {
-				allowedOrigins = append(allowedOrigins, trimmed)
+		allowed, legacyPolicy, disabled := m.resolvedCORSOrigins()
+		if disabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+		allowCredentials := m.config.Server.CORS.AllowCredentials || legacyPolicy && len(allowed) > 0
+		for _, origin := range allowed {
+			if origin == "*" {
+				allowCredentials = false
+				break
 			}
 		}
-		allowCredentials = true
-	}
-
-	c := cors.New(cors.Options{
-		AllowedOrigins:       allowedOrigins,
-		AllowedMethods:       []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:       []string{"*"},
-		AllowCredentials:     allowCredentials,
-		MaxAge:               86400,
-		OptionsSuccessStatus: http.StatusNoContent,
+		maxAge := m.config.Server.CORS.MaxAge
+		if maxAge <= 0 {
+			maxAge = 86400
+		}
+		if r.Method == http.MethodOptions {
+			requested := r.Header.Get("Access-Control-Request-Headers")
+			if requested != "" {
+				names := strings.Split(requested, ",")
+				for index := range names {
+					names[index] = strings.ToLower(strings.TrimSpace(names[index]))
+				}
+				r.Header.Set("Access-Control-Request-Headers", strings.Join(names, ","))
+			}
+		}
+		cors.New(cors.Options{
+			AllowedOrigins:   allowed,
+			AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+			AllowedHeaders:   []string{"Content-Type", "Accept", "X-Requested-With", "Authorization", "X-Api-Key", "X-CSRF-Token", "X-XSRF-Token", "MCP-Protocol-Version", "Mcp-Method", "Mcp-Name"},
+			AllowCredentials: allowCredentials, MaxAge: maxAge, OptionsSuccessStatus: http.StatusNoContent,
+		}).Handler(next).ServeHTTP(w, r)
 	})
-	return c.Handler(next)
+}
+
+func (m *Middleware) resolvedCORSOrigins() (origins []string, legacyPolicy bool, disabled bool) {
+	configured := m.config.Server.CORS.AllowedOrigins
+	if len(configured) == 1 && strings.TrimSpace(configured[0]) == "" {
+		return nil, false, true
+	}
+	origins = append(origins, configured...)
+	legacyPolicy = len(origins) == 0
+	if legacyPolicy {
+		if m.config.Server.Web.CORS == "" {
+			return nil, true, true
+		}
+		for _, origin := range strings.Split(m.config.Server.Web.CORS, ",") {
+			if origin = strings.TrimSpace(origin); origin != "" {
+				origins = append(origins, origin)
+			}
+		}
+	}
+	domainEntries := strings.Split(os.Getenv("DOMAIN"), ",")
+	if os.Getenv("DOMAIN") == "" && m.config.Server.FQDN != "" {
+		domainEntries = strings.Split(m.config.Server.FQDN, ",")
+	}
+	for _, domain := range domainEntries {
+		if domain = strings.TrimSpace(domain); domain != "" {
+			origins = append(origins, "https://"+domain)
+		}
+	}
+	m.corsMu.RLock()
+	for origin := range m.learnedCORS {
+		origins = append(origins, origin)
+	}
+	m.corsMu.RUnlock()
+	if len(origins) == 0 {
+		origins = []string{"*"}
+	}
+	return origins, legacyPolicy, false
+}
+
+func trustedForwardedHost(r *http.Request, additional []string) string {
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !isTrustedProxy(remoteIP, additional) {
+		return ""
+	}
+	host := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+	if host == "" {
+		return ""
+	}
+	u, err := url.Parse("https://" + host)
+	if err != nil || u.Host != host || u.Hostname() == "" || u.User != nil || u.Path != "" {
+		return ""
+	}
+	return host
 }
 
 // RateLimiter implements per-IP token bucket rate limiting via golang.org/x/time/rate.
