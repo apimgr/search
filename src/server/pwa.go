@@ -19,13 +19,9 @@ func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, i18n.RequestString(r, "errors.not_found"), http.StatusNotFound)
 		return
 	}
-	// Stamp the running build's version into the cache name so every deploy
-	// gets its own cache and the worker's `activate` handler evicts the
-	// previous one. Per AI.md PART 16 line 22493-22494: "Cache name MUST
-	// embed {project_version}". Without this a browser that installed the
-	// worker before a fix shipped keeps serving the stale cached app.js
-	// forever, no matter how many times the server is redeployed.
-	data = bytes.ReplaceAll(data, []byte("__CACHE_VERSION__"), []byte(version.Version))
+	// Stamp the running build's version and commit into the cache name and
+	// precache URLs so every build gets a distinct cache.
+	data = bytes.ReplaceAll(data, []byte("__CACHE_VERSION__"), []byte(buildAssetStamp()))
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	// Allow the worker to claim the full root scope even though the file path is /sw.js
 	w.Header().Set("Service-Worker-Allowed", "/")
@@ -35,7 +31,7 @@ func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 	// update check - a cached service worker script delays every other
 	// update mechanism.
 	w.Header().Set("Cache-Control", "no-cache")
-	etag := "sw-" + version.Version
+	etag := "sw-" + buildAssetStamp()
 	w.Header().Set("ETag", fmt.Sprintf("%q", etag))
 	writeIfNotModified(w, r, etag, data)
 }

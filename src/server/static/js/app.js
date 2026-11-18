@@ -2564,10 +2564,27 @@
     // ========================================================================
     // SERVICE WORKER
     // ========================================================================
+    var serviceWorkerUpdateAccepted = false;
+    var serviceWorkerReloading = false;
+
+    function reloadServiceWorkerUpdateOnce() {
+        if (serviceWorkerReloading) {
+            return;
+        }
+        serviceWorkerReloading = true;
+        window.location.reload();
+    }
+
     function initServiceWorker() {
         if (!('serviceWorker' in navigator)) {
             return;
         }
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+            if (serviceWorkerUpdateAccepted) {
+                reloadServiceWorkerUpdateOnce();
+            }
+        });
+
         window.addEventListener('load', function() {
             navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function(registration) {
                 // Detect a new worker installing while an old one still controls the page
@@ -2585,7 +2602,7 @@
 
                 // Check for updates every hour while the app is active
                 setInterval(function() {
-                    registration.update();
+                    registration.update().catch(function() {});
                 }, 60 * 60 * 1000);
             }).catch(function() {
                 // Service worker registration failed - the site still works without it
@@ -2613,7 +2630,9 @@
         updateBtn.type = 'button';
         updateBtn.className = 'btn update-banner-update';
         updateBtn.textContent = t('pwa.update_now', 'Update Now');
-        updateBtn.addEventListener('click', updateApp);
+        updateBtn.addEventListener('click', function() {
+            updateApp();
+        });
 
         var laterBtn = document.createElement('button');
         laterBtn.type = 'button';
@@ -2627,16 +2646,17 @@
         document.body.appendChild(banner);
     }
 
-    // Apply a waiting service-worker update and reload once it takes control
+    // Apply a waiting service-worker update and always reload after acceptance.
     function updateApp() {
+        serviceWorkerUpdateAccepted = true;
+        window.setTimeout(reloadServiceWorkerUpdateOnce, 5000);
         navigator.serviceWorker.ready.then(function(registration) {
             if (registration.waiting) {
                 registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            } else {
+                reloadServiceWorkerUpdateOnce();
             }
-        });
-        navigator.serviceWorker.addEventListener('controllerchange', function() {
-            window.location.reload();
-        });
+        }).catch(reloadServiceWorkerUpdateOnce);
     }
 
     // ========================================================================

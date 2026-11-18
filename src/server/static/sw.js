@@ -7,9 +7,9 @@
 // Response. The service worker is an enhancement, never a dependency: the site
 // stays fully usable if it never installs.
 
-// CACHE_VERSION is substituted with the running build's version by
+// CACHE_VERSION is substituted with the running build's version and commit by
 // handleServiceWorker (src/server/pwa.go) before this file is served, per
-// AI.md PART 16: the cache name MUST embed the project version so every new
+// AI.md PART 16: the cache name MUST embed the build stamp so every new
 // deploy gets its own cache and `activate` below evicts the previous one -
 // otherwise a browser that installed the worker before a fix shipped keeps
 // serving the stale cached app.js/CSS forever, no matter how many times the
@@ -17,43 +17,53 @@
 const CACHE_VERSION = '__CACHE_VERSION__';
 const CACHE_NAME = 'search-cache-' + CACHE_VERSION;
 const STATIC_ASSETS = [
-  '/',
-  '/static/css/common.css',
-  '/static/css/components.css',
-  '/static/css/public.css',
-  '/static/js/app.js',
-  '/static/img/favicon.svg',
-  '/static/img/favicon-16.png',
-  '/static/img/favicon-32.png',
-  '/static/img/favicon-48.png',
-  '/static/img/ios-share.svg',
-  '/static/img/icon-72.png',
-  '/static/img/icon-96.png',
-  '/static/img/icon-128.png',
-  '/static/img/icon-144.png',
-  '/static/img/icon-152.png',
-  '/static/img/icon-180.png',
-  '/static/img/icon-192.png',
-  '/static/img/icon-384.png',
-  '/static/img/icon-192.svg',
-  '/static/img/icon-512.png',
-  '/static/img/icon-512.svg',
-  '/static/img/icon-maskable-192.png',
-  '/static/img/icon-maskable-512.png',
-  '/static/splash/iphone-1179x2556.png',
-  '/static/splash/iphone-1284x2778.png',
-  '/static/screenshots/desktop.png',
-  '/static/screenshots/mobile.png',
+  '/static/css/common.css?v=__CACHE_VERSION__',
+  '/static/css/components.css?v=__CACHE_VERSION__',
+  '/static/css/public.css?v=__CACHE_VERSION__',
+  '/static/js/app.js?v=__CACHE_VERSION__',
+  '/static/img/favicon.svg?v=__CACHE_VERSION__',
+  '/static/img/favicon-16.png?v=__CACHE_VERSION__',
+  '/static/img/favicon-32.png?v=__CACHE_VERSION__',
+  '/static/img/favicon-48.png?v=__CACHE_VERSION__',
+  '/static/img/ios-share.svg?v=__CACHE_VERSION__',
+  '/static/img/icon-72.png?v=__CACHE_VERSION__',
+  '/static/img/icon-96.png?v=__CACHE_VERSION__',
+  '/static/img/icon-128.png?v=__CACHE_VERSION__',
+  '/static/img/icon-144.png?v=__CACHE_VERSION__',
+  '/static/img/icon-152.png?v=__CACHE_VERSION__',
+  '/static/img/icon-180.png?v=__CACHE_VERSION__',
+  '/static/img/icon-192.png?v=__CACHE_VERSION__',
+  '/static/img/icon-384.png?v=__CACHE_VERSION__',
+  '/static/img/icon-192.svg?v=__CACHE_VERSION__',
+  '/static/img/icon-512.png?v=__CACHE_VERSION__',
+  '/static/img/icon-512.svg?v=__CACHE_VERSION__',
+  '/static/img/icon-maskable-192.png?v=__CACHE_VERSION__',
+  '/static/img/icon-maskable-512.png?v=__CACHE_VERSION__',
+  '/static/splash/iphone-1179x2556.png?v=__CACHE_VERSION__',
+  '/static/splash/iphone-1284x2778.png?v=__CACHE_VERSION__',
+  '/static/screenshots/desktop.png?v=__CACHE_VERSION__',
+  '/static/screenshots/mobile.png?v=__CACHE_VERSION__',
   '/manifest.json',
   '/offline.html'
 ];
 
-// INSTALL - pre-cache static assets, then activate immediately
+// Pre-cache static assets only when they return successful non-redirect responses.
+function precacheStaticAssets() {
+  return caches.open(CACHE_NAME).then((cache) => Promise.all(STATIC_ASSETS.map((asset) =>
+    fetch(new Request(asset, { redirect: 'manual' }))
+      .then((response) => {
+        if (response.ok && !response.redirected && response.type !== 'opaqueredirect') {
+          return cache.put(asset, response);
+        }
+      })
+      .catch(() => {})
+  )));
+}
+
+// INSTALL - pre-cache static assets. An updated worker waits for user approval.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(STATIC_ASSETS))
-      .then(() => self.skipWaiting())
+    precacheStaticAssets()
   );
 });
 
@@ -76,6 +86,18 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// A navigation never waits on the network forever.
+const NAV_TIMEOUT_MS = 8000;
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
 
 // GUARANTEED last-resort page - synthesized in the worker so it needs no cache
 // hit and can never itself miss
@@ -112,10 +134,13 @@ self.addEventListener('fetch', (event) => {
   // offline page, then a GUARANTEED synthesized offline page
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      withTimeout(fetch(request), NAV_TIMEOUT_MS)
         .then((response) => {
+          if (!response.ok || response.redirected) {
+            throw new Error('navigation returned an error or redirect');
+          }
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
           return response;
         })
         .catch(async () =>
@@ -132,8 +157,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request)
         .then((cached) => cached || fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (response.ok && !response.redirected) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
+          }
           return response;
         }))
         .catch(() => new Response('', { status: 504, statusText: 'Gateway Timeout' }))
