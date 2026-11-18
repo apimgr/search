@@ -1119,3 +1119,17 @@ func TestGetCertInfoExpiringFlag(t *testing.T) {
 		t.Error("GetCertInfo() IsExpiring should be true for cert expiring in 5 days")
 	}
 }
+
+func TestCreateDNSProviderFromEnvRestoresCredentialEnvironment(t *testing.T) {
+	t.Setenv("CF_DNS_API_TOKEN", "ambient-value")
+	provider, err := CreateDNSProviderFromEnv("cloudflare", map[string]string{"CF_DNS_API_TOKEN": "temporary-value"})
+	if err != nil {
+		t.Fatalf("CreateDNSProviderFromEnv() error = %v", err)
+	}
+	if provider == nil {
+		t.Fatal("CreateDNSProviderFromEnv() returned a nil provider")
+	}
+	if got := os.Getenv("CF_DNS_API_TOKEN"); got != "ambient-value" {
+		t.Fatalf("CF_DNS_API_TOKEN after provider construction = %q, want ambient value restored", got)
+	}
+}

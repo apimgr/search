@@ -23,6 +23,7 @@ import (
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/security"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )
@@ -233,6 +234,12 @@ func (c *Config) Reload() error {
 	newCfg, err := Load(path)
 	if err != nil {
 		return err
+	}
+	if newCfg.needsSave {
+		if err := newCfg.Save(path); err != nil {
+			return fmt.Errorf("persist normalized configuration: %w", err)
+		}
+		newCfg.needsSave = false
 	}
 
 	// Fold the root-level `tor:` overlay into Server.Tor (AI.md PART 12) so
@@ -604,7 +611,9 @@ type SSLConfig struct {
 		Domains []string `yaml:"domains"`
 		Staging bool     `yaml:"staging"`
 		// http-01, tls-alpn-01, dns-01
-		Challenge string `yaml:"challenge"`
+		Challenge      string            `yaml:"challenge"`
+		DNSProvider    string            `yaml:"dns_provider"`
+		DNSCredentials map[string]string `yaml:"dns_credentials"`
 	} `yaml:"letsencrypt"`
 	// DNS-01 provider configuration per AI.md PART 17
 	DNS01 DNS01Config `yaml:"dns01"`
@@ -2926,12 +2935,38 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	warnings := cfg.ValidateAndApplyDefaults()
-	cfg.needsSave = len(warnings) > 0
+	if err := cfg.encryptDNSCredentials(); err != nil {
+		return nil, err
+	}
+	cfg.needsSave = cfg.needsSave || len(warnings) > 0
 	for _, warning := range warnings {
 		slog.Warn("merged configuration validation warning", "field", warning.Field, "message", warning.Message)
 	}
 
 	return cfg, nil
+}
+
+func (c *Config) encryptDNSCredentials() error {
+	credentials := c.Server.SSL.LetsEncrypt.DNSCredentials
+	if len(credentials) == 0 {
+		return nil
+	}
+	key := c.Server.Security.EncryptionKey
+	for name, value := range credentials {
+		if strings.HasPrefix(value, "enc:v1:") {
+			if _, err := security.DecryptAESGCM(key, strings.TrimPrefix(value, "enc:v1:")); err != nil {
+				return fmt.Errorf("decrypt DNS credential %s: invalid encrypted value", name)
+			}
+			continue
+		}
+		encrypted, err := security.EncryptAESGCM(key, []byte(value))
+		if err != nil {
+			return fmt.Errorf("encrypt DNS credential %s: %w", name, err)
+		}
+		credentials[name] = "enc:v1:" + encrypted
+		c.needsSave = true
+	}
+	return nil
 }
 
 func yamlNodeFromConfig(path string) (*yaml.Node, error) {
@@ -3115,7 +3150,35 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 
-	return os.WriteFile(path, []byte(buf.String()), 0600)
+	tmp, err := os.CreateTemp(dir, ".server.yml-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		if err := os.Remove(tmpPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("failed to clean temporary config file", "err", err)
+		}
+	}()
+	if err := tmp.Chmod(0600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.WriteString(buf.String()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	return nil
 }
 
 // addConfigComments adds comments to configuration node

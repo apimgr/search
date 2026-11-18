@@ -163,6 +163,21 @@ func rotateEncryptionKey(cfg *config.Config, reasonText string) error {
 	oldKey := cfg.Server.Security.EncryptionKey
 	newKey := config.GenerateBase64Secret()
 
+	for name, encoded := range cfg.Server.SSL.LetsEncrypt.DNSCredentials {
+		if !strings.HasPrefix(encoded, "enc:v1:") {
+			return fmt.Errorf("DNS credential %s is not encrypted", name)
+		}
+		plaintext, err := security.DecryptAESGCM(oldKey, strings.TrimPrefix(encoded, "enc:v1:"))
+		if err != nil {
+			return fmt.Errorf("cannot decrypt DNS credential %s for key rotation", name)
+		}
+		ciphertext, err := security.EncryptAESGCM(newKey, plaintext)
+		if err != nil {
+			return fmt.Errorf("cannot re-encrypt DNS credential %s", name)
+		}
+		cfg.Server.SSL.LetsEncrypt.DNSCredentials[name] = "enc:v1:" + ciphertext
+	}
+
 	reencrypted, err := reencryptSecurityReports(oldKey, newKey)
 	if err != nil {
 		return err

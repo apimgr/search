@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -116,6 +117,40 @@ type Server struct {
 	// Set at the top of Shutdown per AI.md PART 13: the server reports
 	// status "shutting_down" (503) once it begins draining.
 	shuttingDown atomic.Bool
+}
+
+func sameDNSCredentials(oldValues map[string]string, oldKey string, newValues map[string]string, newKey string) bool {
+	if len(oldValues) != len(newValues) {
+		return false
+	}
+	for name, oldValue := range oldValues {
+		newValue, exists := newValues[name]
+		if !exists {
+			return false
+		}
+		if strings.HasPrefix(oldValue, "enc:v1:") && strings.HasPrefix(newValue, "enc:v1:") {
+			oldPlain, oldErr := security.DecryptAESGCM(oldKey, strings.TrimPrefix(oldValue, "enc:v1:"))
+			newPlain, newErr := security.DecryptAESGCM(newKey, strings.TrimPrefix(newValue, "enc:v1:"))
+			if oldErr == nil && newErr == nil && bytes.Equal(oldPlain, newPlain) {
+				continue
+			}
+		}
+		if oldValue != newValue {
+			return false
+		}
+	}
+	return true
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	copy := make(map[string]string, len(values))
+	for key, value := range values {
+		copy[key] = value
+	}
+	return copy
 }
 
 // NewServer creates a new server instance with the production public-IP providers.
@@ -310,7 +345,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	var tlsMgr *ssl.Manager
 	if cfg.Server.SSL.Enabled {
 		dataDir := config.GetDataDir()
-		tlsMgr = ssl.NewManagerWithSecretAndHost(&cfg.Server.SSL, dataDir, cfg.Server.SecretKey, cfg.Server.FQDN)
+		tlsMgr = ssl.NewManagerWithKeysAndHost(&cfg.Server.SSL, dataDir, cfg.Server.SecretKey, cfg.Server.Security.EncryptionKey, cfg.Server.FQDN)
 	}
 
 	// Create GeoIP lookup if enabled (uses MMDB from sapics/ip-location-db)
@@ -454,6 +489,29 @@ func newServer(cfg *config.Config, providers []string) *Server {
 				apiHandler.SetOwnerManager(ownerMgr)
 			}
 		}
+	}
+	if tlsMgr != nil && dbMgr != nil && dbMgr.ServerDB() != nil {
+		serverDB := dbMgr.ServerDB()
+		if err := tlsMgr.SetDNSValidatedAtWriter(func(value string) error {
+			return database.SetAppSecretValue(context.Background(), serverDB, database.SecretDNSValidatedAt, value)
+		}); err != nil {
+			slog.Error("Failed to persist DNS validation timestamp", "err", err)
+		}
+		lastProvider := cfg.Server.SSL.LetsEncrypt.DNSProvider
+		lastCredentials := cloneStringMap(cfg.Server.SSL.LetsEncrypt.DNSCredentials)
+		lastEncryptionKey := cfg.Server.Security.EncryptionKey
+		cfg.OnReload(func(c *config.Config) {
+			tlsMgr.SetEncryptionKey(c.Server.Security.EncryptionKey)
+			letsencrypt := c.Server.SSL.LetsEncrypt
+			if letsencrypt.DNSProvider != lastProvider || !sameDNSCredentials(lastCredentials, lastEncryptionKey, letsencrypt.DNSCredentials, c.Server.Security.EncryptionKey) {
+				if err := database.DeleteAppSecretValue(context.Background(), serverDB, database.SecretDNSValidatedAt); err != nil {
+					slog.Error("Failed to clear DNS validation timestamp", "err", err)
+				}
+				lastProvider = letsencrypt.DNSProvider
+				lastCredentials = cloneStringMap(letsencrypt.DNSCredentials)
+			}
+			lastEncryptionKey = c.Server.Security.EncryptionKey
+		})
 	}
 
 	// Per IDEA.md: privacy is the product — no admin web UI, no sessions,

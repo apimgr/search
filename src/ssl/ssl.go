@@ -21,12 +21,14 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/security"
 )
 
 // renewalThreshold is how long before expiry an app-managed certificate is
@@ -69,7 +71,10 @@ type Manager struct {
 	// For DNS-01 challenges
 	legoClient *lego.Client
 	// For credential decryption
-	secretKey string
+	secretKey            string
+	encryptionKey        string
+	dnsValidatedAt       string
+	dnsValidatedAtWriter func(string) error
 }
 
 // legoUser implements registration.User for lego ACME client
@@ -220,16 +225,21 @@ func NewManagerWithSecret(cfg *config.SSLConfig, dataDir, secretKey string) *Man
 // NewManagerWithSecretAndHost initializes TLS using the server's configured
 // public host for certificate validation and ACME name resolution.
 func NewManagerWithSecretAndHost(cfg *config.SSLConfig, dataDir, secretKey, host string) *Manager {
+	return newManagerWithKeysAndHost(cfg, dataDir, secretKey, "", host)
+}
+
+func newManagerWithKeysAndHost(cfg *config.SSLConfig, dataDir, secretKey, encryptionKey, host string) *Manager {
 	fqdn := strings.TrimSpace(host)
 	if fqdn == "" {
 		fqdn = GetFQDN(config.ProjectName)
 	}
 	m := &Manager{
-		config:    cfg,
-		dataDir:   dataDir,
-		sslDir:    config.GetSSLDir(),
-		fqdn:      fqdn,
-		secretKey: secretKey,
+		config:        cfg,
+		dataDir:       dataDir,
+		sslDir:        config.GetSSLDir(),
+		fqdn:          fqdn,
+		secretKey:     secretKey,
+		encryptionKey: encryptionKey,
 	}
 
 	// Normalize the challenge type. AI.md PART 15 supports exactly http-01,
@@ -291,6 +301,45 @@ func NewManagerWithSecretAndHost(cfg *config.SSLConfig, dataDir, secretKey, host
 	}
 
 	return m
+}
+
+// NewManagerWithKeysAndHost supplies separate keys for legacy credential
+// migration and current AES-GCM DNS credential storage.
+func NewManagerWithKeysAndHost(cfg *config.SSLConfig, dataDir, legacySecretKey, encryptionKey, host string) *Manager {
+	return newManagerWithKeysAndHost(cfg, dataDir, legacySecretKey, encryptionKey, host)
+}
+
+// SetDNSValidatedAtWriter persists successful DNS-01 issuance metadata. If
+// initial issuance happened before the database was ready, its timestamp is
+// written immediately when this callback is installed.
+func (m *Manager) SetDNSValidatedAtWriter(writer func(string) error) error {
+	m.mu.Lock()
+	m.dnsValidatedAtWriter = writer
+	value := m.dnsValidatedAt
+	m.mu.Unlock()
+	if value != "" && writer != nil {
+		return writer(value)
+	}
+	return nil
+}
+
+// SetEncryptionKey updates the key used to decrypt reloaded DNS credentials.
+func (m *Manager) SetEncryptionKey(key string) {
+	m.mu.Lock()
+	m.encryptionKey = key
+	m.mu.Unlock()
+}
+
+func (m *Manager) recordDNSValidation() error {
+	value := time.Now().UTC().Format(time.RFC3339)
+	m.mu.Lock()
+	m.dnsValidatedAt = value
+	writer := m.dnsValidatedAtWriter
+	m.mu.Unlock()
+	if writer != nil {
+		return writer(value)
+	}
+	return nil
 }
 
 // certificateDomains resolves the domain list used for ACME certificate
@@ -454,33 +503,9 @@ func (m *Manager) initDNS01() error {
 		return fmt.Errorf("create certificate cache directory: %w", err)
 	}
 
-	// Validate DNS-01 configuration
-	if m.config.DNS01.Provider == "" {
-		return fmt.Errorf("dns01.provider is required for DNS-01 challenge")
-	}
-	if m.config.DNS01.CredentialsEncrypted == "" {
-		return fmt.Errorf("dns01.credentials_encrypted is required for DNS-01 challenge")
-	}
-	if m.secretKey == "" {
-		return fmt.Errorf("secret key is required for DNS-01 credential decryption")
-	}
-
-	// Decrypt credentials
-	credentials, err := DecryptCredentials(m.config.DNS01.CredentialsEncrypted, m.secretKey)
+	dnsProvider, err := m.configuredDNSProvider()
 	if err != nil {
-		return fmt.Errorf("failed to decrypt DNS credentials: %w", err)
-	}
-
-	// AI.md PART 15: the server validates credentials on startup and before
-	// every certificate request.
-	if err := ValidateCredentials(m.config.DNS01.Provider, credentials); err != nil {
-		return fmt.Errorf("DNS provider credential validation failed: %w", err)
-	}
-
-	// Create DNS provider
-	dnsProvider, err := CreateDNSProvider(m.config.DNS01.Provider, credentials)
-	if err != nil {
-		return fmt.Errorf("failed to create DNS provider: %w", err)
+		return err
 	}
 
 	// Generate or load ACME account key
@@ -532,13 +557,66 @@ func (m *Manager) initDNS01() error {
 
 	slog.Info("DNS-01 challenge enabled",
 		"domains", m.certificateDomains(),
-		"provider", m.config.DNS01.Provider,
-		"validated_at", ValidatedAtNow())
+		"provider", m.dnsProviderName())
 	if m.config.LetsEncrypt.Staging {
 		slog.Info("Using Let's Encrypt STAGING environment")
 	}
 
 	return nil
+}
+
+func (m *Manager) dnsProviderName() string {
+	if m.config.LetsEncrypt.DNSProvider != "" {
+		return m.config.LetsEncrypt.DNSProvider
+	}
+	return m.config.DNS01.Provider
+}
+
+func (m *Manager) configuredDNSProvider() (challenge.Provider, error) {
+	if providerID := m.config.LetsEncrypt.DNSProvider; providerID != "" {
+		if len(m.config.LetsEncrypt.DNSCredentials) == 0 {
+			return nil, fmt.Errorf("DNS credentials are required for provider %s", providerID)
+		}
+		m.mu.RLock()
+		encryptionKey := m.encryptionKey
+		m.mu.RUnlock()
+		if encryptionKey == "" {
+			return nil, fmt.Errorf("server.security.encryption_key is required for DNS credentials")
+		}
+		credentials := make(map[string]string, len(m.config.LetsEncrypt.DNSCredentials))
+		for name, value := range m.config.LetsEncrypt.DNSCredentials {
+			if !strings.HasPrefix(value, "enc:v1:") {
+				return nil, fmt.Errorf("DNS credential %s is not encrypted", name)
+			}
+			plaintext, err := security.DecryptAESGCM(encryptionKey, strings.TrimPrefix(value, "enc:v1:"))
+			if err != nil {
+				return nil, fmt.Errorf("DNS credential %s cannot be decrypted", name)
+			}
+			credentials[name] = string(plaintext)
+		}
+		provider, err := CreateDNSProviderFromEnv(providerID, credentials)
+		if err != nil {
+			return nil, err
+		}
+		return provider, nil
+	}
+	if m.config.DNS01.Provider == "" {
+		return nil, fmt.Errorf("dns01.provider is required for DNS-01 challenge")
+	}
+	if m.config.DNS01.CredentialsEncrypted == "" {
+		return nil, fmt.Errorf("dns01.credentials_encrypted is required for DNS-01 challenge")
+	}
+	if m.secretKey == "" {
+		return nil, fmt.Errorf("secret key is required for DNS-01 credential decryption")
+	}
+	credentials, err := DecryptCredentials(m.config.DNS01.CredentialsEncrypted, m.secretKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt legacy DNS credentials")
+	}
+	if err := ValidateCredentials(m.config.DNS01.Provider, credentials); err != nil {
+		return nil, fmt.Errorf("DNS provider credential validation failed: %w", err)
+	}
+	return CreateDNSProvider(m.config.DNS01.Provider, credentials)
 }
 
 // loadOrCreateAccountKey loads or creates an ACME account private key
@@ -609,13 +687,17 @@ func (m *Manager) obtainCertificateDNS01() error {
 
 	// AI.md PART 15: credentials are re-validated before every certificate
 	// request, not only at startup.
-	if m.config.DNS01.CredentialsEncrypted != "" && m.secretKey != "" {
-		credentials, err := DecryptCredentials(m.config.DNS01.CredentialsEncrypted, m.secretKey)
+	if m.config.LetsEncrypt.DNSProvider != "" {
+		provider, err := m.configuredDNSProvider()
 		if err != nil {
-			return fmt.Errorf("failed to decrypt DNS credentials: %w", err)
+			return err
 		}
-		if err := ValidateCredentials(m.config.DNS01.Provider, credentials); err != nil {
-			return fmt.Errorf("DNS provider credential validation failed: %w", err)
+		if err := m.legoClient.Challenge.SetDNS01Provider(provider); err != nil {
+			return fmt.Errorf("set DNS provider %s: %w", m.config.LetsEncrypt.DNSProvider, err)
+		}
+	} else if m.config.DNS01.CredentialsEncrypted != "" && m.secretKey != "" {
+		if _, err := m.configuredDNSProvider(); err != nil {
+			return err
 		}
 	}
 
@@ -651,6 +733,11 @@ func (m *Manager) obtainCertificateDNS01() error {
 	m.tlsConfig = m.createTLSConfig(cert)
 	m.owner = certOwnerApp
 	m.mu.Unlock()
+	if m.config.LetsEncrypt.DNSProvider != "" {
+		if err := m.recordDNSValidation(); err != nil {
+			return fmt.Errorf("certificate issued but DNS validation timestamp could not be stored: %w", err)
+		}
+	}
 
 	slog.Info("Obtained new certificate via DNS-01", "domains", domains, "path", certPath)
 	return nil

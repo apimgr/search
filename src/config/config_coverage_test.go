@@ -2,10 +2,31 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/apimgr/search/src/security"
 	"gopkg.in/yaml.v3"
 )
+
+func TestEncryptDNSCredentialsAtRest(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.SSL.LetsEncrypt.DNSCredentials = map[string]string{"CF_DNS_API_TOKEN": "test-token-value"}
+	if err := cfg.encryptDNSCredentials(); err != nil {
+		t.Fatalf("encryptDNSCredentials() error = %v", err)
+	}
+	encoded := cfg.Server.SSL.LetsEncrypt.DNSCredentials["CF_DNS_API_TOKEN"]
+	if !strings.HasPrefix(encoded, "enc:v1:") || strings.Contains(encoded, "test-token-value") {
+		t.Fatalf("DNS credential was not encrypted: %q", encoded)
+	}
+	plaintext, err := security.DecryptAESGCM(cfg.Server.Security.EncryptionKey, strings.TrimPrefix(encoded, "enc:v1:"))
+	if err != nil {
+		t.Fatalf("decrypt encrypted DNS credential: %v", err)
+	}
+	if string(plaintext) != "test-token-value" || !cfg.needsSave {
+		t.Fatalf("decrypted credential = %q, needsSave = %t", plaintext, cfg.needsSave)
+	}
+}
 
 // TestSetDatabaseDirOverride covers the 0% SetDatabaseDirOverride function.
 func TestSetDatabaseDirOverride(t *testing.T) {

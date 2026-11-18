@@ -23,6 +23,10 @@ const SecretCookieSigning = "cookie_signing_key"
 // AI.md PART 11 "Other Project-Level Secrets": auto-rotated every 180 days.
 const SecretCSRFToken = "csrf_token_secret"
 
+// SecretDNSValidatedAt names the server-maintained timestamp for the last
+// successful DNS-01 certificate issuance or renewal.
+const SecretDNSValidatedAt = "dns_validated_at"
+
 // secretLength is the mandated size of every app_secrets value: 32 bytes
 // (256 bits) of crypto/rand, stored base64-encoded.
 const secretLength = 32
@@ -85,6 +89,28 @@ func GetSecret(ctx context.Context, db *DB, name string) (*AppSecret, error) {
 		secret.PreviousValue = ""
 	}
 	return &secret, nil
+}
+
+// SetAppSecretValue stores a non-key app_secrets value such as a validation
+// timestamp without generating or exposing secret material.
+func SetAppSecretValue(ctx context.Context, db *DB, name, value string) error {
+	table := ServerTableName(db, "app_secrets")
+	query := fmt.Sprintf(`INSERT INTO %s (name, value, created_at, rotated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT(name) DO UPDATE SET value = excluded.value, rotated_at = CURRENT_TIMESTAMP`, table)
+	if _, err := db.Exec(ctx, query, name, value); err != nil {
+		return fmt.Errorf("store %s: %w", name, err)
+	}
+	return nil
+}
+
+// DeleteAppSecretValue removes an optional app_secrets value.
+func DeleteAppSecretValue(ctx context.Context, db *DB, name string) error {
+	table := ServerTableName(db, "app_secrets")
+	if _, err := db.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE name = ?`, table), name); err != nil {
+		return fmt.Errorf("delete %s: %w", name, err)
+	}
+	return nil
 }
 
 // EnsureSecret returns the named secret, generating and persisting a new

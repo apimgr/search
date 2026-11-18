@@ -4,9 +4,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
-	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -284,6 +284,74 @@ func CreateDNSProvider(providerID string, credentials map[string]string) (challe
 		}
 		return createLegoDNSProvider(providerID, info, credentials)
 	}
+}
+
+// CreateDNSProviderFromEnv constructs a lego provider with a temporary, isolated
+// credential environment. The provider catalog supplies the variable names so
+// this path does not maintain a provider-specific field list.
+func CreateDNSProviderFromEnv(providerID string, credentials map[string]string) (result challenge.Provider, resultErr error) {
+	if GetProviderByID(providerID) == nil {
+		return nil, fmt.Errorf("DNS provider %q is not supported", providerID)
+	}
+	legoProviderEnvMu.Lock()
+	defer legoProviderEnvMu.Unlock()
+	variables := make(map[string]struct{})
+	var catalog []legoProviderDefinition
+	if err := json.Unmarshal(legoDNSProviderCatalog, &catalog); err == nil {
+		for _, provider := range catalog {
+			if provider.ID == providerID {
+				for _, credential := range provider.Credentials {
+					variables[credential.Name] = struct{}{}
+				}
+				break
+			}
+		}
+	}
+	for name := range credentials {
+		variables[name] = struct{}{}
+	}
+	original := make(map[string]*string, len(variables))
+	for name := range variables {
+		if value, exists := os.LookupEnv(name); exists {
+			copy := value
+			original[name] = &copy
+		} else {
+			original[name] = nil
+		}
+		if err := os.Unsetenv(name); err != nil {
+			return nil, fmt.Errorf("clear DNS credential variable %s", name)
+		}
+	}
+	defer func() {
+		for name, value := range original {
+			var err error
+			if value == nil {
+				err = os.Unsetenv(name)
+			} else {
+				err = os.Setenv(name, *value)
+			}
+			if err != nil {
+				result = nil
+				resultErr = errors.Join(resultErr, fmt.Errorf("restore DNS credential variable %s", name))
+			}
+		}
+	}()
+	for name, value := range credentials {
+		if err := os.Setenv(name, value); err != nil {
+			return nil, fmt.Errorf("set DNS credential variable %s", name)
+		}
+	}
+	provider, err := legoDNS.NewDNSChallengeProviderByName(providerID)
+	if err != nil {
+		message := err.Error()
+		for _, value := range credentials {
+			if value != "" {
+				message = strings.ReplaceAll(message, value, "[redacted]")
+			}
+		}
+		return nil, fmt.Errorf("initialize DNS provider %s: %s", providerID, message)
+	}
+	return provider, nil
 }
 
 func createLegoDNSProvider(providerID string, info *DNSProviderInfo, credentials map[string]string) (result challenge.Provider, resultErr error) {
