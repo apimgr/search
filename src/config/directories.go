@@ -478,7 +478,7 @@ func GetPIDFile() string {
 		return "/data/" + ProjectName + ".pid"
 	}
 	if startedElevated && (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd") {
-		return "/var/run/" + InternalOrg + "/" + InternalName + ".pid"
+		return filepath.Join("/var/run", InternalOrg, InternalName, InternalName+".pid")
 	}
 	return filepath.Join(GetDataDir(), InternalName+".pid")
 }
@@ -682,6 +682,7 @@ func EnsureSystemDirectories(userName string) error {
 		"/var/lib/" + InternalOrg + "/" + InternalName + "/db",
 		"/var/log/" + InternalOrg + "/" + InternalName,
 		"/var/cache/" + InternalOrg + "/" + InternalName,
+		filepath.Join("/var/run", InternalOrg, InternalName),
 	}
 
 	// Sensitive directories with 0700 permissions
@@ -710,15 +711,6 @@ func EnsureSystemDirectories(userName string) error {
 		if err := chownRecursive(dir, userName); err != nil {
 			return err
 		}
-	}
-
-	// Create PID directory
-	pidDir := "/var/run/" + InternalOrg
-	if err := os.MkdirAll(pidDir, 0755); err != nil {
-		return err
-	}
-	if err := chownRecursive(pidDir, userName); err != nil {
-		return err
 	}
 
 	return nil

@@ -336,11 +336,13 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=true
-ReadWritePaths=/etc/apimgr/search
-ReadWritePaths=/var/lib/apimgr/search
-ReadWritePaths=/var/cache/apimgr/search
-ReadWritePaths=/var/log/apimgr/search
-ReadWritePaths=/var/run/apimgr
+ExecStartPre=+/usr/bin/install -d -m 0755 /etc/apimgr/search /var/lib/apimgr/search /var/cache/apimgr/search /var/log/apimgr/search /var/run/apimgr/search
+ReadWritePaths=-/etc/apimgr/search
+ReadWritePaths=-/var/lib/apimgr/search
+ReadWritePaths=-/var/cache/apimgr/search
+ReadWritePaths=-/var/log/apimgr/search
+ReadWritePaths=-/var/run/apimgr/search
+ReadWritePaths=-/mnt/Backups/apimgr/search
 
 [Install]
 WantedBy=multi-user.target
@@ -489,7 +491,7 @@ func (sm *ServiceManager) statusRunit() (string, error) {
 func openrcTemplate() string {
 	name := config.InternalName
 	owner := name + ":" + name
-	runDir := filepath.Join("/var/run", config.InternalOrg)
+	runDir := filepath.Join("/var/run", config.InternalOrg, name)
 	logDir := filepath.Join("/var/log", config.InternalOrg, name)
 	return fmt.Sprintf(`#!/sbin/openrc-run
 # Service identity comes from %[1]s so config_dir/data_dir paths stay
@@ -642,7 +644,7 @@ const sysVInitTemplate = `#!/bin/sh
 NAME=search
 DAEMON=/usr/local/bin/search
 DAEMON_USER=search
-PIDFILE=/var/run/apimgr/search.pid
+PIDFILE=/var/run/apimgr/search/search.pid
 LOGFILE=/var/log/apimgr/search/server.log
 
 case "$1" in

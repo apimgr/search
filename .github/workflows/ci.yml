@@ -25,7 +25,7 @@ jobs:
   test:
     name: Test
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -33,7 +33,7 @@ jobs:
       CGO_ENABLED: "0"
       GOFLAGS: -buildvcs=false
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Run tests with coverage
         run: |
@@ -53,7 +53,7 @@ jobs:
   lint:
     name: Lint
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -61,7 +61,7 @@ jobs:
       CGO_ENABLED: "0"
       GOFLAGS: -buildvcs=false
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: go vet
         run: |
@@ -83,7 +83,7 @@ jobs:
     name: Build
     if: github.event_name != 'schedule'
     needs: [test, lint]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -113,7 +113,7 @@ jobs:
       CGO_ENABLED: "0"
       GOFLAGS: -buildvcs=false
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set build info
         run: |
@@ -162,9 +162,9 @@ jobs:
 
   secret-scan:
     name: Secret scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
 
@@ -190,15 +190,15 @@ jobs:
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
       - name: Scan for secrets (truffleHog)
-        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
+        uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341  # v3.99.0
         with:
           base: ${{ steps.range.outputs.base }}
           head: ${{ steps.range.outputs.head }}
-          extra_args: --only-verified
+          extra_args: --results=${{ steps.range.outputs.base == '' && 'verified' || 'verified,unknown' }}
 
   vuln-scan:
     name: Vulnerability scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -207,7 +207,7 @@ jobs:
       GOFLAGS: -buildvcs=false
       GOTOOLCHAIN: auto
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Run govulncheck
         run: |
@@ -217,9 +217,9 @@ jobs:
 
   workflow-policy:
     name: Workflow SHA policy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Enforce SHA-pinned third-party actions
         run: |
@@ -234,11 +234,11 @@ jobs:
 
   image-scan:
     name: Image scan (Trivy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0

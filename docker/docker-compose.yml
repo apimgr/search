@@ -11,7 +11,7 @@ x-logging: &default-logging
 
 services:
   search:
-    image: ghcr.io/apimgr/search:latest
+    image: ghcr.io/apimgr/search:${IMAGE_TAG:-latest}
     container_name: search-app
     hostname: search
     restart: always
@@ -19,6 +19,7 @@ services:
     logging: *default-logging
     environment:
       PORT: 80
+      DOMAIN: ${DOMAIN:-}
       TZ: ${TZ:-America/New_York}
       GOOGLE_SAFE_BROWSING_API_KEY: ${GOOGLE_SAFE_BROWSING_API_KEY:-}
       PHISHTANK_API_KEY: ${PHISHTANK_API_KEY:-}
@@ -27,10 +28,10 @@ services:
       # DATABASE_DRIVER: libsql
       # DATABASE_URL: libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
     volumes:
-      - ./volumes/config:/config:z
-      - ./volumes/data:/data:z
+      - ${CONFIG_PATH:-./volumes/config}:/config:z
+      - ${DATA_PATH:-./volumes/data}:/data:z
     ports:
-      - "172.17.0.1:64580:80"
+      - "172.17.0.1:${PORT:-64580}:80"
     healthcheck:
       test: ["CMD", "/usr/local/bin/search", "--status"]
       interval: 10s
@@ -44,13 +45,13 @@ services:
       - search
 
   search-cache:
-    image: valkey/valkey:alpine
+    image: valkey/valkey:${CACHE_IMAGE_TAG:-alpine}
     pull_policy: always
     container_name: search-cache
     restart: always
     logging: *default-logging
     volumes:
-      - ./volumes/data/db/valkey:/data:z
+      - ${DATA_PATH:-./volumes/data}/db/valkey:/data:z
     healthcheck:
       test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
       interval: 10s

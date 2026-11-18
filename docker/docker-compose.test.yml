@@ -8,7 +8,7 @@ x-logging: &default-logging
 
 services:
   search:
-    image: ghcr.io/apimgr/search:devel
+    image: ghcr.io/apimgr/search:${IMAGE_TAG:-devel}
     pull_policy: always
     container_name: search-app
     hostname: search
@@ -18,16 +18,17 @@ services:
       PORT: 80
       DEBUG: true
       MODE: development
+      DOMAIN: ${DOMAIN:-}
       TZ: ${TZ:-America/New_York}
       CACHE_URL: valkey://search-cache:6379
     volumes:
       # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
       # AI: NEVER run this from the project directory
-      - ./volumes/config:/config:z
-      - ./volumes/data:/data:z
+      - ${CONFIG_PATH:-./volumes/config}:/config:z
+      - ${DATA_PATH:-./volumes/data}:/data:z
     ports:
-      - "172.17.0.1:64581:80"
+      - "172.17.0.1:${PORT:-64581}:80"
     healthcheck:
       test: ["CMD", "/usr/local/bin/search", "--status"]
       interval: 10s
