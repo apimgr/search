@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,6 +26,45 @@ func TestEncryptDNSCredentialsAtRest(t *testing.T) {
 	}
 	if string(plaintext) != "test-token-value" || !cfg.needsSave {
 		t.Fatalf("decrypted credential = %q, needsSave = %t", plaintext, cfg.needsSave)
+	}
+}
+
+func TestPortPairConfigRoundTrip(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.Port = 8080
+	cfg.Server.HTTPSPort = 8443
+	path := filepath.Join(t.TempDir(), "server.yml")
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), `port: 8080,8443`) || strings.Contains(string(data), "https_port:") {
+		t.Fatalf("saved port pair is not canonical: %s", data)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.Server.Port != 8080 || loaded.Server.HTTPSPort != 8443 {
+		t.Fatalf("loaded ports = %d,%d, want 8080,8443", loaded.Server.Port, loaded.Server.HTTPSPort)
+	}
+}
+
+func TestPeekServerPortReadsOnlyPortValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	content := "server:\n  port: \"8080,8443\"\n  address: 42\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	httpPort, httpsPort, found, err := PeekServerPort(path)
+	if err != nil {
+		t.Fatalf("PeekServerPort() error = %v", err)
+	}
+	if !found || httpPort != 8080 || httpsPort != 8443 {
+		t.Fatalf("PeekServerPort() = %d,%d,%t, want 8080,8443,true", httpPort, httpsPort, found)
 	}
 }
 

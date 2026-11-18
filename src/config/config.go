@@ -2886,6 +2886,9 @@ func Load(path string) (*Config, error) {
 		mergeConfigNodes(root, node, "", filePath, winners)
 		slog.Info("loaded configuration drop-in", "path", filePath)
 	}
+	if err := normalizeDualPortNode(root); err != nil {
+		return nil, err
+	}
 	encoded, err := yaml.Marshal(root)
 	if err != nil {
 		return nil, fmt.Errorf("encode merged configuration: %w", err)
@@ -3129,6 +3132,7 @@ func (c *Config) Save(path string) error {
 	if err := node.Encode(c); err != nil {
 		return err
 	}
+	serializeDualPortNode(&node, c.Server.Port, c.Server.HTTPSPort)
 
 	// Add comments to top-level sections
 	addConfigComments(&node)
@@ -3371,11 +3375,12 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 
 	// PORT — server port
 	if env.Port != "" {
-		port, err := strconv.Atoi(env.Port)
+		port, httpsPort, err := ParsePortValue(env.Port)
 		if err != nil {
 			slog.Warn("invalid PORT environment override; keeping configured port", "error", err)
-		} else if port > 0 {
+		} else {
 			c.Server.Port = port
+			c.Server.HTTPSPort = httpsPort
 		}
 	}
 
@@ -3404,6 +3409,15 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if env.Port != "" {
+		port, httpsPort, err := ParsePortValue(env.Port)
+		if err != nil {
+			slog.Warn("invalid PORT environment override; keeping configured port", "error", err)
+		} else {
+			c.Server.Port = port
+			c.Server.HTTPSPort = httpsPort
+		}
+	}
 
 	// DOMAIN — FQDN override (highest priority for hostname resolution)
 	// Per AI.md PART 5: Sets FQDN directly, not just BaseURL
@@ -3522,6 +3536,26 @@ func (c *ServerConfig) GetHTTPSPort() int {
 	return ResolvePort(c.HTTPSPort)
 }
 
+// ParsePortValue accepts a single listen port or an HTTP,HTTPS pair.
+func ParsePortValue(value string) (int, int, error) {
+	parts := strings.Split(strings.TrimSpace(value), ",")
+	if len(parts) == 0 || len(parts) > 2 {
+		return 0, 0, fmt.Errorf("expected one port or an HTTP,HTTPS pair")
+	}
+	first, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil || first < 0 || first > 65535 {
+		return 0, 0, fmt.Errorf("HTTP port must be between 0 and 65535")
+	}
+	if len(parts) == 1 {
+		return first, 0, nil
+	}
+	second, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil || first == 0 || second < 1 || second > 65535 {
+		return 0, 0, fmt.Errorf("dual ports must be between 1 and 65535")
+	}
+	return first, second, nil
+}
+
 // GetConfigPath returns the path to the configuration file
 func GetConfigPath() string {
 	env := LoadFromEnv()
@@ -3533,6 +3567,105 @@ func GetConfigPath() string {
 	}
 
 	return filepath.Join(configDir, "server.yml")
+}
+
+// PeekServerPort reads only server.port from the config syntax tree for the
+// privileged startup phase. It does not decode or validate any other setting.
+func PeekServerPort(path string) (int, int, bool, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, false, err
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return 0, 0, false, fmt.Errorf("parse early server port: %w", err)
+	}
+	if len(document.Content) == 0 {
+		return 0, 0, false, nil
+	}
+	root := document.Content[0]
+	serverNode := mappingValue(root, "server")
+	portNode := mappingValue(serverNode, "port")
+	if portNode == nil || portNode.Kind != yaml.ScalarNode || strings.TrimSpace(portNode.Value) == "" {
+		return 0, 0, false, nil
+	}
+	httpPort, httpsPort, err := ParsePortValue(portNode.Value)
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("invalid early server.port: %w", err)
+	}
+	return httpPort, httpsPort, true, nil
+}
+
+func mappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func normalizeDualPortNode(document *yaml.Node) error {
+	if document == nil || len(document.Content) == 0 {
+		return nil
+	}
+	root := document.Content[0]
+	server := mappingValue(root, "server")
+	port := mappingValue(server, "port")
+	if port == nil || !strings.Contains(port.Value, ",") {
+		return nil
+	}
+	httpPort, httpsPort, err := ParsePortValue(port.Value)
+	if err != nil || httpsPort == 0 {
+		return fmt.Errorf("invalid server.port dual-port value")
+	}
+	port.Value = strconv.Itoa(httpPort)
+	port.Tag = "!!int"
+	for i := 0; i+1 < len(server.Content); i += 2 {
+		if server.Content[i].Value == "https_port" {
+			server.Content[i+1].Value = strconv.Itoa(httpsPort)
+			server.Content[i+1].Tag = "!!int"
+			return nil
+		}
+	}
+	server.Content = append(server.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: "https_port", Tag: "!!str"},
+		&yaml.Node{Kind: yaml.ScalarNode, Value: strconv.Itoa(httpsPort), Tag: "!!int"})
+	return nil
+}
+
+func serializeDualPortNode(document *yaml.Node, httpPort, httpsPort int) {
+	if document == nil || len(document.Content) == 0 || httpsPort == 0 {
+		return
+	}
+	root := document
+	if document.Kind == yaml.DocumentNode {
+		root = document.Content[0]
+	}
+	server := mappingValue(root, "server")
+	if server == nil {
+		return
+	}
+	port := mappingValue(server, "port")
+	if port == nil {
+		key := &yaml.Node{Kind: yaml.ScalarNode, Value: "port", Tag: "!!str"}
+		port = &yaml.Node{Kind: yaml.ScalarNode}
+		server.Content = append(server.Content, key, port)
+	}
+	port.Value = fmt.Sprintf("%d,%d", httpPort, httpsPort)
+	port.Tag = "!!str"
+	for i := 0; i+1 < len(server.Content); i += 2 {
+		if server.Content[i].Value == "https_port" {
+			server.Content = append(server.Content[:i], server.Content[i+2:]...)
+			return
+		}
+	}
 }
 
 // Initialize initializes the configuration system

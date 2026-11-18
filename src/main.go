@@ -308,7 +308,6 @@ func handleLegacyArgs() {
 var startServerBody = runServerServiceBody
 
 var (
-	startupConfig           *config.Config
 	startupListeners        map[int]net.Listener
 	startupRedirectListener net.Listener
 )
@@ -347,12 +346,11 @@ func bindPrivilegedListeners(cfg *config.Config) (map[int]net.Listener, net.List
 	}
 
 	ports := []int{cfg.Server.GetHTTPPort()}
-	tlsEnabled := cfg.Server.SSL.Enabled || cfg.Server.SSL.LetsEncrypt.Enabled
-	if cfg.Server.IsDualPortMode() && tlsEnabled {
+	if cfg.Server.IsDualPortMode() {
 		ports = append(ports, cfg.Server.GetHTTPSPort())
 	}
 	var redirectPort int
-	if tlsEnabled && cfg.Server.SSL.AutoTLS && !cfg.Server.IsDualPortMode() {
+	if cfg.Server.SSL.AutoTLS && !cfg.Server.IsDualPortMode() {
 		redirectPort = 80
 	}
 
@@ -389,6 +387,42 @@ func bindPrivilegedListeners(cfg *config.Config) (map[int]net.Listener, net.List
 		redirectListener = listener
 	}
 	return listeners, redirectListener, nil
+}
+
+func earlyPortConfig() (*config.Config, error) {
+	cfg := config.DefaultConfig()
+	env := config.LoadFromEnv()
+	portValue := strings.TrimSpace(env.Port)
+	if flagPort > 0 {
+		portValue = strconv.Itoa(flagPort)
+	}
+	var port, httpsPort int
+	if portValue != "" {
+		var err error
+		port, httpsPort, err = config.ParsePortValue(portValue)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PORT value: %w", err)
+		}
+	} else {
+		var found bool
+		var err error
+		port, httpsPort, found, err = config.PeekServerPort(config.GetConfigPath())
+		if err != nil {
+			return nil, err
+		}
+		if !found || port == 0 {
+			port = config.GetRandomPort()
+			if err := os.Setenv("PORT", strconv.Itoa(port)); err != nil {
+				return nil, fmt.Errorf("persist early random port for config initialization: %w", err)
+			}
+		}
+	}
+	cfg.Server.Port = port
+	cfg.Server.HTTPSPort = httpsPort
+	if env.Listen != "" {
+		cfg.Server.Address = env.Listen
+	}
+	return cfg, nil
 }
 
 func runServerServiceBody() {
@@ -463,16 +497,11 @@ func runServerServiceBody() {
 			slog.Warn("failed to set service HOME", "error", err)
 		}
 
-		// Resolve the persisted runtime configuration before binding privileged
-		// sockets so CLI, environment, and server.yml port rules stay identical.
-		cfg, err := config.Initialize()
+		// Read only the effective port before binding privileged sockets. The
+		// full configuration load happens after PID handling below.
+		cfg, err := earlyPortConfig()
 		if err != nil {
-			slog.Error("Configuration failed", "err", err)
-			exitFunc(1)
-			return
-		}
-		if err := config.ChownRuntimeDirectories("search"); err != nil {
-			slog.Error("Failed to set runtime directory ownership", "err", err)
+			slog.Error("Early port resolution failed", "err", err)
 			exitFunc(1)
 			return
 		}
@@ -482,7 +511,6 @@ func runServerServiceBody() {
 			exitFunc(1)
 			return
 		}
-		startupConfig = cfg
 		startupListeners = listeners
 		startupRedirectListener = redirectListener
 
@@ -501,18 +529,10 @@ func runServerServiceBody() {
 		slog.Info("Privileges dropped successfully")
 	}
 
-	// Configuration initialization creates the runtime directories, including
-	// the parent directory of the PID file. It must complete before PID handling
-	// so fresh installs and containers can start with empty data volumes.
-	cfg := startupConfig
-	if cfg == nil {
-		var err error
-		cfg, err = config.Initialize()
-		if err != nil {
-			slog.Error("Configuration failed", "err", err)
-			exitFunc(1)
-			return
-		}
+	if err := config.EnsureDirectories(); err != nil {
+		slog.Error("Failed to create runtime directories", "err", err)
+		exitFunc(1)
+		return
 	}
 
 	// Step 11: Check PID file for existing running instance (stale PID detection)
@@ -538,6 +558,15 @@ func runServerServiceBody() {
 		}
 	}()
 
+	// Full settings are loaded after PID ownership is established. This keeps
+	// the privileged phase limited to the server.port peek and socket binding.
+	cfg, err := config.Initialize()
+	if err != nil {
+		slog.Error("Configuration failed", "err", err)
+		exitFunc(1)
+		return
+	}
+
 	// On first run, point the operator to server.yml where the operator token
 	// is stored. The token itself is never displayed or logged.
 	showSetup := cfg.IsFirstRun()
@@ -545,7 +574,6 @@ func runServerServiceBody() {
 	// Create server (initialises DB, scheduler, etc. — steps 13-16 per AI.md PART 8)
 	srv := server.NewServer(cfg)
 	srv.SetPreboundListeners(startupListeners, startupRedirectListener)
-	startupConfig = nil
 	startupListeners = nil
 	startupRedirectListener = nil
 
