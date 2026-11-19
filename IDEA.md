@@ -109,6 +109,76 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 - **Webhook URL is user-supplied.** SSRF mitigations apply but cannot prevent a user from configuring webhooks pointing at private addresses they own. Reason: legitimate self-hosted automation. Mitigation: SSRF protections applied (per AI.md trust boundary rules).
 - **No admin web UI or user accounts.** The spec (AI.md PART 0–33) has no admin web panel, no session system, no login form, no user registration, no organizations, and no custom-domain features. The operator surface is the two-tier bearer-token model (`server.token` + per-resource owner tokens) documented above. Reason: privacy is the product; the application has no UI-driven configuration and no end-user accounts.
 
+### API routes
+
+The following inventory records the API surface implemented by this project, including template endpoints so route drift can be checked as one complete contract. API success responses use `{ok:true,data}` and errors use `{ok:false,error,message}` unless a route is a protocol endpoint. `{api_version}` is currently `v1`.
+
+| Method | Path | Authentication | Purpose | Request / response summary |
+|--------|------|----------------|---------|----------------------------|
+| GET | `/api/autodiscover` | None | Discover API version and capabilities | No body; returns supported API information |
+| GET | `/api/v1/server/healthz`, `/api/healthz` | None | Health status and alias | No body; health JSON |
+| GET | `/api/v1/server/healthz.txt` | None | Plain-text health status | No body; plain text |
+| POST | `/api/v1/server/reports/csp`, `/api/v1/server/reports/nel`, `/api/v1/server/reports/default`, `/api/v1/server/reports/{name}` | None | Receive browser security reports | Bounded browser report JSON; returns 204 with no body |
+| GET | `/api/v1/server/metrics`, `/api/v1/server/metrics/prometheus`, `/api/metrics`, `/api/metrics/prometheus` | Per-service bearer token | Prometheus metrics and aliases | No body; Prometheus text exposition |
+| GET | `/api/v1/server/metrics/grafana`, `/api/metrics/grafana` | Grafana service bearer token | Grafana dashboard metrics | No body; Grafana-compatible JSON |
+| GET | `/api/v1/server/metrics/loki`, `/api/metrics/loki` | Loki service bearer token | Loki log metrics | No body; Loki-compatible JSON |
+| GET | `/api/v1/info`, `/api/v1/info.txt` | None | Service and version information | No body; JSON or plain text |
+| GET, POST | `/api/v1/search` | None | Aggregate search | Query parameters or JSON search request; returns ranked results |
+| GET | `/api/v1/search/related` | None | Related queries | Query parameter `q`; returns suggestions |
+| GET | `/api/v1/autocomplete` | None | Search suggestions | Query parameter `q`; returns suggestions |
+| GET | `/api/v1/engines` | None | List search engines | No body; returns engine metadata and state |
+| GET | `/api/v1/engines/*` | None | Inspect an engine | Engine path; returns engine details |
+| GET | `/api/v1/categories` | None | List search categories | No body; returns categories |
+| GET | `/api/v1/bangs` | None | List search bang shortcuts | No body; returns bang definitions |
+| GET | `/api/v1/widgets` | None | List instant-answer widgets | No body; returns widget metadata |
+| GET | `/api/v1/widgets/*` | None | Fetch widget data | Widget path and query; returns widget data |
+| GET | `/api/v1/instant` | None | Fetch an instant answer | Query parameters; returns answer data |
+| GET | `/api/v1/direct/*` | None | Fetch a direct answer | Direct-answer path and query; returns answer data |
+| GET | `/api/v1/server/about` | None | About content | No body; returns Markdown source and format |
+| GET | `/api/v1/server/privacy` | None | Privacy policy | No body; returns policy content |
+| GET | `/api/v1/server/dpo` | None | Data protection contact | No body; returns DPO contact fields |
+| GET | `/api/v1/server/help` | None | Help content | No body; returns Markdown source and format |
+| GET | `/api/v1/server/help/mcp` | None | MCP connection help | No body; returns sections and resolved endpoint |
+| GET | `/api/v1/server/terms` | None | Terms of service | No body; returns Markdown source and format |
+| GET, POST | `/api/v1/server/contact` | None | Describe or submit contact form | GET returns fields/challenge; POST requires form token, captcha proof and contact fields |
+| GET | `/api/v1/server/security` | None | Security disclosure channels | No body; returns configured contacts and policy links |
+| GET | `/api/v1/server/security/policy` | None | Disclosure policy | No body; returns policy Markdown |
+| GET | `/api/v1/server/security/thanks` | None | Researcher acknowledgements | No body; returns public acknowledgement entries |
+| GET | `/api/v1/server/auth/check` | Bearer token | Check token validity | No body; returns token kind, never the token |
+| GET, POST | `/api/v1/server/preferences` | None | Read or update client preferences | Preference values; returns normalized preferences |
+| GET | `/api/v1/server/preferences/export` | None | Export preferences | No body; returns export data |
+| GET | `/api/v1/server/preferences/import` | None | Describe preference import | No body; returns import instructions |
+| POST | `/api/v1/server/mcp`, `/api/mcp`, `/mcp` | Bearer token when using private tools | MCP Streamable HTTP endpoint and aliases | MCP protocol JSON; returns protocol response |
+| GET | `/api/v1/server/swagger` | None | OpenAPI document | No body; returns generated OpenAPI JSON |
+| GET | `/api/swagger` | None | OpenAPI document alias | No body; returns the same OpenAPI JSON |
+| POST | `/api/v1/server/graphql` | Bearer token for private fields | GraphQL endpoint | GraphQL query; returns GraphQL JSON |
+| POST | `/api/graphql` | Bearer token for private fields | GraphQL compatibility alias | GraphQL query; returns the same GraphQL JSON |
+| GET | `/api/v1/server/preferences/tokens` | Owner token | List linked tokens | No body; returns token metadata, never plaintext tokens |
+| POST | `/api/v1/server/preferences/tokens` | Owner token | Create linked token | Client name/scopes; returns plaintext token once and metadata |
+| POST | `/api/v1/server/preferences/tokens/primary/reveal`, `/api/v1/server/preferences/tokens/primary/rotate` | Owner token | Reveal or rotate primary token | Confirmation fields; returns token once |
+| PATCH | `/api/v1/server/preferences/tokens/{id}` | Owner token | Update linked token | Token metadata; returns updated metadata |
+| DELETE | `/api/v1/server/preferences/tokens/{id}` | Owner token | Revoke linked token | Token ID; returns revocation status |
+| POST | `/api/v1/server/preferences/tokens/{id}/reveal` | Owner token | Reveal linked token | Confirmation fields; returns plaintext token once |
+| POST | `/api/v1/server/preferences/tokens/{id}/rotate` | Owner token | Rotate linked token | Confirmation fields; returns replacement plaintext token once |
+| GET | `/api/v1/favicon` | None | Privacy-preserving favicon proxy | URL parameter; returns proxied image |
+| GET, POST | `/api/v1/alerts` | None | List or create accountless alerts | GET filters; POST query/email/webhook settings; returns alert or signed manage link |
+| GET, PATCH, DELETE | `/api/v1/alerts/{token}` | Signed alert token | Read, update or delete an alert | GET reads; PATCH updates; DELETE removes; returns alert state or action result |
+| POST | `/api/v1/alerts/{token}/pause` | Signed alert token | Pause an alert | No body; returns updated alert state |
+| GET | `/api/v1/alerts/{token}/rss` | Signed RSS token | Read alert RSS feed | Token in path; returns RSS XML |
+| GET | `/api/v1/server/status`, `/api/v1/server/config` | Operator bearer token | Read operator status or safe configuration | No body; returns status/configuration without secrets |
+| POST | `/api/v1/server/config/contact/webhooks` | Operator bearer token | Configure contact webhooks | Webhook configuration; returns save status |
+| GET | `/api/v1/server/geoip/ips`, `/api/v1/server/geoip/ips.txt` | None | Lookup requester or supplied IP | Optional IP query; returns GeoIP data as JSON or text |
+| GET | `/api/v1/server/geoip/ips/{ip}` | None | Lookup an IP address | IP path; returns GeoIP data |
+| GET | `/api/v1/server/geoip/ips/{ip}.txt` | None | Plain-text IP lookup | IP path; returns GeoIP fields as text |
+| GET, POST | `/api/v1/server/geoip/presets` | Operator bearer token | List or save country-list presets | Preset data on POST; returns presets |
+| GET, DELETE | `/api/v1/server/geoip/presets/{name}` | Operator bearer token | Read or delete a country-list preset | Preset name; returns preset or deletion result |
+| GET | `/api/v1/server/scheduler/tasks` | Operator bearer token | List scheduled tasks | No body; returns task states |
+| GET | `/api/v1/server/scheduler/tasks/{task}` | Operator bearer token | Read a scheduled task | Task ID; returns task state |
+| GET | `/api/v1/server/scheduler/tasks/{task}/history` | Operator bearer token | Read task run history | Task ID; returns recent run history |
+| POST | `/api/v1/server/scheduler/tasks/{task}/run` | Operator bearer token | Trigger a scheduled task | Task ID; returns trigger status |
+| POST | `/api/v1/server/scheduler/tasks/{task}/enable` | Operator bearer token | Enable a scheduled task | Task ID; returns updated task state |
+| POST | `/api/v1/server/scheduler/tasks/{task}/disable` | Operator bearer token | Disable a scheduled task | Task ID; returns updated task state |
+
 ---
 
 ### Features
