@@ -9,7 +9,7 @@
 
 Search is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you. Built in Go for enhanced performance, security, and ease of deployment.
 
-Single self-contained binary. Runs with zero configuration on first start. No admin web UI — all settings are in `server.yml`.
+Single self-contained binary. Runs with zero configuration on first start. No admin web UI — node settings live in `server.yml`, area settings in `yaml.d/`, and credentials in `secrets.yml`.
 
 ## Official Site
 
@@ -34,7 +34,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Installable PWA: Add Search to your home screen with offline fallback support and desktop/mobile install previews
 - Dark, Light, and Auto Themes: Choose the theme, font size, results density, and accent color in Preferences
 - Custom CSS: Save a browser-local stylesheet override, excluded from preference exports/imports
-- File-only Configuration: All settings in `server.yml`; no admin web UI
+- File-only Configuration: Hot-reloaded `server.yml` and `yaml.d/` area files, with credentials isolated in `secrets.yml`
 - Multi-Category Search: Web, images, videos, news, maps, files, music, science, IT, and social
 - Built-in SSL: Let's Encrypt integration for automatic HTTPS
 - Monitoring: Prometheus metrics and health endpoints
@@ -169,7 +169,12 @@ search-cli --help
 
 ## Configuration
 
-On first run, Search creates a configuration file with sane defaults.
+On first run, Search creates `server.yml` with node settings and stores credentials
+in `secrets.yml`. The operator token is shown once in the startup banner. Area
+settings are stored in `{config_dir}/yaml.d/` as needed; for example,
+`branding.yml`, `web.yml`, `security.yml`, and `app.yml`. Existing all-in-one
+`server.yml` files are split automatically on startup, with a `server.yml.bak`
+backup kept before migration.
 
 **Config file locations:**
 
@@ -194,20 +199,12 @@ server:
   # Application mode: production or development
   mode: production
 
-  # Operator bearer token (auto-generated on first run)
-  token: ""
-
-# Enable search engines
-engines:
-  google:
-    enabled: true
-  bing:
-    enabled: true
-  duckduckgo:
-    enabled: true
-  wikipedia:
-    enabled: true
 ```
+
+Search engines and other application settings belong in `yaml.d/app.yml`.
+Do not copy credentials into `server.yml`; the server moves supported secret
+keys to `secrets.yml` on startup. The token and other generated credentials are
+written there with private file permissions.
 
 ### Environment Variables
 
@@ -224,7 +221,11 @@ BACKUP_DIR="/var/backups/apimgr/search"
 
 ### Operator Access
 
-There is **no admin web UI**. Configuration is file-driven via `server.yml` and hot-reloaded automatically via a file watcher (no signal required). To rotate the operator token:
+There is **no admin web UI**. Configuration is file-driven: changes to
+`server.yml`, `yaml.d/`, and `secrets.yml` are hot-reloaded automatically via a
+file watcher (no signal required). The operator bearer token is stored at
+`server.token` in `secrets.yml`; generated metrics tokens are under
+`server.metrics.auth.tokens` in the same file.
 
 ```bash
 search --maintenance secret rotate installation_secret
@@ -355,12 +356,13 @@ server:
 
 ### Monitoring
 
-Metrics endpoints are internal and require a configured per-service bearer
-token. Supply the Prometheus token in the `Authorization` header; do not expose
+Metrics endpoints require a per-service bearer token generated at startup and
+stored in `secrets.yml` under `server.metrics.auth.tokens`. Read the Prometheus
+token from that file and supply it in the `Authorization` header; do not expose
 metrics endpoints to the public internet.
 
 ```bash
-# Prometheus metrics (set PROMETHEUS_TOKEN to the configured service token)
+# Prometheus metrics (use the token from secrets.yml)
 curl -q -LSsf -H "Authorization: Bearer $PROMETHEUS_TOKEN" https://scour.li/metrics
 
 # Health check
