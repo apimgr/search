@@ -102,6 +102,39 @@
     color: var(--color-text);
 }
 
+.contact-review-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: var(--color-overlay-strong);
+}
+
+.contact-review-panel {
+    width: min(38rem, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    padding: clamp(1rem, 4vw, 2rem);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg);
+    color: var(--color-text);
+    box-shadow: 0 1rem 3rem var(--color-shadow);
+}
+
+.contact-review-email {
+    overflow-wrap: anywhere;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.contact-review-panel form {
+    display: grid;
+    gap: 1rem;
+}
+
 .pwa-install-dialog::backdrop {
     background: var(--color-overlay-strong);
 }
@@ -4165,6 +4198,15 @@ body:has(.nav-checkbox:checked) {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+.contact-honeypot {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
 }
 
 /* Skip link for keyboard navigation - WCAG 2.1 AA */

@@ -39,10 +39,6 @@ type mcpTool struct {
 }
 
 func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request) {
-	if !h.config.Server.MCP.Enabled {
-		http.NotFound(w, r)
-		return
-	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)

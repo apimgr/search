@@ -90,9 +90,11 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 		writeResponseFormatted(w, "Contact: %s\n", webSecurity.ReportURL)
 	}
 
-	// Contact 2: rotating {security_id} contact-form URL per AI.md PART 11
-	securityID := security.GenerateSecurityID(s.config.Server.Security.InstallationSecret, time.Now().Unix())
-	writeResponseFormatted(w, "Contact: %s/server/contact?security_id=%s\n", baseURL, securityID)
+	// Contact 2: rotating report-form URL per AI.md PART 11.
+	if s.config.Server.Pages.Contact.Enabled {
+		securityID := security.GenerateSecurityID(s.config.Server.Security.InstallationSecret, time.Now().Unix())
+		writeResponseFormatted(w, "Contact: %s/server/contact?security_id=%s\n", baseURL, securityID)
+	}
 
 	// Contact 3: mailto: fallback
 	// Uses security.contact then general.contact per AI.md PART 12 fallback chain

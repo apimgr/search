@@ -4,11 +4,6 @@
         <h1>{{t "footer.privacy_policy"}}</h1>
     </header>
 
-    {{if .Config.Server.Pages.Privacy.Content}}
-    <div class="page-content markdown">
-        {{.Config.Server.Pages.Privacy.Content | safe}}
-    </div>
-    {{else}}
     <div class="page-content">
         {{/* Summary key points — the sold/not-sold point swaps on server.privacy.data.sold */}}
         <section class="privacy-section privacy-summary" id="summary">
@@ -143,13 +138,12 @@
             {{end}}
         </section>
 
+        {{if operatorHTMLExists "privacy" .}}<section class="privacy-section operator-content">{{operatorHTML "privacy" .}}</section>{{end}}
         <section class="privacy-section">
             <h2>{{t "contact.page_title"}}</h2>
-            <p>{{t "privacy.contact_prefix"}} <a href="/server/contact">{{t "contact.title"}}</a>{{t "privacy.contact_suffix"}}</p>
+            <p>{{t "privacy.contact_prefix"}} <a href="/server/security">{{t "contact.title"}}</a>{{t "privacy.contact_suffix"}}</p>
         </section>
     </div>
-    {{end}}
-
     <section class="privacy-section ccpa-section" id="ccpa-opt-out">
         <h2>{{t "privacy.ccpa_opt_out_heading"}}</h2>
         {{if .DataSold}}

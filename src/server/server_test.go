@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
+	"github.com/apimgr/search/src/swagger"
 	"github.com/apimgr/search/src/version"
 	"github.com/go-chi/chi/v5"
 )
@@ -24,6 +26,185 @@ import (
 type queryCaptureEngine struct {
 	*search.BaseEngine
 	queries chan model.Query
+}
+
+func TestAPIRoutesMatchAIAndIDEAContract(t *testing.T) {
+	server := newTestServer(t)
+	server.Handler()
+	if server.router == nil {
+		t.Fatal("API route drift: server router was not initialized")
+	}
+
+	want := readIDEAAPIInventory(t)
+	template := readAITemplateAPIInventory(t)
+	for operation := range template {
+		want[operation] = true
+	}
+	registered := make(map[string]bool)
+	for _, route := range server.router.Routes() {
+		path := normalizeRoutePath(route.Pattern)
+		if !strings.HasPrefix(path, "/api/") && path != "/mcp" {
+			continue
+		}
+		for method := range route.Handlers {
+			registered[method+" "+path] = true
+		}
+	}
+	spec := swagger.GenerateSpec(server.config, "https://search.example.test")
+	documented := make(map[string]bool)
+	for path, item := range spec.Paths {
+		if !strings.HasPrefix(path, "/api/") && path != "/mcp" {
+			continue
+		}
+		for method, present := range map[string]bool{
+			"GET": item.Get != nil, "POST": item.Post != nil, "PUT": item.Put != nil,
+			"PATCH": item.Patch != nil, "DELETE": item.Delete != nil,
+		} {
+			if present {
+				documented[method+" "+path] = true
+			}
+		}
+	}
+	for operation := range want {
+		if !registered[operation] {
+			t.Errorf("API route drift: %s is present in the AI.md + IDEA.md contract but missing from the router", operation)
+		}
+		if !documented[operation] {
+			t.Errorf("API route drift: %s is present in the AI.md + IDEA.md contract but missing from OpenAPI", operation)
+		}
+	}
+	for operation := range registered {
+		if !want[operation] {
+			t.Errorf("API route drift: %s is registered but missing from AI.md and IDEA.md", operation)
+		}
+		if !documented[operation] {
+			t.Errorf("API route drift: %s is registered but missing from OpenAPI", operation)
+		}
+	}
+	for operation := range documented {
+		if !want[operation] {
+			t.Errorf("API route drift: %s is in OpenAPI but missing from AI.md and IDEA.md", operation)
+		}
+		if !registered[operation] {
+			t.Errorf("API route drift: %s is in OpenAPI but missing from the router", operation)
+		}
+	}
+}
+
+func readIDEAAPIInventory(t *testing.T) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile("../../IDEA.md")
+	if err != nil {
+		t.Fatalf("read IDEA.md API inventory: %v", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "### API routes" {
+			start = i + 1
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatal("API route drift: IDEA.md is missing the ### API routes inventory")
+	}
+	return parseRouteTable(lines[start:], 1, 2)
+}
+
+func readAITemplateAPIInventory(t *testing.T) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile("../../AI.md")
+	if err != nil {
+		t.Fatalf("read AI.md template API routes: %v", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	start, end := -1, -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "### /server/ API Endpoints" {
+			start = i + 1
+		}
+		if start >= 0 && strings.TrimSpace(line) == "**Direct alias endpoints (same handler, no redirect):**" {
+			end = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatal("API route drift: AI.md template API endpoint table could not be found")
+	}
+	if end < 0 {
+		end = len(lines)
+	}
+	template := parseRouteTable(lines[start:end], 2, 1)
+	aliasStart, aliasEnd := -1, len(lines)
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "**Direct alias endpoints (same handler, no redirect):**" {
+			aliasStart = i + 1
+			continue
+		}
+		if aliasStart >= 0 && strings.TrimSpace(line) == "### /server/ Frontend Routes" {
+			aliasEnd = i
+			break
+		}
+	}
+	if aliasStart >= 0 {
+		for _, line := range lines[aliasStart:aliasEnd] {
+			columns := strings.Split(strings.TrimSpace(line), "|")
+			if len(columns) < 3 {
+				continue
+			}
+			alias := strings.TrimSpace(strings.Trim(strings.TrimSpace(columns[1]), "`"))
+			canonical := strings.TrimSpace(strings.Trim(strings.TrimSpace(columns[2]), "`"))
+			canonical = strings.ReplaceAll(canonical, "/api/{api_version}", "/api/v1")
+			canonical = normalizeRoutePath(canonical)
+			for operation := range template {
+				method, path, ok := strings.Cut(operation, " ")
+				if ok && path == canonical && strings.HasPrefix(alias, "/") {
+					template[method+" "+alias] = true
+				}
+			}
+		}
+	}
+	return template
+}
+
+func parseRouteTable(lines []string, methodColumn, pathColumn int) map[string]bool {
+	operations := make(map[string]bool)
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "### ") || trimmed == "---" {
+			break
+		}
+		columns := strings.Split(trimmed, "|")
+		if len(columns) <= methodColumn || len(columns) <= pathColumn {
+			continue
+		}
+		methods := strings.Split(strings.TrimSpace(columns[methodColumn]), ",")
+		paths := strings.Split(strings.TrimSpace(columns[pathColumn]), ",")
+		for _, method := range methods {
+			method = strings.ToUpper(strings.TrimSpace(method))
+			if method == "" || method == "METHOD" || strings.Contains(method, "-") {
+				continue
+			}
+			for _, path := range paths {
+				path = strings.TrimSpace(strings.Trim(strings.TrimSpace(path), "`"))
+				if !strings.HasPrefix(path, "/") {
+					continue
+				}
+				path = strings.ReplaceAll(path, "/api/{api_version}", "/api/v1")
+				path = normalizeRoutePath(path)
+				operations[method+" "+path] = true
+			}
+		}
+	}
+	return operations
+}
+
+func normalizeRoutePath(path string) string {
+	path = strings.ReplaceAll(path, "/engines/*", "/engines/{engine_id}")
+	path = strings.ReplaceAll(path, "/widgets/*", "/widgets/{widget_id}")
+	path = strings.ReplaceAll(path, "/direct/*", "/direct/{type}/{term}")
+	path = strings.ReplaceAll(path, "/alerts/*", "/alerts/{token}")
+	return path
 }
 
 func (e *queryCaptureEngine) Search(_ context.Context, query *model.Query) ([]model.Result, error) {
@@ -2362,13 +2543,20 @@ func TestSignCaptcha(t *testing.T) {
 
 func TestContactHoneypotSilentlyAcceptsWithoutDelivery(t *testing.T) {
 	s := newTestServer(t)
-	form := url.Values{"website": {"https://spam.example"}}
+	s.config.Update(func(cfg *config.ServerConfig) { cfg.Pages.Contact.Antispam.MinFillSeconds = 0 })
+	captchaID := s.signCaptcha(3)
+	form := url.Values{
+		"website": {"https://spam.example"}, "type": {"privacy"}, "request_kind": {"other"},
+		"name": {"Spam"}, "email": {"spam@example.com"}, "subject": {"Hello"}, "message": {"Message"},
+		"form_token": {s.ContactFormToken()}, "captcha_id": {captchaID}, "captcha": {"3"},
+	}
 	req := httptest.NewRequest(http.MethodPost, "/server/contact", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://example.com")
 	recorder := httptest.NewRecorder()
 	s.handleContactSubmit(recorder, req)
-	if recorder.Code != http.StatusSeeOther || recorder.Header().Get("Location") != "/server/contact?success=1" {
-		t.Fatalf("honeypot response = %d %q, want successful redirect", recorder.Code, recorder.Header().Get("Location"))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "contact-review-panel") {
+		t.Fatalf("honeypot first step = %d, want normal review page", recorder.Code)
 	}
 }
 

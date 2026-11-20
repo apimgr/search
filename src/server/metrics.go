@@ -59,6 +59,8 @@ type Metrics struct {
 	dbConnectionsOpen  prometheus.Gauge
 	dbConnectionsInUse prometheus.Gauge
 	dbErrors           *prometheus.CounterVec
+	dbBusyTotal        prometheus.Counter
+	dbWriteWait        prometheus.Histogram
 
 	// Cache metrics
 	cacheHits      *prometheus.CounterVec
@@ -80,6 +82,7 @@ type Metrics struct {
 	// Rate limiting metrics
 	ratelimitRequestsTotal *prometheus.CounterVec
 	ratelimitBlockedTotal  *prometheus.CounterVec
+	contactBlocked         *prometheus.CounterVec
 
 	// Business metrics (search domain)
 	searchesTotal  prometheus.Counter
@@ -239,6 +242,19 @@ func NewMetrics(cfg *config.Config) *Metrics {
 			},
 			[]string{"operation", "error_type"},
 		),
+		dbBusyTotal: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "search_db_busy_total",
+				Help: "Database writes delayed by SQLite contention",
+			},
+		),
+		dbWriteWait: promauto.With(reg).NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "search_db_write_wait_seconds",
+				Help:    "Time spent waiting to begin SQLite write transactions",
+				Buckets: prometheus.DefBuckets,
+			},
+		),
 
 		// Cache metrics per AI.md PART 20
 		cacheHits: promauto.With(reg).NewCounterVec(
@@ -337,6 +353,13 @@ func NewMetrics(cfg *config.Config) *Metrics {
 				Help: "Requests blocked by rate limiter",
 			},
 			[]string{"limit"},
+		),
+		contactBlocked: promauto.With(reg).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "search_contact_blocked_total",
+				Help: "Contact submissions blocked by antispam reason",
+			},
+			[]string{"reason"},
 		),
 
 		// Search metrics
@@ -647,6 +670,12 @@ func (m *Metrics) RecordDBQuery(operation, table string, duration time.Duration)
 // RecordDBError records a database error
 func (m *Metrics) RecordDBError(operation, errorType string) {
 	m.dbErrors.WithLabelValues(operation, errorType).Inc()
+}
+
+// RecordDBBusy observes writes delayed more than one second by SQLite.
+func (m *Metrics) RecordDBBusy(wait time.Duration, _ string) {
+	m.dbBusyTotal.Inc()
+	m.dbWriteWait.Observe(wait.Seconds())
 }
 
 // RecordCacheHit records a cache hit

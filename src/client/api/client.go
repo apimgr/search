@@ -347,7 +347,7 @@ func (c *Client) GetVersion() (string, error) {
 }
 
 func (c *Client) CheckAuth() (string, error) {
-	resp, err := c.get(searchapi.APIPrefix + "/server/auth")
+	resp, err := c.get(searchapi.APIPrefix + "/server/auth/check")
 	if err != nil {
 		return "", err
 	}

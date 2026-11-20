@@ -54,7 +54,7 @@ func TestMCPInitializeAndToolsList(t *testing.T) {
 	}
 }
 
-func TestMCPRejectsOriginHeaderMismatchAndDisabledEndpoint(t *testing.T) {
+func TestMCPRejectsOriginHeaderMismatchAndIgnoresRemovedEnabledSwitch(t *testing.T) {
 	tests := []struct {
 		name           string
 		configure      func(*config.Config)
@@ -63,7 +63,7 @@ func TestMCPRejectsOriginHeaderMismatchAndDisabledEndpoint(t *testing.T) {
 	}{
 		{name: "origin", origin: "https://evil.example", want: http.StatusForbidden},
 		{name: "header mismatch", method: "tools/call", want: http.StatusBadRequest},
-		{name: "disabled", configure: func(cfg *config.Config) { cfg.Server.MCP.Enabled = false }, want: http.StatusNotFound},
+		{name: "always on", configure: func(cfg *config.Config) { cfg.Server.MCP.Enabled = false }, want: http.StatusOK},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

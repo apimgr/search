@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -69,6 +70,13 @@ func (s *testContactSubmitter) SubmitContact(_ context.Context, message ContactM
 	s.calls++
 	s.last = message
 	return s.err
+}
+
+func (*testContactSubmitter) ContactReviewToken(url.Values, string) string {
+	return "test-review-token"
+}
+func (*testContactSubmitter) ValidateContactReviewToken(_ url.Values, token string, confirmed bool) bool {
+	return token == "test-review-token" && confirmed
 }
 
 func newTestHandler() *Handler {
@@ -2520,7 +2528,7 @@ func TestRegisterRoutes(t *testing.T) {
 		{"/api/autodiscover", http.MethodGet},
 		{"/api/v1/server/healthz", http.MethodGet},
 		{"/api/v1/server/healthz.txt", http.MethodGet},
-		{"/api/v1/server/auth", http.MethodGet},
+		{"/api/v1/server/auth/check", http.MethodGet},
 		{"/api/v1/info", http.MethodGet},
 		{"/api/v1/categories", http.MethodGet},
 		{"/api/v1/engines", http.MethodGet},
@@ -2836,8 +2844,9 @@ func TestHandleServerAbout(t *testing.T) {
 		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
 	}
 
+	responseBody := w.Body.Bytes()
 	var resp APIResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.Unmarshal(responseBody, &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if !resp.OK {
@@ -2910,8 +2919,9 @@ func TestHandleServerPrivacy(t *testing.T) {
 		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
 	}
 
+	responseBody := w.Body.Bytes()
 	var resp APIResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.Unmarshal(responseBody, &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if !resp.OK {
@@ -3038,6 +3048,7 @@ func TestHandleServerTermsMethodNotAllowed(t *testing.T) {
 
 func TestHandleServerContactGETJSON(t *testing.T) {
 	handler := newTestHandler()
+	handler.config.Server.Pages.Contact.Enabled = true
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/contact", nil)
 	req.Header.Set("Accept", "application/json")
@@ -3049,8 +3060,9 @@ func TestHandleServerContactGETJSON(t *testing.T) {
 		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
 	}
 
+	responseBody := w.Body.Bytes()
 	var resp APIResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.Unmarshal(responseBody, &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if !resp.OK {
@@ -3060,6 +3072,7 @@ func TestHandleServerContactGETJSON(t *testing.T) {
 
 func TestHandleServerContactGETHTMLAcceptStillReturnsAPIData(t *testing.T) {
 	handler := newTestHandler()
+	handler.config.Server.Pages.Contact.Enabled = true
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/contact", nil)
 	req.Header.Set("Accept", "text/html")
@@ -3074,6 +3087,7 @@ func TestHandleServerContactGETHTMLAcceptStillReturnsAPIData(t *testing.T) {
 
 func TestHandleServerContactMethodNotAllowed(t *testing.T) {
 	handler := newTestHandler()
+	handler.config.Server.Pages.Contact.Enabled = true
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/server/contact", nil)
 	req.Header.Set("Accept", "application/json")
@@ -3109,14 +3123,7 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 			Contact: config.ContactConfig{
 				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
-			Pages: config.PagesConfig{Contact: struct {
-				Enabled        bool   `yaml:"enabled"`
-				Email          string `yaml:"email"`
-				Captcha        string `yaml:"captcha"`
-				CaptchaSiteKey string `yaml:"captcha_site_key"`
-				CaptchaSecret  string `yaml:"captcha_secret_key"`
-				SuccessMessage string `yaml:"success_message"`
-			}{Enabled: true}},
+			Pages: config.PagesConfig{Contact: config.ContactPageConfig{Enabled: true}},
 		},
 	}
 	registry := engine.NewRegistry()
@@ -3126,7 +3133,16 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 	handler.SetContactSubmitter(submitter)
 	handler.SetContactCaptchaProvider(testContactCaptcha{})
 
-	body := `{"name":"Alice","email":"alice@example.com","subject":"Bug Report","message":"Found a bug","captcha_id":"test-id","captcha_answer":"2"}`
+	cfg.Server.Pages.Contact.Antispam.MinFillSeconds = 0
+	bodyFields := map[string]interface{}{
+		"name": "Alice", "email": "alice@example.com", "type": "privacy", "request_kind": "other", "subject": "Bug Report", "message": "Found a bug",
+		"form_token": handler.contactFormToken(nil), "captcha_id": "test-id", "captcha_answer": "2",
+	}
+	bodyBytes, err := json.Marshal(bodyFields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(bodyBytes)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -3144,6 +3160,28 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 	if !resp.OK {
 		t.Errorf("OK = false, want true; message = %q", resp.Message)
 	}
+	if submitter.calls != 0 {
+		t.Fatalf("first contact step delivered %d messages, want none", submitter.calls)
+	}
+	reviewData, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("review response data = %#v", resp.Data)
+	}
+	reviewToken, _ := reviewData["review_token"].(string)
+	bodyFields["step"] = "confirm"
+	bodyFields["review_token"] = reviewToken
+	bodyFields["confirmed"] = true
+	confirmBody, err := json.Marshal(bodyFields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmRequest := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(string(confirmBody)))
+	confirmRequest.Header.Set("Content-Type", "application/json")
+	confirmResponse := httptest.NewRecorder()
+	handler.handleServerContact(confirmResponse, confirmRequest)
+	if confirmResponse.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want %d: %s", confirmResponse.Code, http.StatusOK, confirmResponse.Body.String())
+	}
 	if submitter.calls != 1 || submitter.last.Email != "alice@example.com" || submitter.last.Subject != "Bug Report" {
 		t.Errorf("contact submission = %#v, calls=%d", submitter.last, submitter.calls)
 	}
@@ -3156,14 +3194,7 @@ func TestHandleServerContactPOSTMissingFields(t *testing.T) {
 			Contact: config.ContactConfig{
 				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
-			Pages: config.PagesConfig{Contact: struct {
-				Enabled        bool   `yaml:"enabled"`
-				Email          string `yaml:"email"`
-				Captcha        string `yaml:"captcha"`
-				CaptchaSiteKey string `yaml:"captcha_site_key"`
-				CaptchaSecret  string `yaml:"captcha_secret_key"`
-				SuccessMessage string `yaml:"success_message"`
-			}{Enabled: true}},
+			Pages: config.PagesConfig{Contact: config.ContactPageConfig{Enabled: true}},
 		},
 	}
 	registry := engine.NewRegistry()
@@ -3203,14 +3234,7 @@ func TestHandleServerContactPOSTInvalidJSON(t *testing.T) {
 			Contact: config.ContactConfig{
 				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
-			Pages: config.PagesConfig{Contact: struct {
-				Enabled        bool   `yaml:"enabled"`
-				Email          string `yaml:"email"`
-				Captcha        string `yaml:"captcha"`
-				CaptchaSiteKey string `yaml:"captcha_site_key"`
-				CaptchaSecret  string `yaml:"captcha_secret_key"`
-				SuccessMessage string `yaml:"success_message"`
-			}{Enabled: true}},
+			Pages: config.PagesConfig{Contact: config.ContactPageConfig{Enabled: true}},
 		},
 	}
 	registry := engine.NewRegistry()

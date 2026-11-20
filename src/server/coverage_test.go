@@ -344,6 +344,9 @@ func TestHandleSecurityTxtEnhanced(t *testing.T) {
 			s := newTestServer(t)
 			s.config.Server.Web.Security.Contact = tt.contact
 			s.config.Server.Contact.Security.Email = tt.contactEmail
+			if tt.name == "no contact fallback hostname" {
+				s.config.Server.Contact.General.Email = ""
+			}
 			s.config.Server.Web.Security.Expires = tt.expires
 
 			req := httptest.NewRequest(http.MethodGet, "/.well-known/security.txt", nil)
@@ -2462,7 +2465,7 @@ func TestHandleSecurityTxtEnhanced_ContactFallback(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.handleSecurityTxtEnhanced(rec, req)
 	body := rec.Body.String()
-	if !strings.Contains(body, "Contact: mailto:security@") {
+	if !strings.Contains(body, "Contact: mailto:security@example.com") {
 		t.Errorf("handleSecurityTxtEnhanced fallback contact missing: %s", body)
 	}
 }

@@ -74,6 +74,23 @@ func (s *Server) VerifyContactChallenge(r *http.Request, id, answer string) bool
 		verifier := newContactCaptchaVerifier(nil, "https://www.google.com/recaptcha/api/siteverify", "https://api.hcaptcha.com/siteverify")
 		return verifier.verify(r.Context(), mode, secretKey, answer, getClientIPSimple(r))
 	}
+	return s.verifySimpleContactChallenge(id, answer)
+}
+
+func (s *Server) VerifyContactProof(r *http.Request, providerToken, id, answer string) bool {
+	mode, siteKey, secretKey := s.configuredContactCaptcha()
+	if providerToken != "" {
+		if isOnionRequest(s.config, r) || isI2PRequest(r) ||
+			(mode != "recaptcha" && mode != "hcaptcha") || siteKey == "" || secretKey == "" {
+			return false
+		}
+		verifier := newContactCaptchaVerifier(nil, "https://www.google.com/recaptcha/api/siteverify", "https://api.hcaptcha.com/siteverify")
+		return verifier.verify(r.Context(), mode, secretKey, providerToken, getClientIPSimple(r))
+	}
+	return s.verifySimpleContactChallenge(id, answer)
+}
+
+func (s *Server) verifySimpleContactChallenge(id, answer string) bool {
 	s.apiCaptchasMu.Lock()
 	challenge, ok := s.apiCaptchas[id]
 	delete(s.apiCaptchas, id)

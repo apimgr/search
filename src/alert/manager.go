@@ -17,6 +17,7 @@ import (
 
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -46,6 +47,7 @@ var (
 
 type Manager struct {
 	db           *sql.DB
+	writer       *database.DB
 	serverConfig *config.Config
 	aggregator   *search.Aggregator
 	mailer       *email.Mailer
@@ -153,6 +155,25 @@ func NewManager(db *sql.DB, serverConfig *config.Config, aggregator *search.Aggr
 	}
 }
 
+func NewManagerWithDB(db *database.DB, serverConfig *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
+	manager := NewManager(db.ReadSQL(), serverConfig, aggregator, mailer)
+	manager.writer = db
+	return manager
+}
+
+func (m *Manager) execWrite(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	if m.writer == nil {
+		return m.db.ExecContext(ctx, query, args...)
+	}
+	var result sql.Result
+	err := m.writer.Write(ctx, func(tx *sql.Tx) error {
+		var err error
+		result, err = tx.ExecContext(ctx, query, args...)
+		return err
+	})
+	return result, err
+}
+
 func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResponse, error) {
 	if m.db == nil {
 		return nil, fmt.Errorf("alert storage unavailable")
@@ -204,7 +225,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 
 	now := time.Now().UTC()
 
-	_, err = m.db.ExecContext(ctx, `
+	_, err = m.execWrite(ctx, `
 		INSERT INTO search_alerts (
 			id, owner_id, email, query, category, language, region, engines_json, safe_search, frequency,
 			deliver_email, deliver_rss, deliver_webhook,
@@ -380,7 +401,7 @@ func (m *Manager) Update(ctx context.Context, manageToken string, req UpdateRequ
 		}
 	}
 
-	_, err = m.db.ExecContext(ctx, `
+	_, err = m.execWrite(ctx, `
 		UPDATE search_alerts
 		SET query = ?, category = ?, language = ?, region = ?, engines_json = ?, frequency = ?, safe_search = ?, deliver_email = ?, deliver_rss = ?, deliver_webhook = ?, webhook_url = ?, paused_at = NULL
 		WHERE manage_token_hash = ?
@@ -400,7 +421,7 @@ func (m *Manager) SetPaused(ctx context.Context, manageToken string, paused bool
 		status = StatusPaused
 		pausedAt = time.Now().UTC()
 	}
-	result, err := m.db.ExecContext(ctx, `UPDATE search_alerts SET status = ?, paused_at = ? WHERE manage_token_hash = ?`, status, pausedAt, hashTokenHex(manageToken))
+	result, err := m.execWrite(ctx, `UPDATE search_alerts SET status = ?, paused_at = ? WHERE manage_token_hash = ?`, status, pausedAt, hashTokenHex(manageToken))
 	if err != nil {
 		return fmt.Errorf("update alert status: %w", err)
 	}
@@ -412,7 +433,7 @@ func (m *Manager) SetPaused(ctx context.Context, manageToken string, paused bool
 }
 
 func (m *Manager) Delete(ctx context.Context, manageToken string) error {
-	result, err := m.db.ExecContext(ctx, `DELETE FROM search_alerts WHERE manage_token_hash = ?`, hashTokenHex(manageToken))
+	result, err := m.execWrite(ctx, `DELETE FROM search_alerts WHERE manage_token_hash = ?`, hashTokenHex(manageToken))
 	if err != nil {
 		return fmt.Errorf("delete alert: %w", err)
 	}
@@ -548,7 +569,7 @@ func (m *Manager) CleanupResults(ctx context.Context) error {
 		retention = 30
 	}
 	threshold := time.Now().UTC().AddDate(0, 0, -retention)
-	_, err := m.db.ExecContext(ctx, `DELETE FROM search_alert_results WHERE first_seen_at < ?`, threshold)
+	_, err := m.execWrite(ctx, `DELETE FROM search_alert_results WHERE first_seen_at < ?`, threshold)
 	return err
 }
 
@@ -563,7 +584,7 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 
 	results, err := m.aggregator.Search(ctx, query)
 	if err != nil && !errors.Is(err, model.ErrNoResults) {
-		_, _ = m.db.ExecContext(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
+		_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
 		return err
 	}
 
@@ -575,7 +596,7 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 		}
 	}
 	now := time.Now().UTC()
-	if _, err := m.db.ExecContext(ctx, `UPDATE search_alerts SET last_checked_at = ?, last_error = '' WHERE id = ?`, now, alert.ID); err != nil {
+	if _, err := m.execWrite(ctx, `UPDATE search_alerts SET last_checked_at = ?, last_error = '' WHERE id = ?`, now, alert.ID); err != nil {
 		return err
 	}
 
@@ -586,13 +607,13 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 		}
 		if len(pendingEmail) > 0 {
 			if err := m.sendDigestEmail(ctx, alert, pendingEmail); err != nil {
-				_, _ = m.db.ExecContext(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
+				_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
 				return err
 			}
 			if err := m.markResultsDelivered(ctx, pendingEmail, "notified_email_at"); err != nil {
 				return err
 			}
-			_, _ = m.db.ExecContext(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, now, alert.ID)
+			_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, now, alert.ID)
 		}
 	}
 
@@ -603,13 +624,13 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 		}
 		if len(pendingWebhook) > 0 {
 			if err := m.sendWebhook(ctx, alert, pendingWebhook); err != nil {
-				_, _ = m.db.ExecContext(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
+				_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
 				return err
 			}
 			if err := m.markResultsDelivered(ctx, pendingWebhook, "notified_webhook_at"); err != nil {
 				return err
 			}
-			_, _ = m.db.ExecContext(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, now, alert.ID)
+			_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, now, alert.ID)
 		}
 	}
 
@@ -796,7 +817,7 @@ func (m *Manager) insertResult(ctx context.Context, alertID string, result model
 	if err != nil {
 		return err
 	}
-	_, err = m.db.ExecContext(ctx, `
+	_, err = m.execWrite(ctx, `
 		INSERT OR IGNORE INTO search_alert_results (
 			id, alert_id, fingerprint, title, url, content, engine, published_at, first_seen_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -842,7 +863,7 @@ func (m *Manager) markResultsDelivered(ctx context.Context, results []AlertResul
 	}
 	now := time.Now().UTC()
 	for _, result := range results {
-		if _, err := m.db.ExecContext(ctx, query, now, result.ID); err != nil {
+		if _, err := m.execWrite(ctx, query, now, result.ID); err != nil {
 			return err
 		}
 	}
@@ -876,7 +897,7 @@ func (m *Manager) ensureWebhookSecret(ctx context.Context, alertID string) error
 	if err != nil {
 		return fmt.Errorf("encrypt webhook secret: %w", err)
 	}
-	if _, err := m.db.ExecContext(ctx, `UPDATE search_alerts SET webhook_secret_encrypted = ? WHERE id = ? AND COALESCE(webhook_secret_encrypted, '') = ''`, encrypted, alertID); err != nil {
+	if _, err := m.execWrite(ctx, `UPDATE search_alerts SET webhook_secret_encrypted = ? WHERE id = ? AND COALESCE(webhook_secret_encrypted, '') = ''`, encrypted, alertID); err != nil {
 		return fmt.Errorf("store webhook secret: %w", err)
 	}
 	return nil

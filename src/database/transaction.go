@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 )
@@ -33,33 +32,7 @@ const (
 // TimeoutTransaction, rolling back on any error and on panic.
 // AI.md PART 10 "Query Timeouts" → "For transactions".
 func WithTransaction(ctx context.Context, db *DB, fn func(*sql.Tx) error) error {
-	ctx, cancel := context.WithTimeout(ctx, TimeoutTransaction)
-	defer cancel()
-
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-
-	// A panic inside fn must not leave the transaction open.
-	committed := false
-	defer func() {
-		if !committed {
-			if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-				slog.Warn("failed to roll back database transaction", "error", err)
-			}
-		}
-	}()
-
-	if err := fn(tx); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	committed = true
-	return nil
+	return db.Write(ctx, fn)
 }
 
 // HandleQueryError maps a database error onto the stable error codes from
@@ -86,6 +59,9 @@ func HandleQueryError(err error) error {
 // serialization failures with a linear backoff.
 // AI.md PART 10 "Retry on Serialization Failure".
 func WithSerializableRetry(ctx context.Context, db *DB, maxRetries int, fn func(*sql.Tx) error) error {
+	if db.Driver() == "sqlite" {
+		return db.Write(ctx, fn)
+	}
 	if maxRetries < 1 {
 		maxRetries = 1
 	}

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/database"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,10 +21,17 @@ import (
 // There is no cluster mode, no database-as-config-source-of-truth (AI.md line 2055).
 type ConfigSync struct {
 	db         *sql.DB
+	writer     *database.DB
 	config     *Config
 	configPath string
 	mu         sync.RWMutex
 	lastSync   time.Time
+}
+
+func NewConfigSyncWithDB(db *database.DB, config *Config, configPath string) *ConfigSync {
+	syncer := NewConfigSync(db.ReadSQL(), config, configPath)
+	syncer.writer = db
+	return syncer
 }
 
 // NewConfigSync creates a new config sync manager.
@@ -76,7 +84,14 @@ func (cs *ConfigSync) writeToDatabase(key string, value interface{}) error {
 	// Per AI.md PART 10: INSERT/UPDATE queries must use context with 10s timeout
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer dbCancel()
-	_, err = cs.db.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
+	if cs.writer != nil {
+		err = cs.writer.Write(dbCtx, func(tx *sql.Tx) error {
+			_, writeErr := tx.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
+			return writeErr
+		})
+	} else {
+		_, err = cs.db.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
+	}
 	if err != nil {
 		return fmt.Errorf("failed to upsert setting: %w", err)
 	}

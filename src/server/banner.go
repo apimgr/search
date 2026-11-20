@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/common/display"
+	"github.com/apimgr/search/src/common/netutil"
 	"github.com/apimgr/search/src/config"
 	"golang.org/x/term"
 )
@@ -423,7 +425,7 @@ func BuildBannerInfo(cfg *config.Config, torAddr string) *BannerInfo {
 			info.HTTPAddr = formatBannerURL(host, port, false)
 			info.HTTPPort = port
 		}
-		info.ListenAddr = fmt.Sprintf("%s:%d", cfg.Server.Address, port)
+		info.ListenAddr = netutil.JoinHostPort(cfg.Server.Address, strconv.Itoa(port))
 	} else {
 		// Dual port mode
 		info.HTTPAddr = formatBannerURL(host, port, false)

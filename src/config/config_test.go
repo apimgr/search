@@ -594,11 +594,11 @@ func TestConfigIsDebug(t *testing.T) {
 
 func TestConfigGetAddress(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Server.Address = "0.0.0.0"
+	cfg.Server.Address = "::"
 	cfg.Server.Port = 8080
 
 	got := cfg.GetAddress()
-	want := "0.0.0.0:8080"
+	want := "[::]:8080"
 	if got != want {
 		t.Errorf("GetAddress() = %q, want %q", got, want)
 	}

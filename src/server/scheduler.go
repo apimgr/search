@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/backup"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/notify"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/update"
@@ -89,10 +89,10 @@ func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.Update
 
 // initScheduler initializes and starts the scheduler per AI.md PART 19
 // The scheduler is ALWAYS RUNNING - there is no enable/disable option
-func (s *Server) initScheduler(db *sql.DB) {
+func (s *Server) initScheduler(db *database.DB) {
 	// Standalone node ID (single-node mode)
 	nodeID := "standalone"
-	sched := scheduler.NewScheduler(db, nodeID)
+	sched := scheduler.NewSchedulerWithDB(db, nodeID)
 
 	// Configure timezone
 	if tz := s.config.Server.Scheduler.Timezone; tz != "" {

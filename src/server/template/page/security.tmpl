@@ -15,10 +15,15 @@
                     <a href="{{.ReportURL}}">{{.ReportURL}}</a>
                 </li>
                 {{end}}
-                <li>
+                {{if .ContactURL}}<li>
                     <strong>{{t "security.channel_form"}}</strong>
                     <a href="{{.ContactURL}}">{{t "security.channel_form_link_text"}}</a>
-                </li>
+                </li>{{end}}
+                {{if .ContactURL}}
+                <li><a href="/server/contact?type=abuse">Report abuse or a terms violation</a></li>
+                <li><a href="/server/contact?type=dmca">Send a DMCA notice</a></li>
+                <li><a href="/server/contact?type=privacy">Submit a privacy request</a></li>
+                {{end}}
                 {{if .MailtoContact}}
                 <li>
                     <strong>{{t "security.channel_email"}}</strong>

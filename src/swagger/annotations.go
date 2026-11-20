@@ -42,6 +42,38 @@ func generatePaths() map[string]PathItem {
 	paths[version.APIPrefix+"/server/healthz.txt"] = paths[version.APIPrefix+"/server/healthz"]
 	paths["/api/healthz"] = paths[version.APIPrefix+"/server/healthz"]
 
+	browserReport := PathItem{Post: &Operation{
+		Summary:     "Receive a browser security report",
+		Description: "Accepts bounded browser CSP, NEL, and Reporting API reports. The response contains no user-controlled data.",
+		Tags:        []string{"Security"},
+		RequestBody: &RequestBody{Required: true, Content: map[string]MediaType{"application/csp-report": {Schema: &Schema{Type: "object"}}, "application/reports+json": {Schema: &Schema{Type: "array", Items: &Schema{Type: "object"}}}}},
+		Responses:   map[string]Response{"204": {Description: "Report accepted; no response body"}, "400": errorResponse("Invalid report")},
+	}}
+	for _, path := range []string{version.APIPrefix + "/server/reports/csp", version.APIPrefix + "/server/reports/nel", version.APIPrefix + "/server/reports/default", version.APIPrefix + "/server/reports/{name}"} {
+		paths[path] = browserReport
+	}
+
+	prometheusMetrics := PathItem{Get: &Operation{
+		Summary: "Read Prometheus metrics",
+		Tags:    []string{"Metrics"},
+		Responses: map[string]Response{"200": {
+			Description: "Prometheus text exposition",
+			Content:     map[string]MediaType{"text/plain": {Schema: &Schema{Type: "string"}}},
+		}},
+	}}
+	metricsJSON := func(summary string) PathItem {
+		return PathItem{Get: &Operation{Summary: summary, Tags: []string{"Metrics"}, Responses: map[string]Response{"200": okResponse(summary, &Schema{Type: "object"}), "401": errorResponse("Missing or invalid service token"), "403": errorResponse("Metrics service is disabled")}}}
+	}
+	for _, path := range []string{version.APIPrefix + "/server/metrics", version.APIPrefix + "/server/metrics/prometheus", "/api/metrics", "/api/metrics/prometheus"} {
+		paths[path] = prometheusMetrics
+	}
+	for _, path := range []string{version.APIPrefix + "/server/metrics/grafana", "/api/metrics/grafana"} {
+		paths[path] = metricsJSON("Read Grafana metrics")
+	}
+	for _, path := range []string{version.APIPrefix + "/server/metrics/loki", "/api/metrics/loki"} {
+		paths[path] = metricsJSON("Read Loki metrics")
+	}
+
 	// Search endpoint
 	paths[version.APIPrefix+"/search"] = PathItem{
 		Get: &Operation{
@@ -602,10 +634,14 @@ func generatePaths() map[string]PathItem {
 					"application/json": {Schema: &Schema{
 						Type: "object",
 						Properties: map[string]Schema{
-							"name":    {Type: "string", Example: "Ada Lovelace"},
-							"email":   {Type: "string", Example: "ada@example.com"},
-							"subject": {Type: "string", Example: "Feedback"},
-							"message": {Type: "string", Example: "Great service"},
+							"name":             {Type: "string", Example: "Ada Lovelace"},
+							"email":            {Type: "string", Example: "ada@example.com"},
+							"subject":          {Type: "string", Example: "Feedback"},
+							"message":          {Type: "string", Example: "Great service"},
+							"form_token":       {Type: "string", Example: "1735689600.3aa3..."},
+							"captcha_id":       {Type: "string", Example: "12.6f9d..."},
+							"captcha_answer":   {Type: "string", Example: "12"},
+							"captcha_response": {Type: "string", Example: "provider-token"},
 						},
 					}},
 				},
@@ -717,7 +753,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths[version.APIPrefix+"/server/auth"] = PathItem{Get: &Operation{Summary: "Validate an operator or owner token", Description: "Checks the bearer token kind without returning the token", Tags: []string{"Authentication"}, Responses: map[string]Response{"200": okResponse("Token kind", &Schema{Type: "object", Properties: map[string]Schema{"kind": {Type: "string", Enum: []interface{}{"operator", "owner"}}}}), "401": errorResponse("Missing or invalid token")}}}
+	paths[version.APIPrefix+"/server/auth/check"] = PathItem{Get: &Operation{Summary: "Validate an operator or owner token", Description: "Checks the bearer token kind without returning the token", Tags: []string{"Authentication"}, Responses: map[string]Response{"200": okResponse("Token kind", &Schema{Type: "object", Properties: map[string]Schema{"kind": {Type: "string", Enum: []interface{}{"operator", "owner"}}}}), "401": errorResponse("Missing or invalid token")}}}
 
 	paths[version.APIPrefix+"/server/config"] = PathItem{
 		Get: &Operation{
@@ -740,6 +776,7 @@ func generatePaths() map[string]PathItem {
 	paths[version.APIPrefix+"/server/geoip/ips"] = PathItem{Get: &Operation{Summary: geoIPLookup.Summary, Description: geoIPLookup.Description, Tags: geoIPLookup.Tags, Responses: geoIPLookup.Responses}}
 	paths[version.APIPrefix+"/server/geoip/ips.txt"] = paths[version.APIPrefix+"/server/geoip/ips"]
 	paths[version.APIPrefix+"/server/geoip/ips/{ip}"] = PathItem{Get: geoIPLookup}
+	paths[version.APIPrefix+"/server/geoip/ips/{ip}.txt"] = PathItem{Get: geoIPLookup}
 	paths[version.APIPrefix+"/server/geoip/ips/{ip}.txt"] = PathItem{Get: geoIPLookup}
 
 	presetList := &Operation{Summary: "List GeoIP presets", Description: "List saved country-list presets; operator bearer token required", Tags: []string{"GeoIP", "Operator"}, Security: operatorSecurity(), Responses: map[string]Response{"200": okResponse("Saved presets", &Schema{Type: "array", Items: &Schema{Type: "object"}}), "401": errorResponse("Missing or invalid operator token")}}
@@ -807,6 +844,7 @@ func generatePaths() map[string]PathItem {
 	mcpEndpoint := PathItem{Post: &Operation{Summary: "MCP Streamable HTTP endpoint", Description: "JSON-RPC 2.0 tools over Streamable HTTP using the same API bearer authentication", Tags: []string{"Docs"}, Responses: map[string]Response{"200": okResponse("MCP JSON-RPC response", &Schema{Type: "object"}), "400": errorResponse("Invalid MCP request"), "403": errorResponse("Origin rejected"), "405": errorResponse("Method not allowed")}}}
 	paths[version.APIPrefix+"/server/mcp"] = mcpEndpoint
 	paths["/api/mcp"] = mcpEndpoint
+	paths["/mcp"] = mcpEndpoint
 	ownerAuth := ownerSecurity()
 	ownerParam := []Parameter{{Name: "id", In: "path", Required: true, Schema: &Schema{Type: "integer"}}}
 	ownerBody := func(properties map[string]Schema) *RequestBody {

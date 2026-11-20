@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/mail"
@@ -30,6 +31,7 @@ import (
 	"github.com/apimgr/search/src/notify"
 	"github.com/apimgr/search/src/security"
 	"github.com/apimgr/search/src/version"
+	"github.com/go-chi/chi/v5"
 )
 
 // handleHome renders the home page
@@ -140,6 +142,10 @@ func (s *Server) handleDPO(w http.ResponseWriter, r *http.Request) {
 // same /server/contact route doubles as the vulnerability-report submission
 // path when a valid ?security_id={id} switches the form into security mode.
 func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Server.Pages.Contact.Enabled {
+		http.NotFound(w, r)
+		return
+	}
 	if r.Method == http.MethodPost {
 		s.handleContactSubmit(w, r)
 		return
@@ -231,6 +237,17 @@ func (s *Server) previousInstallationSecret() string {
 
 // renderContactForm renders the contact page in standard or security mode.
 func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, securityID string, securityMode bool, contactError string) {
+	s.renderContactFormValues(w, r, securityID, securityMode, contactError, nil)
+}
+
+func (s *Server) renderContactFormValues(w http.ResponseWriter, r *http.Request, securityID string, securityMode bool, contactError string, values url.Values) {
+	if values == nil && !securityMode {
+		values = make(url.Values)
+		requestedType := strings.TrimSpace(r.URL.Query().Get("type"))
+		if requestedType == "abuse" || requestedType == "dmca" || requestedType == "privacy" {
+			values.Set("type", requestedType)
+		}
+	}
 	captchaRequired := true
 	var a, b int
 	var captchaID string
@@ -270,8 +287,15 @@ func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, secur
 		CaptchaLocal:    captchaRequired && (mode == "simple" || onionRequest),
 		CaptchaProvider: mode,
 		CaptchaSiteKey:  siteKey,
+		FormToken:       s.ContactFormToken(),
 		SecurityMode:    securityMode,
 		SecurityID:      securityID,
+		ReviewFields:    make(map[string]string),
+	}
+	for key, entries := range values {
+		if len(entries) > 0 {
+			data.ReviewFields[key] = entries[0]
+		}
 	}
 
 	if securityMode {
@@ -280,6 +304,18 @@ func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, secur
 		data.Timestamp = time.Now().UTC().Format(time.RFC3339)
 		data.RequestUserAgent = r.UserAgent()
 		data.DisclosureDays = 90
+		data.ResearcherGPG = values.Get("researcher_gpg")
+		data.AffectedComponent = values.Get("affected_component")
+		data.AffectedEndpoint = values.Get("affected_endpoint")
+		data.Severity = values.Get("severity")
+		data.Summary = values.Get("summary")
+		data.StepsToReproduce = values.Get("steps_to_reproduce")
+		data.Impact = values.Get("impact")
+		data.SuggestedFix = values.Get("suggested_fix")
+		data.CVERequested = config.IsTruthy(values.Get("cve_requested"))
+		data.CreditPreference = values.Get("credit_preference")
+		data.CreditHandle = values.Get("credit_handle")
+		data.AgreedToDisclosure = config.IsTruthy(values.Get("agreed_to_disclosure"))
 	}
 
 	// Check for success message
@@ -292,12 +328,60 @@ func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, secur
 	}
 }
 
+func (s *Server) renderContactReview(w http.ResponseWriter, r *http.Request, securityID string, securityMode bool, values url.Values, flags, contactError string) {
+	baseData := s.newPageData(w, r, "", "contact")
+	baseData.Title = s.getI18nManager().T(baseData.Lang, "contact.page_title")
+	fields := make(map[string]string, len(values))
+	for key, entries := range values {
+		if len(entries) > 0 && key != "csrf_token" && key != "form_token" && key != "captcha" && key != "captcha_id" && key != "captcha_answer" && key != "captcha_response" && key != "g-recaptcha-response" && key != "h-captcha-response" && key != "website" && key != "step" && key != "review_token" && key != "confirmed" {
+			fields[key] = entries[0]
+		}
+	}
+	settings := s.contactSpamSettings()
+	minSeconds := settings.ReviewMinSeconds
+	if minSeconds <= 0 {
+		minSeconds = 2
+	}
+	reviewSubject := fields["subject"]
+	if securityMode {
+		reviewSubject = fields["summary"]
+	}
+	data := &ContactPageData{
+		PageData: *baseData, ContactError: contactError, FormToken: s.ContactFormToken(),
+		ReviewMode: true, ReviewType: fields["type"], ReviewEmail: fields["email"],
+		ReviewSubject: reviewSubject, ReviewToken: s.ContactReviewToken(values, flags),
+		ConfirmAfter: minSeconds, ReviewFields: fields, SecurityMode: securityMode, SecurityID: securityID,
+	}
+	if err := s.renderer.Render(w, "contact", data); err != nil {
+		s.handleInternalError(w, r, "contact review render", err)
+	}
+}
+
 // handleContactSubmit processes a POST to /server/contact. When a valid
 // security_id was submitted, the report is routed to the coordinated-
 // disclosure pipeline per AI.md PART 11 "Submission Flow"; otherwise the
 // standard contact-form path is preserved (out of scope for this pipeline).
 func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if !s.config.Server.Pages.Contact.Enabled {
+		http.NotFound(w, r)
+		return
+	}
+	if s.ContactBanned(r) {
+		s.RecordContactBlock("banned", r)
+		w.Header().Set("Retry-After", "86400")
+		localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limited")
+		return
+	}
+	if !s.ValidateContactOrigin(r) {
+		s.RecordContactBlock("origin", r)
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Please submit the form from this site"})
+		} else {
+			http.Error(w, "Please submit the form from this site", http.StatusBadRequest)
+		}
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxContactBodyBytes)
 	if err := r.ParseForm(); err != nil {
 		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
@@ -306,21 +390,96 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 	securityID := strings.TrimSpace(r.PostFormValue("security_id"))
 	securityMode := securityID != "" && s.validateSecurityIDOrLog(r, securityID)
 	lang := s.newPageData(w, r, "", "contact").Lang
-	if strings.TrimSpace(r.PostFormValue("website")) != "" {
-		s.clearContactCaptchaRequirement(w, r)
-		if strings.Contains(r.Header.Get("Accept"), "application/json") {
-			respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "received"}})
-		} else {
-			http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
-		}
+	if reason := s.ValidateContactShape(r, r.PostForm, securityMode, false); reason != "" {
+		s.RecordContactBlock(reason, r)
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
-	if !s.verifyConfiguredContactCaptcha(r) {
-		s.markContactCaptchaRequired(w, r)
-		s.renderContactForm(w, r, securityID, securityMode, s.getI18nManager().T(lang, "errors.bad_request"))
+	step := r.PostFormValue("step")
+	if step == "edit" {
+		s.renderContactFormValues(w, r, securityID, securityMode, "", r.PostForm)
+		return
+	}
+	honeypot := s.ContactHoneypotFilled(r.PostForm)
+	if step != "confirm" {
+		if !s.ValidateContactFormToken(r.PostFormValue("form_token")) {
+			s.RecordContactBlock(s.ContactTokenFailureReason(r.PostFormValue("form_token")), r)
+			w.WriteHeader(http.StatusBadRequest)
+			s.renderContactFormValues(w, r, securityID, securityMode, s.getI18nManager().T(lang, "errors.bad_request"), r.PostForm)
+			return
+		}
+		if !s.verifyConfiguredContactCaptcha(r) {
+			s.RecordContactBlock("captcha", r)
+			s.markContactCaptchaRequired(w, r)
+			s.renderContactFormValues(w, r, securityID, securityMode, s.getI18nManager().T(lang, "errors.bad_request"), r.PostForm)
+			return
+		}
+	} else if !s.ValidateContactReviewToken(r.PostForm, r.PostFormValue("review_token"), config.IsTruthy(r.PostFormValue("confirmed"))) {
+		s.RecordContactBlock("review", r)
+		flags := ""
+		if ContactReviewHoneypot(r.PostFormValue("review_token")) {
+			flags = "d"
+		}
+		s.renderContactReview(w, r, securityID, securityMode, r.PostForm, flags, "Please read the details and confirm")
 		return
 	}
 	if securityMode {
+		r.PostForm.Set("type", "security")
+		r.Form.Set("type", "security")
+	}
+	if !securityMode && !s.validContactReportFields(r, r.PostForm) {
+		s.RecordContactBlock("content", r)
+		s.renderContactFormValues(w, r, "", false, "Your message could not be sent", r.PostForm)
+		return
+	}
+	if step != "confirm" {
+		address, err := mail.ParseAddress(strings.TrimSpace(r.PostFormValue("email")))
+		if err != nil {
+			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+			return
+		}
+		if reason, retryAfter := s.CheckContactSubmissionLimit(r, getClientIPSimple(r), address.Address); reason != "" {
+			s.RecordContactBlock(reason, r)
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
+			localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limited")
+			return
+		}
+		flags := ""
+		if honeypot {
+			flags = "d"
+			s.RecordContactBlock("honeypot", r)
+		}
+		if honeypot {
+			r.PostForm.Set("website", "")
+		}
+		s.renderContactReview(w, r, securityID, securityMode, r.PostForm, flags, "")
+		return
+	}
+	if ContactReviewHoneypot(r.PostFormValue("review_token")) {
+		s.clearContactCaptchaRequirement(w, r)
+		s.respondContactSpamSuccess(w, r)
+		return
+	}
+	if securityMode {
+		address, err := mail.ParseAddress(strings.TrimSpace(r.PostFormValue("email")))
+		if err != nil {
+			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+			return
+		}
+		if reason, retryAfter := s.AcceptContactSubmission(r, getClientIPSimple(r), address.Address, r.PostFormValue("name"), r.PostFormValue("summary"), r.PostFormValue("steps_to_reproduce"), true); reason != "" {
+			s.RecordContactBlock(reason, r)
+			if retryAfter > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
+				localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limited")
+				return
+			}
+			if reason == "content" {
+				s.renderContactForm(w, r, securityID, securityMode, "Your message could not be sent")
+				return
+			}
+			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+			return
+		}
 		s.handleSecurityReportSubmit(w, r, securityID)
 		return
 	}
@@ -349,13 +508,157 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
 		return
 	}
-	if err := s.SubmitContact(r.Context(), api.ContactMessage{Name: name, Email: address.Address, Subject: subject, Message: message, SourceIP: getClientIPSimple(r)}); err != nil {
+	if reason, retryAfter := s.AcceptContactSubmission(r, getClientIPSimple(r), address.Address, name, subject, message, false); reason != "" {
+		s.RecordContactBlock(reason, r)
+		if reason == "duplicate" {
+			s.clearContactCaptchaRequirement(w, r)
+			s.respondContactSpamSuccess(w, r)
+			return
+		}
+		if retryAfter > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
+			localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limited")
+			return
+		}
+		if reason == "content" {
+			if strings.Contains(r.Header.Get("Accept"), "application/json") {
+				respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Your message could not be sent", Details: map[string]interface{}{"field": "contact", "rule": "invalid"}})
+			} else {
+				s.markContactCaptchaRequired(w, r)
+				s.renderContactForm(w, r, "", false, "Your message could not be sent")
+			}
+			return
+		}
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+		return
+	}
+	if err := s.SubmitContact(r.Context(), api.ContactMessage{
+		Name: name, Email: address.Address, Subject: subject, Message: message, Type: r.PostFormValue("type"),
+		ReportedURL: r.PostFormValue("reported_url"), Reason: r.PostFormValue("reason"),
+		CopyrightedWork:    r.PostFormValue("copyrighted_work"),
+		GoodFaithStatement: config.IsTruthy(r.PostFormValue("good_faith_statement")),
+		AccuracyStatement:  config.IsTruthy(r.PostFormValue("accuracy_statement")),
+		Signature:          r.PostFormValue("signature"), RequestKind: r.PostFormValue("request_kind"),
+		SourceIP: getClientIPSimple(r),
+	}); err != nil {
+		s.ForgetContactSubmission(r, getClientIPSimple(r), address.Address, name, subject, message, false)
 		slog.Error("contact message delivery failed")
 		s.markContactCaptchaRequired(w, r)
 		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.server_error_message"))
 		return
 	}
 	s.clearContactCaptchaRequirement(w, r)
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "received"}})
+		return
+	}
+	http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
+}
+
+func (s *Server) validContactReportFields(r *http.Request, values url.Values) bool {
+	typeName := values.Get("type")
+	if typeName == "abuse" {
+		switch values.Get("reason") {
+		case "illegal_content", "terms_violation", "harassment", "malware_phishing", "other":
+		default:
+			return false
+		}
+	}
+	if typeName == "dmca" && (!config.IsTruthy(values.Get("good_faith_statement")) || !config.IsTruthy(values.Get("accuracy_statement"))) {
+		return false
+	}
+	if typeName == "abuse" || typeName == "dmca" {
+		if !s.validReportedURL(r, values.Get("reported_url")) {
+			return false
+		}
+	}
+	settings := s.contactSpamSettings()
+	fields := []string{values.Get("message")}
+	if typeName != "security" {
+		for _, field := range fields {
+			if !s.contactLinksAllowed(r, field, settings.MaxLinks, settings.BlockedLinkDomains) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (s *Server) ValidateContactReport(r *http.Request, values url.Values) bool {
+	return s.validContactReportFields(r, values)
+}
+
+func (s *Server) validReportedURL(r *http.Request, raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return false
+	}
+	if u.Path == "" || u.Path == "/" || u.Path == "/server/contact" || strings.HasPrefix(u.Path, "/api/") || strings.HasPrefix(u.Path, "/server/admin") {
+		return false
+	}
+	if !s.contactHostAllowed(r, u.Hostname(), nil) {
+		return false
+	}
+	if s.router == nil {
+		return false
+	}
+	ctx := chi.NewRouteContext()
+	return s.router.Match(ctx, http.MethodGet, u.Path)
+}
+
+func (s *Server) contactLinksAllowed(r *http.Request, content string, maxLinks int, blockedDomains []string) bool {
+	matches := contactLinkPattern.FindAllStringIndex(content, -1)
+	count := 0
+	for _, match := range matches {
+		if match[0] > 0 && content[match[0]-1] == '@' {
+			continue
+		}
+		candidate := strings.TrimRight(content[match[0]:match[1]], ".,;:!?)\"'")
+		if candidate == "" {
+			continue
+		}
+		count++
+		raw := candidate
+		if !strings.Contains(raw, "://") {
+			raw = "https://" + strings.TrimPrefix(strings.TrimPrefix(raw, "www."), "www.")
+		}
+		u, err := url.Parse(raw)
+		if err != nil || u.Hostname() == "" || !s.contactHostAllowed(r, u.Hostname(), blockedDomains) {
+			return false
+		}
+	}
+	return maxLinks <= 0 || count <= maxLinks
+}
+
+func (s *Server) contactHostAllowed(r *http.Request, host string, blockedDomains []string) bool {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	allowed := make(map[string]bool)
+	if base, err := url.Parse(s.getBaseURL(r)); err == nil && base.Hostname() != "" {
+		allowed[strings.ToLower(base.Hostname())] = true
+	}
+	for _, domain := range strings.Split(os.Getenv("DOMAIN"), ",") {
+		if domain = strings.TrimSpace(strings.ToLower(domain)); domain != "" {
+			allowed[strings.TrimSuffix(domain, ".")] = true
+		}
+	}
+	requestHost := strings.ToLower(r.Host)
+	if hostOnly, _, err := net.SplitHostPort(requestHost); err == nil {
+		requestHost = hostOnly
+	}
+	allowed[strings.TrimSuffix(requestHost, ".")] = true
+	if !allowed[host] {
+		return false
+	}
+	for _, blocked := range blockedDomains {
+		blocked = strings.Trim(strings.ToLower(strings.TrimSpace(blocked)), ".")
+		if blocked != "" && (host == blocked || strings.HasSuffix(host, "."+blocked)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) respondContactSpamSuccess(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "received"}})
 		return
@@ -417,30 +720,86 @@ func (s *Server) clearContactCaptchaRequirement(w http.ResponseWriter, r *http.R
 
 // SubmitContact sends the contact message through the configured queued mailer.
 func (s *Server) SubmitContact(ctx context.Context, message api.ContactMessage) error {
-	recipient := s.config.Server.Contact.General.Email
+	role := strings.ToLower(strings.TrimSpace(message.Type))
+	if role == "" {
+		role = "general"
+	}
+	if role == "dmca" {
+		role = "abuse"
+	}
+	if role != "abuse" && role != "privacy" {
+		role = "general"
+	}
+	recipient := ""
+	switch role {
+	case "abuse":
+		recipient = s.config.Server.Contact.Abuse.Email
+	case "privacy":
+		recipient = s.config.Server.Contact.DPO.Email
+	}
+	if recipient == "" {
+		recipient = s.config.Server.Contact.General.Email
+	}
 	if recipient == "" {
 		recipient = s.config.Server.Contact.Admin.Email
 	}
 	mailEnabled := recipient != "" && s.mailer != nil && s.mailer.CanSend()
-	webhookEnabled := s.notifyManager != nil && s.notifyManager.HasWebhook("general")
+	webhookRole := role
+	if role == "privacy" && s.notifyManager != nil && !s.notifyManager.HasWebhook(webhookRole) {
+		webhookRole = "general"
+	}
+	webhookEnabled := s.notifyManager != nil && s.notifyManager.HasWebhook(webhookRole)
 	if !mailEnabled && !webhookEnabled {
 		return fmt.Errorf("contact delivery is not configured")
 	}
 	if mailEnabled {
-		mailMessage := email.NewMessage([]string{recipient}, "[contact] "+message.Subject,
-			"Name: "+message.Name+"\nEmail: "+message.Email+"\n\n"+message.Message)
+		appName := strings.TrimSpace(s.config.Server.Branding.Title)
+		if appName == "" {
+			appName = "Search"
+		}
+		mailMessage := email.NewMessage([]string{recipient}, "["+appName+" contact] "+message.Subject,
+			contactMessageBody(message))
 		mailMessage.Headers["Reply-To"] = message.Email
 		if err := s.mailer.Send(mailMessage); err != nil {
 			return err
 		}
 	}
 	if webhookEnabled {
-		body := "Name: " + message.Name + "\nEmail: " + message.Email + "\n\n" + message.Message
-		if err := s.notifyManager.Dispatch(ctx, notify.Event{Role: "general", Name: "contact.received", Subject: message.Subject, Body: body, Severity: "info", SourceIP: message.SourceIP}); err != nil {
+		if err := s.notifyManager.Dispatch(ctx, notify.Event{Role: webhookRole, Name: "contact.received", Subject: message.Subject, Body: contactMessageBody(message), Severity: "info", SourceIP: message.SourceIP}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func contactMessageBody(message api.ContactMessage) string {
+	var body strings.Builder
+	fmt.Fprintf(&body, "Type: %s\n", message.Type)
+	fmt.Fprintf(&body, "Name: %s\nEmail: %s\n", message.Name, message.Email)
+	if message.ReportedURL != "" {
+		fmt.Fprintf(&body, "Reported URL: %s\n", message.ReportedURL)
+	}
+	if message.Reason != "" {
+		fmt.Fprintf(&body, "Reason: %s\n", message.Reason)
+	}
+	if message.CopyrightedWork != "" {
+		fmt.Fprintf(&body, "Copyrighted work: %s\n", message.CopyrightedWork)
+	}
+	if message.GoodFaithStatement {
+		fmt.Fprintf(&body, "Good faith statement: %t\n", message.GoodFaithStatement)
+	}
+	if message.AccuracyStatement {
+		fmt.Fprintf(&body, "Accuracy statement: %t\n", message.AccuracyStatement)
+	}
+	if message.Signature != "" {
+		fmt.Fprintf(&body, "Signature: %s\n", message.Signature)
+	}
+	if message.RequestKind != "" {
+		fmt.Fprintf(&body, "Privacy request: %s\n", message.RequestKind)
+	}
+	body.WriteString("\n")
+	body.WriteString(message.Message)
+	return body.String()
 }
 
 func (s *Server) dispatchNotification(event notify.Event) {
@@ -464,6 +823,12 @@ func (s *Server) dispatchExactNotification(event notify.Event) {
 // handleSecurityReportSubmit implements AI.md PART 11's 7-step coordinated-
 // disclosure Submission Flow.
 func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Request, securityID string) {
+	accepted := false
+	defer func() {
+		if !accepted {
+			s.ForgetContactSubmission(r, getClientIPSimple(r), r.PostFormValue("email"), r.PostFormValue("name"), r.PostFormValue("summary"), r.PostFormValue("steps_to_reproduce"), true)
+		}
+	}()
 	lang := s.newPageData(w, r, "", "contact").Lang
 	if strings.TrimSpace(r.PostFormValue("website")) != "" {
 		s.clearContactCaptchaRequirement(w, r)
@@ -584,6 +949,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	accepted = true
 
 	// Step 4: maintainer notification (security role, falls back to admin).
 	s.sendSecurityMaintainerNotification(report, plaintextBody, researcherGPG, getClientIPSimple(r))
@@ -781,7 +1147,7 @@ type MCPHelpPageData struct {
 }
 
 func (s *Server) handleMCPHelp(w http.ResponseWriter, r *http.Request) {
-	if !s.config.Server.MCP.Enabled || s.apiHandler == nil {
+	if s.apiHandler == nil {
 		http.NotFound(w, r)
 		return
 	}

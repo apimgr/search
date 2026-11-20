@@ -551,6 +551,222 @@
         }
       }
     },
+    "/api/metrics": {
+      "get": {
+        "summary": "Read Prometheus metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics/grafana": {
+      "get": {
+        "summary": "Read Grafana metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Read Grafana metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Metrics service is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics/loki": {
+      "get": {
+        "summary": "Read Loki metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Read Loki metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Metrics service is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics/prometheus": {
+      "get": {
+        "summary": "Read Prometheus metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/swagger": {
       "get": {
         "summary": "OpenAPI specification",
@@ -1877,9 +2093,9 @@
         }
       }
     },
-    "/api/v1/server/auth": {
+    "/api/v1/server/auth/check": {
       "get": {
-        "operationId": "getApiV1ServerAuth",
+        "operationId": "getApiV1ServerAuthCheck",
         "summary": "Validate an operator or owner token",
         "description": "Checks the bearer token kind without returning the token",
         "tags": [
@@ -2232,9 +2448,25 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "captcha_answer": {
+                    "type": "string",
+                    "example": "12"
+                  },
+                  "captcha_id": {
+                    "type": "string",
+                    "example": "12.6f9d..."
+                  },
+                  "captcha_response": {
+                    "type": "string",
+                    "example": "provider-token"
+                  },
                   "email": {
                     "type": "string",
                     "example": "ada@example.com"
+                  },
+                  "form_token": {
+                    "type": "string",
+                    "example": "1735689600.3aa3..."
                   },
                   "message": {
                     "type": "string",
@@ -4050,6 +4282,226 @@
         }
       }
     },
+    "/api/v1/server/metrics": {
+      "get": {
+        "operationId": "getApiV1ServerMetrics",
+        "summary": "Read Prometheus metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/metrics/grafana": {
+      "get": {
+        "operationId": "getApiV1ServerMetricsGrafana",
+        "summary": "Read Grafana metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Read Grafana metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Metrics service is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/metrics/loki": {
+      "get": {
+        "operationId": "getApiV1ServerMetricsLoki",
+        "summary": "Read Loki metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Read Loki metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Metrics service is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/metrics/prometheus": {
+      "get": {
+        "operationId": "getApiV1ServerMetricsPrometheus",
+        "summary": "Read Prometheus metrics",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/server/preferences": {
       "get": {
         "operationId": "getApiV1ServerPreferences",
@@ -4892,6 +5344,246 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/reports/csp": {
+      "post": {
+        "operationId": "postApiV1ServerReportsCsp",
+        "summary": "Receive a browser security report",
+        "description": "Accepts bounded browser CSP, NEL, and Reporting API reports. The response contains no user-controlled data.",
+        "tags": [
+          "Security"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/csp-report": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "application/reports+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Report accepted; no response body"
+          },
+          "400": {
+            "description": "Invalid report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/reports/default": {
+      "post": {
+        "operationId": "postApiV1ServerReportsDefault",
+        "summary": "Receive a browser security report",
+        "description": "Accepts bounded browser CSP, NEL, and Reporting API reports. The response contains no user-controlled data.",
+        "tags": [
+          "Security"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/csp-report": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "application/reports+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Report accepted; no response body"
+          },
+          "400": {
+            "description": "Invalid report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/reports/nel": {
+      "post": {
+        "operationId": "postApiV1ServerReportsNel",
+        "summary": "Receive a browser security report",
+        "description": "Accepts bounded browser CSP, NEL, and Reporting API reports. The response contains no user-controlled data.",
+        "tags": [
+          "Security"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/csp-report": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "application/reports+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Report accepted; no response body"
+          },
+          "400": {
+            "description": "Invalid report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/server/reports/{name}": {
+      "post": {
+        "operationId": "postApiV1ServerReportsName",
+        "summary": "Receive a browser security report",
+        "description": "Accepts bounded browser CSP, NEL, and Reporting API reports. The response contains no user-controlled data.",
+        "tags": [
+          "Security"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/csp-report": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "application/reports+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Report accepted; no response body"
+          },
+          "400": {
+            "description": "Invalid report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
                 }
               }
             }
@@ -5930,6 +6622,122 @@
           },
           "404": {
             "description": "Widget not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "summary": "MCP Streamable HTTP endpoint",
+        "description": "JSON-RPC 2.0 tools over Streamable HTTP using the same API bearer authentication",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP JSON-RPC response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid MCP request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
             "content": {
               "application/json": {
                 "schema": {

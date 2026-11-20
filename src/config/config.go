@@ -23,6 +23,7 @@ import (
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/netutil"
 	"github.com/apimgr/search/src/security"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
@@ -77,6 +78,9 @@ type Config struct {
 	firstRun bool
 	// needsSave records normalization performed while loading a config file.
 	needsSave bool
+	// migrateSecretPaths contains generated secret paths found in server.yml;
+	// drop-in values are not migrated by Save.
+	migrateSecretPaths map[string]bool
 	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
 	debugEnabled bool
 	// reloadHooks are called after every successful Reload(); guarded by reloadHooksMu
@@ -339,6 +343,7 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 	}
 
 	configDir := filepath.Dir(path)
+	secretsPath := filepath.Join(configDir, "secrets.yml")
 	if err := watcher.Add(configDir); err != nil {
 		closeutil.Close(watcher)
 		return fmt.Errorf("failed to watch config directory %s: %w", configDir, err)
@@ -348,6 +353,13 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 		if err := watcher.Add(dropInDir); err != nil {
 			closeutil.Close(watcher)
 			return fmt.Errorf("failed to watch drop-in directory %s: %w", dropInDir, err)
+		}
+	}
+	htmlDir := filepath.Join(configDir, "html")
+	if info, statErr := os.Stat(htmlDir); statErr == nil && info.IsDir() {
+		if err := watcher.Add(htmlDir); err != nil {
+			closeutil.Close(watcher)
+			return fmt.Errorf("failed to watch operator content directory %s: %w", htmlDir, err)
 		}
 	}
 
@@ -370,12 +382,18 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 				}
 				cleanName := filepath.Clean(event.Name)
 				inDropIns := filepath.Dir(cleanName) == dropInDir
+				inOperatorHTML := filepath.Dir(cleanName) == htmlDir
 				if cleanName == dropInDir && event.Has(fsnotify.Create) {
 					if err := watcher.Add(dropInDir); err != nil {
 						slog.Error("config watcher could not watch yaml.d", "err", err, "path", dropInDir)
 					}
 				}
-				if (cleanName == path || inDropIns || cleanName == dropInDir) && (event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
+				if cleanName == htmlDir && event.Has(fsnotify.Create) {
+					if err := watcher.Add(htmlDir); err != nil {
+						slog.Error("config watcher could not watch operator content directory", "err", err, "path", htmlDir)
+					}
+				}
+				if (cleanName == path || cleanName == secretsPath || inDropIns || cleanName == dropInDir || inOperatorHTML || cleanName == htmlDir) && (event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
 					if debounce != nil {
 						debounce.Stop()
 					}
@@ -571,7 +589,7 @@ type OwnerTokensConfig struct {
 }
 
 type MCPConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"-"`
 }
 
 // DebugConfig holds the debug-gated settings from AI.md PART 6
@@ -640,12 +658,12 @@ type BrandingConfig struct {
 	// Per PART 13: project.description source
 	Description string `yaml:"description"`
 	// Per AI.md: {PLATFORM_REPO_URL} - repository URL
-	SourceCodeURL string `yaml:"source_code_url"`
+	SourceCodeURL string `yaml:"-"`
 	Logo          string `yaml:"logo"`
 	Favicon       string `yaml:"favicon"`
-	FooterText    string `yaml:"footer_text"`
-	Theme         string `yaml:"theme"`
-	PrimaryColor  string `yaml:"primary_color"`
+	FooterText    string `yaml:"-"`
+	Theme         string `yaml:"-"`
+	PrimaryColor  string `yaml:"-"`
 }
 
 // RateLimitEndpointConfig holds per-endpoint rate limit parameters per AI.md PART 12.
@@ -659,7 +677,7 @@ type RateLimitEndpointConfig struct {
 // RateLimitConfig represents per-endpoint rate limiting configuration per AI.md PART 12.
 // read: 120/min, write: 10/min, health: 120/min, global_burst: 240 per-IP sliding window.
 type RateLimitConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"-"`
 	// Read endpoints (search, results, static) — default 120 req/60s
 	Read RateLimitEndpointConfig `yaml:"read"`
 	// Write endpoints (prefs, alerts, contact) — default 10 req/60s
@@ -671,57 +689,45 @@ type RateLimitConfig struct {
 }
 
 // LogsConfig represents logging configuration
+type LogFileConfig struct {
+	Filename string `yaml:"-"`
+	Format   string `yaml:"format"`
+	Custom   string `yaml:"custom,omitempty"`
+	Rotate   string `yaml:"rotate,omitempty"`
+	Keep     string `yaml:"keep,omitempty"`
+}
+
+type AccessLogConfig struct {
+	LogFileConfig   `yaml:",inline"`
+	LogHealthChecks bool `yaml:"-"`
+}
+
+type AuditLogConfig struct {
+	LogFileConfig `yaml:",inline"`
+	Enabled       bool `yaml:"enabled"`
+	Compress      bool `yaml:"compress"`
+}
+
+type DebugLogConfig struct {
+	LogFileConfig `yaml:",inline"`
+	Enabled       bool `yaml:"enabled"`
+}
+
 type LogsConfig struct {
-	Level  string `yaml:"level"`
-	File   string `yaml:"file"`
-	Format string `yaml:"format"`
-	Access struct {
-		Filename string `yaml:"filename"`
-		Format   string `yaml:"format"`
-		Custom   string `yaml:"custom"`
-		Rotate   string `yaml:"rotate"`
-		Keep     string `yaml:"keep"`
-		// Log successful health-check requests (failures always log), per
-		// AI.md PART 13; default false so Docker healthchecks do not flood
-		// access.log
-		LogHealthChecks bool `yaml:"log_health_checks"`
-	} `yaml:"access"`
-	Server struct {
-		Filename string `yaml:"filename"`
-		Format   string `yaml:"format"`
-		Custom   string `yaml:"custom"`
-		Rotate   string `yaml:"rotate"`
-		Keep     string `yaml:"keep"`
-	} `yaml:"server"`
-	Error struct {
-		Filename string `yaml:"filename"`
-		Format   string `yaml:"format"`
-		Custom   string `yaml:"custom"`
-		Rotate   string `yaml:"rotate"`
-		Keep     string `yaml:"keep"`
-	} `yaml:"error"`
-	Audit struct {
-		Filename string `yaml:"filename"`
-		Format   string `yaml:"format"`
-		Custom   string `yaml:"custom"`
-		Rotate   string `yaml:"rotate"`
-		Keep     string `yaml:"keep"`
-	} `yaml:"audit"`
-	Security struct {
-		Filename string `yaml:"filename"`
-		Format   string `yaml:"format"`
-		Custom   string `yaml:"custom"`
-		Rotate   string `yaml:"rotate"`
-		Keep     string `yaml:"keep"`
-	} `yaml:"security"`
-	Debug struct {
-		Enabled  bool   `yaml:"enabled"`
-		Filename string `yaml:"filename"`
-		Format   string `yaml:"format"`
-		Custom   string `yaml:"custom"`
-		Rotate   string `yaml:"rotate"`
-		Keep     string `yaml:"keep"`
-	} `yaml:"debug"`
+	Level    string `yaml:"level"`
+	File     string `yaml:"file"`
+	Format   string `yaml:"format"`
+	Defaults struct {
+		Custom string `yaml:"custom"`
+		Rotate string `yaml:"rotate"`
+		Keep   string `yaml:"keep"`
+	} `yaml:"defaults"`
+	Access   AccessLogConfig `yaml:"access"`
+	Server   LogFileConfig   `yaml:"server"`
+	Error    LogFileConfig   `yaml:"error"`
+	Audit    AuditLogConfig  `yaml:"audit"`
+	Security LogFileConfig   `yaml:"security"`
+	Debug    DebugLogConfig  `yaml:"debug"`
 }
 
 // I2PConfig represents I2P eepsite configuration per AI.md PART 31.2.
@@ -906,7 +912,7 @@ type SecurityHeadersConfig struct {
 	XXSSProtection        string `yaml:"x_xss_protection"`
 	ReferrerPolicy        string `yaml:"referrer_policy"`
 	ContentSecurityPolicy string `yaml:"content_security_policy"`
-	PermissionsPolicy     string `yaml:"permissions_policy"`
+	PermissionsPolicy     string `yaml:"-"`
 	// Per AI.md PART 11: cross-origin isolation headers
 	// Cross-Origin-Opener-Policy (default: unsafe-none)
 	COOP string `yaml:"coop"`
@@ -927,7 +933,7 @@ type SecurityHeadersConfig struct {
 
 // BlocklistSourceConfig describes one operator-configured blocklist feed.
 type BlocklistSourceConfig struct {
-	Name    string `yaml:"name"`
+	ID      string `yaml:"id"`
 	URL     string `yaml:"url"`
 	Type    string `yaml:"type"`
 	Enabled bool   `yaml:"enabled"`
@@ -953,7 +959,8 @@ type SecurityConfig struct {
 	// the canonical at-rest encryption key for ALL sensitive server data: API token hashes,
 	// security report bodies (AES fallback when no PGP keypair exists), and any future
 	// at-rest encrypted data. Never logged, never returned in any API response.
-	EncryptionKey string `yaml:"encryption_key"`
+	EncryptionKey        string `yaml:"encryption_key"`
+	EncryptionKeyVersion int    `yaml:"encryption_key_version"`
 	// EncryptionKeyPrevious holds the value replaced by the most recent
 	// `--maintenance secret rotate encryption_key`. Per AI.md PART 11
 	// ("Secret Rotation") the previous key is kept 30 days so any at-rest data
@@ -984,8 +991,8 @@ type SecurityConfig struct {
 	Allowlist []AllowlistEntry `yaml:"allowlist"`
 	// BlockedIPs lists IPs/prefixes that are always rejected (403) before any other check.
 	BlockedIPs []string `yaml:"blocked_ips"`
-	// Blocklists adds or overrides daily IP, CIDR, and domain feeds.
-	Blocklists []BlocklistSourceConfig `yaml:"blocklists"`
+	// ExtraSources adds operator-selected IP, CIDR, and domain feeds.
+	ExtraSources []BlocklistSourceConfig `yaml:"extra_sources"`
 }
 
 // AuthConfig represents external authentication configuration per AI.md PART 31
@@ -1031,29 +1038,52 @@ type LDAPConfig struct {
 type PagesConfig struct {
 	About struct {
 		Enabled bool   `yaml:"enabled"`
-		Content string `yaml:"content"`
+		Content string `yaml:"-"`
 	} `yaml:"about"`
 	Privacy struct {
 		Enabled bool   `yaml:"enabled"`
-		Content string `yaml:"content"`
+		Content string `yaml:"-"`
 	} `yaml:"privacy"`
-	Contact struct {
-		Enabled        bool   `yaml:"enabled"`
-		Email          string `yaml:"email"`
-		Captcha        string `yaml:"captcha"`
-		CaptchaSiteKey string `yaml:"captcha_site_key"`
-		CaptchaSecret  string `yaml:"captcha_secret_key"`
-		SuccessMessage string `yaml:"success_message"`
-	} `yaml:"contact"`
-	Help struct {
+	Contact ContactPageConfig `yaml:"contact"`
+	Help    struct {
 		Enabled bool   `yaml:"enabled"`
 		Content string `yaml:"content"`
 		MCP     string `yaml:"mcp"`
 	} `yaml:"help"`
 	Terms struct {
 		Enabled bool   `yaml:"enabled"`
-		Content string `yaml:"content"`
+		Content string `yaml:"-"`
 	} `yaml:"terms"`
+}
+
+type ContactPageConfig struct {
+	Enabled        bool                  `yaml:"enabled"`
+	Email          string                `yaml:"email"`
+	Captcha        string                `yaml:"captcha"`
+	CaptchaSiteKey string                `yaml:"captcha_site_key"`
+	CaptchaSecret  string                `yaml:"captcha_secret_key"`
+	SuccessMessage string                `yaml:"success_message"`
+	Antispam       ContactAntispamConfig `yaml:"antispam"`
+}
+
+type ContactAntispamConfig struct {
+	Honeypot             bool     `yaml:"honeypot"`
+	RejectMarkup         bool     `yaml:"reject_markup"`
+	MinFillSeconds       int      `yaml:"min_fill_seconds"`
+	MaxAgeSeconds        int      `yaml:"max_age_seconds"`
+	ReviewMinSeconds     int      `yaml:"review_min_seconds"`
+	ReviewMaxSeconds     int      `yaml:"review_max_seconds"`
+	Strikes              int      `yaml:"strikes"`
+	BanHours             int      `yaml:"ban_hours"`
+	PerIP                int      `yaml:"per_ip"`
+	PerEmail             int      `yaml:"per_email"`
+	Global               int      `yaml:"global"`
+	Window               string   `yaml:"window"`
+	MaxLinks             int      `yaml:"max_links"`
+	BlockedLinkDomains   []string `yaml:"blocked_link_domains"`
+	BlockedWords         []string `yaml:"blocked_words"`
+	BlockedEmailDomains  []string `yaml:"blocked_email_domains"`
+	DuplicateWindowHours int      `yaml:"duplicate_window_hours"`
 }
 
 // WebConfig represents web settings (robots.txt, security.txt, announcements)
@@ -1145,7 +1175,7 @@ type PrivacyConfig struct {
 	// ThirdParty lists third-party services that receive user data (if any).
 	ThirdParty PrivacyThirdParty `yaml:"third_party"`
 	// Content holds the Markdown body of each privacy-page section.
-	Content PrivacyContent `yaml:"content"`
+	Content PrivacyContent `yaml:"-"`
 }
 
 // PrivacyDataPolicy controls data handling and CCPA compliance.
@@ -1691,7 +1721,7 @@ type MaintenanceSelfHealConfig struct {
 // Per AI.md PART 5: enabled, retry_interval, max_attempts
 type MaintenanceSelfHealingConfig struct {
 	// Enable automatic self-healing attempts
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"-"`
 	// Duration between retry attempts (e.g., "30s")
 	RetryInterval string `yaml:"retry_interval"`
 	// Maximum retry attempts before giving up; 0 = unlimited
@@ -1755,21 +1785,24 @@ type ContactConfig struct {
 
 // SEOConfig represents SEO configuration
 type SEOConfig struct {
-	Enabled            bool              `yaml:"enabled"`
-	DefaultTitle       string            `yaml:"default_title"`
-	TitleSeparator     string            `yaml:"title_separator"`
-	DefaultDescription string            `yaml:"default_description"`
+	Enabled            bool              `yaml:"-"`
+	DefaultTitle       string            `yaml:"-"`
+	TitleSeparator     string            `yaml:"-"`
+	DefaultDescription string            `yaml:"-"`
 	Keywords           []string          `yaml:"keywords"`
-	MetaTags           map[string]string `yaml:"meta_tags"`
-	OpenGraph          OpenGraphConfig   `yaml:"opengraph"`
-	Twitter            TwitterConfig     `yaml:"twitter"`
+	Author             string            `yaml:"author"`
+	OGImage            string            `yaml:"og_image"`
+	TwitterHandle      string            `yaml:"twitter_handle"`
+	MetaTags           map[string]string `yaml:"-"`
+	OpenGraph          OpenGraphConfig   `yaml:"-"`
+	Twitter            TwitterConfig     `yaml:"-"`
 	// Include canonical URLs
-	Canonical bool `yaml:"canonical"`
+	Canonical bool `yaml:"-"`
 	// Set noindex on search results
-	NoIndex bool `yaml:"noindex"`
+	NoIndex bool `yaml:"-"`
 	// Generate sitemap.xml
-	Sitemap bool       `yaml:"sitemap"`
-	Feed    FeedConfig `yaml:"feed"`
+	Sitemap bool       `yaml:"-"`
+	Feed    FeedConfig `yaml:"-"`
 }
 
 type FeedConfig struct {
@@ -2058,6 +2091,10 @@ type EngineConfig struct {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
+		migrateSecretPaths: map[string]bool{
+			"server.token": true, "server.security.encryption_key": true,
+			"server.security.encryption_key_version": true,
+		},
 		Web: WebCSPConfig{CSP: struct {
 			FrameSrcExtra string `yaml:"frame_src_extra"`
 		}{FrameSrcExtra: ""}},
@@ -2109,11 +2146,12 @@ func DefaultConfig() *Config {
 			Tokens: OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y", IdlePurgeDays: 0},
 			MCP:    MCPConfig{Enabled: true},
 			Branding: BrandingConfig{
-				Title:        "Search",
-				Tagline:      "Privacy-respecting metasearch",
-				Description:  "A privacy-respecting metasearch engine",
-				Theme:        "dark",
-				PrimaryColor: "#bd93f9",
+				Title:         "Search",
+				Tagline:       "Privacy-respecting metasearch",
+				Description:   "A privacy-respecting metasearch engine",
+				SourceCodeURL: "https://github.com/apimgr/search",
+				Theme:         "dark",
+				PrimaryColor:  "#bd93f9",
 			},
 			RateLimit: RateLimitConfig{
 				Enabled:     true,
@@ -2124,81 +2162,21 @@ func DefaultConfig() *Config {
 			},
 			Logs: LogsConfig{
 				Level: "warn",
-				Access: struct {
-					Filename        string `yaml:"filename"`
-					Format          string `yaml:"format"`
-					Custom          string `yaml:"custom"`
-					Rotate          string `yaml:"rotate"`
-					Keep            string `yaml:"keep"`
-					LogHealthChecks bool   `yaml:"log_health_checks"`
+				Defaults: struct {
+					Custom string `yaml:"custom"`
+					Rotate string `yaml:"rotate"`
+					Keep   string `yaml:"keep"`
 				}{
-					Filename: "access.log",
-					Format:   "apache",
-					Rotate:   "monthly",
-					Keep:     "none",
+					Custom: "",
+					Rotate: "weekly,50MB",
+					Keep:   "none",
 				},
-				Server: struct {
-					Filename string `yaml:"filename"`
-					Format   string `yaml:"format"`
-					Custom   string `yaml:"custom"`
-					Rotate   string `yaml:"rotate"`
-					Keep     string `yaml:"keep"`
-				}{
-					Filename: "server.log",
-					Format:   "text",
-					Rotate:   "weekly,50MB",
-					Keep:     "none",
-				},
-				Error: struct {
-					Filename string `yaml:"filename"`
-					Format   string `yaml:"format"`
-					Custom   string `yaml:"custom"`
-					Rotate   string `yaml:"rotate"`
-					Keep     string `yaml:"keep"`
-				}{
-					Filename: "error.log",
-					Format:   "text",
-					Rotate:   "weekly,50MB",
-					Keep:     "none",
-				},
-				Audit: struct {
-					Filename string `yaml:"filename"`
-					Format   string `yaml:"format"`
-					Custom   string `yaml:"custom"`
-					Rotate   string `yaml:"rotate"`
-					Keep     string `yaml:"keep"`
-				}{
-					Filename: "audit.log",
-					Format:   "json",
-					Rotate:   "weekly,50MB",
-					Keep:     "none",
-				},
-				Security: struct {
-					Filename string `yaml:"filename"`
-					Format   string `yaml:"format"`
-					Custom   string `yaml:"custom"`
-					Rotate   string `yaml:"rotate"`
-					Keep     string `yaml:"keep"`
-				}{
-					Filename: "security.log",
-					Format:   "fail2ban",
-					Rotate:   "weekly,50MB",
-					Keep:     "none",
-				},
-				Debug: struct {
-					Enabled  bool   `yaml:"enabled"`
-					Filename string `yaml:"filename"`
-					Format   string `yaml:"format"`
-					Custom   string `yaml:"custom"`
-					Rotate   string `yaml:"rotate"`
-					Keep     string `yaml:"keep"`
-				}{
-					Enabled:  false,
-					Filename: "debug.log",
-					Format:   "text",
-					Rotate:   "weekly,50MB",
-					Keep:     "none",
-				},
+				Access:   AccessLogConfig{LogFileConfig: LogFileConfig{Filename: "access.log", Format: "apache", Rotate: "monthly"}},
+				Server:   LogFileConfig{Filename: "server.log", Format: "text"},
+				Error:    LogFileConfig{Filename: "error.log", Format: "text"},
+				Audit:    AuditLogConfig{LogFileConfig: LogFileConfig{Filename: "audit.log", Format: "json", Rotate: "daily"}, Enabled: true},
+				Security: LogFileConfig{Filename: "security.log", Format: "fail2ban"},
+				Debug:    DebugLogConfig{LogFileConfig: LogFileConfig{Filename: "debug.log", Format: "text"}},
 			},
 			Tor: TorConfig{
 				// Per AI.md PART 32: Enabled is auto-detected at runtime
@@ -2255,8 +2233,9 @@ func DefaultConfig() *Config {
 				},
 			},
 			Security: SecurityConfig{
-				InstallationSecret: generateBase64Secret(),
-				EncryptionKey:      generateBase64Secret(),
+				InstallationSecret:   generateBase64Secret(),
+				EncryptionKey:        generateBase64Secret(),
+				EncryptionKeyVersion: 1,
 				CSRF: CSRFConfig{
 					Enabled:    true,
 					CookieName: "csrf_token",
@@ -2320,29 +2299,41 @@ func DefaultConfig() *Config {
 			Pages: PagesConfig{
 				About: struct {
 					Enabled bool   `yaml:"enabled"`
-					Content string `yaml:"content"`
+					Content string `yaml:"-"`
 				}{
 					Enabled: true,
 					Content: "",
 				},
 				Privacy: struct {
 					Enabled bool   `yaml:"enabled"`
-					Content string `yaml:"content"`
+					Content string `yaml:"-"`
 				}{
 					Enabled: true,
 					Content: "",
 				},
-				Contact: struct {
-					Enabled        bool   `yaml:"enabled"`
-					Email          string `yaml:"email"`
-					Captcha        string `yaml:"captcha"`
-					CaptchaSiteKey string `yaml:"captcha_site_key"`
-					CaptchaSecret  string `yaml:"captcha_secret_key"`
-					SuccessMessage string `yaml:"success_message"`
-				}{
+				Contact: ContactPageConfig{
 					Enabled:        true,
 					Captcha:        "simple",
 					SuccessMessage: "Thank you for your message. We'll respond soon.",
+					Antispam: ContactAntispamConfig{
+						Honeypot:             true,
+						RejectMarkup:         true,
+						MinFillSeconds:       3,
+						MaxAgeSeconds:        43200,
+						ReviewMinSeconds:     2,
+						ReviewMaxSeconds:     900,
+						Strikes:              3,
+						BanHours:             24,
+						PerIP:                5,
+						PerEmail:             3,
+						Global:               60,
+						Window:               "1h",
+						MaxLinks:             2,
+						BlockedLinkDomains:   []string{},
+						BlockedWords:         []string{},
+						BlockedEmailDomains:  []string{},
+						DuplicateWindowHours: 24,
+					},
 				},
 				Help: struct {
 					Enabled bool   `yaml:"enabled"`
@@ -2833,20 +2824,25 @@ func NormalizeUpdateBranch(branch string) string {
 	}
 }
 
-func Load(path string) (*Config, error) {
-	root, err := yamlNodeFromConfig(path)
-	if err != nil {
-		return nil, err
-	}
-	winners := make(map[string]string)
-	if err := recordConfigSources(root, "", path, winners, false); err != nil {
-		return nil, err
-	}
+func configDropInPaths(path string) ([]string, error) {
 	dropInDir := filepath.Join(filepath.Dir(path), "yaml.d")
+	if info, statErr := os.Stat(dropInDir); statErr == nil {
+		if !info.IsDir() {
+			return nil, fmt.Errorf("drop-in path %s is not a directory", dropInDir)
+		}
+		if info.Mode().Perm() != 0700 {
+			if err := os.Chmod(dropInDir, 0700); err != nil {
+				return nil, fmt.Errorf("secure drop-in directory %s: %w", dropInDir, err)
+			}
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("stat drop-in directory %s: %w", dropInDir, statErr)
+	}
 	entries, err := os.ReadDir(dropInDir)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read drop-in directory %s: %w", dropInDir, err)
 	}
+	var paths []string
 	for _, entry := range entries {
 		name := entry.Name()
 		isYAML := strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml")
@@ -2876,15 +2872,82 @@ func Load(path string) (*Config, error) {
 		if !info.Mode().IsRegular() {
 			continue
 		}
-		if info.Mode().Perm()&0022 != 0 {
-			return nil, fmt.Errorf("drop-in %s is group or world writable", filePath)
+		if err := enforceOwnerOnlyFile(filePath); err != nil {
+			return nil, fmt.Errorf("secure drop-in %s: %w", filePath, err)
 		}
+		paths = append(paths, filePath)
+	}
+	return paths, nil
+}
+
+func Load(path string) (*Config, error) {
+	root, err := yamlNodeFromConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	legacySecretPaths := map[string]bool{}
+	for _, secretPath := range []string{"server.token", "server.security.encryption_key", "server.security.encryption_key_version"} {
+		if configPathPresent(root, secretPath) {
+			legacySecretPaths[secretPath] = true
+		}
+	}
+	winners := make(map[string]string)
+	if err := recordConfigSources(root, "", path, winners, false); err != nil {
+		return nil, err
+	}
+	dropInPaths, err := configDropInPaths(path)
+	if err != nil {
+		return nil, err
+	}
+	for _, filePath := range dropInPaths {
 		node, err := yamlNodeFromConfig(filePath)
 		if err != nil {
 			return nil, err
 		}
 		mergeConfigNodes(root, node, "", filePath, winners)
 		slog.Info("loaded configuration drop-in", "path", filePath)
+	}
+	secretsPath := filepath.Join(filepath.Dir(path), "secrets.yml")
+	if _, statErr := os.Stat(secretsPath); statErr == nil {
+		secretNode, secretErr := yamlNodeFromConfig(secretsPath)
+		if secretErr != nil {
+			return nil, secretErr
+		}
+		mergeConfigNodes(root, secretNode, "", secretsPath, winners)
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("stat secrets file %s: %w", secretsPath, statErr)
+	}
+	for secretPath := range legacySecretPaths {
+		if winners[secretPath] != path {
+			delete(legacySecretPaths, secretPath)
+		}
+	}
+	if legacySecretPaths["server.token"] {
+		value := configPathValue(root, "server.token")
+		if !isGeneratedHexSecret(value) {
+			delete(legacySecretPaths, "server.token")
+		}
+	}
+	if legacySecretPaths["server.security.encryption_key"] {
+		value := configPathValue(root, "server.security.encryption_key")
+		if !isGeneratedBase64Secret(value) {
+			delete(legacySecretPaths, "server.security.encryption_key")
+			delete(legacySecretPaths, "server.security.encryption_key_version")
+		}
+	}
+	if !legacySecretPaths["server.security.encryption_key"] {
+		delete(legacySecretPaths, "server.security.encryption_key_version")
+	}
+	for _, secretPath := range []string{"server.token", "server.security.encryption_key", "server.security.encryption_key_version"} {
+		value := configPathValue(root, secretPath)
+		if value == nil || value.Kind != yaml.ScalarNode || strings.TrimSpace(value.Value) == "" {
+			if secretPath != "server.security.encryption_key_version" || legacySecretPaths["server.security.encryption_key"] {
+				legacySecretPaths[secretPath] = true
+			}
+		}
+	}
+	if legacySecretPaths["server.security.encryption_key"] {
+		legacySecretPaths["server.security.encryption_key_version"] = true
 	}
 	if err := normalizeDualPortNode(root); err != nil {
 		return nil, err
@@ -2900,6 +2963,7 @@ func Load(path string) (*Config, error) {
 		slog.Warn("merged config contains unrecognized fields (ignored)", "detail", err)
 	}
 	cfg := DefaultConfig()
+	cfg.firstRun = false
 	if err := yaml.Unmarshal(encoded, cfg); err != nil {
 		return nil, fmt.Errorf("decode merged configuration: %w", err)
 	}
@@ -2932,6 +2996,7 @@ func Load(path string) (*Config, error) {
 
 	// Store path for reload
 	cfg.configPath = path
+	cfg.migrateSecretPaths = legacySecretPaths
 	for key, file := range winners {
 		if file != path {
 			slog.Debug("configuration key overridden by drop-in", "key", key, "path", file)
@@ -2941,12 +3006,28 @@ func Load(path string) (*Config, error) {
 	if err := cfg.encryptDNSCredentials(); err != nil {
 		return nil, err
 	}
-	cfg.needsSave = cfg.needsSave || len(warnings) > 0
+	cfg.needsSave = cfg.needsSave || len(warnings) > 0 || len(legacySecretPaths) > 0
 	for _, warning := range warnings {
 		slog.Warn("merged configuration validation warning", "field", warning.Field, "message", warning.Message)
 	}
 
 	return cfg, nil
+}
+
+func isGeneratedHexSecret(value *yaml.Node) bool {
+	if value == nil || value.Kind != yaml.ScalarNode || len(value.Value) != 64 {
+		return false
+	}
+	decoded, err := hex.DecodeString(value.Value)
+	return err == nil && len(decoded) == 32 && value.Value == strings.ToLower(value.Value)
+}
+
+func isGeneratedBase64Secret(value *yaml.Node) bool {
+	if value == nil || value.Kind != yaml.ScalarNode {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(value.Value)
+	return err == nil && len(decoded) == 32 && base64.StdEncoding.EncodeToString(decoded) == value.Value
 }
 
 func (c *Config) encryptDNSCredentials() error {
@@ -2973,9 +3054,8 @@ func (c *Config) encryptDNSCredentials() error {
 }
 
 func yamlNodeFromConfig(path string) (*yaml.Node, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("stat config file %s: %w", path, err)
+	if err := enforceOwnerOnlyFile(path); err != nil {
+		return nil, fmt.Errorf("secure config %s: %w", path, err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -2991,10 +3071,23 @@ func yamlNodeFromConfig(path string) (*yaml.Node, error) {
 	if err := validateConfigNode(document.Content[0], path, ""); err != nil {
 		return nil, err
 	}
-	if containsSensitiveConfigKey(document.Content[0]) && info.Mode().Perm()&0077 != 0 {
-		return nil, fmt.Errorf("config %s contains secret settings but is not owner-only (mode %04o)", path, info.Mode().Perm())
-	}
 	return &document, nil
+}
+
+func enforceOwnerOnlyFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("must be a regular file")
+	}
+	if info.Mode().Perm() != 0600 {
+		if err := os.Chmod(path, 0600); err != nil {
+			return fmt.Errorf("set mode 0600: %w", err)
+		}
+	}
+	return nil
 }
 
 func containsSensitiveConfigKey(node *yaml.Node) bool {
@@ -3132,6 +3225,30 @@ func (c *Config) Save(path string) error {
 	if err := node.Encode(c); err != nil {
 		return err
 	}
+	secrets := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	secretsPath := filepath.Join(filepath.Dir(path), "secrets.yml")
+	if existing, err := yamlNodeFromConfig(secretsPath); err == nil {
+		secrets = existing
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read existing secrets file: %w", err)
+	}
+	generated := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	generatedPaths := c.migrateSecretPaths
+	if c.firstRun {
+		generatedPaths = map[string]bool{
+			"server.token":                           true,
+			"server.security.encryption_key":         true,
+			"server.security.encryption_key_version": true,
+		}
+	}
+	extractGeneratedSecrets(&node, generated, generatedPaths)
+	removeSecretFileValues(&node, secrets)
+	mergeConfigNodes(secrets, generated, "", secretsPath, make(map[string]string))
+	if len(secrets.Content[0].Content) > 0 {
+		if err := writeYAMLAtomic(secretsPath, secrets, ".secrets.yml-*"); err != nil {
+			return err
+		}
+	}
 	serializeDualPortNode(&node, c.Server.Port, c.Server.HTTPSPort)
 
 	// Add comments to top-level sections
@@ -3154,7 +3271,28 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 
-	tmp, err := os.CreateTemp(dir, ".server.yml-*")
+	return writeTextAtomic(path, buf.String(), ".server.yml-*")
+}
+
+func writeYAMLAtomic(path string, node *yaml.Node, pattern string) error {
+	var contents strings.Builder
+	encoder := yaml.NewEncoder(&contents)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(node); err != nil {
+		return err
+	}
+	if err := encoder.Close(); err != nil {
+		return err
+	}
+	return writeTextAtomic(path, contents.String(), pattern)
+}
+
+func writeTextAtomic(path, contents, pattern string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return err
 	}
@@ -3168,7 +3306,7 @@ func (c *Config) Save(path string) error {
 		_ = tmp.Close()
 		return err
 	}
-	if _, err := tmp.WriteString(buf.String()); err != nil {
+	if _, err := tmp.WriteString(contents); err != nil {
 		_ = tmp.Close()
 		return err
 	}
@@ -3179,20 +3317,205 @@ func (c *Config) Save(path string) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return err
+	return os.Rename(tmpPath, path)
+}
+
+func extractConfigSecrets(mainNode, secretNode *yaml.Node) {
+	mainRoot, secretRoot := configYAMLRoot(mainNode), configYAMLRoot(secretNode)
+	if mainRoot == nil || secretRoot == nil {
+		return
 	}
-	return nil
+	var walk func(*yaml.Node, string, *yaml.Node)
+	walk = func(mapping *yaml.Node, prefix string, secretMapping *yaml.Node) {
+		if mapping.Kind != yaml.MappingNode {
+			return
+		}
+		for i := 0; i+1 < len(mapping.Content); {
+			key, value := mapping.Content[i], mapping.Content[i+1]
+			path := key.Value
+			if prefix != "" {
+				path = prefix + "." + path
+			}
+			if configSecretPath(path) {
+				secretMapping.Content = append(secretMapping.Content, cloneYAMLNode(key), cloneYAMLNode(value))
+				mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+				continue
+			}
+			if value.Kind == yaml.MappingNode {
+				child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+				walk(value, path, child)
+				if len(child.Content) > 0 {
+					mergeSecretMapping(secretMapping, key, child)
+				}
+			}
+			i += 2
+		}
+	}
+	walk(mainRoot, "", secretRoot)
+}
+
+func extractGeneratedSecrets(mainNode, secretNode *yaml.Node, selected map[string]bool) {
+	mainRoot, secretRoot := configYAMLRoot(mainNode), configYAMLRoot(secretNode)
+	if mainRoot == nil || secretRoot == nil || len(selected) == 0 {
+		return
+	}
+	var walk func(*yaml.Node, string, *yaml.Node)
+	walk = func(mapping *yaml.Node, prefix string, secretMapping *yaml.Node) {
+		if mapping.Kind != yaml.MappingNode {
+			return
+		}
+		for index := 0; index+1 < len(mapping.Content); {
+			key, value := mapping.Content[index], mapping.Content[index+1]
+			path := key.Value
+			if prefix != "" {
+				path = prefix + "." + path
+			}
+			if selected[path] {
+				secretMapping.Content = append(secretMapping.Content, cloneYAMLNode(key), cloneYAMLNode(value))
+				mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
+				continue
+			}
+			if value.Kind == yaml.MappingNode {
+				child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+				walk(value, path, child)
+				if len(child.Content) > 0 {
+					mergeSecretMapping(secretMapping, key, child)
+				}
+			}
+			index += 2
+		}
+	}
+	walk(mainRoot, "", secretRoot)
+}
+
+func removeSecretFileValues(mainNode, secretNode *yaml.Node) {
+	mainRoot, secretRoot := configYAMLRoot(mainNode), configYAMLRoot(secretNode)
+	if mainRoot == nil || secretRoot == nil {
+		return
+	}
+	var remove func(*yaml.Node, *yaml.Node)
+	remove = func(mainMap, secretMap *yaml.Node) {
+		if mainMap.Kind != yaml.MappingNode || secretMap.Kind != yaml.MappingNode {
+			return
+		}
+		for i := 0; i+1 < len(secretMap.Content); i += 2 {
+			secretKey, secretValue := secretMap.Content[i], secretMap.Content[i+1]
+			for j := 0; j+1 < len(mainMap.Content); j += 2 {
+				if mainMap.Content[j].Value != secretKey.Value {
+					continue
+				}
+				if secretValue.Kind == yaml.MappingNode && mainMap.Content[j+1].Kind == yaml.MappingNode {
+					remove(mainMap.Content[j+1], secretValue)
+					if len(mainMap.Content[j+1].Content) == 0 {
+						mainMap.Content = append(mainMap.Content[:j], mainMap.Content[j+2:]...)
+					}
+				} else {
+					mainMap.Content = append(mainMap.Content[:j], mainMap.Content[j+2:]...)
+				}
+				break
+			}
+		}
+	}
+	remove(mainRoot, secretRoot)
+}
+
+func configYAMLRoot(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return node.Content[0]
+	}
+	return node
+}
+
+func mergeSecretMapping(target *yaml.Node, key, child *yaml.Node) {
+	for index := 0; index+1 < len(target.Content); index += 2 {
+		if target.Content[index].Value == key.Value {
+			existing := target.Content[index+1]
+			existing.Content = append(existing.Content, child.Content...)
+			return
+		}
+	}
+	target.Content = append(target.Content, cloneYAMLNode(key), child)
+}
+
+func hasConfigSecrets(node *yaml.Node) bool {
+	if node == nil || len(node.Content) == 0 {
+		return false
+	}
+	var walk func(*yaml.Node, string) bool
+	walk = func(current *yaml.Node, prefix string) bool {
+		if current.Kind != yaml.MappingNode {
+			return false
+		}
+		for index := 0; index+1 < len(current.Content); index += 2 {
+			key, value := current.Content[index], current.Content[index+1]
+			path := key.Value
+			if prefix != "" {
+				path = prefix + "." + path
+			}
+			if configSecretPath(path) || walk(value, path) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(node.Content[0], "")
+}
+
+func configPathPresent(document *yaml.Node, dottedPath string) bool {
+	return configPathValue(document, dottedPath) != nil
+}
+
+func configPathValue(document *yaml.Node, dottedPath string) *yaml.Node {
+	if document == nil || len(document.Content) == 0 {
+		return nil
+	}
+	current := configYAMLRoot(document)
+	for _, part := range strings.Split(dottedPath, ".") {
+		current = mappingValue(current, part)
+		if current == nil {
+			return nil
+		}
+	}
+	return current
+}
+
+func configSecretPath(path string) bool {
+	switch path {
+	case "server.token", "server.security.encryption_key", "server.security.encryption_key_version", "server.notifications.email.smtp.password", "server.cache.password", "server.database.password", "server.database.token", "server.pages.contact.captcha_secret_key", "server.ssl.letsencrypt.dns_credentials", "data.cve.api_key", "server.backup.encryption_password", "server.metrics.auth.tokens":
+		return true
+	}
+	parts := strings.Split(path, ".")
+	if len(parts) >= 4 && parts[0] == "server" && parts[1] == "contact" && parts[len(parts)-1] == "webhooks" {
+		return true
+	}
+	return strings.HasSuffix(path, ".client_secret") || strings.HasSuffix(path, ".bind_password") || strings.HasSuffix(path, "._secret")
+}
+
+func cloneYAMLNode(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	copy := *node
+	copy.Content = make([]*yaml.Node, len(node.Content))
+	for index, child := range node.Content {
+		copy.Content[index] = cloneYAMLNode(child)
+	}
+	return &copy
 }
 
 // addConfigComments adds comments to configuration node
 // Per AI.md config-rules.md: Comments ABOVE the setting, never inline
 func addConfigComments(node *yaml.Node) {
-	if node.Kind != yaml.DocumentNode || len(node.Content) == 0 {
+	root := configYAMLRoot(node)
+	if root == nil {
 		return
 	}
-
-	root := node.Content[0]
 	if root.Kind != yaml.MappingNode {
 		return
 	}
@@ -3317,6 +3640,7 @@ func LoadOrCreate(path string) (*Config, bool, error) {
 	// If file doesn't exist, create default
 	if errors.Is(err, os.ErrNotExist) {
 		cfg = DefaultConfig()
+		cfg.firstRun = true
 		// Store path for reload
 		cfg.configPath = path
 		if err := cfg.Save(path); err != nil {
@@ -3569,22 +3893,58 @@ func GetConfigPath() string {
 	return filepath.Join(configDir, "server.yml")
 }
 
-// PeekServerPort reads only server.port from the config syntax tree for the
-// privileged startup phase. It does not decode or validate any other setting.
-func PeekServerPort(path string) (int, int, bool, error) {
+func mergeEarlyConfigFile(root *yaml.Node, path string, winners map[string]string) error {
+	if err := enforceOwnerOnlyFile(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("secure early config file %s: %w", path, err)
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return 0, 0, false, nil
+		return nil
 	}
 	if err != nil {
-		return 0, 0, false, err
+		return fmt.Errorf("read early config file %s: %w", path, err)
 	}
 	var document yaml.Node
 	if err := yaml.Unmarshal(data, &document); err != nil {
-		return 0, 0, false, fmt.Errorf("parse early server port: %w", err)
+		// The full config load reports parse errors after startup reaches step 13.
+		return nil
 	}
-	if len(document.Content) == 0 {
-		return 0, 0, false, nil
+	if len(document.Content) > 0 {
+		mergeConfigNodes(root, &document, "", path, winners)
+	}
+	return nil
+}
+
+func earlyMergedConfig(path string) (*yaml.Node, error) {
+	root := &yaml.Node{
+		Kind: yaml.DocumentNode,
+		Content: []*yaml.Node{{
+			Kind: yaml.MappingNode,
+			Tag:  "!!map",
+		}},
+	}
+	winners := make(map[string]string)
+	if err := mergeEarlyConfigFile(root, path, winners); err != nil {
+		return nil, err
+	}
+	dropInPaths, err := configDropInPaths(path)
+	if err != nil {
+		return nil, err
+	}
+	for _, filePath := range dropInPaths {
+		if err := mergeEarlyConfigFile(root, filePath, winners); err != nil {
+			return nil, err
+		}
+	}
+	return root, nil
+}
+
+// PeekServerPort reads only server.port from the merged config syntax tree for
+// the privileged startup phase. It does not decode or validate other settings.
+func PeekServerPort(path string) (int, int, bool, error) {
+	document, err := earlyMergedConfig(path)
+	if err != nil {
+		return 0, 0, false, err
 	}
 	root := document.Content[0]
 	serverNode := mappingValue(root, "server")
@@ -3597,6 +3957,21 @@ func PeekServerPort(path string) (int, int, bool, error) {
 		return 0, 0, false, fmt.Errorf("invalid early server.port: %w", err)
 	}
 	return httpPort, httpsPort, true, nil
+}
+
+// PeekServerAddress reads only server.address from the merged config syntax
+// tree for the privileged startup phase.
+func PeekServerAddress(path string) (string, bool, error) {
+	document, err := earlyMergedConfig(path)
+	if err != nil {
+		return "", false, err
+	}
+	serverNode := mappingValue(document.Content[0], "server")
+	addressNode := mappingValue(serverNode, "address")
+	if addressNode == nil || addressNode.Kind != yaml.ScalarNode || strings.TrimSpace(addressNode.Value) == "" {
+		return "", false, nil
+	}
+	return strings.TrimSpace(addressNode.Value), true, nil
 }
 
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
@@ -3795,7 +4170,7 @@ func (c *Config) Sanitized() map[string]any {
 func (c *Config) GetAddress() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return fmt.Sprintf("%s:%d", c.Server.Address, c.Server.Port)
+	return netutil.JoinHostPort(c.Server.Address, strconv.Itoa(c.Server.Port))
 }
 
 // Get returns a read-locked copy of server config
@@ -3951,7 +4326,7 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 	}
 
 	// Rate limit validation — warn and apply defaults; never crash per AI.md PART 12
-	if c.Server.RateLimit.Enabled {
+	{
 		if c.Server.RateLimit.Read.Requests <= 0 {
 			warnings = append(warnings, ValidationWarning{
 				Field:   "server.rate_limit.read.requests",

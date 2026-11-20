@@ -60,7 +60,7 @@ func TestHandleMCPHelpReturnsLiveToolsAndRequestURL(t *testing.T) {
 	t.Fatalf("live MCP tool list omitted getApiV1Search: %s", response.Body.String())
 }
 
-func TestHandleMCPHelpReturnsNotFoundWhenDisabled(t *testing.T) {
+func TestHandleMCPHelpRemainsAvailableWhenRemovedSwitchIsFalse(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.MCP.Enabled = false
 	handler := NewHandler(cfg, nil, nil)
@@ -69,10 +69,10 @@ func TestHandleMCPHelpReturnsNotFoundWhenDisabled(t *testing.T) {
 
 	handler.handleMCPHelp(response, request)
 
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if strings.Contains(response.Body.String(), "tools") {
-		t.Fatalf("disabled MCP response disclosed tools: %s", response.Body.String())
+	if !strings.Contains(response.Body.String(), "tools") {
+		t.Fatalf("MCP help response omitted tools: %s", response.Body.String())
 	}
 }

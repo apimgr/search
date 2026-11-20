@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -33,11 +36,14 @@ func normalizeDriver(driver string) string {
 
 // DB represents a single database connection
 type DB struct {
-	db     *sql.DB
-	driver string
-	dsn    string
-	mu     sync.RWMutex
-	ready  bool
+	// db is the write handle and remains exposed for existing integrations.
+	db           *sql.DB
+	readDB       *sql.DB
+	driver       string
+	dsn          string
+	mu           sync.RWMutex
+	ready        bool
+	busyObserver func(time.Duration, string)
 }
 
 // DatabaseManager manages both server and users databases per AI.md PART 24
@@ -127,13 +133,18 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 	var err error
 	switch normalizedDriver {
 	case "sqlite":
-		// Build DSN for SQLite (modernc.org/sqlite). PRAGMAs are embedded in the
-		// DSN (not just run once after Ping) so every connection the pool opens
-		// gets them — required now that MaxOpenConns is no longer hardcoded to 1.
+		// SQLite uses independent read and write pools. The write pool is
+		// single-connection and uses BEGIN IMMEDIATE; every read connection is
+		// query-only. DSN pragmas apply to every connection in each pool.
 		db.dsn = filepath.Join(cfg.DataDir, dbName)
-		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn))
+		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn)+"&_txlock=immediate")
 		if err != nil {
 			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
+		}
+		db.readDB, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn)+"&_pragma=query_only(1)")
+		if err != nil {
+			_ = db.db.Close()
+			return nil, fmt.Errorf("failed to open sqlite read database: %w", err)
 		}
 
 	case "libsql":
@@ -153,13 +164,7 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 		return nil, fmt.Errorf("unsupported database driver: %s (supported: sqlite, libsql)", cfg.Driver)
 	}
 
-	// Configure connection pool.
-	// Per AI.md "Connection Pooling": SQLite allows 1 writer + concurrent WAL
-	// readers, so cfg.MaxOpen/MaxIdle apply to sqlite the same as other
-	// drivers — write conflicts are serialized by SQLite itself (busy_timeout
-	// PRAGMA, embedded in the DSN above) rather than by capping the Go pool
-	// at a single connection, which previously forced every read to queue
-	// behind unrelated in-flight queries.
+	// Configure separate write and read pools for SQLite.
 	db.applyPoolSettings(cfg)
 
 	// Test connection
@@ -173,25 +178,40 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 		db.db = nil
 		return nil, fmt.Errorf("failed to ping database: %w", errors.Join(err, closeErr))
 	}
+	if db.readDB != nil {
+		if err := verifySQLiteSetup(ctx, db.db, db.readDB, db.dsn); err != nil {
+			_ = db.readDB.Close()
+			_ = db.db.Close()
+			return nil, err
+		}
+	}
 
 	db.ready = true
 	return db, nil
 }
 
-// applyPoolSettings configures the connection pool per AI.md PART 10
-// "Connection Pooling": max_open, max_idle, max_lifetime and max_idle_time
-// are all mandatory. SQLite allows 1 writer + concurrent WAL readers, so
-// cfg.MaxOpen/MaxIdle apply to sqlite the same as to libsql — write
-// conflicts are serialized by SQLite itself via the busy_timeout PRAGMA
-// embedded in the DSN rather than by capping the Go pool at one connection.
+// applyPoolSettings keeps SQLite writes on one connection and uses a pooled
+// read handle. Remote libSQL uses a single configured pool.
 func (db *DB) applyPoolSettings(cfg *Config) {
-	db.db.SetMaxOpenConns(cfg.MaxOpen)
-	db.db.SetMaxIdleConns(cfg.MaxIdle)
-	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
+	maxOpen := max(cfg.MaxOpen, 1)
 	idleTime := cfg.IdleTime
 	if idleTime <= 0 {
 		idleTime = 60
 	}
+	if db.driver == "sqlite" && db.readDB != nil {
+		db.db.SetMaxOpenConns(1)
+		db.db.SetMaxIdleConns(1)
+		db.db.SetConnMaxLifetime(0)
+		db.db.SetConnMaxIdleTime(0)
+		db.readDB.SetMaxOpenConns(maxOpen)
+		db.readDB.SetMaxIdleConns(min(maxOpen, max(cfg.MaxIdle, 1)))
+		db.readDB.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
+		db.readDB.SetConnMaxIdleTime(time.Duration(idleTime) * time.Second)
+		return
+	}
+	db.db.SetMaxOpenConns(maxOpen)
+	db.db.SetMaxIdleConns(min(maxOpen, max(cfg.MaxIdle, 1)))
+	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
 	db.db.SetConnMaxIdleTime(time.Duration(idleTime) * time.Second)
 }
 
@@ -207,7 +227,28 @@ func sqliteDSNWithPragmas(path string) string {
 	if path == "" {
 		return path
 	}
-	return path + "?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	return path + separator + "_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(10000)"
+}
+
+func verifySQLiteSetup(ctx context.Context, writeDB, readDB *sql.DB, path string) error {
+	if err := readDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("failed to ping read database: %w", err)
+	}
+	var journalMode string
+	if err := writeDB.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil {
+		return fmt.Errorf("failed to verify sqlite journal mode for %s: %w", path, err)
+	}
+	if strings.Contains(path, "mode=memory") {
+		return nil
+	}
+	if !strings.EqualFold(journalMode, "wal") {
+		return fmt.Errorf("sqlite database %s requires WAL journal mode (got %q)", path, journalMode)
+	}
+	return nil
 }
 
 // ServerDB returns the server database connection
@@ -266,6 +307,18 @@ func (dm *DatabaseManager) Ping(ctx context.Context) error {
 	return nil
 }
 
+// SetBusyObserver installs an optional observer for delayed SQLite writes.
+func (dm *DatabaseManager) SetBusyObserver(observer func(time.Duration, string)) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	if dm.serverDB != nil {
+		dm.serverDB.SetBusyObserver(observer)
+	}
+	if dm.usersDB != nil {
+		dm.usersDB.SetBusyObserver(observer)
+	}
+}
+
 // NewDB creates a new database connection (single-database mode for direct use)
 func NewDB(cfg *Config) (*DB, error) {
 	if cfg == nil {
@@ -297,9 +350,16 @@ func (db *DB) connect(cfg *Config) error {
 
 	switch normalizedDriver {
 	case "sqlite":
-		// Use modernc.org/sqlite (pure Go SQLite). PRAGMAs embedded in the DSN
-		// so every pooled connection gets them (see sqliteDSNWithPragmas).
-		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(cfg.DSN))
+		// Keep writes on one immediate-transaction connection and reads in a
+		// separate query-only pool.
+		db.dsn = cfg.DSN
+		if db.dsn == "" || db.dsn == ":memory:" {
+			db.dsn = fmt.Sprintf("file:search-%d?mode=memory&cache=shared", time.Now().UnixNano())
+		}
+		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn)+"&_txlock=immediate")
+		if err == nil {
+			db.readDB, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn)+"&_pragma=query_only(1)")
+		}
 	case "libsql":
 		// libSQL/Turso remote database
 		db.db, err = sql.Open("libsql", cfg.DSN)
@@ -315,13 +375,7 @@ func (db *DB) connect(cfg *Config) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure connection pool.
-	// Per AI.md "Connection Pooling": SQLite allows 1 writer + concurrent WAL
-	// readers, so cfg.MaxOpen/MaxIdle apply to sqlite the same as other
-	// drivers — write conflicts are serialized by SQLite itself (busy_timeout
-	// PRAGMA, embedded in the DSN above) rather than by capping the Go pool
-	// at a single connection, which previously forced every read to queue
-	// behind unrelated in-flight queries.
+	// Configure independent SQLite write and read pools.
 	db.applyPoolSettings(cfg)
 
 	// Test connection
@@ -335,6 +389,13 @@ func (db *DB) connect(cfg *Config) error {
 		db.db = nil
 		return fmt.Errorf("failed to ping database: %w", errors.Join(err, closeErr))
 	}
+	if db.readDB != nil {
+		if err := verifySQLiteSetup(ctx, db.db, db.readDB, db.dsn); err != nil {
+			_ = db.readDB.Close()
+			_ = db.db.Close()
+			return err
+		}
+	}
 
 	db.ready = true
 	return nil
@@ -345,11 +406,29 @@ func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if db.db != nil {
-		db.ready = false
-		return db.db.Close()
+	db.ready = false
+	var errs []error
+	if db.driver == "sqlite" && db.db != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err := db.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
+		cancel()
+		if err != nil && !strings.Contains(strings.ToLower(err.Error()), "no such pragma") {
+			errs = append(errs, fmt.Errorf("checkpoint sqlite WAL: %w", err))
+		}
 	}
-	return nil
+	if db.readDB != nil {
+		if err := db.readDB.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		db.readDB = nil
+	}
+	if db.db != nil {
+		if err := db.db.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		db.db = nil
+	}
+	return errors.Join(errs...)
 }
 
 // IsReady returns true if database is ready
@@ -371,13 +450,22 @@ func (db *DB) IsRemote() bool {
 // Exec executes a query without returning rows
 func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	db.mu.RLock()
-	defer db.mu.RUnlock()
-
 	if !db.ready {
+		db.mu.RUnlock()
 		return nil, fmt.Errorf("database not ready")
 	}
-
-	return db.db.ExecContext(ctx, query, args...)
+	if db.driver != "sqlite" {
+		defer db.mu.RUnlock()
+		return db.db.ExecContext(ctx, query, args...)
+	}
+	db.mu.RUnlock()
+	var result sql.Result
+	err := db.Write(ctx, func(tx *sql.Tx) error {
+		var execErr error
+		result, execErr = tx.ExecContext(ctx, query, args...)
+		return execErr
+	})
+	return result, err
 }
 
 // Query executes a query that returns rows
@@ -389,7 +477,11 @@ func (db *DB) Query(ctx context.Context, query string, args ...interface{}) (*sq
 		return nil, fmt.Errorf("database not ready")
 	}
 
-	return db.db.QueryContext(ctx, query, args...)
+	readDB := db.readDB
+	if readDB == nil {
+		readDB = db.db
+	}
+	return readDB.QueryContext(ctx, query, args...)
 }
 
 // QueryRow executes a query that returns a single row
@@ -397,7 +489,96 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	return db.db.QueryRowContext(ctx, query, args...)
+	readDB := db.readDB
+	if readDB == nil {
+		readDB = db.db
+	}
+	return readDB.QueryRowContext(ctx, query, args...)
+}
+
+// SetBusyObserver configures the callback invoked when a write waited over one second.
+func (db *DB) SetBusyObserver(observer func(time.Duration, string)) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.busyObserver = observer
+}
+
+// Write executes a short write transaction with bounded busy retries.
+func (db *DB) Write(ctx context.Context, fn func(*sql.Tx) error) error {
+	if fn == nil {
+		return errors.New("write callback is required")
+	}
+	var busyWait time.Duration
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var err error
+	for attempt := 0; attempt <= 5; attempt++ {
+		attemptStart := time.Now()
+		err = db.writeOnce(ctx, fn)
+		if IsSQLiteBusy(err) {
+			busyWait += time.Since(attemptStart)
+		}
+		if !IsSQLiteBusy(err) || attempt == 5 {
+			break
+		}
+		wait := time.Duration(25<<attempt)*time.Millisecond + time.Duration(rand.Intn(25))*time.Millisecond
+		waitStart := time.Now()
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			err = ctx.Err()
+			attempt = 5
+		}
+		busyWait += time.Since(waitStart)
+	}
+	if busyWait > time.Second {
+		caller := "unknown"
+		if pc, _, _, ok := runtime.Caller(1); ok {
+			if fn := runtime.FuncForPC(pc); fn != nil {
+				caller = fn.Name()
+			}
+		}
+		slog.Warn("db.busy", "wait_ms", busyWait.Milliseconds(), "caller", caller)
+		db.mu.RLock()
+		observer := db.busyObserver
+		db.mu.RUnlock()
+		if observer != nil {
+			observer(busyWait, caller)
+		}
+	}
+	return err
+}
+
+func (db *DB) writeOnce(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+				slog.Warn("failed to roll back database transaction", "error", rollbackErr)
+			}
+		}
+	}()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+// IsSQLiteBusy reports busy or locked errors, including extended SQLite codes.
+func IsSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToUpper(err.Error())
+	return strings.Contains(message, "SQLITE_BUSY") || strings.Contains(message, "SQLITE_LOCKED") || strings.Contains(message, "DATABASE IS LOCKED")
 }
 
 // Begin starts a transaction
@@ -422,6 +603,17 @@ func (db *DB) Driver() string {
 func (db *DB) SQL() *sql.DB {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
+	return db.db
+}
+
+// ReadSQL returns the pooled, query-only SQLite handle for integrations that
+// still consume database/sql directly.
+func (db *DB) ReadSQL() *sql.DB {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if db.readDB != nil {
+		return db.readDB
+	}
 	return db.db
 }
 

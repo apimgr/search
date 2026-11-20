@@ -41,7 +41,9 @@ func (s *Server) SecurityOverview(r *http.Request) interface{} {
 	if webSecurity.ReportURL != "" {
 		contacts = append(contacts, webSecurity.ReportURL)
 	}
-	contacts = append(contacts, baseURL+"/server/contact?security_id="+securityID)
+	if s.config.Server.Pages.Contact.Enabled {
+		contacts = append(contacts, baseURL+"/server/contact?security_id="+securityID)
+	}
 	contact := webSecurity.Contact
 	if contact == "" {
 		contact = s.config.Server.Contact.Security.Email
@@ -172,12 +174,15 @@ func (s *Server) handleSecurityOverview(w http.ResponseWriter, r *http.Request) 
 	data := &SecurityOverviewPageData{
 		PageData:       *baseData,
 		ReportURL:      webSecurity.ReportURL,
-		ContactURL:     baseURL + "/server/contact?security_id=" + securityID,
+		ContactURL:     "",
 		MailtoContact:  mailto,
 		Expires:        expires,
 		HasPGPKey:      hasPGPKey,
 		PGPKeyURL:      baseURL + "/.well-known/pgp-key.asc",
 		SecurityTxtURL: baseURL + "/.well-known/security.txt",
+	}
+	if s.config.Server.Pages.Contact.Enabled {
+		data.ContactURL = baseURL + "/server/contact?security_id=" + securityID
 	}
 
 	if err := s.renderer.Render(w, "security", data); err != nil {

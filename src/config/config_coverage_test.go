@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,143 @@ func TestPortPairConfigRoundTrip(t *testing.T) {
 	}
 }
 
+func TestConfigSaveMigratesGeneratedSecretsAndPreservesOperatorSecrets(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yml")
+	secretPath := filepath.Join(dir, "secrets.yml")
+	generatedToken := strings.Repeat("a", 64)
+	if err := os.WriteFile(path, []byte("server:\n  token: "+generatedToken+"\n  pages:\n    contact:\n      captcha_secret_key: operator-captcha-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secretPath, []byte("server:\n  notifications:\n    email:\n      smtp:\n        password: smtp-password\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	mainConfig, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretConfig, err := os.ReadFile(secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(mainConfig), generatedToken) || strings.Contains(string(mainConfig), "smtp-password") || !strings.Contains(string(mainConfig), "operator-captcha-secret") {
+		t.Fatalf("server.yml must migrate generated token and retain operator-set captcha secret (migrate=%v): %s", cfg.migrateSecretPaths, mainConfig)
+	}
+	for _, expected := range []string{generatedToken, "smtp-password"} {
+		if !strings.Contains(string(secretConfig), expected) {
+			t.Fatalf("secrets.yml missing preserved value %q: %s", expected, secretConfig)
+		}
+	}
+	if mode := fileMode(t, secretPath); mode != 0600 {
+		t.Fatalf("secrets.yml mode = %04o, want 0600", mode)
+	}
+}
+
+func TestConfigSavePreservesOperatorTokenInServerConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yml")
+	const operatorToken = "operator-managed-token"
+	if err := os.WriteFile(path, []byte("server:\n  token: "+operatorToken+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	mainConfig, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainConfig), operatorToken) {
+		t.Fatalf("operator-managed token was moved from server.yml: %s", mainConfig)
+	}
+	secretConfig, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read secrets.yml: %v", err)
+	}
+	if strings.Contains(string(secretConfig), operatorToken) {
+		t.Fatalf("operator-managed token was copied to secrets.yml: %s", secretConfig)
+	}
+}
+
+func TestConfigLoadCorrectsConfigAndDropInModes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yml")
+	if err := os.WriteFile(path, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dropInDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropInDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	dropIn := filepath.Join(dropInDir, "10-extra.yml")
+	if err := os.WriteFile(dropIn, []byte("search:\n  results_per_page: 20\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, filename := range []string{path, dropIn} {
+		if mode := fileMode(t, filename); mode != 0600 {
+			t.Errorf("%s mode = %04o, want 0600", filename, mode)
+		}
+	}
+	if mode := fileMode(t, dropInDir); mode != 0700 {
+		t.Errorf("yaml.d mode = %04o, want 0700", mode)
+	}
+}
+
+func TestGeneratedLogConfigUsesSharedDefaultsAndOnlyOverrides(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	if err := DefaultConfig().Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		t.Fatalf("parse generated config: %v", err)
+	}
+	logs := mappingValue(mappingValue(document.Content[0], "server"), "logs")
+	defaults := mappingValue(logs, "defaults")
+	if mappingValue(defaults, "rotate").Value != "weekly,50MB" || mappingValue(defaults, "keep").Value != "none" {
+		t.Fatalf("shared log defaults = %#v", defaults)
+	}
+	for _, kind := range []string{"access", "server", "error", "audit", "security", "debug"} {
+		if mappingValue(mappingValue(logs, kind), "filename") != nil {
+			t.Errorf("logs.%s must derive its filename from the log kind", kind)
+		}
+	}
+	if got := mappingValue(mappingValue(logs, "access"), "rotate"); got == nil || got.Value != "monthly" {
+		t.Errorf("access rotation = %#v, want monthly override", got)
+	}
+	audit := mappingValue(logs, "audit")
+	if mappingValue(audit, "enabled").Value != "true" || mappingValue(audit, "rotate").Value != "daily" {
+		t.Errorf("audit log override = %#v", audit)
+	}
+}
+
+func fileMode(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
+}
+
 func TestPeekServerPortReadsOnlyPortValue(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	content := "server:\n  port: \"8080,8443\"\n  address: 42\n"
@@ -65,6 +203,104 @@ func TestPeekServerPortReadsOnlyPortValue(t *testing.T) {
 	}
 	if !found || httpPort != 8080 || httpsPort != 8443 {
 		t.Fatalf("PeekServerPort() = %d,%d,%t, want 8080,8443,true", httpPort, httpsPort, found)
+	}
+}
+
+func TestPeekServerAddressReadsOnlyAddressValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	content := "server:\n  address: \"[::]\"\n  port: invalid\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	address, found, err := PeekServerAddress(path)
+	if err != nil {
+		t.Fatalf("PeekServerAddress() error = %v", err)
+	}
+	if !found || address != "[::]" {
+		t.Fatalf("PeekServerAddress() = %q,%t, want [::],true", address, found)
+	}
+}
+
+func TestPeekServerPortAndAddressMergeOrderedDropIns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yml")
+	if err := os.WriteFile(path, []byte("server:\n  port: \"8080,8443\"\n  address: 127.0.0.1\n"), 0600); err != nil {
+		t.Fatalf("write server.yml: %v", err)
+	}
+	dropInDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropInDir, 0700); err != nil {
+		t.Fatalf("create yaml.d: %v", err)
+	}
+	for name, content := range map[string]string{
+		"10-listen.yml": "server:\n  port: \"8181,8444\"\n  address: \"::1\"\n",
+		"20-port.yml":   "server:\n  port: \"8282,9443\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dropInDir, name), []byte(content), 0600); err != nil {
+			t.Fatalf("write drop-in %s: %v", name, err)
+		}
+	}
+
+	httpPort, httpsPort, found, err := PeekServerPort(path)
+	if err != nil {
+		t.Fatalf("PeekServerPort() error = %v", err)
+	}
+	if !found || httpPort != 8282 || httpsPort != 9443 {
+		t.Fatalf("PeekServerPort() = %d,%d,%t, want 8282,9443,true", httpPort, httpsPort, found)
+	}
+	address, found, err := PeekServerAddress(path)
+	if err != nil {
+		t.Fatalf("PeekServerAddress() error = %v", err)
+	}
+	if !found || address != "::1" {
+		t.Fatalf("PeekServerAddress() = %q,%t, want ::1,true", address, found)
+	}
+}
+
+func TestPeekServerSkipsMalformedFilesUntilFullLoad(t *testing.T) {
+	for _, malformedBase := range []bool{false, true} {
+		name := "malformed drop-in"
+		if malformedBase {
+			name = "malformed base config"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "server.yml")
+			base := "server:\n  port: 8080\n  address: 127.0.0.1\n"
+			if malformedBase {
+				base = "server: [\n"
+			}
+			if err := os.WriteFile(path, []byte(base), 0600); err != nil {
+				t.Fatalf("write server.yml: %v", err)
+			}
+			dropInDir := filepath.Join(dir, "yaml.d")
+			if err := os.Mkdir(dropInDir, 0700); err != nil {
+				t.Fatalf("create yaml.d: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dropInDir, "10-invalid.yml"), []byte("server: [\n"), 0600); err != nil {
+				t.Fatalf("write malformed drop-in: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dropInDir, "20-listen.yml"), []byte("server:\n  port: 9090\n  address: \"[::1]\"\n"), 0600); err != nil {
+				t.Fatalf("write valid drop-in: %v", err)
+			}
+
+			httpPort, _, found, err := PeekServerPort(path)
+			if err != nil {
+				t.Fatalf("PeekServerPort() error = %v", err)
+			}
+			if !found || httpPort != 9090 {
+				t.Fatalf("PeekServerPort() = %d,%t, want 9090,true", httpPort, found)
+			}
+			address, found, err := PeekServerAddress(path)
+			if err != nil {
+				t.Fatalf("PeekServerAddress() error = %v", err)
+			}
+			if !found || address != "[::1]" {
+				t.Fatalf("PeekServerAddress() = %q,%t, want [::1],true", address, found)
+			}
+			if _, err := Load(path); err == nil {
+				t.Fatal("Load() error = nil, want malformed YAML to be reported by full load")
+			}
+		})
 	}
 }
 

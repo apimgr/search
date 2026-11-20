@@ -4,9 +4,9 @@
         <h1>{{t "footer.terms"}}</h1>
     </header>
 
-    {{if .Config.Server.Pages.Terms.Content}}
+    {{if operatorHTMLExists "terms" .}}
     <div class="page-content markdown">
-        {{.Config.Server.Pages.Terms.Content | safe}}
+        {{operatorHTML "terms" .}}
     </div>
     {{else}}
     <div class="page-content">
@@ -77,7 +77,7 @@
 
         <section class="terms-section">
             <h2>{{t "contact.page_title"}}</h2>
-            <p>{{t "terms.contact_prefix"}} <a href="/server/contact">{{t "contact.title"}}</a>{{t "terms.contact_suffix"}}</p>
+            <p>{{t "terms.contact_prefix"}} <a href="/server/security">{{t "contact.title"}}</a>{{t "terms.contact_suffix"}}</p>
         </section>
     </div>
     {{end}}

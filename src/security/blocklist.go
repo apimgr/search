@@ -57,12 +57,6 @@ func DefaultBlocklistSources() []BlocklistSource {
 			Type:    "cidr",
 			Enabled: true,
 		},
-		{
-			Name:    "emerging_threats",
-			URL:     "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt",
-			Type:    "ip",
-			Enabled: true,
-		},
 	}
 }
 

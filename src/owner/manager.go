@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/database"
 	"github.com/google/uuid"
 )
 
@@ -57,6 +58,7 @@ type Manager struct {
 	key       []byte
 	maxLinked int
 	clock     func() time.Time
+	writer    *database.DB
 }
 
 func NewManager(db *sql.DB, tablePrefix, encryptionKey string, maxLinked int) (*Manager, error) {
@@ -68,6 +70,48 @@ func NewManager(db *sql.DB, tablePrefix, encryptionKey string, maxLinked int) (*
 		maxLinked = 25
 	}
 	return &Manager{db: db, table: tablePrefix + "api_tokens", owners: tablePrefix + "owners", audit: tablePrefix + "audit_log", key: key, maxLinked: maxLinked, clock: time.Now}, nil
+}
+
+func NewManagerWithDB(db *database.DB, tablePrefix, encryptionKey string, maxLinked int) (*Manager, error) {
+	manager, err := NewManager(db.ReadSQL(), tablePrefix, encryptionKey, maxLinked)
+	if err == nil {
+		manager.writer = db
+	}
+	return manager, err
+}
+
+func (m *Manager) withWrite(ctx context.Context, fn func(*sql.Tx) error) error {
+	if m.writer != nil {
+		return m.writer.Write(ctx, fn)
+	}
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+func (m *Manager) execWrite(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	var result sql.Result
+	err := m.withWrite(ctx, func(tx *sql.Tx) error {
+		var err error
+		result, err = tx.ExecContext(ctx, query, args...)
+		return err
+	})
+	return result, err
 }
 
 func (m *Manager) Issue(ctx context.Context) (identity Identity, plaintext string, err error) {
@@ -82,27 +126,19 @@ func (m *Manager) Issue(ctx context.Context) (identity Identity, plaintext strin
 		return Identity{}, "", err
 	}
 	now := m.clock().Unix()
-	tx, err := m.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Identity{}, "", err
-	}
-	defer func() {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
-			err = errors.Join(err, fmt.Errorf("roll back owner-token issue: %w", rollbackErr))
+	var id int64
+	err = m.withWrite(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO `+m.owners+` (id, created_at, last_seen_at) VALUES (?, ?, ?)`, ownerID, now, now); err != nil {
+			return err
 		}
-	}()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO `+m.owners+` (id, created_at, last_seen_at) VALUES (?, ?, ?)`, ownerID, now, now); err != nil {
-		return Identity{}, "", err
-	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO `+m.table+` (name, token_hash, token_prefix, owner_id, kind, token_enc, created_at, active) VALUES ('primary', ?, ?, ?, 'primary', ?, ?, 1)`, hash, token[:12], ownerID, enc, now)
+		res, err := tx.ExecContext(ctx, `INSERT INTO `+m.table+` (name, token_hash, token_prefix, owner_id, kind, token_enc, created_at, active) VALUES ('primary', ?, ?, ?, 'primary', ?, ?, 1)`, hash, token[:12], ownerID, enc, now)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
 	if err != nil {
-		return Identity{}, "", err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return Identity{}, "", err
-	}
-	if err := tx.Commit(); err != nil {
 		return Identity{}, "", err
 	}
 	identity = Identity{OwnerID: ownerID, TokenID: id, Kind: "primary", Prefix: token[:12]}
@@ -117,18 +153,20 @@ func (m *Manager) Resolve(ctx context.Context, token string) (Identity, error) {
 		return Identity{}, ErrInvalidToken
 	}
 	hash := tokenHash(token)
-	rows, err := m.db.QueryContext(ctx, `SELECT id, owner_id, kind, token_prefix, token_hash, expires_at FROM `+m.table+` WHERE token_prefix = ? AND revoked_at IS NULL AND active = 1 AND owner_id IS NOT NULL`, token[:12])
+	rows, err := m.db.QueryContext(ctx, `SELECT t.id, t.owner_id, t.kind, t.token_prefix, t.token_hash, t.expires_at, t.last_used_at, o.last_seen_at FROM `+m.table+` t JOIN `+m.owners+` o ON o.id = t.owner_id WHERE t.token_prefix = ? AND t.revoked_at IS NULL AND t.active = 1 AND t.owner_id IS NOT NULL`, token[:12])
 	if err != nil {
 		return Identity{}, err
 	}
 	var identity Identity
 	var expiry sql.NullInt64
+	var lastUsed, ownerLastSeen sql.NullInt64
 	matched := false
 	for rows.Next() {
 		var id Identity
 		var storedHash string
 		var expires sql.NullInt64
-		if err := rows.Scan(&id.TokenID, &id.OwnerID, &id.Kind, &id.Prefix, &storedHash, &expires); err != nil {
+		var tokenLastUsed, lastSeen sql.NullInt64
+		if err := rows.Scan(&id.TokenID, &id.OwnerID, &id.Kind, &id.Prefix, &storedHash, &expires, &tokenLastUsed, &lastSeen); err != nil {
 			if closeErr := rows.Close(); closeErr != nil {
 				return Identity{}, errors.Join(err, fmt.Errorf("close owner-token rows: %w", closeErr))
 			}
@@ -136,7 +174,7 @@ func (m *Manager) Resolve(ctx context.Context, token string) (Identity, error) {
 		}
 		equal := subtle.ConstantTimeCompare([]byte(hash), []byte(storedHash))
 		if equal == 1 && id.OwnerID != "" {
-			identity, expiry, matched = id, expires, true
+			identity, expiry, lastUsed, ownerLastSeen, matched = id, expires, tokenLastUsed, lastSeen, true
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -152,11 +190,22 @@ func (m *Manager) Resolve(ctx context.Context, token string) (Identity, error) {
 		return Identity{}, ErrInvalidToken
 	}
 	now := m.clock().Unix()
-	if _, err := m.db.ExecContext(ctx, `UPDATE `+m.table+` SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`, now, identity.TokenID, now-60); err != nil {
-		return Identity{}, err
-	}
-	if _, err := m.db.ExecContext(ctx, `UPDATE `+m.owners+` SET last_seen_at = ? WHERE id = ?`, now, identity.OwnerID); err != nil {
-		return Identity{}, err
+	if !lastUsed.Valid || lastUsed.Int64 <= now-300 || !ownerLastSeen.Valid || ownerLastSeen.Int64 <= now-300 {
+		if err := m.withWrite(ctx, func(tx *sql.Tx) error {
+			if !lastUsed.Valid || lastUsed.Int64 <= now-300 {
+				if _, err := tx.ExecContext(ctx, `UPDATE `+m.table+` SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`, now, identity.TokenID, now-300); err != nil {
+					return err
+				}
+			}
+			if !ownerLastSeen.Valid || ownerLastSeen.Int64 <= now-300 {
+				if _, err := tx.ExecContext(ctx, `UPDATE `+m.owners+` SET last_seen_at = ? WHERE id = ? AND last_seen_at <= ?`, now, identity.OwnerID, now-300); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return Identity{}, err
+		}
 	}
 	return identity, nil
 }
@@ -283,7 +332,7 @@ func (m *Manager) Rotate(ctx context.Context, identity Identity, tokenID int64) 
 	if err != nil {
 		return "", err
 	}
-	res, err := m.db.ExecContext(ctx, `UPDATE `+m.table+` SET token_hash = ?, token_prefix = ?, token_enc = ?, rotated_at = ?, last_used_at = NULL WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`, tokenHash(token), token[:12], encrypted, m.clock().Unix(), tokenID, identity.OwnerID)
+	res, err := m.execWrite(ctx, `UPDATE `+m.table+` SET token_hash = ?, token_prefix = ?, token_enc = ?, rotated_at = ?, last_used_at = NULL WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`, tokenHash(token), token[:12], encrypted, m.clock().Unix(), tokenID, identity.OwnerID)
 	if err != nil {
 		return "", err
 	}
@@ -323,7 +372,7 @@ func (m *Manager) CreateLinked(ctx context.Context, identity Identity, name stri
 	if expiry != nil {
 		expiryValue = expiry.Unix()
 	}
-	res, err := m.db.ExecContext(ctx, `INSERT INTO `+m.table+` (name, token_hash, token_prefix, owner_id, kind, token_enc, created_at, expires_at, active) VALUES (?, ?, ?, ?, 'linked', ?, ?, ?, 1)`, name, tokenHash(token), token[:12], identity.OwnerID, encrypted, m.clock().Unix(), expiryValue)
+	res, err := m.execWrite(ctx, `INSERT INTO `+m.table+` (name, token_hash, token_prefix, owner_id, kind, token_enc, created_at, expires_at, active) VALUES (?, ?, ?, ?, 'linked', ?, ?, ?, 1)`, name, tokenHash(token), token[:12], identity.OwnerID, encrypted, m.clock().Unix(), expiryValue)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return 0, "", ErrDuplicate
@@ -349,7 +398,7 @@ func (m *Manager) UpdateLinked(ctx context.Context, identity Identity, tokenID i
 	if expiry != nil {
 		expiryValue = expiry.Unix()
 	}
-	res, err := m.db.ExecContext(ctx, `UPDATE `+m.table+` SET name = ?, expires_at = ? WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, name, expiryValue, tokenID, identity.OwnerID)
+	res, err := m.execWrite(ctx, `UPDATE `+m.table+` SET name = ?, expires_at = ? WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, name, expiryValue, tokenID, identity.OwnerID)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return ErrDuplicate
@@ -364,7 +413,7 @@ func (m *Manager) UpdateLinked(ctx context.Context, identity Identity, tokenID i
 
 // Audit records a credential-management action without ever storing the raw token.
 func (m *Manager) Audit(ctx context.Context, identity Identity, action string) error {
-	_, err := m.db.ExecContext(ctx, `INSERT INTO `+m.audit+` (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details) VALUES (?, ?, 'owner', ?, ?, 'api_token', ?, ?)`, uuid.NewString(), m.clock().Unix(), identity.OwnerID, action, identity.Prefix, `{"token_prefix":"`+identity.Prefix+`"}`)
+	_, err := m.execWrite(ctx, `INSERT INTO `+m.audit+` (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details) VALUES (?, ?, 'owner', ?, ?, 'api_token', ?, ?)`, uuid.NewString(), m.clock().Unix(), identity.OwnerID, action, identity.Prefix, `{"token_prefix":"`+identity.Prefix+`"}`)
 	return err
 }
 
@@ -378,7 +427,7 @@ func (m *Manager) RevokeLinked(ctx context.Context, identity Identity, tokenID i
 	} else if err != nil {
 		return err
 	}
-	res, err := m.db.ExecContext(ctx, `UPDATE `+m.table+` SET active = 0, revoked_at = ?, revoked_reason = 'owner_revoked' WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, m.clock().Unix(), tokenID, identity.OwnerID)
+	res, err := m.execWrite(ctx, `UPDATE `+m.table+` SET active = 0, revoked_at = ?, revoked_reason = 'owner_revoked' WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, m.clock().Unix(), tokenID, identity.OwnerID)
 	if err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/apimgr/search/src/common/closeutil"
+	"github.com/apimgr/search/src/database"
 )
 
 // defaultTimezone is the default timezone for the scheduler (allows testing)
@@ -212,6 +213,7 @@ type Scheduler struct {
 	mu            sync.RWMutex
 	tasks         map[TaskID]*Task
 	db            *sql.DB
+	writer        *database.DB
 	nodeID        string
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -239,6 +241,17 @@ type Scheduler struct {
 // NewScheduler creates a new scheduler
 // Per AI.md PART 18: Scheduler is ALWAYS RUNNING
 func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
+	return newScheduler(db, nil, nodeID)
+}
+
+func NewSchedulerWithDB(db *database.DB, nodeID string) *Scheduler {
+	if db == nil {
+		return NewScheduler(nil, nodeID)
+	}
+	return newScheduler(db.ReadSQL(), db, nodeID)
+}
+
+func newScheduler(db *sql.DB, writer *database.DB, nodeID string) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Default to America/New_York per spec
@@ -250,6 +263,7 @@ func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
 	s := &Scheduler{
 		tasks:    make(map[TaskID]*Task),
 		db:       db,
+		writer:   writer,
 		nodeID:   nodeID,
 		ctx:      ctx,
 		cancel:   cancel,
@@ -265,6 +279,19 @@ func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
 	}
 
 	return s
+}
+
+func (s *Scheduler) execWrite(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	if s.writer == nil {
+		return s.db.ExecContext(ctx, query, args...)
+	}
+	var result sql.Result
+	err := s.writer.Write(ctx, func(tx *sql.Tx) error {
+		var err error
+		result, err = tx.ExecContext(ctx, query, args...)
+		return err
+	})
+	return result, err
 }
 
 // SetTimezone sets the timezone for scheduled tasks
@@ -1221,7 +1248,7 @@ func (s *Scheduler) initDatabase() {
 			locked_at DATETIME
 		)
 	`
-	if _, err := s.db.ExecContext(initCtx, query); err != nil {
+	if _, err := s.execWrite(initCtx, query); err != nil {
 		slog.Error("Failed to create tasks table", "err", err)
 	}
 
@@ -1233,7 +1260,7 @@ func (s *Scheduler) initDatabase() {
 		{"next_retry", "DATETIME"}, {"locked_by", "TEXT"}, {"locked_at", "DATETIME"},
 	} {
 		query := "ALTER TABLE scheduler_tasks ADD COLUMN " + column.name + " " + column.definition
-		if _, err := s.db.ExecContext(initCtx, query); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+		if _, err := s.execWrite(initCtx, query); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
 			slog.Warn("failed to apply scheduler schema update", "column", column.name, "error", err)
 		}
 	}
@@ -1251,16 +1278,16 @@ func (s *Scheduler) initDatabase() {
 			error TEXT
 		)
 	`
-	if _, err := s.db.ExecContext(initCtx, historyQuery); err != nil {
+	if _, err := s.execWrite(initCtx, historyQuery); err != nil {
 		slog.Error("Failed to create scheduler history table", "err", err)
 	}
 
 	// Idempotent schema update — status distinguishes skipped runs from failures,
 	// which the table's success flag alone cannot express
-	if _, err := s.db.ExecContext(initCtx, "ALTER TABLE scheduler_history ADD COLUMN status TEXT"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+	if _, err := s.execWrite(initCtx, "ALTER TABLE scheduler_history ADD COLUMN status TEXT"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
 		slog.Warn("failed to add scheduler history status column", "error", err)
 	}
-	if _, err := s.db.ExecContext(initCtx, "CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id, started_at)"); err != nil {
+	if _, err := s.execWrite(initCtx, "CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id, started_at)"); err != nil {
 		slog.Warn("failed to create scheduler history index", "error", err)
 	}
 }
@@ -1336,7 +1363,7 @@ func (s *Scheduler) saveTaskState(task *Task) {
 	// Per AI.md PART 10: INSERT/UPDATE queries must use context with 10s timeout
 	saveCtx, saveCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer saveCancel()
-	_, err := s.db.ExecContext(saveCtx, query,
+	_, err := s.execWrite(saveCtx, query,
 		string(task.ID),
 		task.Name,
 		task.Schedule,
@@ -1387,14 +1414,14 @@ func (s *Scheduler) recordHistory(task *Task, startedAt, finishedAt time.Time, s
 		success = 1
 	}
 
-	if _, err := s.db.ExecContext(ctx, insert, newHistoryID(), string(task.ID), startedAt, finishedAt, success, errMsg, string(status)); err != nil {
+	if _, err := s.execWrite(ctx, insert, newHistoryID(), string(task.ID), startedAt, finishedAt, success, errMsg, string(status)); err != nil {
 		slog.Error("Failed to record task history", "task", task.ID, "err", err)
 		return
 	}
 
 	prune := `DELETE FROM scheduler_history WHERE task_id = ? AND id NOT IN (
 		SELECT id FROM scheduler_history WHERE task_id = ? ORDER BY started_at DESC LIMIT ?)`
-	if _, err := s.db.ExecContext(ctx, prune, string(task.ID), string(task.ID), historyRetainPerTask); err != nil {
+	if _, err := s.execWrite(ctx, prune, string(task.ID), string(task.ID), historyRetainPerTask); err != nil {
 		slog.Warn("Failed to prune task history", "task", task.ID, "err", err)
 	}
 }
@@ -1496,7 +1523,7 @@ func (s *Scheduler) acquireTaskLock(task *Task) bool {
 	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
 	lockCtx, lockCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer lockCancel()
-	result, err := s.db.ExecContext(lockCtx, query, s.nodeID, now, string(task.ID), s.nodeID, now.Add(-lockTimeout))
+	result, err := s.execWrite(lockCtx, query, s.nodeID, now, string(task.ID), s.nodeID, now.Add(-lockTimeout))
 	if err != nil {
 		slog.Warn("Failed to acquire lock", "task", task.ID, "err", err)
 		return false
@@ -1512,7 +1539,7 @@ func (s *Scheduler) releaseTaskLock(task *Task) {
 	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
 	relCtx, relCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer relCancel()
-	if _, err := s.db.ExecContext(relCtx, query, string(task.ID), s.nodeID); err != nil {
+	if _, err := s.execWrite(relCtx, query, string(task.ID), s.nodeID); err != nil {
 		slog.Warn("failed to release scheduler task lock", "task_id", task.ID, "error", err)
 	}
 }
@@ -1661,7 +1688,7 @@ func (s *Scheduler) forceReleaseLocks() {
 	defer cancel()
 
 	query := `UPDATE scheduler_tasks SET locked_by = NULL, locked_at = NULL WHERE locked_by = ?`
-	if _, err := s.db.ExecContext(ctx, query, s.nodeID); err != nil {
+	if _, err := s.execWrite(ctx, query, s.nodeID); err != nil {
 		slog.Error("Failed to release scheduler locks on shutdown", "err", err)
 	}
 }

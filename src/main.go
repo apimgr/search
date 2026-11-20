@@ -30,6 +30,7 @@ import (
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/netutil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/mode"
@@ -367,8 +368,8 @@ func bindPrivilegedListeners(cfg *config.Config) (map[int]net.Listener, net.List
 		if _, exists := listeners[port]; exists {
 			continue
 		}
-		addr := net.JoinHostPort(cfg.Server.Address, fmt.Sprint(port))
-		listener, err := net.Listen("tcp", addr)
+		addr := netutil.JoinHostPort(cfg.Server.Address, fmt.Sprint(port))
+		listener, err := netutil.ListenTCP(cfg.Server.Address, port)
 		if err != nil {
 			closeListeners()
 			return nil, nil, fmt.Errorf("bind %s: %w", addr, err)
@@ -378,8 +379,8 @@ func bindPrivilegedListeners(cfg *config.Config) (map[int]net.Listener, net.List
 
 	var redirectListener net.Listener
 	if redirectPort > 0 {
-		addr := net.JoinHostPort(cfg.Server.Address, fmt.Sprint(redirectPort))
-		listener, err := net.Listen("tcp", addr)
+		addr := netutil.JoinHostPort(cfg.Server.Address, fmt.Sprint(redirectPort))
+		listener, err := netutil.ListenTCP(cfg.Server.Address, redirectPort)
 		if err != nil {
 			closeListeners()
 			return nil, nil, fmt.Errorf("bind AutoTLS redirect %s: %w", addr, err)
@@ -419,8 +420,21 @@ func earlyPortConfig() (*config.Config, error) {
 	}
 	cfg.Server.Port = port
 	cfg.Server.HTTPSPort = httpsPort
-	if env.Listen != "" {
-		cfg.Server.Address = env.Listen
+	listenAddress := strings.TrimSpace(flagAddress)
+	if listenAddress == "" {
+		listenAddress = strings.TrimSpace(env.Listen)
+	}
+	if listenAddress == "" {
+		address, found, err := config.PeekServerAddress(config.GetConfigPath())
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			listenAddress = address
+		}
+	}
+	if listenAddress != "" {
+		cfg.Server.Address = listenAddress
 	}
 	return cfg, nil
 }

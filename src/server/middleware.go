@@ -117,6 +117,9 @@ func isOnionRequest(cfg *config.Config, r *http.Request) bool {
 // SecurityHeaders adds security headers to all responses per AI.md PART 11.
 func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/server/contact" {
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		}
 		headers := m.config.Server.Security.Headers
 		isOnion := isOnionRequest(m.config, r)
 
@@ -1134,13 +1137,8 @@ func (m *Middleware) Logger(next http.Handler) http.Handler {
 
 		duration := time.Since(start)
 
-		// Health-check log suppression per AI.md PART 13: skip successful
-		// 2xx health requests unless logging is explicitly enabled or debug
-		// is on; failures always log
-		suppressHealth := isHealthPath(r.URL.Path) &&
-			wrapped.statusCode >= 200 && wrapped.statusCode < 300 &&
-			!m.config.Server.Logs.Access.LogHealthChecks &&
-			!m.config.IsDebug()
+		// Suppress successful health checks in every request log; failures log.
+		suppressHealth := isHealthPath(r.URL.Path) && wrapped.statusCode >= 200 && wrapped.statusCode < 300
 
 		// Log to access log (Apache/Nginx combined format)
 		if m.logManager != nil && !suppressHealth {
@@ -1148,7 +1146,7 @@ func (m *Middleware) Logger(next http.Handler) http.Handler {
 		}
 
 		// Debug-mode request log — never log client IP (privacy is the product)
-		if m.config.Server.Mode == "development" {
+		if m.config.Server.Mode == "development" && !suppressHealth {
 			slog.Debug("request",
 				"method", r.Method,
 				"path", r.URL.Path,

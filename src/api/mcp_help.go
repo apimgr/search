@@ -43,7 +43,7 @@ func (h *Handler) MCPHelpInfo(r *http.Request) MCPHelpInfo {
 	}
 
 	return MCPHelpInfo{
-		Enabled:                     h.config.Server.MCP.Enabled,
+		Enabled:                     true,
 		URL:                         httputil.BuildURL(r, version.APIPrefix+"/server/mcp"),
 		Aliases:                     []string{httputil.BuildURL(r, "/api/mcp"), httputil.BuildURL(r, "/mcp")},
 		ProtocolVersion:             mcpVersions[0],
@@ -64,10 +64,6 @@ func containsMCPTool(tools []mcpTool, name string) bool {
 }
 
 func (h *Handler) handleMCPHelp(w http.ResponseWriter, r *http.Request) {
-	if !h.config.Server.MCP.Enabled {
-		http.NotFound(w, r)
-		return
-	}
 	info := h.MCPHelpInfo(r)
 	tools := make([]map[string]string, 0, len(info.Tools))
 	for _, tool := range info.Tools {

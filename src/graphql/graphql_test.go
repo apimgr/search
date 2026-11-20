@@ -870,6 +870,8 @@ func TestGraphQLInformationalRoutesUseRESTHandlers(t *testing.T) {
 	}
 	cfg := &config.Config{}
 	cfg.Server.Title = "Search"
+	cfg.Server.Pages.Contact.Enabled = true
+	cfg.Server.Contact.General.Email = "contact@example.test"
 	dependencies := testGraphQLDependencies()
 	dependencies.API = api.NewHandler(cfg, nil, nil)
 	handler := Handler(cfg, dependencies)

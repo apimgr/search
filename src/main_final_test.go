@@ -585,12 +585,19 @@ func TestFirstRunOperatorTokenIsStored(t *testing.T) {
 	if !cfg.IsFirstRun() || cfg.Server.Token == "" {
 		t.Fatal("expected first-run config with a generated operator token")
 	}
-	contents, err := os.ReadFile(filepath.Join(dir, "config", "server.yml"))
+	contents, err := os.ReadFile(filepath.Join(dir, "config", "secrets.yml"))
+	if err != nil {
+		t.Fatalf("read generated secrets.yml: %v", err)
+	}
+	if !strings.Contains(string(contents), cfg.Server.Token) {
+		t.Fatal("generated operator token was not persisted in secrets.yml")
+	}
+	mainConfig, err := os.ReadFile(filepath.Join(dir, "config", "server.yml"))
 	if err != nil {
 		t.Fatalf("read generated server.yml: %v", err)
 	}
-	if !strings.Contains(string(contents), cfg.Server.Token) {
-		t.Fatal("generated operator token was not persisted in server.yml")
+	if strings.Contains(string(mainConfig), cfg.Server.Token) {
+		t.Fatal("generated operator token was also persisted in server.yml")
 	}
 }
 

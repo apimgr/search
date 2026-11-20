@@ -57,6 +57,12 @@ func NewTemplateRenderer(cfg *config.Config, i18nManager *i18n.Manager) *Templat
 }
 
 func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.FuncMap {
+	resolvedLanguage := "en"
+	if i18nFuncs != nil {
+		if langFunc, ok := i18nFuncs["lang"].(func() string); ok {
+			resolvedLanguage = langFunc()
+		}
+	}
 	return template.FuncMap{
 		"asset": assetURL,
 		// i18n functions - use provided funcs or fallback
@@ -116,7 +122,13 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 		"trim":           strings.TrimSpace,
 		"join":           strings.Join,
 		"markdownToHTML": markdownToHTML,
-		"split":          strings.Split,
+		"operatorHTML": func(name string, data interface{}) template.HTML {
+			return loadOperatorHTML(name, resolvedLanguage, pageDataValue(data))
+		},
+		"operatorHTMLExists": func(name string, data interface{}) bool {
+			return operatorHTMLExists(name, resolvedLanguage)
+		},
+		"split": strings.Split,
 		"default": func(def, val interface{}) interface{} {
 			if val == nil || val == "" {
 				return def
@@ -198,6 +210,29 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 			return key
 		},
 	}
+}
+
+func pageDataValue(value interface{}) PageData {
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return PageData{}
+	}
+	if reflected.Kind() == reflect.Pointer {
+		if reflected.IsNil() {
+			return PageData{}
+		}
+		reflected = reflected.Elem()
+	}
+	if reflected.Type() == reflect.TypeOf(PageData{}) {
+		return reflected.Interface().(PageData)
+	}
+	if reflected.Kind() == reflect.Struct {
+		field := reflected.FieldByName("PageData")
+		if field.IsValid() && field.Type() == reflect.TypeOf(PageData{}) {
+			return field.Interface().(PageData)
+		}
+	}
+	return PageData{}
 }
 
 func assetURL(assetPath string) string {
@@ -565,6 +600,7 @@ type PageData struct {
 	TorEnabled         bool
 	TorStatus          string
 	OnionAddress       string
+	I2PAddress         string
 	WidgetsEnabled     bool
 	MCPEnabled         bool
 	EnabledWidgets     []string
@@ -770,6 +806,14 @@ type ContactPageData struct {
 	CaptchaLocal    bool
 	CaptchaProvider string
 	CaptchaSiteKey  string
+	FormToken       string
+	ReviewMode      bool
+	ReviewType      string
+	ReviewEmail     string
+	ReviewSubject   string
+	ReviewToken     string
+	ConfirmAfter    int
+	ReviewFields    map[string]string
 
 	// SecurityMode is true when a valid security_id switched the form into
 	// coordinated-disclosure (vulnerability report) mode.

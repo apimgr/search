@@ -18,6 +18,8 @@
         <a href="/server/help"{{if eq .Page "help"}} aria-current="page"{{end}}>{{t "nav.help"}}</a>
     </nav>
 
+    {{operatorHTML "header" .}}
+
     {{/* Desktop action icons: language selector + theme toggle + preferences */}}
     <div class="header-actions">
         {{if .AvailableLanguages}}

@@ -15,36 +15,104 @@
         {{end}}
         <a href="/" class="btn btn-primary">{{t "contact.return_home"}}</a>
     </div>
+    {{else if .ReviewMode}}
+    <div class="contact-review-backdrop">
+        <section class="contact-review-panel" aria-labelledby="contact-review-title">
+            <h2 id="contact-review-title">Review your report</h2>
+            {{if .ContactError}}<p role="alert">{{.ContactError}}</p>{{end}}
+            <p class="contact-review-email">{{.ReviewEmail}}</p>
+            <dl><dt>Type</dt><dd>{{.ReviewType}}</dd><dt>Subject</dt><dd>{{.ReviewSubject}}</dd></dl>
+            <form action="/server/contact" method="POST">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="form_token" value="{{.FormToken}}">
+                <input type="hidden" name="review_token" value="{{.ReviewToken}}">
+                {{range $key, $value := .ReviewFields}}<input type="hidden" name="{{$key}}" value="{{$value}}">{{end}}
+                <label class="form-checkbox"><input type="checkbox" name="confirmed" value="true" required> This email address is correct, and this is a genuine report, not an advertisement, a solicitation or spam</label>
+                <button class="btn btn-primary" type="submit" name="step" value="confirm">Confirm</button>
+                <button class="btn btn-secondary" type="submit" name="step" value="edit" formnovalidate>Edit</button>
+            </form>
+        </section>
+    </div>
     {{else}}
     <div class="page-content">
-        <p>{{if .SecurityMode}}{{t "contact.security_description"}}{{else}}{{t "contact.description"}}{{end}}</p>
+        <p>This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions.</p>
 
         <form action="/server/contact" method="POST" class="contact-form">
             {{/* CSRF Token */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
-            <div class="sr-only" aria-hidden="true">
-                <label for="website">Website</label>
+            <div class="contact-honeypot" aria-hidden="true">
+                <label for="website">Leave this field empty</label>
                 <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
             </div>
+            <input type="hidden" name="form_token" value="{{.FormToken}}">
 
             {{if .SecurityMode}}
             {{/* Coordinated-disclosure mode: security_id plus hidden auto-filled fields, per AI.md PART 11 */}}
             <input type="hidden" name="security_id" value="{{.SecurityID}}">
+            <input type="hidden" name="type" value="security">
             <input type="hidden" name="app_version" value="{{.AppVersion}}">
             <input type="hidden" name="commit_hash" value="{{.CommitHash}}">
             <input type="hidden" name="timestamp" value="{{.Timestamp}}">
             <input type="hidden" name="request_user_agent" value="{{.RequestUserAgent}}">
             {{end}}
 
+            {{if not .SecurityMode}}
+            <div class="form-group">
+                <label for="type">Type <span class="required">*</span></label>
+                <select id="type" name="type" required>
+                    <option value="abuse" {{if eq (index .ReviewFields "type") "abuse"}}selected{{end}}>Abuse</option>
+                    <option value="dmca" {{if eq (index .ReviewFields "type") "dmca"}}selected{{end}}>DMCA</option>
+                    <option value="privacy" {{if eq (index .ReviewFields "type") "privacy"}}selected{{end}}>Privacy request</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="reported_url">Reported URL</label>
+                <input type="url" id="reported_url" name="reported_url" maxlength="2048" value="{{index .ReviewFields "reported_url"}}">
+            </div>
+            <div class="form-group">
+                <label for="reason">Abuse reason</label>
+                <select id="reason" name="reason">
+                    <option value="illegal_content" {{if eq (index .ReviewFields "reason") "illegal_content"}}selected{{end}}>Illegal content</option>
+                    <option value="terms_violation" {{if eq (index .ReviewFields "reason") "terms_violation"}}selected{{end}}>Terms violation</option>
+                    <option value="harassment" {{if eq (index .ReviewFields "reason") "harassment"}}selected{{end}}>Harassment</option>
+                    <option value="malware_phishing" {{if eq (index .ReviewFields "reason") "malware_phishing"}}selected{{end}}>Malware or phishing</option>
+                    <option value="other" {{if eq (index .ReviewFields "reason") "other"}}selected{{end}}>Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="copyrighted_work">Copyrighted work</label>
+                <input type="text" id="copyrighted_work" name="copyrighted_work" maxlength="1000" value="{{index .ReviewFields "copyrighted_work"}}">
+            </div>
+            <div class="form-group form-checkbox">
+                <label><input type="checkbox" name="good_faith_statement" value="true" {{if eq (index .ReviewFields "good_faith_statement") "true"}}checked{{end}}> I have a good faith belief that the use is not authorized.</label>
+                <label><input type="checkbox" name="accuracy_statement" value="true" {{if eq (index .ReviewFields "accuracy_statement") "true"}}checked{{end}}> The information is accurate and I am authorized to act.</label>
+            </div>
+            <div class="form-group">
+                <label for="signature">Electronic signature</label>
+                <input type="text" id="signature" name="signature" maxlength="254" value="{{index .ReviewFields "signature"}}">
+            </div>
+            <div class="form-group">
+                <label for="request_kind">Privacy request</label>
+                <select id="request_kind" name="request_kind">
+                    <option value="access" {{if eq (index .ReviewFields "request_kind") "access"}}selected{{end}}>Access</option>
+                    <option value="export" {{if eq (index .ReviewFields "request_kind") "export"}}selected{{end}}>Export</option>
+                    <option value="deletion" {{if eq (index .ReviewFields "request_kind") "deletion"}}selected{{end}}>Deletion</option>
+                    <option value="correction" {{if eq (index .ReviewFields "request_kind") "correction"}}selected{{end}}>Correction</option>
+                    <option value="opt_out" {{if eq (index .ReviewFields "request_kind") "opt_out"}}selected{{end}}>Opt out</option>
+                    <option value="other" {{if eq (index .ReviewFields "request_kind") "other"}}selected{{end}}>Other</option>
+                </select>
+            </div>
+            {{end}}
+
             <div class="form-group">
                 <label for="name">{{t "contact.name_label"}} <span class="required">*</span></label>
-                <input type="text" id="name" name="name" required placeholder="{{t "contact.name_placeholder"}}" autocomplete="name">
+                <input type="text" id="name" name="name" required value="{{index .ReviewFields "name"}}" placeholder="{{t "contact.name_placeholder"}}" autocomplete="name">
             </div>
 
             <div class="form-group">
                 <label for="email">{{t "contact.email_label"}} {{if not .SecurityMode}}<span class="required">*</span>{{end}}</label>
-                <input type="email" id="email" name="email" {{if not .SecurityMode}}required{{end}} placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
+                <input type="email" id="email" name="email" {{if not .SecurityMode}}required{{end}} value="{{index .ReviewFields "email"}}" placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
             </div>
 
             {{if .SecurityMode}}
@@ -130,12 +198,12 @@
             {{else}}
             <div class="form-group">
                 <label for="subject">{{t "contact.subject_label"}} <span class="required">*</span></label>
-                <input type="text" id="subject" name="subject" required placeholder="{{t "contact.subject_placeholder"}}">
+                <input type="text" id="subject" name="subject" required value="{{index .ReviewFields "subject"}}" placeholder="{{t "contact.subject_placeholder"}}">
             </div>
 
             <div class="form-group">
                 <label for="message">{{t "contact.message_label"}} <span class="required">*</span></label>
-                <textarea id="message" name="message" rows="6" required placeholder="{{t "contact.message_placeholder"}}"></textarea>
+                <textarea id="message" name="message" rows="6" required placeholder="{{t "contact.message_placeholder"}}">{{index .ReviewFields "message"}}</textarea>
             </div>
             {{end}}
 
@@ -169,6 +237,14 @@
                 <button type="submit" class="btn btn-primary">{{t "contact.send_message"}}</button>
             </div>
         </form>
+        <section class="contact-information">
+            <h2>Security Issues</h2>
+            <p>To report a security vulnerability, consult our <a href="/server/security">security policy</a>.</p>
+        </section>
+        <section class="contact-information">
+            <h2>Abuse Reports</h2>
+            <p>To report abusive content or a terms violation, choose the type Abuse above. To send a DMCA notice, choose the type DMCA.{{if .Config.Server.Contact.Abuse.Email}} or email {{.Config.Server.Contact.Abuse.Email}}{{else if .Config.Server.Contact.General.Email}} or email {{.Config.Server.Contact.General.Email}}{{end}}</p>
+        </section>
     </div>
     {{end}}
 </div>

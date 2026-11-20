@@ -15,7 +15,6 @@
         <span>•</span>
         <a href="/server/privacy">{{t "nav.privacy"}}</a>
         <span>•</span>
-        <a href="/server/contact">{{t "nav.contact"}}</a>
         <span>•</span>
         <a href="/server/help">{{t "nav.help"}}</a>
         <span>•</span>
@@ -24,7 +23,9 @@
 
     {{/* Application branding - per AI.md PART 16 "Default Application Footer" */}}
     <p>
+        {{if operatorHTMLExists "footer" .}}{{operatorHTML "footer" .}}{{else}}
         {{if .Config.Server.Branding.SourceCodeURL}}<a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">{{t "footer.made_with"}}</a>{{else}}{{t "footer.made_with"}}{{end}} ❤️
+        {{end}}
         <span>•</span>
         <span>{{version}}</span>
     </p>

@@ -27,6 +27,7 @@ import (
 	"github.com/apimgr/search/src/cache"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/common/netutil"
 	"github.com/apimgr/search/src/common/qr"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
@@ -89,6 +90,8 @@ type Server struct {
 	ownerManager      *owner.Manager
 	ownerFlashMu      sync.Mutex
 	ownerFlashes      map[string]ownerTokenFlash
+	contactSpamMu     sync.Mutex
+	contactSpamState  *contactSpamState
 	feedQueriesMu     sync.RWMutex
 	feedQueries       []feedQuery
 	apiCaptchasMu     sync.Mutex
@@ -316,7 +319,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 				InboundQuantity:  cfg.Server.I2P.InboundQuantity,
 				OutboundQuantity: cfg.Server.I2P.OutboundQuantity,
 			},
-			fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.Port))
+			netutil.JoinHostPort(cfg.Server.Address, strconv.Itoa(cfg.Server.Port)))
 	}
 
 	// Set I2P manager on API handler for health checks per AI.md PART 31.2
@@ -482,7 +485,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 				prefix = "srv_"
 			}
 			var ownerErr error
-			ownerMgr, ownerErr = owner.NewManager(dbMgr.ServerDB().SQL(), prefix, cfg.Server.Security.EncryptionKey, cfg.Server.Tokens.MaxLinked)
+			ownerMgr, ownerErr = owner.NewManagerWithDB(dbMgr.ServerDB(), prefix, cfg.Server.Security.EncryptionKey, cfg.Server.Tokens.MaxLinked)
 			if ownerErr != nil {
 				slog.Error("Owner token manager initialization failed", "err", ownerErr)
 			} else {
@@ -519,6 +522,9 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
+	if dbMgr != nil {
+		dbMgr.SetBusyObserver(metrics.RecordDBBusy)
+	}
 	apiHandler.SetHealthMetrics(metrics)
 	rl.SetMetrics(metrics)
 
@@ -533,12 +539,12 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	renderer = NewTemplateRenderer(cfg, i18nMgr)
 
 	var alertMgr *alert.Manager
-	if dbMgr != nil && dbMgr.ServerDB() != nil && dbMgr.ServerDB().SQL() != nil {
-		alertMgr = alert.NewManager(dbMgr.ServerDB().SQL(), cfg, aggregator, mailer)
+	if dbMgr != nil && dbMgr.ServerDB() != nil && dbMgr.ServerDB().ReadSQL() != nil {
+		alertMgr = alert.NewManagerWithDB(dbMgr.ServerDB(), cfg, aggregator, mailer)
 	}
 
 	// Create blocklist manager per AI.md PART 18
-	blocklistMgr := security.NewBlocklistManagerWithSecurityDir(config.GetDataDir(), cfg.Data.SecurityDir, blocklistSources(cfg.Server.Security.Blocklists))
+	blocklistMgr := security.NewBlocklistManagerWithSecurityDir(config.GetDataDir(), cfg.Data.SecurityDir, blocklistSources(cfg.Server.Security.ExtraSources))
 	mw.SetBlocklistManager(blocklistMgr)
 	if handler, exists := directMgr.GetHandler(direct.AnswerTypeSafe); exists {
 		if safeHandler, ok := handler.(*direct.SafeHandler); ok {
@@ -549,7 +555,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	}
 	cfg.OnReload(func(c *config.Config) {
 		blocklistMgr.SetSecurityDir(c.Data.SecurityDir)
-		blocklistMgr.SetSources(blocklistSources(c.Server.Security.Blocklists))
+		blocklistMgr.SetSources(blocklistSources(c.Server.Security.ExtraSources))
 	})
 	// Load any previously downloaded blocklists
 	if err := blocklistMgr.LoadFromDisk(); err != nil {
@@ -588,7 +594,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	// Set debug accessor for db per AI.md PART 6
 	var serverDB *sql.DB
 	if dbMgr != nil && dbMgr.ServerDB() != nil {
-		serverDB = dbMgr.ServerDB().SQL()
+		serverDB = dbMgr.ServerDB().ReadSQL()
 	}
 
 	s := &Server{
@@ -633,7 +639,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 		if configPath == "" {
 			configPath = "/etc/search/server.yml"
 		}
-		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath)
+		s.configSync = config.NewConfigSyncWithDB(dbMgr.ServerDB(), cfg, configPath)
 	}
 
 	// Share contact delivery and captcha validation with the REST API.
@@ -663,9 +669,9 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	// Initialize scheduler - ALWAYS RUNNING per AI.md PART 19
 	// Use server.db for persistent task state if available
-	var schedulerDB *sql.DB
+	var schedulerDB *database.DB
 	if dbMgr != nil {
-		schedulerDB = dbMgr.ServerDB().SQL()
+		schedulerDB = dbMgr.ServerDB()
 	}
 	s.initScheduler(schedulerDB)
 	s.apiHandler.SetHealthProvider(s)
@@ -755,7 +761,7 @@ func (s *Server) listen(port int, addr string) (net.Listener, error) {
 		delete(s.preboundListeners, port)
 		return listener, nil
 	}
-	return net.Listen("tcp", addr)
+	return netutil.ListenTCP(s.config.Server.Address, port)
 }
 
 // StartHTTPServer starts the server and signals readyCh once the TCP socket is bound.
@@ -851,8 +857,8 @@ func (s *Server) startNotifyWorkers() {
 func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<- struct{}) error {
 	httpsPort := s.config.Server.GetHTTPSPort()
 
-	httpAddr := fmt.Sprintf("%s:%d", s.config.Server.Address, httpPort)
-	httpsAddr := fmt.Sprintf("%s:%d", s.config.Server.Address, httpsPort)
+	httpAddr := netutil.JoinHostPort(s.config.Server.Address, strconv.Itoa(httpPort))
+	httpsAddr := netutil.JoinHostPort(s.config.Server.Address, strconv.Itoa(httpsPort))
 
 	// Bind HTTP socket
 	httpLn, err := s.listen(httpPort, httpAddr)
@@ -936,7 +942,7 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 // Binds the socket via net.Listen first, then signals readyCh so the banner
 // is shown only after the port is actually accepting connections.
 func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- struct{}) error {
-	addr := fmt.Sprintf("%s:%d", s.config.Server.Address, port)
+	addr := netutil.JoinHostPort(s.config.Server.Address, strconv.Itoa(port))
 
 	s.httpServer = &http.Server{
 		Addr:         addr,
@@ -959,7 +965,7 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 
 		// Start HTTP->HTTPS redirect server on port 80 if configured
 		if s.config.Server.SSL.AutoTLS {
-			redirectAddr := net.JoinHostPort(s.config.Server.Address, "80")
+			redirectAddr := netutil.JoinHostPort(s.config.Server.Address, "80")
 			redirectHandler := ssl.HTTPSRedirectHandler(port)
 			if s.config.Server.SSL.LetsEncrypt.Enabled {
 				redirectHandler = s.tlsManager.GetHTTPChallengeHandler(redirectHandler)
@@ -1092,7 +1098,7 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 // Per AI.md PART 16: Theme read from cookie set by client-side JS
 func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page string) *PageData {
 	data := NewPageData(s.config, title, page)
-	data.MCPEnabled = s.config.Server.MCP.Enabled
+	data.MCPEnabled = true
 	i18nManager := s.getI18nManager()
 	data.Lang = i18nManager.ResolveLanguage(w, r)
 	if i18nManager.IsRTL(data.Lang) {
@@ -1138,6 +1144,9 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 		} else {
 			data.TorStatus = "starting..."
 		}
+	}
+	if s.i2pManager != nil && s.i2pManager.IsRunning() {
+		data.I2PAddress = s.i2pManager.EepsiteAddress()
 	}
 	// Set HasConsentCookie: skip banner when a valid cookie_consent cookie exists.
 	// A cookie that is present but unparseable is NOT a valid consent, so the
@@ -1535,11 +1544,6 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/security", "0.4", "monthly"},
 		{"/server/security/policy", "0.4", "monthly"},
 		{"/server/security/thanks", "0.3", "yearly"},
-	}
-
-	// Add contact page if enabled
-	if s.config.Server.Pages.Contact.Enabled {
-		entries = append(entries, sitemapEntry{"/server/contact", "0.4", "monthly"})
 	}
 
 	// The sitemap only includes anonymous HTML pages allowed by robots.txt.
