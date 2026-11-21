@@ -469,6 +469,25 @@ func TestSchedulerGetTasksWithDefaultMaxRetries(t *testing.T) {
 	}
 }
 
+func TestSetTaskRetryEnabled(t *testing.T) {
+	sched := NewScheduler(nil, "test")
+	if err := sched.Register(&Task{ID: TaskGeoIPUpdate, Schedule: "0 3 * * 0", Enabled: true, Run: func(context.Context) error { return nil }}); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if err := sched.SetTaskRetryEnabled(TaskGeoIPUpdate, false); err != nil {
+		t.Fatalf("SetTaskRetryEnabled(false) error = %v", err)
+	}
+	if !sched.tasks[TaskGeoIPUpdate].RetryDisabled {
+		t.Fatal("RetryDisabled = false, want true")
+	}
+	if err := sched.SetTaskRetryEnabled(TaskGeoIPUpdate, true); err != nil {
+		t.Fatalf("SetTaskRetryEnabled(true) error = %v", err)
+	}
+	if sched.tasks[TaskGeoIPUpdate].RetryDisabled {
+		t.Fatal("RetryDisabled = true, want false")
+	}
+}
+
 func TestSchedulerGetTask(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 

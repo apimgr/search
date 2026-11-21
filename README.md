@@ -228,6 +228,8 @@ file watcher (no signal required). The operator bearer token is stored at
 `server.metrics.auth.tokens` in the same file.
 The operator token uses the `adm_` prefix, metrics tokens use `mtr_`, and new
 owner tokens use `own_`; previously issued `tok_` owner tokens remain valid.
+Scheduled task settings under `server.scheduler.tasks` support per-task
+`schedule`, `retry_on_fail`, and `retry_delay` values.
 
 ```bash
 search --maintenance secret rotate installation_secret

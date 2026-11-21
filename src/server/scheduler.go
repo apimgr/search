@@ -13,6 +13,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/backup"
+	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/notify"
 	"github.com/apimgr/search/src/scheduler"
@@ -385,9 +386,36 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 // applyTaskConfig applies user configuration to skippable tasks
 func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
+	if sched == nil {
+		return
+	}
 	tasks := s.config.Server.Scheduler.Tasks
+	applySettings := func(id scheduler.TaskID, taskConfig config.TaskConfig) {
+		if taskConfig.Schedule != "" {
+			if err := sched.SetTaskSchedule(id, taskConfig.Schedule); err != nil {
+				slog.Warn("failed to set scheduler task schedule", "task", id, "error", err)
+			}
+		}
+		if err := sched.SetTaskRetryEnabled(id, taskConfig.RetryOnFail); err != nil {
+			slog.Warn("failed to set scheduler task retry policy", "task", id, "error", err)
+		}
+		if taskConfig.RetryDelay != "" {
+			delay, err := time.ParseDuration(taskConfig.RetryDelay)
+			if err != nil {
+				slog.Warn("invalid scheduler task retry delay", "task", id, "delay", taskConfig.RetryDelay, "error", err)
+			} else if err := sched.SetTaskRetry(id, 0, delay); err != nil {
+				slog.Warn("failed to set scheduler task retry delay", "task", id, "error", err)
+			}
+		}
+	}
 
 	// Apply config for skippable tasks only
+	applySettings(scheduler.TaskBackupDaily, tasks.BackupDaily)
+	applySettings(scheduler.TaskBackupHourly, tasks.BackupHourly)
+	applySettings(scheduler.TaskGeoIPUpdate, tasks.GeoIPUpdate)
+	applySettings(scheduler.TaskBlocklistUpdate, tasks.BlocklistUpdate)
+	applySettings(scheduler.TaskCVEUpdate, tasks.CVEUpdate)
+	applySettings(scheduler.TaskUpdateCheck, tasks.UpdateCheck)
 	if !tasks.BackupDaily.Enabled {
 		if err := sched.Disable(scheduler.TaskBackupDaily); err != nil {
 			slog.Warn("failed to disable daily backup task", "error", err)

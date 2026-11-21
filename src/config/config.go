@@ -2509,12 +2509,12 @@ func DefaultConfig() *Config {
 				Timezone:      "America/New_York",
 				CatchUpWindow: "1h",
 				Tasks: SchedulerTasksConfig{
-					BackupDaily:     TaskConfig{Schedule: "0 2 * * *", Enabled: true},
+					BackupDaily:     TaskConfig{Schedule: "0 2 * * *", Enabled: true, RetryOnFail: true},
 					BackupHourly:    TaskConfig{Schedule: "@hourly", Enabled: false},
-					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true},
-					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true},
-					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true},
-					UpdateCheck:     TaskConfig{Schedule: "0 6 * * *", Enabled: true},
+					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true, RetryOnFail: true},
+					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
+					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
+					UpdateCheck:     TaskConfig{Schedule: "0 6 * * *", Enabled: true, RetryOnFail: true},
 				},
 			},
 			Cache: CacheConfig{

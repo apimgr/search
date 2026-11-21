@@ -124,6 +124,8 @@ type Task struct {
 	MaxRetries int
 	// Base delay between retries (default: 5m)
 	RetryDelay time.Duration
+	// RetryDisabled disables retries for this task when configured.
+	RetryDisabled bool
 
 	// Runtime state (persisted to database)
 	LastRun    time.Time
@@ -374,6 +376,18 @@ func (s *Scheduler) SetTaskRetry(id TaskID, maxRetries int, retryDelay time.Dura
 		task.RetryDelay = retryDelay
 	}
 
+	return nil
+}
+
+// SetTaskRetryEnabled applies the configured retry_on_fail value.
+func (s *Scheduler) SetTaskRetryEnabled(id TaskID, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	task, ok := s.tasks[id]
+	if !ok {
+		return fmt.Errorf("task not found: %s", id)
+	}
+	task.RetryDisabled = !enabled
 	return nil
 }
 
@@ -895,7 +909,9 @@ func (s *Scheduler) runTask(task *Task) {
 
 	// Get retry settings with defaults
 	maxRetries := task.MaxRetries
-	if maxRetries <= 0 {
+	if task.RetryDisabled {
+		maxRetries = 0
+	} else if maxRetries <= 0 {
 		maxRetries = DefaultMaxRetries
 	}
 	retryDelay := task.RetryDelay
