@@ -410,12 +410,28 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 	}
 
 	// Apply config for skippable tasks only
-	applySettings(scheduler.TaskBackupDaily, tasks.BackupDaily)
+	backupDaily := tasks.BackupDaily
+	if tasks.Backup.Schedule != "" || tasks.Backup.Enabled || tasks.Backup.RetryOnFail || tasks.Backup.RetryDelay != "" || tasks.Backup.Retention > 0 {
+		backupDaily = tasks.Backup
+	}
+	applySettings(scheduler.TaskBackupDaily, backupDaily)
 	applySettings(scheduler.TaskBackupHourly, tasks.BackupHourly)
+	applySettings(scheduler.TaskSSLRenewal, tasks.SSLRenewal)
 	applySettings(scheduler.TaskGeoIPUpdate, tasks.GeoIPUpdate)
 	applySettings(scheduler.TaskBlocklistUpdate, tasks.BlocklistUpdate)
 	applySettings(scheduler.TaskCVEUpdate, tasks.CVEUpdate)
 	applySettings(scheduler.TaskUpdateCheck, tasks.UpdateCheck)
+	applySettings(scheduler.TaskTokenCleanup, tasks.TokenCleanup)
+	applySettings(scheduler.TaskLogRotation, tasks.LogRotation)
+	applySettings(scheduler.TaskHealthcheckSelf, tasks.HealthcheckSelf)
+	applySettings(scheduler.TaskTorHealth, tasks.TorHealth)
+	applySettings(scheduler.TaskI2PHealth, tasks.I2PHealth)
+	applySettings(scheduler.TaskAlertsImmediate, tasks.AlertsImmediate)
+	applySettings(scheduler.TaskAlertsDaily, tasks.AlertsDaily)
+	applySettings(scheduler.TaskAlertsWeekly, tasks.AlertsWeekly)
+	if backupDaily.Retention > 0 {
+		s.config.Server.Backup.Retention.MaxBackups = backupDaily.Retention
+	}
 	if !tasks.BackupDaily.Enabled {
 		if err := sched.Disable(scheduler.TaskBackupDaily); err != nil {
 			slog.Warn("failed to disable daily backup task", "error", err)

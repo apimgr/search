@@ -1408,6 +1408,8 @@ type SchedulerConfig struct {
 
 // SchedulerTasksConfig represents per-task configuration
 type SchedulerTasksConfig struct {
+	SSLRenewal TaskConfig `yaml:"ssl_renewal"`
+	Backup     TaskConfig `yaml:"backup"`
 	// Daily backup at 02:00 (skippable)
 	BackupDaily TaskConfig `yaml:"backup_daily"`
 	// Hourly incremental backup (skippable, disabled by default)
@@ -1419,7 +1421,15 @@ type SchedulerTasksConfig struct {
 	// CVE database update (skippable)
 	CVEUpdate TaskConfig `yaml:"cve_update"`
 	// Update check (skippable) - notify-only newer-version check at 06:00
-	UpdateCheck TaskConfig `yaml:"update_check"`
+	UpdateCheck     TaskConfig `yaml:"update_check"`
+	TokenCleanup    TaskConfig `yaml:"token_cleanup"`
+	LogRotation     TaskConfig `yaml:"log_rotation"`
+	HealthcheckSelf TaskConfig `yaml:"healthcheck_self"`
+	TorHealth       TaskConfig `yaml:"tor_health"`
+	I2PHealth       TaskConfig `yaml:"i2p_health"`
+	AlertsImmediate TaskConfig `yaml:"alerts_immediate"`
+	AlertsDaily     TaskConfig `yaml:"alerts_daily"`
+	AlertsWeekly    TaskConfig `yaml:"alerts_weekly"`
 }
 
 // TaskConfig represents configuration for a scheduled task
@@ -2509,12 +2519,21 @@ func DefaultConfig() *Config {
 				Timezone:      "America/New_York",
 				CatchUpWindow: "1h",
 				Tasks: SchedulerTasksConfig{
+					SSLRenewal:      TaskConfig{Schedule: "0 3 * * *", Enabled: true, RetryOnFail: true},
 					BackupDaily:     TaskConfig{Schedule: "0 2 * * *", Enabled: true, RetryOnFail: true},
 					BackupHourly:    TaskConfig{Schedule: "@hourly", Enabled: false},
 					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true, RetryOnFail: true},
 					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
 					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
 					UpdateCheck:     TaskConfig{Schedule: "0 6 * * *", Enabled: true, RetryOnFail: true},
+					TokenCleanup:    TaskConfig{Schedule: "@every 15m", Enabled: true, RetryOnFail: true},
+					LogRotation:     TaskConfig{Schedule: "0 0 * * *", Enabled: true, RetryOnFail: true},
+					HealthcheckSelf: TaskConfig{Schedule: "@every 5m", Enabled: true, RetryOnFail: true},
+					TorHealth:       TaskConfig{Schedule: "@every 10m", Enabled: true, RetryOnFail: true},
+					I2PHealth:       TaskConfig{Schedule: "@every 10m", Enabled: true, RetryOnFail: true},
+					AlertsImmediate: TaskConfig{Schedule: "@every 10m", Enabled: true, RetryOnFail: true},
+					AlertsDaily:     TaskConfig{Schedule: "0 8 * * *", Enabled: true, RetryOnFail: true},
+					AlertsWeekly:    TaskConfig{Schedule: "0 8 * * 1", Enabled: true, RetryOnFail: true},
 				},
 			},
 			Cache: CacheConfig{
