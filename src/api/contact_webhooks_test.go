@@ -67,12 +67,12 @@ func TestContactWebhookConfigSaveReturnsSecretOnlyWhenCreatedOrRotated(t *testin
 	if code != http.StatusOK || !ok || newSecret == secret {
 		t.Fatalf("changed URL must return a new secret: status=%d data=%#v", code, rotated)
 	}
-	stored, err := os.ReadFile(configPath)
+	stored, err := os.ReadFile(filepath.Join(tempDir, "secrets.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Contains(stored, []byte(secret)) || !bytes.Contains(stored, []byte(newSecret)) {
-		t.Fatal("config persistence did not rotate webhook secret")
+		t.Fatal("secrets.yml did not persist the rotated webhook secret")
 	}
 	if info, err := os.Stat(configPath); err != nil || info.Mode().Perm()&0077 != 0 {
 		t.Fatalf("config file permissions are not private: info=%v err=%v", info, err)

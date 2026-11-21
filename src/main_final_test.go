@@ -383,12 +383,11 @@ func TestRunMaintenanceRestoreFileYesError(t *testing.T) {
 // ============================================================
 
 // ============================================================
-// runMaintenance — mode DISABLED path
+// runMaintenance — legacy maintenance config migration path
 // ============================================================
 
-// TestRunMaintenanceModeToggleBack covers the DISABLED branch in the mode case
-// by pre-writing a config with maintenance_mode: true, then calling
-// runMaintenance("mode") once so the toggle produces the DISABLED output.
+// TestRunMaintenanceModeToggleBack verifies the removed maintenance_mode key
+// is discarded before the command toggles the in-memory mode on.
 func TestRunMaintenanceModeToggleBack(t *testing.T) {
 	withExitFunc(t)
 	tmpDir, err := os.MkdirTemp("", "search-test-mode-*")
@@ -400,8 +399,8 @@ func TestRunMaintenanceModeToggleBack(t *testing.T) {
 		os.RemoveAll(tmpDir)
 	})
 
-	// Pre-write a config with maintenance_mode already true so the toggle
-	// will flip it to false and print the DISABLED branch.
+	// The legacy key is removed during config migration, so the toggle starts
+	// false and prints the ENABLED branch.
 	configContent := "server:\n  maintenance_mode: true\n"
 	if err := os.WriteFile(tmpDir+"/server.yml", []byte(configContent), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -410,8 +409,8 @@ func TestRunMaintenanceModeToggleBack(t *testing.T) {
 
 	withArgs(t, []string{"search", "--maintenance", "mode"})
 	out := captureStdout(t, func() { runMaintenance("mode") })
-	if !strings.Contains(out, "DISABLED") {
-		t.Errorf("expected 'DISABLED' when toggling from true, got: %q", out)
+	if !strings.Contains(out, "ENABLED") {
+		t.Errorf("expected 'ENABLED' after legacy config migration, got: %q", out)
 	}
 }
 

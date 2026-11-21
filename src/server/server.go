@@ -15,6 +15,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -348,7 +349,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	var tlsMgr *ssl.Manager
 	if cfg.Server.SSL.Enabled {
 		dataDir := config.GetDataDir()
-		tlsMgr = ssl.NewManagerWithKeysAndHost(&cfg.Server.SSL, dataDir, cfg.Server.SecretKey, cfg.Server.Security.EncryptionKey, cfg.Server.FQDN)
+		tlsMgr = ssl.NewManagerWithKeysAndHost(&cfg.Server.SSL, dataDir, cfg.Server.Security.InstallationSecret, cfg.Server.Security.EncryptionKey, cfg.Server.FQDN)
 	}
 
 	// Create GeoIP lookup if enabled (uses MMDB from sapics/ip-location-db)
@@ -480,6 +481,16 @@ func newServer(cfg *config.Config, providers []string) *Server {
 			slog.Warn("Database schema initialization failed", "err", err)
 		} else {
 			slog.Info("Database schema initialized")
+			if serverDB := dbMgr.ServerDB(); serverDB != nil {
+				if err := cfg.ImportLegacyAppSecrets(context.Background(), serverDB); err != nil {
+					slog.Error("Legacy application secret migration failed", "err", err)
+				}
+				cfg.OnReload(func(reloaded *config.Config) {
+					if err := reloaded.ImportLegacyAppSecrets(context.Background(), serverDB); err != nil {
+						slog.Error("Failed to reload application secrets", "err", err)
+					}
+				})
+			}
 			prefix := ""
 			if dbMgr.ServerDB().Driver() == "libsql" {
 				prefix = "srv_"
@@ -1113,6 +1124,9 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	// the no-JS CSS fallback (@media (prefers-color-scheme: light)) can resolve it; JS
 	// additionally applies the live system preference on page load when mode is "auto".
 	themeMode := GetTheme(r)
+	if _, cookieErr := r.Cookie("theme"); cookieErr != nil && r.URL.Query().Get("theme") == "" && s.config.Web.UI.Theme != "" {
+		themeMode = s.config.Web.UI.Theme
+	}
 	if prefs.Theme != "" {
 		themeMode = prefs.Theme
 	}
@@ -1128,6 +1142,7 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	// Per AI.md URL & FQDN Detection: embedded template URLs must use {proto}://{fqdn}/path,
 	// never a bare /path — set once here so every page template can build full URLs.
 	data.ServerURL = s.getBaseURL(r)
+	data.SEO = buildSEOPageData(s.config, r, data)
 	if prefs.DefaultCategory != "" {
 		data.Category = prefs.DefaultCategory.String()
 	}
@@ -1182,6 +1197,98 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 		data.Announcements = filtered
 	}
 	return data
+}
+
+func buildSEOPageData(cfg *config.Config, r *http.Request, page *PageData) SEOPageData {
+	seo := cfg.Server.SEO
+	title := strings.TrimSpace(page.Title)
+	if title == "" {
+		title = strings.TrimSpace(cfg.Server.Branding.Title)
+	}
+	if title == "" {
+		title = strings.TrimSpace(cfg.Server.Title)
+	}
+	description := strings.TrimSpace(page.Description)
+	if description == "" {
+		description = strings.TrimSpace(cfg.Server.Branding.Description)
+	}
+	if description == "" {
+		description = strings.TrimSpace(cfg.Server.Description)
+	}
+	separator := seo.TitleSeparator
+	if separator == "" {
+		separator = " - "
+	}
+	fullTitle := title
+	if tagline := strings.TrimSpace(cfg.Server.Branding.Tagline); tagline != "" {
+		fullTitle += separator + tagline
+	}
+	robots := "index,follow"
+	if seo.NoIndex || !isPublicSEORoute(r.URL.Path) {
+		robots = "noindex,nofollow"
+	}
+	siteName := strings.TrimSpace(seo.OpenGraph.SiteName)
+	if siteName == "" {
+		siteName = strings.TrimSpace(cfg.Server.Branding.Title)
+	}
+	if siteName == "" {
+		siteName = strings.TrimSpace(cfg.Server.Title)
+	}
+	tagNames := make([]string, 0, len(seo.MetaTags))
+	for name := range seo.MetaTags {
+		tagNames = append(tagNames, name)
+	}
+	sort.Strings(tagNames)
+	tags := make([]SEOMetaTag, 0, len(tagNames))
+	for _, name := range tagNames {
+		tags = append(tags, SEOMetaTag{Name: name, Content: seo.MetaTags[name]})
+	}
+	canonicalURL := ""
+	if isPublicSEORoute(r.URL.Path) && !seo.NoIndex {
+		canonicalURL = canonicalSEOURL(seo.Canonical, r)
+	}
+	return SEOPageData{
+		Title:             fullTitle,
+		Description:       description,
+		Keywords:          strings.Join(seo.Keywords, ", "),
+		Author:            seo.Author,
+		Robots:            robots,
+		CanonicalURL:      canonicalURL,
+		TitleSeparator:    separator,
+		OpenGraphEnabled:  seo.OpenGraph.Enabled,
+		AccentCSSEnabled:  validAccentColor(cfg.Web.UI.Accent),
+		OpenGraphType:     seo.OpenGraph.Type,
+		OpenGraphSiteName: siteName,
+		OpenGraphImage:    seo.OGImage,
+		TwitterEnabled:    seo.Twitter.Enabled,
+		TwitterCard:       seo.Twitter.Card,
+		TwitterSite:       seo.TwitterHandle,
+		TwitterCreator:    seo.Twitter.Creator,
+		MetaTags:          tags,
+	}
+}
+
+func isPublicSEORoute(path string) bool {
+	switch path {
+	case "/", "/search", "/server/about", "/server/privacy", "/server/dpo", "/server/help", "/server/help/mcp", "/server/terms", "/server/docs/swagger", "/server/docs/graphql", "/server/security", "/server/security/policy":
+		return true
+	default:
+		return false
+	}
+}
+
+func canonicalSEOURL(canonicalBase string, r *http.Request) string {
+	base := strings.TrimSpace(canonicalBase)
+	if base == "" {
+		return httputil.BuildURL(r, r.URL.Path)
+	}
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return httputil.BuildURL(r, r.URL.Path)
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/" + strings.TrimLeft(r.URL.Path, "/")
+	parsed.RawPath = ""
+	return parsed.String()
 }
 
 func (s *Server) getI18nManager() *i18n.Manager {
@@ -1268,7 +1375,7 @@ func (s *Server) setupRoutes() http.Handler {
 
 	r.Get("/s/{code}", s.handleQRShortlinkRedirect)
 	if s.config.Server.ImageProxy.Enabled {
-		r.Get("/image-proxy", newImageProxyHandler(s.config.Server.ImageProxy, s.config.Server.SecretKey).ServeHTTP)
+		r.Get("/image-proxy", newImageProxyHandler(s.config.Server.ImageProxy, s.config.Server.Security.EncryptionKey).ServeHTTP)
 	}
 
 	// Home page (root catch-all)
@@ -1405,6 +1512,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/offline.html", s.handleOfflinePage)
 
 	// Static files (served from embedded filesystem)
+	r.Get("/static/css/accent.css", s.handleAccentCSS)
 	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))
 	r.HandleFunc("/locales/*", s.handleLocale)
 

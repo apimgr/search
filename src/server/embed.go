@@ -626,12 +626,38 @@ type PageData struct {
 	// consented Simple Analytics tracking is enabled.
 	TrackingNoscriptHTML template.HTML
 	Extra                map[string]interface{}
+	SEO                  SEOPageData
 	ServerURL            string
 	// RequestPath is the current request's path+query, used to redirect the browser
 	// back to the same page after a no-JS form POST (e.g. the header theme-switch form).
 	RequestPath string
 	PrefsQuery  string
 	Prefs       GeneralPrefs
+}
+
+type SEOMetaTag struct {
+	Name    string
+	Content string
+}
+
+type SEOPageData struct {
+	Title             string
+	Description       string
+	Keywords          string
+	Author            string
+	Robots            string
+	CanonicalURL      string
+	TitleSeparator    string
+	OpenGraphEnabled  bool
+	AccentCSSEnabled  bool
+	OpenGraphType     string
+	OpenGraphSiteName string
+	OpenGraphImage    string
+	TwitterEnabled    bool
+	TwitterCard       string
+	TwitterSite       string
+	TwitterCreator    string
+	MetaTags          []SEOMetaTag
 }
 
 // GeneralPrefs holds the general-settings preference values (theme, units,

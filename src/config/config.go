@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,11 +20,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/common/netutil"
+	"github.com/apimgr/search/src/logging"
 	"github.com/apimgr/search/src/security"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
@@ -77,10 +80,9 @@ type Config struct {
 	// True if this is first run (no config existed)
 	firstRun bool
 	// needsSave records normalization performed while loading a config file.
-	needsSave bool
-	// migrateSecretPaths contains generated secret paths found in server.yml;
-	// drop-in values are not migrated by Save.
-	migrateSecretPaths map[string]bool
+	needsSave             bool
+	generatedSecretPaths  []string
+	legacyAppSecretValues map[string]string
 	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
 	debugEnabled bool
 	// reloadHooks are called after every successful Reload(); guarded by reloadHooksMu
@@ -113,9 +115,15 @@ type DataConfig struct {
 }
 
 type WebCSPConfig struct {
+	UI  WebUIConfig `yaml:"ui"`
 	CSP struct {
 		FrameSrcExtra string `yaml:"frame_src_extra"`
 	} `yaml:"csp"`
+}
+
+type WebUIConfig struct {
+	Theme  string `yaml:"theme"`
+	Accent string `yaml:"accent"`
 }
 
 type CVEDataConfig struct {
@@ -449,7 +457,7 @@ type ServerConfig struct {
 	HTTPSPort int    `yaml:"https_port"`
 	Address   string `yaml:"address"`
 	Mode      string `yaml:"mode"`
-	SecretKey string `yaml:"secret_key"`
+	SecretKey string `yaml:"-"`
 	// URL path prefix for all routes (AI.md PART 12: `server.baseurl`)
 	BaseURL string `yaml:"baseurl"`
 	// Fully qualified domain name — auto-detected from host if empty
@@ -470,7 +478,7 @@ type ServerConfig struct {
 	// CORS controls cross-origin requests for every route.
 	CORS CORSConfig `yaml:"cors"`
 
-	// Operator/Server bearer token (Authorization: Bearer tok_...)
+	// Operator bearer token (Authorization: Bearer adm_...)
 	// Auto-generated on first run if empty. Validated by SHA-256 comparison.
 	// Per AI.md: two-tier auth — server.token + per-resource api_tokens.
 	Token  string            `yaml:"token"`
@@ -552,7 +560,7 @@ type ServerConfig struct {
 	Healthz HealthzConfig `yaml:"healthz"`
 
 	// Maintenance mode - when enabled, shows maintenance page to all users
-	MaintenanceMode bool `yaml:"maintenance_mode"`
+	MaintenanceMode bool `yaml:"-"`
 
 	// Backup configuration per AI.md PART 22
 	Backup BackupConfig `yaml:"backup"`
@@ -1417,8 +1425,11 @@ type SchedulerTasksConfig struct {
 // TaskConfig represents configuration for a scheduled task
 type TaskConfig struct {
 	// Cron expression or @every interval
-	Schedule string `yaml:"schedule"`
-	Enabled  bool   `yaml:"enabled"`
+	Schedule    string `yaml:"schedule"`
+	Enabled     bool   `yaml:"enabled"`
+	RetryOnFail bool   `yaml:"retry_on_fail"`
+	RetryDelay  string `yaml:"retry_delay"`
+	Retention   int    `yaml:"retention,omitempty"`
 }
 
 // CacheConfig represents cache configuration per AI.md PART 18
@@ -1585,7 +1596,7 @@ func (g *GeoIPConfig) DeletePreset(name string) bool {
 type MetricsConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// Endpoint path (default: /server/metrics)
-	Endpoint string `yaml:"endpoint"`
+	Endpoint string `yaml:"-"`
 	// Include system metrics (CPU, memory, disk)
 	IncludeSystem bool `yaml:"include_system"`
 	// Include Go runtime metrics
@@ -1616,8 +1627,7 @@ type MetricsAuthConfig struct {
 	Tokens               MetricsTokensConfig `yaml:"tokens"`
 }
 
-// MetricsTokensConfig holds one bearer token per metrics service.
-// An empty token disables that service (403 with an empty body).
+// MetricsTokensConfig holds one generated bearer token per metrics service.
 type MetricsTokensConfig struct {
 	Prometheus string `yaml:"prometheus"`
 	Grafana    string `yaml:"grafana"`
@@ -1787,19 +1797,17 @@ type ContactConfig struct {
 type SEOConfig struct {
 	Enabled            bool              `yaml:"-"`
 	DefaultTitle       string            `yaml:"-"`
-	TitleSeparator     string            `yaml:"-"`
+	TitleSeparator     string            `yaml:"title_separator"`
 	DefaultDescription string            `yaml:"-"`
 	Keywords           []string          `yaml:"keywords"`
 	Author             string            `yaml:"author"`
 	OGImage            string            `yaml:"og_image"`
 	TwitterHandle      string            `yaml:"twitter_handle"`
-	MetaTags           map[string]string `yaml:"-"`
-	OpenGraph          OpenGraphConfig   `yaml:"-"`
-	Twitter            TwitterConfig     `yaml:"-"`
-	// Include canonical URLs
-	Canonical bool `yaml:"-"`
-	// Set noindex on search results
-	NoIndex bool `yaml:"-"`
+	MetaTags           map[string]string `yaml:"meta_tags"`
+	OpenGraph          OpenGraphConfig   `yaml:"opengraph"`
+	Twitter            TwitterConfig     `yaml:"twitter"`
+	Canonical          string            `yaml:"canonical"`
+	NoIndex            bool              `yaml:"noindex"`
 	// Generate sitemap.xml
 	Sitemap bool       `yaml:"-"`
 	Feed    FeedConfig `yaml:"-"`
@@ -1815,8 +1823,8 @@ type OpenGraphConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	Type        string `yaml:"type"`
 	SiteName    string `yaml:"site_name"`
-	Image       string `yaml:"image"`
-	Description string `yaml:"description"`
+	Image       string `yaml:"-"`
+	Description string `yaml:"-"`
 }
 
 // TwitterConfig represents Twitter card meta tags
@@ -1825,7 +1833,7 @@ type TwitterConfig struct {
 	// summary, summary_large_image
 	Card string `yaml:"card"`
 	// @username
-	Site    string `yaml:"site"`
+	Site    string `yaml:"-"`
 	Creator string `yaml:"creator"`
 }
 
@@ -2091,11 +2099,7 @@ type EngineConfig struct {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		migrateSecretPaths: map[string]bool{
-			"server.token": true, "server.security.encryption_key": true,
-			"server.security.encryption_key_version": true,
-		},
-		Web: WebCSPConfig{CSP: struct {
+		Web: WebCSPConfig{UI: WebUIConfig{Theme: "dark"}, CSP: struct {
 			FrameSrcExtra string `yaml:"frame_src_extra"`
 		}{FrameSrcExtra: ""}},
 		Data: DataConfig{
@@ -2109,7 +2113,6 @@ func DefaultConfig() *Config {
 			Port:        0,
 			Address:     "[::]",
 			Mode:        "production",
-			SecretKey:   generateSecret(),
 			// Empty = auto-detect from request headers
 			BaseURL: "",
 			// Empty = auto-detected from hostname at runtime
@@ -2142,7 +2145,7 @@ func DefaultConfig() *Config {
 			},
 			// Operator/server bearer token. Treat like a root password.
 			// SHA-256 compared against Authorization: Bearer header.
-			Token:  generateSecret(),
+			Token:  generateBearerToken("adm"),
 			Tokens: OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y", IdlePurgeDays: 0},
 			MCP:    MCPConfig{Enabled: true},
 			Branding: BrandingConfig{
@@ -2541,15 +2544,22 @@ func DefaultConfig() *Config {
 			},
 			// Per AI.md PART 20: metrics are always built in; the root /metrics
 			// alias defaults to true because Prometheus scrapers expect it, and
-			// every service token starts empty (= that service is disabled).
+			// each metrics service always has a generated bearer token.
 			Metrics: MetricsConfig{
 				Enabled:        true,
 				Endpoint:       "/server/metrics",
 				IncludeSystem:  true,
 				IncludeRuntime: true,
 				Root:           MetricsRootConfig{Enabled: true},
-				Auth:           MetricsAuthConfig{AllowUnauthenticated: false},
-				Loki:           MetricsLokiConfig{MaxEntries: 1000, MaxAge: "1h"},
+				Auth: MetricsAuthConfig{
+					AllowUnauthenticated: false,
+					Tokens: MetricsTokensConfig{
+						Prometheus: generateBearerToken("mtr"),
+						Grafana:    generateBearerToken("mtr"),
+						Loki:       generateBearerToken("mtr"),
+					},
+				},
+				Loki: MetricsLokiConfig{MaxEntries: 1000, MaxAge: "1h"},
 			},
 			ImageProxy: ImageProxyConfig{
 				Enabled: true,
@@ -2567,17 +2577,16 @@ func DefaultConfig() *Config {
 				OpenGraph: OpenGraphConfig{
 					Enabled:  true,
 					Type:     "website",
-					SiteName: "Search",
+					SiteName: "",
 				},
 				Twitter: TwitterConfig{
 					Enabled: true,
-					Card:    "summary",
+					Card:    "summary_large_image",
 				},
-				Canonical: true,
-				// Don't index search results by default
-				NoIndex: true,
-				Sitemap: false,
-				Feed:    FeedConfig{MaxItems: 50},
+				Canonical: "",
+				NoIndex:   false,
+				Sitemap:   false,
+				Feed:      FeedConfig{MaxItems: 50},
 			},
 			Compression: CompressionConfig{
 				Enabled: true,
@@ -2964,6 +2973,18 @@ func Load(path string) (*Config, error) {
 	}
 	cfg := DefaultConfig()
 	cfg.firstRun = false
+	cfg.legacyAppSecretValues = make(map[string]string)
+	for _, legacyPath := range []string{
+		"server.security.installation_secret",
+		"server.security.installation_secret_previous",
+		"server.security.installation_secret_previous_expires",
+		"server.security.encryption_key_previous",
+		"server.security.encryption_key_previous_expires",
+	} {
+		if value := configPathValue(root, legacyPath); value != nil && value.Kind == yaml.ScalarNode {
+			cfg.legacyAppSecretValues[legacyPath] = value.Value
+		}
+	}
 	if err := yaml.Unmarshal(encoded, cfg); err != nil {
 		return nil, fmt.Errorf("decode merged configuration: %w", err)
 	}
@@ -2988,6 +3009,19 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.Server.Update.Branch = NormalizeUpdateBranch(cfg.Server.Update.Branch)
+	for _, generatedPath := range []string{
+		"server.token",
+		"server.security.encryption_key",
+		"server.metrics.auth.tokens.prometheus",
+		"server.metrics.auth.tokens.grafana",
+		"server.metrics.auth.tokens.loki",
+	} {
+		value := configPathValue(root, generatedPath)
+		if value == nil || value.Kind != yaml.ScalarNode || strings.TrimSpace(value.Value) == "" {
+			cfg.generatedSecretPaths = appendUnique(cfg.generatedSecretPaths, generatedPath)
+		}
+	}
+	trackMissingWebhookSecrets(root, &cfg.generatedSecretPaths)
 
 	// Merge the root-level `tor:` block (AI.md PART 12) into Server.Tor so
 	// consumers keep reading cfg.Server.Tor regardless of where the operator
@@ -2996,7 +3030,6 @@ func Load(path string) (*Config, error) {
 
 	// Store path for reload
 	cfg.configPath = path
-	cfg.migrateSecretPaths = legacySecretPaths
 	for key, file := range winners {
 		if file != path {
 			slog.Debug("configuration key overridden by drop-in", "key", key, "path", file)
@@ -3233,15 +3266,18 @@ func (c *Config) Save(path string) error {
 		return fmt.Errorf("read existing secrets file: %w", err)
 	}
 	generated := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
-	generatedPaths := c.migrateSecretPaths
-	if c.firstRun {
-		generatedPaths = map[string]bool{
-			"server.token":                           true,
-			"server.security.encryption_key":         true,
-			"server.security.encryption_key_version": true,
+	extractConfigSecrets(&node, generated)
+	if len(c.legacyAppSecretValues) == 0 {
+		for _, legacyPath := range []string{
+			"server.security.installation_secret",
+			"server.security.installation_secret_previous",
+			"server.security.installation_secret_previous_expires",
+			"server.security.encryption_key_previous",
+			"server.security.encryption_key_previous_expires",
+		} {
+			removeConfigPath(&node, legacyPath)
 		}
 	}
-	extractGeneratedSecrets(&node, generated, generatedPaths)
 	removeSecretFileValues(&node, secrets)
 	mergeConfigNodes(secrets, generated, "", secretsPath, make(map[string]string))
 	if len(secrets.Content[0].Content) > 0 {
@@ -3249,6 +3285,12 @@ func (c *Config) Save(path string) error {
 			return err
 		}
 	}
+	if err := saveAreaConfig(path, &node); err != nil {
+		return err
+	}
+	_, partitioned := partitionConfigNode(&node)
+	node = *partitioned
+	node.HeadComment = serverConfigHeader
 	serializeDualPortNode(&node, c.Server.Port, c.Server.HTTPSPort)
 
 	// Add comments to top-level sections
@@ -3336,7 +3378,7 @@ func extractConfigSecrets(mainNode, secretNode *yaml.Node) {
 			if prefix != "" {
 				path = prefix + "." + path
 			}
-			if configSecretPath(path) {
+			if configSecretPath(path) || configSecretURLPath(path, value) {
 				secretMapping.Content = append(secretMapping.Content, cloneYAMLNode(key), cloneYAMLNode(value))
 				mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
 				continue
@@ -3349,40 +3391,6 @@ func extractConfigSecrets(mainNode, secretNode *yaml.Node) {
 				}
 			}
 			i += 2
-		}
-	}
-	walk(mainRoot, "", secretRoot)
-}
-
-func extractGeneratedSecrets(mainNode, secretNode *yaml.Node, selected map[string]bool) {
-	mainRoot, secretRoot := configYAMLRoot(mainNode), configYAMLRoot(secretNode)
-	if mainRoot == nil || secretRoot == nil || len(selected) == 0 {
-		return
-	}
-	var walk func(*yaml.Node, string, *yaml.Node)
-	walk = func(mapping *yaml.Node, prefix string, secretMapping *yaml.Node) {
-		if mapping.Kind != yaml.MappingNode {
-			return
-		}
-		for index := 0; index+1 < len(mapping.Content); {
-			key, value := mapping.Content[index], mapping.Content[index+1]
-			path := key.Value
-			if prefix != "" {
-				path = prefix + "." + path
-			}
-			if selected[path] {
-				secretMapping.Content = append(secretMapping.Content, cloneYAMLNode(key), cloneYAMLNode(value))
-				mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
-				continue
-			}
-			if value.Kind == yaml.MappingNode {
-				child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-				walk(value, path, child)
-				if len(child.Content) > 0 {
-					mergeSecretMapping(secretMapping, key, child)
-				}
-			}
-			index += 2
 		}
 	}
 	walk(mainRoot, "", secretRoot)
@@ -3458,7 +3466,7 @@ func hasConfigSecrets(node *yaml.Node) bool {
 			if prefix != "" {
 				path = prefix + "." + path
 			}
-			if configSecretPath(path) || walk(value, path) {
+			if configSecretPath(path) || configSecretURLPath(path, value) || walk(value, path) {
 				return true
 			}
 		}
@@ -3487,14 +3495,81 @@ func configPathValue(document *yaml.Node, dottedPath string) *yaml.Node {
 
 func configSecretPath(path string) bool {
 	switch path {
-	case "server.token", "server.security.encryption_key", "server.security.encryption_key_version", "server.notifications.email.smtp.password", "server.cache.password", "server.database.password", "server.database.token", "server.pages.contact.captcha_secret_key", "server.ssl.letsencrypt.dns_credentials", "data.cve.api_key", "server.backup.encryption_password", "server.metrics.auth.tokens":
+	case "server.token", "server.security.encryption_key", "server.security.encryption_key_version", "server.notifications.email.smtp.password", "server.cache.password", "server.database.token", "server.pages.contact.captcha_secret_key", "server.ssl.letsencrypt.dns_credentials", "data.cve.api_key", "server.backup.encryption_password", "server.metrics.auth.tokens":
 		return true
 	}
 	parts := strings.Split(path, ".")
-	if len(parts) >= 4 && parts[0] == "server" && parts[1] == "contact" && parts[len(parts)-1] == "webhooks" {
+	if len(parts) >= 4 && parts[0] == "server" && parts[1] == "contact" && parts[3] == "webhooks" {
+		return true
+	}
+	if strings.HasPrefix(path, "server.metrics.auth.tokens.") {
 		return true
 	}
 	return strings.HasSuffix(path, ".client_secret") || strings.HasSuffix(path, ".bind_password") || strings.HasSuffix(path, "._secret")
+}
+
+func configSecretURLPath(path string, value *yaml.Node) bool {
+	if (path != "server.database.url" && path != "server.cache.url") || value == nil || value.Kind != yaml.ScalarNode {
+		return false
+	}
+	parsed, err := url.Parse(value.Value)
+	if err != nil {
+		return false
+	}
+	if parsed.User != nil {
+		username := parsed.User.Username()
+		password, hasPassword := parsed.User.Password()
+		if username != "" || hasPassword && password != "" {
+			return true
+		}
+	}
+	for key, values := range parsed.Query() {
+		switch strings.ToLower(key) {
+		case "password", "pwd", "token", "authtoken":
+			for _, secret := range values {
+				if strings.TrimSpace(secret) != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func appendUnique(paths []string, value string) []string {
+	for _, existing := range paths {
+		if existing == value {
+			return paths
+		}
+	}
+	return append(paths, value)
+}
+
+func trackMissingWebhookSecrets(document *yaml.Node, generatedPaths *[]string) {
+	contact := configPathValue(document, "server.contact")
+	if contact == nil || contact.Kind != yaml.MappingNode {
+		return
+	}
+	for index := 0; index+1 < len(contact.Content); index += 2 {
+		roleName := contact.Content[index].Value
+		role := contact.Content[index+1]
+		webhooks := mappingValue(role, "webhooks")
+		if webhooks == nil || webhooks.Kind != yaml.MappingNode {
+			continue
+		}
+		for webhookIndex := 0; webhookIndex+1 < len(webhooks.Content); webhookIndex += 2 {
+			name := webhooks.Content[webhookIndex].Value
+			value := webhooks.Content[webhookIndex+1]
+			if strings.HasSuffix(name, "_secret") || value.Kind != yaml.ScalarNode || strings.TrimSpace(value.Value) == "" {
+				continue
+			}
+			secretName := name + "_secret"
+			secretValue := mappingValue(webhooks, secretName)
+			if secretValue == nil || secretValue.Kind != yaml.ScalarNode || strings.TrimSpace(secretValue.Value) == "" {
+				*generatedPaths = appendUnique(*generatedPaths, "server.contact."+roleName+".webhooks."+secretName)
+			}
+		}
+	}
 }
 
 func cloneYAMLNode(node *yaml.Node) *yaml.Node {
@@ -3801,6 +3876,28 @@ func generateSecret() string {
 	return hex.EncodeToString(b)
 }
 
+func generateBearerToken(prefix string) string {
+	const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	const tokenLength = 32
+	result := make([]byte, 0, tokenLength)
+	buffer := make([]byte, tokenLength*2)
+	for len(result) < tokenLength {
+		if _, err := rand.Read(buffer); err != nil {
+			panic("config: crypto/rand failed generating bearer token: " + err.Error())
+		}
+		for _, value := range buffer {
+			if value >= 248 {
+				continue
+			}
+			result = append(result, alphabet[int(value)%len(alphabet)])
+			if len(result) == tokenLength {
+				break
+			}
+		}
+	}
+	return prefix + "_" + string(result)
+}
+
 // generateBase64Secret generates 32 random bytes, base64-encoded.
 // Used for secrets consumed by cryptographic primitives (HMAC keys, KDF input)
 // that are conventionally represented as base64 rather than hex.
@@ -3974,6 +4071,24 @@ func PeekServerAddress(path string) (string, bool, error) {
 	return strings.TrimSpace(addressNode.Value), true, nil
 }
 
+// PeekServerDaemonize reads only server.daemonize from the merged config view.
+func PeekServerDaemonize(path string) (bool, bool, error) {
+	document, err := earlyMergedConfig(path)
+	if err != nil {
+		return false, false, err
+	}
+	serverNode := mappingValue(document.Content[0], "server")
+	value := mappingValue(serverNode, "daemonize")
+	if value == nil || value.Kind != yaml.ScalarNode {
+		return false, false, nil
+	}
+	var enabled bool
+	if err := value.Decode(&enabled); err != nil {
+		return false, false, nil
+	}
+	return enabled, true, nil
+}
+
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return nil
@@ -4062,6 +4177,17 @@ func Initialize() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
+	if !created {
+		migrated, migrationErr := migrateConfigAreas(configPath)
+		if migrationErr != nil {
+			slog.Warn("configuration area migration skipped", "path", configPath, "err", migrationErr)
+		} else if migrated {
+			cfg, _, err = LoadOrCreate(configPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to reload migrated config: %w", err)
+			}
+		}
+	}
 
 	// Per AI.md PART 5: Runtime env vars (MODE, DOMAIN, DATABASE_DRIVER, DATABASE_URL, SMTP_*)
 	// are always applied on every startup, regardless of whether this is first run.
@@ -4070,6 +4196,15 @@ func Initialize() (*Config, error) {
 	// Per AI.md PART 5: Init-only env vars (PORT, APPLICATION_NAME, CONFIG_DIR, etc.)
 	// are applied only on first run, then persisted in server.yml.
 	if created {
+		for _, secretPath := range []string{
+			"server.token",
+			"server.security.encryption_key",
+			"server.metrics.auth.tokens.prometheus",
+			"server.metrics.auth.tokens.grafana",
+			"server.metrics.auth.tokens.loki",
+		} {
+			cfg.generatedSecretPaths = appendUnique(cfg.generatedSecretPaths, secretPath)
+		}
 		cfg.ApplyEnv(env)
 
 		// Per AI.md PART 5: First run selects a random port in 64000-64999 and persists it.
@@ -4091,6 +4226,10 @@ func Initialize() (*Config, error) {
 		}
 		cfg.needsSave = false
 	}
+	if len(cfg.generatedSecretPaths) > 0 {
+		logGeneratedSecrets(cfg.generatedSecretPaths)
+		cfg.generatedSecretPaths = nil
+	}
 
 	normalizeHTTPSMode(cfg)
 
@@ -4100,6 +4239,27 @@ func Initialize() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func logGeneratedSecrets(paths []string) {
+	audit := logging.NewAuditLogger(filepath.Join(GetLogDir(), "audit.log"))
+	defer func() {
+		if err := audit.Close(); err != nil {
+			slog.Warn("failed to close audit logger after secret generation", "err", err)
+		}
+	}()
+	sort.Strings(paths)
+	for _, secretPath := range paths {
+		audit.Log(logging.AuditEntry{
+			Event:    logging.AuditAction("config.secret_generated"),
+			Category: logging.AuditCategoryConfig,
+			Severity: logging.AuditSeverityInfo,
+			Actor:    logging.AuditActor{Type: "system"},
+			Target:   &logging.AuditTarget{Type: "config_secret", Name: secretPath},
+			Details:  map[string]interface{}{"key": secretPath},
+			Result:   "success",
+		})
+	}
 }
 
 // normalizeHTTPSMode enforces AI.md PART 15's HTTPS rules for dual ports and
@@ -4187,11 +4347,14 @@ func (c *Config) Update(fn func(*ServerConfig)) {
 	fn(&c.Server)
 }
 
-// GetEncryptionKey returns a 32-byte encryption key derived from the SecretKey
+// GetEncryptionKey returns a 32-byte key derived from the configured encryption key.
 // Uses SHA256 to ensure consistent 32-byte length for AES-256
 func (c *Config) GetEncryptionKey() []byte {
 	c.mu.RLock()
-	secret := c.Server.SecretKey
+	secret := c.Server.Security.EncryptionKey
+	if secret == "" {
+		secret = c.Server.SecretKey
+	}
 	c.mu.RUnlock()
 
 	if secret == "" {
@@ -4293,16 +4456,6 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		c.Server.Mode = "production"
 	}
 
-	// Secret key
-	if c.Server.SecretKey == "" {
-		warnings = append(warnings, ValidationWarning{
-			Field:   "server.secret_key",
-			Message: "Secret key is empty, generating random key",
-			Default: "<generated>",
-		})
-		c.Server.SecretKey = generateSecret()
-	}
-
 	// Installation secret (per AI.md PART 11): HMAC key for {security_id} and
 	// KDF input for the PGP private-key encryption at rest.
 	if c.Server.Security.InstallationSecret == "" {
@@ -4323,6 +4476,51 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 			Default: "<generated>",
 		})
 		c.Server.Security.EncryptionKey = generateBase64Secret()
+		c.generatedSecretPaths = appendUnique(c.generatedSecretPaths, "server.security.encryption_key")
+	}
+	if c.Server.Token == "" {
+		c.Server.Token = generateBearerToken("adm")
+		c.generatedSecretPaths = appendUnique(c.generatedSecretPaths, "server.token")
+	}
+	for service, token := range map[string]string{
+		"prometheus": c.Server.Metrics.Auth.Tokens.Prometheus,
+		"grafana":    c.Server.Metrics.Auth.Tokens.Grafana,
+		"loki":       c.Server.Metrics.Auth.Tokens.Loki,
+	} {
+		if token != "" {
+			continue
+		}
+		generated := generateBearerToken("mtr")
+		switch service {
+		case "prometheus":
+			c.Server.Metrics.Auth.Tokens.Prometheus = generated
+		case "grafana":
+			c.Server.Metrics.Auth.Tokens.Grafana = generated
+		case "loki":
+			c.Server.Metrics.Auth.Tokens.Loki = generated
+		}
+		c.generatedSecretPaths = appendUnique(c.generatedSecretPaths, "server.metrics.auth.tokens."+service)
+	}
+	for roleName, role := range map[string]*ContactRoleConfig{
+		"admin":    &c.Server.Contact.Admin,
+		"security": &c.Server.Contact.Security,
+		"abuse":    &c.Server.Contact.Abuse,
+		"general":  &c.Server.Contact.General,
+	} {
+		if role.Webhooks == nil {
+			continue
+		}
+		for name, endpoint := range role.Webhooks {
+			if strings.HasSuffix(name, "_secret") || strings.TrimSpace(endpoint) == "" {
+				continue
+			}
+			secretName := name + "_secret"
+			if strings.TrimSpace(role.Webhooks[secretName]) != "" {
+				continue
+			}
+			role.Webhooks[secretName] = generateBase64Secret()
+			c.generatedSecretPaths = appendUnique(c.generatedSecretPaths, "server.contact."+roleName+".webhooks."+secretName)
+		}
 	}
 
 	// Rate limit validation — warn and apply defaults; never crash per AI.md PART 12
@@ -4443,7 +4641,92 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		}
 	}
 
+	warnings = append(warnings, validateSEOConfig(&c.Server.SEO, c.Server.Branding.Title)...)
+	if c.Web.UI.Theme != "dark" && c.Web.UI.Theme != "light" && c.Web.UI.Theme != "auto" {
+		warnings = append(warnings, ValidationWarning{Field: "web.ui.theme", Message: "Invalid default theme; using dark", Default: "dark"})
+		c.Web.UI.Theme = "dark"
+	}
+	if c.Web.UI.Accent != "" {
+		if len(c.Web.UI.Accent) != 7 || c.Web.UI.Accent[0] != '#' {
+			warnings = append(warnings, ValidationWarning{Field: "web.ui.accent", Message: "Invalid accent color; using the built-in color", Default: ""})
+			c.Web.UI.Accent = ""
+		} else if _, err := hex.DecodeString(c.Web.UI.Accent[1:]); err != nil {
+			warnings = append(warnings, ValidationWarning{Field: "web.ui.accent", Message: "Invalid accent color; using the built-in color", Default: ""})
+			c.Web.UI.Accent = ""
+		}
+	}
+
 	return warnings
+}
+
+func validateSEOConfig(seo *SEOConfig, brandingTitle string) []ValidationWarning {
+	var warnings []ValidationWarning
+	if utf8.RuneCountInString(seo.TitleSeparator) > 8 {
+		warnings = append(warnings, ValidationWarning{Field: "server.seo.title_separator", Message: "Title separator exceeds 8 characters; using the default", Default: " - "})
+		seo.TitleSeparator = " - "
+	}
+	if seo.Canonical != "" {
+		parsed, err := url.Parse(seo.Canonical)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+			warnings = append(warnings, ValidationWarning{Field: "server.seo.canonical", Message: "Canonical base must be an absolute HTTPS URL; using the request origin", Default: ""})
+			seo.Canonical = ""
+		}
+	}
+	if seo.OpenGraph.Type == "" {
+		seo.OpenGraph.Type = "website"
+	}
+	allowedOpenGraphTypes := map[string]bool{
+		"website": true, "article": true, "book": true, "profile": true,
+		"music.song": true, "music.album": true, "music.playlist": true, "music.radio_station": true,
+		"video.movie": true, "video.episode": true, "video.tv_show": true, "video.other": true,
+	}
+	if !allowedOpenGraphTypes[seo.OpenGraph.Type] {
+		warnings = append(warnings, ValidationWarning{Field: "server.seo.opengraph.type", Message: "Invalid OpenGraph type; using the default", Default: "website"})
+		seo.OpenGraph.Type = "website"
+	}
+	if seo.OpenGraph.SiteName == "" {
+		seo.OpenGraph.SiteName = brandingTitle
+	}
+	if seo.Twitter.Card != "summary" && seo.Twitter.Card != "summary_large_image" {
+		warnings = append(warnings, ValidationWarning{Field: "server.seo.twitter.card", Message: "Invalid Twitter card type; using the default", Default: "summary_large_image"})
+		seo.Twitter.Card = "summary_large_image"
+	}
+	reserved := map[string]bool{"description": true, "keywords": true, "author": true, "robots": true, "viewport": true}
+	if len(seo.MetaTags) > 20 {
+		warnings = append(warnings, ValidationWarning{Field: "server.seo.meta_tags", Message: "At most 20 custom meta tags are allowed; invalid and excess entries are ignored", Default: map[string]string{}})
+	}
+	metaNames := make([]string, 0, len(seo.MetaTags))
+	for name := range seo.MetaTags {
+		metaNames = append(metaNames, name)
+	}
+	sort.Strings(metaNames)
+	clean := make(map[string]string, min(len(seo.MetaTags), 20))
+	for _, name := range metaNames {
+		if len(clean) == 20 {
+			break
+		}
+		if !validSEOName(name) || reserved[name] {
+			continue
+		}
+		clean[name] = seo.MetaTags[name]
+	}
+	if len(clean) != len(seo.MetaTags) && len(seo.MetaTags) <= 20 {
+		warnings = append(warnings, ValidationWarning{Field: "server.seo.meta_tags", Message: "Invalid or generated meta tag names were ignored", Default: map[string]string{}})
+	}
+	seo.MetaTags = clean
+	return warnings
+}
+
+func validSEOName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || strings.ContainsRune(":_.-", char)) {
+			return false
+		}
+	}
+	return true
 }
 
 func containsLanguage(languages []string, target string) bool {

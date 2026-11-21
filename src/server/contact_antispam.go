@@ -234,8 +234,8 @@ func (s *Server) contactFormSigningKey() []byte {
 		if cfg.Security.InstallationSecret != "" {
 			return []byte(cfg.Security.InstallationSecret)
 		}
-		if cfg.SecretKey != "" {
-			return []byte(cfg.SecretKey)
+		if cfg.Security.EncryptionKey != "" {
+			return []byte(cfg.Security.EncryptionKey)
 		}
 	}
 	return []byte("search-contact-form")

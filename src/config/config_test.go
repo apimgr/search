@@ -38,6 +38,32 @@ func TestI18nConfigLanguageKeys(t *testing.T) {
 	}
 }
 
+func TestConfigSecretURLPathDetectsCredentialSources(t *testing.T) {
+	tests := []struct {
+		name  string
+		path  string
+		value string
+		want  bool
+	}{
+		{name: "userinfo", path: "server.database.url", value: "postgres://user:pass@db/search", want: true},
+		{name: "password query", path: "server.database.url", value: "postgres://db/search?password=secret", want: true},
+		{name: "pwd query case insensitive", path: "server.cache.url", value: "redis://cache?PWD=secret", want: true},
+		{name: "token query", path: "server.cache.url", value: "redis://cache?token=secret", want: true},
+		{name: "auth token query", path: "server.database.url", value: "libsql://db?authToken=secret", want: true},
+		{name: "empty credential query", path: "server.database.url", value: "postgres://db/search?password=", want: false},
+		{name: "unrelated URL", path: "server.database.url", value: "postgres://db/search?sslmode=require", want: false},
+		{name: "other setting", path: "server.database.name", value: "postgres://user:pass@db/search", want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			node := &yaml.Node{Kind: yaml.ScalarNode, Value: test.value}
+			if got := configSecretURLPath(test.path, node); got != test.want {
+				t.Errorf("configSecretURLPath(%q, %q) = %t, want %t", test.path, test.value, got, test.want)
+			}
+		})
+	}
+}
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg == nil {
@@ -54,6 +80,18 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")
+	}
+	if !strings.HasPrefix(cfg.Server.Token, "adm_") || len(strings.TrimPrefix(cfg.Server.Token, "adm_")) != 32 {
+		t.Errorf("Server.Token format = %q, want adm_ plus 32 characters", cfg.Server.Token)
+	}
+	for name, token := range map[string]string{
+		"prometheus": cfg.Server.Metrics.Auth.Tokens.Prometheus,
+		"grafana":    cfg.Server.Metrics.Auth.Tokens.Grafana,
+		"loki":       cfg.Server.Metrics.Auth.Tokens.Loki,
+	} {
+		if !strings.HasPrefix(token, "mtr_") || len(strings.TrimPrefix(token, "mtr_")) != 32 {
+			t.Errorf("metrics %s token format = %q, want mtr_ plus 32 characters", name, token)
+		}
 	}
 	if cfg.Server.Title != "Search" || cfg.Server.Branding.Title != "Search" {
 		t.Errorf("default app titles = %q / %q, want IDEA.md app_name Search", cfg.Server.Title, cfg.Server.Branding.Title)
@@ -631,7 +669,7 @@ func TestConfigUpdate(t *testing.T) {
 }
 
 func TestConfigGetEncryptionKey(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := &Config{}
 
 	// With secret key
 	cfg.Server.SecretKey = "test-secret-key"
@@ -654,6 +692,11 @@ func TestConfigGetEncryptionKey(t *testing.T) {
 	key = cfg.GetEncryptionKey()
 	if key != nil {
 		t.Error("GetEncryptionKey() should return nil for empty secret")
+	}
+
+	cfg.Server.Security.EncryptionKey = "configured-encryption-key"
+	if key := cfg.GetEncryptionKey(); len(key) != 32 {
+		t.Errorf("GetEncryptionKey() returned key of length %d for configured encryption key, want 32", len(key))
 	}
 }
 

@@ -13,8 +13,8 @@ ifeq ($(strip $(INTERNAL_NAME)),)
 INTERNAL_NAME := $(PROJECTNAME)
 endif
 
-# Version precedence: release.txt > env/default fallback
-VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
+# Local-build version: explicit VERSION > non-empty release.txt > commit id.
+VERSION ?= $(shell v=; [ -r release.txt ] && v=$$(tr -d '[:space:]' < release.txt); if [ -n "$$v" ]; then echo "$$v"; else git rev-parse --short=7 HEAD 2>/dev/null || echo devel; fi)
 # Per AI.md PART 25: add v prefix ONLY to numeric semver (e.g. 1.2.3 → v1.2.3)
 # Text versions (dev, beta, devel) and timestamps get NO v prefix
 TAG := $(shell echo "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]' && echo "v$(VERSION)" || echo "$(VERSION)")
@@ -29,10 +29,10 @@ COMMIT_ID := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
 # Official site URL (OPTIONAL - never guess or assume)
 # Sources (in order of precedence):
 #   1. File: site.txt in project root (single line, URL only)
-#   2. Environment variable: OFFICIALSITE=https://example.com
+#   2. Environment variable: OFFICIAL_SITE=<url>
 #   3. Empty (self-hosted projects - users must use --server flag)
 # NEVER infer from project name, domain, or any other source
-OFFICIALSITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}")
+OFFICIAL_SITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}")
 
 # Linker flags to embed build info (per AI.md PART 25)
 # Sets vars in both src/config and src/version packages (both declare build info vars)
@@ -40,7 +40,7 @@ LDFLAGS := -s -w \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.Version=$(VERSION)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.CommitID=$(COMMIT_ID)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.BuildEpoch=$(BUILD_EPOCH)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.OfficialSite=$(OFFICIALSITE)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.OfficialSite=$(OFFICIAL_SITE)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.Version=$(VERSION)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.CommitID=$(COMMIT_ID)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.BuildEpoch=$(BUILD_EPOCH)'
@@ -51,7 +51,7 @@ CLI_LDFLAGS := -s -w \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.Version=$(VERSION)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.CommitID=$(COMMIT_ID)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.BuildEpoch=$(BUILD_EPOCH)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.OfficialSite=$(OFFICIALSITE)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.OfficialSite=$(OFFICIAL_SITE)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.ProjectName=$(PROJECTNAME)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.Version=$(VERSION)'
 

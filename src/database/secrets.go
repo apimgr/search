@@ -60,28 +60,32 @@ func generateSecret() (string, error) {
 func GetSecret(ctx context.Context, db *DB, name string) (*AppSecret, error) {
 	table := ServerTableName(db, "app_secrets")
 	query := fmt.Sprintf(`SELECT name, value, COALESCE(previous_value, ''),
-		COALESCE(previous_expires_at, CURRENT_TIMESTAMP), created_at, rotated_at
+		COALESCE(previous_expires_at, ''), created_at, rotated_at
 		FROM %s WHERE name = ?`, table)
 
 	var (
 		secret    AppSecret
-		prevExp   sql.NullTime
-		createdAt sql.NullTime
-		rotatedAt sql.NullTime
+		prevExp   sql.NullString
+		createdAt sql.NullString
+		rotatedAt sql.NullString
 	)
 	row := db.QueryRow(ctx, query, name)
 	if err := row.Scan(&secret.Name, &secret.Value, &secret.PreviousValue,
 		&prevExp, &createdAt, &rotatedAt); err != nil {
 		return nil, err
 	}
-	if prevExp.Valid {
-		secret.PreviousExpiresAt = prevExp.Time
+	previousExpiresAt, err := parseSecretTimestamp(prevExp)
+	if err != nil {
+		return nil, fmt.Errorf("parse previous expiry for %s: %w", name, err)
 	}
-	if createdAt.Valid {
-		secret.CreatedAt = createdAt.Time
+	secret.PreviousExpiresAt = previousExpiresAt
+	secret.CreatedAt, err = parseSecretTimestamp(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse creation time for %s: %w", name, err)
 	}
-	if rotatedAt.Valid {
-		secret.RotatedAt = rotatedAt.Time
+	secret.RotatedAt, err = parseSecretTimestamp(rotatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse rotation time for %s: %w", name, err)
 	}
 	// A previous value past its grace window is no longer valid material.
 	if secret.PreviousValue != "" && !secret.PreviousExpiresAt.IsZero() &&
@@ -89,6 +93,23 @@ func GetSecret(ctx context.Context, db *DB, name string) (*AppSecret, error) {
 		secret.PreviousValue = ""
 	}
 	return &secret, nil
+}
+
+func parseSecretTimestamp(value sql.NullString) (time.Time, error) {
+	if !value.Valid || value.String == "" {
+		return time.Time{}, nil
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	} {
+		if parsed, err := time.Parse(layout, value.String); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unsupported timestamp format")
 }
 
 // SetAppSecretValue stores a non-key app_secrets value such as a validation

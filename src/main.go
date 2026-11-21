@@ -441,8 +441,16 @@ func earlyPortConfig() (*config.Config, error) {
 
 func runServerServiceBody() {
 	// Handle daemonization per AI.md PART 6
-	// Check if we should daemonize (only for manual starts, not --service start)
-	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
+	// Read only server.daemonize here so re-execution happens before root binds.
+	daemonizeFromConfig := false
+	if !config.IsRunningInContainer() {
+		if enabled, found, err := config.PeekServerDaemonize(config.GetConfigPath()); err != nil {
+			slog.Warn("could not read early daemonize setting", "error", err)
+		} else {
+			daemonizeFromConfig = found && enabled
+		}
+	}
+	if (flagDaemon || daemonizeFromConfig) && !config.IsRunningInContainer() && os.Getenv("_DAEMON_CHILD") != "1" {
 		if err := daemonize(); err != nil {
 			slog.Error("Failed to daemonize", "err", err)
 			exitFunc(1)
@@ -581,8 +589,7 @@ func runServerServiceBody() {
 		return
 	}
 
-	// On first run, point the operator to server.yml where the operator token
-	// is stored. The token itself is never displayed or logged.
+	// Show the operator token once, at first creation, so it can be saved.
 	showSetup := cfg.IsFirstRun()
 
 	// Create server (initialises DB, scheduler, etc. — steps 13-16 per AI.md PART 8)
@@ -656,6 +663,12 @@ func runServerServiceBody() {
 		Debug:     serverBannerDebugEnabled(cfg),
 		URLs:      urls,
 		ShowSetup: showSetup,
+		SetupToken: func() string {
+			if showSetup {
+				return cfg.Server.Token
+			}
+			return ""
+		}(),
 	})
 
 	// Step 21: Block until graceful shutdown completes.

@@ -154,10 +154,14 @@ func (h *imageProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) proxyImageURL(raw string) string {
 	u, err := validateImageProxyURL(raw)
-	if err != nil || len(s.config.Server.SecretKey) == 0 {
+	key := s.config.Server.Security.EncryptionKey
+	if key == "" {
+		key = s.config.Server.SecretKey
+	}
+	if err != nil || len(key) == 0 {
 		return ""
 	}
-	return "/image-proxy?url=" + url.QueryEscape(u.String()) + "&sig=" + signImageProxyURL(u.String(), []byte(s.config.Server.SecretKey))
+	return "/image-proxy?url=" + url.QueryEscape(u.String()) + "&sig=" + signImageProxyURL(u.String(), []byte(key))
 }
 
 func signImageProxyURL(raw string, key []byte) string {

@@ -58,17 +58,13 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> "$GITHUB_ENV"
-          else
-            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-          fi
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITHUB_ENV"
           if [ -f site.txt ]; then
-            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITHUB_ENV"
+            echo "OFFICIAL_SITE=$(cat site.txt)" >> "$GITHUB_ENV"
           else
-            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
+            echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}" >> "$GITHUB_ENV"
           fi
           echo "OUTPUT=${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$GITHUB_ENV"
           echo "CLI_OUTPUT=${PROJECTNAME}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$GITHUB_ENV"
@@ -83,7 +79,7 @@ jobs:
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
@@ -101,7 +97,7 @@ jobs:
             -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
           go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client

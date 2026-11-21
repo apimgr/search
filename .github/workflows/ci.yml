@@ -117,13 +117,13 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=$(cat release.txt 2>/dev/null || echo "devel")" >> "$GITHUB_ENV"
+          echo "VERSION=$(git rev-parse --short=7 HEAD 2>/dev/null || echo devel)" >> "$GITHUB_ENV"
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")" >> "$GITHUB_ENV"
           echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITHUB_ENV"
           if [ -f site.txt ]; then
-            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITHUB_ENV"
+            echo "OFFICIAL_SITE=$(cat site.txt)" >> "$GITHUB_ENV"
           else
-            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
+            echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}" >> "$GITHUB_ENV"
           fi
 
       - name: Generate API code
@@ -140,7 +140,7 @@ jobs:
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
@@ -149,7 +149,7 @@ jobs:
             -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
           go build -buildvcs=false -trimpath \
@@ -194,7 +194,7 @@ jobs:
         with:
           base: ${{ steps.range.outputs.base }}
           head: ${{ steps.range.outputs.head }}
-          extra_args: --results=${{ steps.range.outputs.base == '' && 'verified' || 'verified,unknown' }}
+          extra_args: --results=${{ steps.range.outputs.base == '' && 'verified' || 'verified,unknown' }} --exclude-paths=.github/trufflehog-exclude.txt
 
   vuln-scan:
     name: Vulnerability scan

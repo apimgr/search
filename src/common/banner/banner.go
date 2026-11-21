@@ -22,8 +22,9 @@ type Config struct {
 	Debug bool
 	// Listen URLs
 	URLs []string
-	// Show first-run setup guidance without disclosing credentials.
+	// ShowSetup is true only when the operator token was just created.
 	ShowSetup   bool
+	SetupToken  string
 	Description string
 	// SMTP status (e.g., "Auto-detected (localhost:25)")
 	SMTPStatus string
@@ -113,7 +114,8 @@ func printFull(cfg Config) {
 
 	// Warning for first run
 	if cfg.ShowSetup {
-		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Operator token is stored in server.yml.", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Save this operator token now:", boxWidth)
+		printBoxLine(vertical, "      "+cfg.SetupToken, boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
 
@@ -157,7 +159,7 @@ func printCompact(cfg Config) {
 	}
 
 	if cfg.ShowSetup {
-		fmt.Printf("%s Operator token is stored in server.yml.\n", display.Emoji("⚠️", "[!]"))
+		fmt.Printf("%s Save this operator token now: %s\n", display.Emoji("⚠️", "[!]"), cfg.SetupToken)
 	}
 	fmt.Println()
 }
@@ -170,7 +172,7 @@ func printMinimal(cfg Config) {
 		fmt.Println(extractHostPort(cfg.URLs[0]))
 	}
 	if cfg.ShowSetup {
-		fmt.Println("Operator token is stored in server.yml.")
+		fmt.Printf("Save this operator token now: %s\n", cfg.SetupToken)
 	}
 }
 
@@ -180,6 +182,9 @@ func printMicro(cfg Config) {
 		fmt.Printf("%s %s\n", cfg.AppName, extractHostPort(cfg.URLs[0]))
 	} else {
 		fmt.Println(cfg.AppName)
+	}
+	if cfg.ShowSetup {
+		fmt.Printf("Save operator token: %s\n", cfg.SetupToken)
 	}
 }
 

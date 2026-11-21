@@ -117,7 +117,7 @@ func isOnionRequest(cfg *config.Config, r *http.Request) bool {
 // SecurityHeaders adds security headers to all responses per AI.md PART 11.
 func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/server/contact" {
+		if m.config.Server.SEO.NoIndex || !isPublicSEORoute(r.URL.Path) {
 			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		}
 		headers := m.config.Server.Security.Headers

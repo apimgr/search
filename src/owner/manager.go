@@ -317,7 +317,11 @@ func (m *Manager) Mask(ctx context.Context, identity Identity, tokenID int64) (s
 	if len(token) != 36 {
 		return "", ErrInvalidToken
 	}
-	return "tok_••••••••••••••••••••••••" + token[len(token)-4:], nil
+	prefix := "own_"
+	if strings.HasPrefix(token, "tok_") {
+		prefix = "tok_"
+	}
+	return prefix + "••••••••••••••••••••••••" + token[len(token)-4:], nil
 }
 
 func (m *Manager) Rotate(ctx context.Context, identity Identity, tokenID int64) (string, error) {
@@ -449,7 +453,7 @@ func (m *Manager) Restore(ctx context.Context, token string) (Identity, error) {
 }
 
 func validToken(token string) bool {
-	if len(token) != 36 || !strings.HasPrefix(token, "tok_") {
+	if len(token) != 36 || (!strings.HasPrefix(token, "own_") && !strings.HasPrefix(token, "tok_")) {
 		return false
 	}
 	for _, c := range token[4:] {
@@ -463,7 +467,7 @@ func validToken(token string) bool {
 func newToken() (string, error) {
 	var b strings.Builder
 	b.Grow(36)
-	b.WriteString("tok_")
+	b.WriteString("own_")
 	for b.Len() < 36 {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(tokenAlphabet))))
 		if err != nil {

@@ -80,10 +80,10 @@ func TestConfigSaveMigratesGeneratedSecretsAndPreservesOperatorSecrets(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(mainConfig), generatedToken) || strings.Contains(string(mainConfig), "smtp-password") || !strings.Contains(string(mainConfig), "operator-captcha-secret") {
-		t.Fatalf("server.yml must migrate generated token and retain operator-set captcha secret (migrate=%v): %s", cfg.migrateSecretPaths, mainConfig)
+	if strings.Contains(string(mainConfig), generatedToken) || strings.Contains(string(mainConfig), "smtp-password") || strings.Contains(string(mainConfig), "operator-captcha-secret") {
+		t.Fatalf("server.yml must not contain credentials: %s", mainConfig)
 	}
-	for _, expected := range []string{generatedToken, "smtp-password"} {
+	for _, expected := range []string{generatedToken, "smtp-password", "operator-captcha-secret"} {
 		if !strings.Contains(string(secretConfig), expected) {
 			t.Fatalf("secrets.yml missing preserved value %q: %s", expected, secretConfig)
 		}
@@ -111,15 +111,15 @@ func TestConfigSavePreservesOperatorTokenInServerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(mainConfig), operatorToken) {
-		t.Fatalf("operator-managed token was moved from server.yml: %s", mainConfig)
+	if strings.Contains(string(mainConfig), operatorToken) {
+		t.Fatalf("operator-managed token remains in server.yml: %s", mainConfig)
 	}
 	secretConfig, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("read secrets.yml: %v", err)
 	}
-	if strings.Contains(string(secretConfig), operatorToken) {
-		t.Fatalf("operator-managed token was copied to secrets.yml: %s", secretConfig)
+	if !strings.Contains(string(secretConfig), operatorToken) {
+		t.Fatalf("operator-managed token was not moved to secrets.yml: %s", secretConfig)
 	}
 }
 
@@ -152,33 +152,33 @@ func TestConfigLoadCorrectsConfigAndDropInModes(t *testing.T) {
 
 func TestGeneratedLogConfigUsesSharedDefaultsAndOnlyOverrides(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
-	if err := DefaultConfig().Save(path); err != nil {
+	cfg := DefaultConfig()
+	cfg.Server.Logs.Level = "debug"
+	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
-	data, err := os.ReadFile(path)
+	logsPath := filepath.Join(filepath.Dir(path), "yaml.d", "logs.yml")
+	data, err := os.ReadFile(logsPath)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("read generated logs area: %v", err)
 	}
 	var document yaml.Node
 	if err := yaml.Unmarshal(data, &document); err != nil {
-		t.Fatalf("parse generated config: %v", err)
+		t.Fatalf("parse generated logs area: %v", err)
 	}
 	logs := mappingValue(mappingValue(document.Content[0], "server"), "logs")
-	defaults := mappingValue(logs, "defaults")
-	if mappingValue(defaults, "rotate").Value != "weekly,50MB" || mappingValue(defaults, "keep").Value != "none" {
-		t.Fatalf("shared log defaults = %#v", defaults)
+	if got := mappingValue(logs, "level"); got == nil || got.Value != "debug" {
+		t.Fatalf("logs override = %#v, want debug", got)
 	}
-	for _, kind := range []string{"access", "server", "error", "audit", "security", "debug"} {
-		if mappingValue(mappingValue(logs, kind), "filename") != nil {
-			t.Errorf("logs.%s must derive its filename from the log kind", kind)
-		}
+	if mappingValue(logs, "defaults") != nil {
+		t.Fatalf("default log settings should not be written: %#v", logs)
 	}
-	if got := mappingValue(mappingValue(logs, "access"), "rotate"); got == nil || got.Value != "monthly" {
-		t.Errorf("access rotation = %#v, want monthly override", got)
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("load saved config: %v", err)
 	}
-	audit := mappingValue(logs, "audit")
-	if mappingValue(audit, "enabled").Value != "true" || mappingValue(audit, "rotate").Value != "daily" {
-		t.Errorf("audit log override = %#v", audit)
+	if loaded.Server.Logs.Defaults.Rotate != "weekly,50MB" || loaded.Server.Logs.Defaults.Keep != "none" || loaded.Server.Logs.Access.Rotate != "monthly" || !loaded.Server.Logs.Audit.Enabled || loaded.Server.Logs.Audit.Rotate != "daily" {
+		t.Fatalf("shared log defaults or overrides were not restored: %#v", loaded.Server.Logs)
 	}
 }
 

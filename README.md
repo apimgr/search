@@ -226,6 +226,8 @@ There is **no admin web UI**. Configuration is file-driven: changes to
 file watcher (no signal required). The operator bearer token is stored at
 `server.token` in `secrets.yml`; generated metrics tokens are under
 `server.metrics.auth.tokens` in the same file.
+The operator token uses the `adm_` prefix, metrics tokens use `mtr_`, and new
+owner tokens use `own_`; previously issued `tok_` owner tokens remain valid.
 
 ```bash
 search --maintenance secret rotate installation_secret
