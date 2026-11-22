@@ -24,6 +24,8 @@ SOFTWARE.
 
 ## Third-Party Licenses
 
+GeoIP City database attribution: <a href="https://db-ip.com/">IP Geolocation by DB-IP</a>
+
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
 | filippo.io/edwards25519 | v1.2.0 | BSD-3-Clause | 2009 The Go Authors |
