@@ -91,6 +91,38 @@ func TestAPIRoutesMatchAIAndIDEAContract(t *testing.T) {
 	}
 }
 
+func TestOfflinePageUsesSharedShellAndRequestPreferences(t *testing.T) {
+	server := newTestServer(t)
+	request := httptest.NewRequest(http.MethodGet, "/offline.html", nil)
+	request.AddCookie(&http.Cookie{Name: "theme", Value: "light"})
+	request.AddCookie(&http.Cookie{Name: "lang", Value: "de"})
+	response := httptest.NewRecorder()
+
+	server.handleOfflinePage(response, request)
+
+	body := response.Body.String()
+	for _, marker := range []string{
+		`<html lang="de"`,
+		`class="theme-light`,
+		`class="skip-link"`,
+		`<header class="header">`,
+		`<main id="main-content"`,
+		`<footer class="footer">`,
+		`Offline`,
+		`href="/" class="btn btn-primary"`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Errorf("offline page missing shared-shell marker %q", marker)
+		}
+	}
+	if response.Code != http.StatusOK {
+		t.Errorf("offline page status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Errorf("offline page Cache-Control = %q, want private, no-store", got)
+	}
+}
+
 func readIDEAAPIInventory(t *testing.T) map[string]bool {
 	t.Helper()
 	data, err := os.ReadFile("../../IDEA.md")

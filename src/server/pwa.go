@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -104,15 +105,18 @@ func etagMatches(ifNoneMatch, etag string) bool {
 	return false
 }
 
-// handleOfflinePage serves the offline fallback page at the site root per
-// AI.md PART 16: PWA Support.
+// handleOfflinePage renders the offline fallback with the public page shell so
+// the service worker can cache the visitor's current language and theme.
 func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
-	data, err := GetStaticFile("offline.html")
-	if err != nil {
-		http.Error(w, i18n.RequestString(r, "errors.not_found"), http.StatusNotFound)
+	if s.renderer == nil {
+		http.Error(w, i18n.RequestString(r, "errors.server_error_message"), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	writeResponseBytes(w, data)
+	w.Header().Set("Cache-Control", "private, no-store")
+	data := s.newPageData(w, r, i18n.RequestString(r, "pwa.offline_title"), "offline")
+	if err := s.renderer.Render(w, "offline", data); err != nil {
+		slog.Error("failed to render offline page", "error", err)
+		http.Error(w, i18n.RequestString(r, "errors.server_error_message"), http.StatusInternalServerError)
+	}
 }

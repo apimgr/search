@@ -2141,7 +2141,8 @@
     "install_title": "Añade Search a tu pantalla de inicio",
     "ios_share": "Toca el botón Compartir en Safari.",
     "ios_add_to_home": "Selecciona «Añadir a pantalla de inicio».",
-    "ios_add": "Toca «Añadir» en la esquina superior derecha."
+    "ios_add": "Toca «Añadir» en la esquina superior derecha.",
+    "offline_title": "Sin conexión"
   },
   "email": {
     "common": {

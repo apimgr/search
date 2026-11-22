@@ -2141,7 +2141,8 @@
     "install_title": "Install Search on your Home Screen",
     "ios_share": "Tap the Share button in Safari.",
     "ios_add_to_home": "Select ‘Add to Home Screen.’",
-    "ios_add": "Tap ‘Add’ in the top right."
+    "ios_add": "Tap ‘Add’ in the top right.",
+    "offline_title": "Offline"
   },
   "email": {
     "common": {

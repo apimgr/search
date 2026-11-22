@@ -2141,7 +2141,8 @@
     "install_title": "Aggiungi Search alla schermata Home",
     "ios_share": "Tocca il pulsante Condividi in Safari.",
     "ios_add_to_home": "Seleziona “Aggiungi alla schermata Home”.",
-    "ios_add": "Tocca “Aggiungi” in alto a destra."
+    "ios_add": "Tocca “Aggiungi” in alto a destra.",
+    "offline_title": "Offline"
   },
   "email": {
     "common": {

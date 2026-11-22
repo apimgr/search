@@ -2141,7 +2141,8 @@
     "install_title": "将 Search 添加到主屏幕",
     "ios_share": "轻点 Safari 中的“共享”按钮。",
     "ios_add_to_home": "选择“添加到主屏幕”。",
-    "ios_add": "轻点右上角的“添加”。"
+    "ios_add": "轻点右上角的“添加”。",
+    "offline_title": "离线"
   },
   "email": {
     "common": {

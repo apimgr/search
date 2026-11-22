@@ -2141,7 +2141,8 @@
     "install_title": "Search aan je beginscherm toevoegen",
     "ios_share": "Tik in Safari op de Deel-knop.",
     "ios_add_to_home": "Kies ‘Zet op beginscherm’.",
-    "ios_add": "Tik rechtsboven op ‘Voeg toe’."
+    "ios_add": "Tik rechtsboven op ‘Voeg toe’.",
+    "offline_title": "Offline"
   },
   "email": {
     "common": {

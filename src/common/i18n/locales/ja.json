@@ -2141,7 +2141,8 @@
     "install_title": "Searchをホーム画面に追加",
     "ios_share": "Safariの共有ボタンをタップします。",
     "ios_add_to_home": "「ホーム画面に追加」を選択します。",
-    "ios_add": "右上の「追加」をタップします。"
+    "ios_add": "右上の「追加」をタップします。",
+    "offline_title": "オフライン"
   },
   "email": {
     "common": {

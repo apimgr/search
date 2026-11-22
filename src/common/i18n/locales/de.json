@@ -2141,7 +2141,8 @@
     "install_title": "Search zum Home-Bildschirm hinzufügen",
     "ios_share": "Tippen Sie in Safari auf „Teilen“.",
     "ios_add_to_home": "Wählen Sie „Zum Home-Bildschirm“.",
-    "ios_add": "Tippen Sie oben rechts auf „Hinzufügen“."
+    "ios_add": "Tippen Sie oben rechts auf „Hinzufügen“.",
+    "offline_title": "Offline"
   },
   "email": {
     "common": {

@@ -2141,7 +2141,8 @@
     "install_title": "Dodaj Search do ekranu początkowego",
     "ios_share": "Stuknij przycisk Udostępnij w Safari.",
     "ios_add_to_home": "Wybierz „Do ekranu początkowego”.",
-    "ios_add": "Stuknij „Dodaj” w prawym górnym rogu."
+    "ios_add": "Stuknij „Dodaj” w prawym górnym rogu.",
+    "offline_title": "Offline"
   },
   "email": {
     "common": {
