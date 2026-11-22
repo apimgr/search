@@ -703,6 +703,10 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.notifications.email.smtp.port` | `587` |
 | `server.notifications.email.smtp.tls` | `auto` |
 | `server.notifications.email.smtp.username` | `` |
+| `server.notifications.disk_low.check_interval` | `5m` |
+| `server.notifications.disk_low.enabled` | `true` |
+| `server.notifications.disk_low.repeat` | `24h` |
+| `server.notifications.disk_low.threshold_percent` | `85` |
 | `server.notifications.webui.duration` | `5` |
 | `server.notifications.webui.position` | `top-right` |
 | `server.pages.about.content` | `` |
@@ -827,6 +831,8 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.scheduler.tasks.blocklist_update.schedule` | `0 4 * * *` |
 | `server.scheduler.tasks.cve_update.enabled` | `true` |
 | `server.scheduler.tasks.cve_update.schedule` | `0 5 * * *` |
+| `server.scheduler.tasks.disk_check.enabled` | `true` |
+| `server.scheduler.tasks.disk_check.schedule` | `@every 5m` |
 | `server.scheduler.tasks.geoip_update.enabled` | `true` |
 | `server.scheduler.tasks.geoip_update.schedule` | `0 3 * * 0` |
 | `server.scheduler.tasks.update_check.enabled` | `true` |
@@ -868,6 +874,7 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.security.nel.include_subdomains` | `true` |
 | `server.security.nel.max_age_seconds` | `2592000` |
 | `server.security.nel.sample_rate` | `1` |
+| `server.security.reports.retention_days` | `365` |
 | `server.seo.canonical` | `true` |
 | `server.seo.default_description` | `A privacy-respecting metasearch engine` |
 | `server.seo.default_title` | `Search` |

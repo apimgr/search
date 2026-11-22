@@ -6,6 +6,8 @@ Search uses direct upstream search engines and combines their results. Search op
 
 Use `!shortcut terms` to redirect a search to a built-in engine or site. In Preferences → Interface, custom bangs are stored in this browser and use a URL template containing `{query}`. The autocomplete suggests matching custom bangs; submitting one replaces `{query}` with the URL-encoded search terms. Custom targets must be HTTP or HTTPS URLs without embedded credentials. The same page lets you edit optional custom CSS, filter the built-in bang list, and copy the OpenSearch URL. These browser customizations are stored locally and are not included in preference sync URLs or codes.
 
+Built-in bangs associated with a search engine are available only while that engine is enabled and eligible for searches on this server. A disabled or cooling-down local engine makes its bang unavailable in search parsing, autocomplete, the available-bangs API, and bang tools. Availability is based only on this server's engine configuration and health state; remote destinations are not probed.
+
 ## Image results
 
 Image thumbnails and full-size previews load through the signed same-origin

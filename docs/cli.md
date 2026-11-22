@@ -111,6 +111,10 @@ search --maintenance compliance report
 search --maintenance --help
 ```
 
+Backups include `server.db` as a consistent SQLite snapshot, including committed
+WAL data. Restores replace the database together with the archived configuration
+and data.
+
 ### Update Management
 
 ```bash
