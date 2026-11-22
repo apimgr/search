@@ -4,14 +4,304 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 )
+
+func TestBuildArchiveIncludesOnlineDatabaseSnapshot(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	databaseDir := filepath.Join(root, "database")
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dm, err := database.NewDatabaseManager(&database.Config{Driver: "sqlite", DataDir: databaseDir, MaxOpen: 1, MaxIdle: 1})
+	if err != nil {
+		t.Fatalf("NewDatabaseManager: %v", err)
+	}
+	defer dm.Close()
+	if _, err := dm.ServerDB().Exec(context.Background(), "CREATE TABLE backup_test (value TEXT NOT NULL)"); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := dm.ServerDB().Exec(context.Background(), "INSERT INTO backup_test (value) VALUES (?)", "included"); err != nil {
+		t.Fatalf("insert row: %v", err)
+	}
+
+	manager := &Manager{configDir: filepath.Join(root, "config"), dataDir: dataDir, databaseDir: databaseDir, serverDB: dm.ServerDB()}
+	if err := os.MkdirAll(manager.configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := manager.buildArchiveAt(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("buildArchiveAt: %v", err)
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		t.Fatalf("gzip.NewReader: %v", err)
+	}
+	tarReader := tar.NewReader(reader)
+	found := false
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read archive: %v", err)
+		}
+		if header.Name == "database/server.db" {
+			found = true
+		}
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close archive reader: %v", err)
+	}
+	if !found {
+		t.Fatal("archive does not contain database/server.db")
+	}
+}
+
+func TestFileManifestUsesSnapshotForDatabaseInsideDataDir(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	databaseDir := filepath.Join(dataDir, "database")
+	if err := os.MkdirAll(databaseDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{dataDir: dataDir, databaseDir: databaseDir}
+	if err := os.WriteFile(filepath.Join(databaseDir, "server.db"), []byte("live database changed after snapshot"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := filepath.Join(root, "snapshot.db")
+	if err := os.WriteFile(snapshot, []byte("consistent snapshot"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshotTime := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(snapshot, snapshotTime, snapshotTime); err != nil {
+		t.Fatal(err)
+	}
+	const archivePath = "data/database/server.db"
+	checksum, err := hashFile(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := manager.fileManifest([]string{archivePath}, map[string]string{archivePath: checksum}, snapshot)
+	if err != nil {
+		t.Fatalf("fileManifest(): %v", err)
+	}
+	if len(manifest) != 1 || manifest[0].Size != int64(len("consistent snapshot")) || !manifest[0].ModifiedAt.Equal(snapshotTime) || manifest[0].SHA256 != checksum {
+		t.Fatalf("manifest entry = %#v, want snapshot metadata", manifest)
+	}
+}
+
+func TestCumulativeIncrementalBackupAndRestore(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	backupDir := filepath.Join(root, "backups")
+	for _, dir := range []string{configDir, dataDir, backupDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte("server:\n  title: Test\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "changed.txt"), []byte("before"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "deleted.txt"), []byte("remove"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir}
+	snapshot := time.Date(2026, 11, 21, 2, 0, 0, 0, time.UTC)
+	fullPath, err := m.CreateAt("search_backup_2026-11-21.tar.gz", snapshot)
+	if err != nil {
+		t.Fatalf("CreateAt(): %v", err)
+	}
+	fullMetadata, err := m.GetMetadata(fullPath)
+	if err != nil {
+		t.Fatalf("GetMetadata(full): %v", err)
+	}
+	if fullMetadata.Type != "full" || !fullMetadata.SnapshotAt.Equal(snapshot) || fullMetadata.SHA256 == "" || len(fullMetadata.FileManifest) == 0 {
+		t.Fatalf("full manifest lacks required snapshot data: %#v", fullMetadata)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "changed.txt"), []byte("after"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "added.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dataDir, "deleted.txt")); err != nil {
+		t.Fatal(err)
+	}
+	incSnapshot := snapshot.Add(24 * time.Hour)
+	incPath, err := m.CreateIncrementalAt("search-daily.tar.gz", incSnapshot)
+	if err != nil {
+		t.Fatalf("CreateIncrementalAt(): %v", err)
+	}
+	incMetadata, err := m.GetMetadata(incPath)
+	if err != nil {
+		t.Fatalf("GetMetadata(incremental): %v", err)
+	}
+	if incMetadata.Type != "incremental" || incMetadata.BaseBackup != filepath.Base(fullPath) || incMetadata.BaseSHA256 == "" || len(incMetadata.Deleted) != 1 || incMetadata.Deleted[0] != "data/deleted.txt" {
+		t.Fatalf("incremental manifest missing differential metadata: %#v", incMetadata)
+	}
+	if len(incMetadata.Contents) != 2 {
+		t.Fatalf("incremental contents = %#v, want only changed and new files", incMetadata.Contents)
+	}
+	if err := m.ApplyRetention(RetentionPolicy{Count: 0, MaxTotalSize: "0"}); err != nil {
+		t.Fatalf("ApplyRetention(): %v", err)
+	}
+	if _, err := os.Stat(fullPath); err != nil {
+		t.Fatalf("retention removed incremental base: %v", err)
+	}
+	m.SetRestoreLimits(RestoreLimits{MaxExpandedSize: 1})
+	limited, err := m.VerifyBackup(incPath)
+	if err != nil || limited.AllPassed || !strings.Contains(strings.Join(limited.Errors, " "), "max_expanded_size") {
+		t.Fatalf("VerifyBackup with combined expansion limit = %#v, %v; want max_expanded_size failure", limited, err)
+	}
+	m.SetRestoreLimits(RestoreLimits{})
+	verified, err := m.VerifyBackup(incPath)
+	if err != nil || !verified.AllPassed {
+		t.Fatalf("VerifyBackup(incremental) = %#v, %v", verified, err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "changed.txt"), []byte("later"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dataDir, "added.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "deleted.txt"), []byte("stale"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Restore(incPath); err != nil {
+		t.Fatalf("Restore(incremental): %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dataDir, "changed.txt")); string(got) != "after" {
+		t.Fatalf("restored changed.txt = %q", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dataDir, "added.txt")); string(got) != "new" {
+		t.Fatalf("restored added.txt = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "deleted.txt")); !os.IsNotExist(err) {
+		t.Fatalf("deleted file remains after incremental restore: %v", err)
+	}
+	if err := os.Remove(fullPath); err != nil {
+		t.Fatal(err)
+	}
+	verified, err = m.VerifyBackup(incPath)
+	if err != nil || verified.BaseValid || verified.AllPassed || !strings.Contains(strings.Join(verified.Errors, " "), "ERR_BASE_MISSING") {
+		t.Fatalf("VerifyBackup with missing base = %#v, %v; want ERR_BASE_MISSING", verified, err)
+	}
+}
+
+func TestDailyPairUsesOneCapturedArchive(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	backupDir := filepath.Join(root, "backups")
+	for _, dir := range []string{configDir, dataDir, backupDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte("server:\n  title: Test\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dataDir, "state.txt")
+	if err := os.WriteFile(file, []byte("base"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir}
+	baseAt := time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC)
+	basePath, err := m.CreateAt("search_backup_2026-11-20.tar.gz", baseAt)
+	if err != nil {
+		t.Fatalf("CreateAt(base): %v", err)
+	}
+	if err := os.WriteFile(file, []byte("daily snapshot"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t0 := baseAt.Add(24 * time.Hour)
+	incPath, fullPath, incResult, fullResult, skipped, err := m.CreateDailyPairAndVerify("search-daily.tar.gz", "search_backup_2026-11-21.tar.gz", t0)
+	if err != nil {
+		t.Fatalf("CreateDailyPairAndVerify(): %v", err)
+	}
+	if skipped || incPath == "" || fullPath == "" || incResult == nil || fullResult == nil || !incResult.AllPassed || !fullResult.AllPassed {
+		t.Fatalf("daily pair results: incremental=%q full=%q skipped=%v inc=%#v full=%#v", incPath, fullPath, skipped, incResult, fullResult)
+	}
+	fullMetadata, err := m.GetMetadata(fullPath)
+	if err != nil {
+		t.Fatalf("GetMetadata(full): %v", err)
+	}
+	incMetadata, err := m.GetMetadata(incPath)
+	if err != nil {
+		t.Fatalf("GetMetadata(incremental): %v", err)
+	}
+	if !fullMetadata.SnapshotAt.Equal(t0) || !incMetadata.SnapshotAt.Equal(t0) || incMetadata.BaseBackup != filepath.Base(basePath) {
+		t.Fatalf("pair manifests differ: full=%#v incremental=%#v", fullMetadata, incMetadata)
+	}
+	var fullHash, incrementalHash string
+	for _, entry := range fullMetadata.FileManifest {
+		if entry.Path == "data/state.txt" {
+			fullHash = entry.SHA256
+		}
+	}
+	for _, entry := range incMetadata.FileManifest {
+		if entry.Path == "data/state.txt" {
+			incrementalHash = entry.SHA256
+		}
+	}
+	if fullHash == "" || fullHash != incrementalHash {
+		t.Fatalf("paired archive state mismatch: full hash=%q incremental hash=%q", fullHash, incrementalHash)
+	}
+}
+
+func TestRestoreLimitsFromConfig(t *testing.T) {
+	limits, err := RestoreLimitsFromConfig(config.RestoreConfig{})
+	if err != nil {
+		t.Fatalf("RestoreLimitsFromConfig(defaults): %v", err)
+	}
+	want := defaultRestoreLimits()
+	if limits != want {
+		t.Fatalf("default restore limits = %#v, want %#v", limits, want)
+	}
+	limits, err = RestoreLimitsFromConfig(config.RestoreConfig{MaxArchiveSize: "2G", MaxExpandedSize: "8G", MaxFiles: 42, MaxFileSize: "1M", MaxRatio: 25})
+	if err != nil {
+		t.Fatalf("RestoreLimitsFromConfig(custom): %v", err)
+	}
+	if limits.MaxArchiveSize != 2<<30 || limits.MaxExpandedSize != 8<<30 || limits.MaxFiles != 42 || limits.MaxFileSize != 1<<20 || limits.MaxRatio != 25 {
+		t.Fatalf("custom restore limits = %#v", limits)
+	}
+	if _, err := RestoreLimitsFromConfig(config.RestoreConfig{MaxArchiveSize: "nonsense"}); err == nil {
+		t.Fatal("invalid restore size accepted")
+	}
+}
+
+func TestIncrementalBackupRequiresFullBase(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"config", "data", "backups"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := &Manager{backupDir: filepath.Join(root, "backups"), configDir: filepath.Join(root, "config"), dataDir: filepath.Join(root, "data")}
+	_, err := m.CreateIncremental("search-daily.tar.gz")
+	if !errors.Is(err, ErrNoFullBackup) {
+		t.Fatalf("CreateIncremental() error = %v, want ErrNoFullBackup", err)
+	}
+}
 
 // Tests for BackupMetadata
 
@@ -2558,8 +2848,8 @@ func TestManagerGetMetadataNoManifest(t *testing.T) {
 	if err == nil {
 		t.Error("GetMetadata() should error when no manifest found")
 	}
-	if !strings.Contains(err.Error(), "metadata not found") {
-		t.Errorf("Error should mention metadata not found: %v", err)
+	if !strings.Contains(err.Error(), "manifest.json not found") {
+		t.Errorf("Error should mention the missing manifest: %v", err)
 	}
 }
 
@@ -3728,7 +4018,7 @@ func TestManagerRestoreHandlesRegularFilesOnly(t *testing.T) {
 	os.MkdirAll(configDir, 0755)
 	os.MkdirAll(dataDir, 0755)
 
-	// Create a tar.gz with a symlink entry (which should be skipped)
+	// Create a tar.gz with a symlink entry, which restore must reject.
 	backupPath := filepath.Join(backupDir, "test.tar.gz")
 	file, _ := os.Create(backupPath)
 	gzWriter := gzip.NewWriter(file)
@@ -3743,7 +4033,7 @@ func TestManagerRestoreHandlesRegularFilesOnly(t *testing.T) {
 	})
 	tarWriter.Write(manifest)
 
-	// Add symlink entry (Type other than TypeReg and TypeDir)
+	// Add symlink entry (Type other than TypeReg and TypeDir).
 	tarWriter.WriteHeader(&tar.Header{
 		Name:     "config/symlink",
 		Typeflag: tar.TypeSymlink,
@@ -3771,18 +4061,14 @@ func TestManagerRestoreHandlesRegularFilesOnly(t *testing.T) {
 	}
 
 	err := m.Restore(backupPath)
-	if err != nil {
-		t.Fatalf("Restore() error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "unsupported entry") {
+		t.Fatalf("Restore() error = %v, want unsupported archive entry", err)
 	}
 
-	// Regular file should be restored
-	if _, err := os.Stat(filepath.Join(configDir, "regular.txt")); err != nil {
-		t.Errorf("Regular file should be restored: %v", err)
-	}
-
-	// Symlink should not exist (was skipped)
-	if _, err := os.Stat(filepath.Join(configDir, "symlink")); !os.IsNotExist(err) {
-		t.Error("Symlink should be skipped during restore")
+	for _, name := range []string{"regular.txt", "symlink"} {
+		if _, err := os.Stat(filepath.Join(configDir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s was written despite invalid archive entry", name)
+		}
 	}
 }
 

@@ -101,17 +101,48 @@ function withTimeout(promise, ms) {
 
 // GUARANTEED last-resort page - synthesized in the worker so it needs no cache
 // hit and can never itself miss
-function offlineFallbackResponse() {
+function requestCookie(request, name) {
+  const cookies = request.headers.get('cookie') || '';
+  const prefix = name + '=';
+  for (const part of cookies.split(';')) {
+    const cookie = part.trim();
+    if (cookie.startsWith(prefix)) return cookie.slice(prefix.length);
+  }
+  return '';
+}
+
+function offlineFallbackResponse(request) {
+  const themePreference = requestCookie(request, 'theme');
+  const theme = ['light', 'dark', 'auto'].includes(themePreference) ? themePreference : 'dark';
+  const languagePreference = requestCookie(request, 'lang');
+  const lang = /^[a-z]{2}(?:-[A-Z]{2})?$/.test(languagePreference) ? languagePreference : 'en';
   return new Response(
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    '<!doctype html><html lang="' + lang + '" class="theme-' + theme + '"><head><meta charset="utf-8">'
       + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-      + '<title>Offline</title></head><body><main>'
-      + '<h1>You are offline</h1><p>This page could not be loaded and no '
-      + 'cached copy is available. Check your connection and try again.</p>'
-      + '</main></body></html>',
+      + '<title>Offline</title>'
+      + '<link rel="stylesheet" href="/static/css/common.css?v=__CACHE_VERSION__">'
+      + '<link rel="stylesheet" href="/static/css/components.css?v=__CACHE_VERSION__">'
+      + '<link rel="stylesheet" href="/static/css/public.css?v=__CACHE_VERSION__">'
+      + '</head><body><a class="skip-link" href="#main-content">Skip to content</a>'
+      + '<header class="header"><a class="site-brand" href="/">Search</a></header>'
+      + '<main id="main-content" class="container"><header class="page-header">'
+      + '<h1 id="offline-heading">Offline</h1></header>'
+      + '<section class="section-card" aria-labelledby="offline-heading">'
+      + '<p>You are offline. This page could not be loaded and no cached copy is available. Check your connection and try again.</p>'
+      + '<a href="/" class="btn btn-primary">Go home</a></section></main>'
+      + '<footer class="footer"><a href="/server/help">Help</a></footer></body></html>',
     { status: 503, statusText: 'Service Unavailable',
       headers: { 'Content-Type': 'text/html; charset=utf-8' } }
   );
+}
+
+// Bang searches are server-recognized redirects. Leave them to the browser so
+// the HTTP redirect is followed as a top-level navigation, never converted to
+// the offline fallback or stored in the page cache.
+function isPotentialBangNavigation(url) {
+  if (url.pathname !== '/search') return false;
+  const query = (url.searchParams.get('q') || '').trim();
+  return /(^|\s)![^\s]+/.test(query);
 }
 
 // FETCH - every response path resolves to a real Response
@@ -130,13 +161,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigations (page loads): return every HTTP response, including redirects
-  // and error pages. Only a network failure or timeout enters the offline
-  // fallback path; search bangs intentionally redirect off-site.
+  // The browser must see the server's direct bang redirect and follow it.
+  if (request.mode === 'navigate' && isPotentialBangNavigation(url)) {
+    return;
+  }
+
+  // Navigations (page loads): redirected responses are treated as network
+  // failures. Search bangs bypass interception above and follow their direct
+  // redirects in the browser.
   if (request.mode === 'navigate') {
     event.respondWith(
       withTimeout(fetch(request), NAV_TIMEOUT_MS)
         .then((response) => {
+          if (response.redirected || response.type === 'opaqueredirect') {
+            throw new Error('redirected navigation response');
+          }
           if (response.ok && !response.redirected && response.type !== 'opaqueredirect') {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
@@ -146,7 +185,7 @@ self.addEventListener('fetch', (event) => {
         .catch(async () =>
           (await caches.match(request))
             || (await caches.match('/offline.html'))
-            || offlineFallbackResponse()
+            || offlineFallbackResponse(request)
         )
     );
     return;

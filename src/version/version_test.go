@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGet(t *testing.T) {
@@ -19,6 +20,17 @@ func TestGet(t *testing.T) {
 	}
 	if info.GoVersion == "" {
 		t.Error("GoVersion should not be empty")
+	}
+}
+
+func TestHealthBuildDateFormat(t *testing.T) {
+	date := HealthBuildDate()
+	parsed, err := time.Parse(time.RFC3339, date)
+	if err != nil {
+		t.Fatalf("HealthBuildDate() = %q: %v", date, err)
+	}
+	if parsed.Location() != time.UTC || parsed.Nanosecond() != 0 || parsed.Format("2006-01-02T15:04:05Z") != date {
+		t.Fatalf("HealthBuildDate() = %q, want UTC whole-second RFC3339", date)
 	}
 }
 

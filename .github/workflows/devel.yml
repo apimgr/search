@@ -74,7 +74,7 @@ jobs:
       - name: Generate API specifications
         run: |
           go mod download
-          go run ./src/cmd/apigen
+          go run ./src/apigen
 
       - name: Set build info
         run: |
@@ -113,11 +113,11 @@ jobs:
         run: |
           go mod download
           CLI_LDFLAGS="-s -w \
-            -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECTNAME}' \
-            -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' \
-            -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' \
-            -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIAL_SITE}' \
+            -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
           go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client

@@ -3,6 +3,8 @@ package server
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -66,7 +68,11 @@ func (s *Server) metricsLokiHandler() http.Handler {
 			cutoff := time.Now().Add(-maxAge)
 
 			for _, name := range lokiSourceLogs {
-				values := readLokiEntries(filepath.Join(s.logManager.LogDir(), name), maxEntries, cutoff)
+				values, err := readLokiEntries(filepath.Join(s.logManager.LogDir(), name), maxEntries, cutoff)
+				if err != nil {
+					slog.Warn("failed to read log entries for Loki metrics", "log", name, "error", err)
+					continue
+				}
 				if len(values) == 0 {
 					continue
 				}
@@ -80,7 +86,9 @@ func (s *Server) metricsLokiHandler() http.Handler {
 			}
 		}
 
-		_ = json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			slog.Error("failed to encode Loki metrics response", "error", err)
+		}
 	})
 }
 
@@ -88,10 +96,13 @@ func (s *Server) metricsLokiHandler() http.Handler {
 // newer than cutoff, oldest first, as [ns-timestamp, line] pairs. A missing or
 // unreadable log file yields no entries rather than an error: the loki service
 // degrades gracefully like every other optional feature.
-func readLokiEntries(path string, maxEntries int, cutoff time.Time) [][2]string {
+func readLokiEntries(path string, maxEntries int, cutoff time.Time) ([][2]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer closeutil.Close(file)
 
@@ -118,11 +129,11 @@ func readLokiEntries(path string, maxEntries int, cutoff time.Time) [][2]string 
 		ring = append(ring, entry)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil
+		return nil, fmt.Errorf("scan %s: %w", path, err)
 	}
 
 	sort.SliceStable(ring, func(i, j int) bool { return ring[i][0] < ring[j][0] })
-	return ring
+	return ring, nil
 }
 
 // lokiEntryTime parses a structured log line's timestamp, falling back to the

@@ -36,6 +36,7 @@ import (
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
 	graphqlpkg "github.com/apimgr/search/src/graphql"
+	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/i2p"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/logging"
@@ -65,6 +66,8 @@ type Server struct {
 	redirectServer    *http.Server
 	pidFile           string
 	registry          *engine.Registry
+	healthRegistry    *health.Registry
+	healthRegistryMu  sync.RWMutex
 	aggregator        *search.Aggregator
 	startTime         time.Time
 	middleware        *Middleware
@@ -89,6 +92,11 @@ type Server struct {
 	dbManager         *database.DatabaseManager
 	alertManager      *alert.Manager
 	ownerManager      *owner.Manager
+	diskLowMu         sync.Mutex
+	diskLowState      map[string]diskLowState
+	databaseFailureMu sync.Mutex
+	databaseFailureSince time.Time
+	databaseFailureNotified bool
 	ownerFlashMu      sync.Mutex
 	ownerFlashes      map[string]ownerTokenFlash
 	contactSpamMu     sync.Mutex
@@ -121,6 +129,7 @@ type Server struct {
 	// Set at the top of Shutdown per AI.md PART 13: the server reports
 	// status "shutting_down" (503) once it begins draining.
 	shuttingDown atomic.Bool
+	shutdownReason atomic.Value
 }
 
 func sameDNSCredentials(oldValues map[string]string, oldKey string, newValues map[string]string, newKey string) bool {
@@ -328,6 +337,16 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	// Create bang manager
 	bangMgr := bang.NewManager()
+	bangMgr.SetEngineAvailability(func(engineID string) bool {
+		configured, err := registry.Get(engineID)
+		if err != nil || !configured.IsEnabled() {
+			return false
+		}
+		if health, ok := configured.(interface{ CanSearch(time.Time) bool }); ok && !health.CanSearch(time.Now()) {
+			return false
+		}
+		return true
+	})
 
 	// Set custom bangs from config
 	if len(cfg.Search.Bangs.Custom) > 0 {
@@ -476,9 +495,19 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	dbMgr, err = database.NewDatabaseManager(dbConfig)
 	if err != nil {
 		slog.Warn("Database initialization failed", "err", err)
+		if mailer != nil {
+			if notifyErr := mailer.SendDatabaseError(err, time.Now().UTC()); notifyErr != nil {
+				slog.Error("database error notification failed", "err", notifyErr)
+			}
+		}
 	} else {
 		if err := database.InitSchema(context.Background(), dbMgr); err != nil {
 			slog.Warn("Database schema initialization failed", "err", err)
+			if mailer != nil {
+				if notifyErr := mailer.SendDatabaseError(err, time.Now().UTC()); notifyErr != nil {
+					slog.Error("database error notification failed", "err", notifyErr)
+				}
+			}
 		} else {
 			slog.Info("Database schema initialized")
 			if serverDB := dbMgr.ServerDB(); serverDB != nil {
@@ -535,6 +564,11 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	metrics := NewMetrics(cfg)
 	if dbMgr != nil {
 		dbMgr.SetBusyObserver(metrics.RecordDBBusy)
+		if db := dbMgr.ServerDB(); db != nil {
+			if err := metrics.SetRequestStatsDB(context.Background(), db); err != nil {
+				slog.Error("failed to load persisted request statistics", "err", err)
+			}
+		}
 	}
 	apiHandler.SetHealthMetrics(metrics)
 	rl.SetMetrics(metrics)
@@ -641,6 +675,10 @@ func newServer(cfg *config.Config, providers []string) *Server {
 		cache: resultCache,
 		db:    serverDB,
 	}
+	s.rebuildHealthRegistry()
+	cfg.OnReload(func(*config.Config) {
+		s.rebuildHealthRegistry()
+	})
 	s.notifyManager = notify.NewManager(func() *config.Config { return s.config }, nil, nil)
 	s.middleware.SetNotificationManager(s.notifyManager)
 
@@ -1084,8 +1122,35 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	// Close database connections
 	if s.dbManager != nil {
+		if s.metrics != nil {
+			if err := s.metrics.PersistRequestStats(ctx); err != nil {
+				slog.Error("failed to persist request statistics during shutdown", "err", err)
+			}
+		}
 		if err := s.dbManager.Close(); err != nil {
 			slog.Error("Database close error", "err", err)
+		}
+	}
+
+	if s.mailer != nil {
+		reason := "signal"
+		if value := s.shutdownReason.Load(); value != nil {
+			if configured, ok := value.(string); ok && configured != "" {
+				reason = configured
+			}
+		}
+		hostname, _ := os.Hostname()
+		done := make(chan error, 1)
+		go func() {
+			done <- s.mailer.SendShutdown(hostname, config.Version, s.config.Server.Mode, reason)
+		}()
+		select {
+		case err := <-done:
+			if err != nil {
+				slog.Warn("shutdown notification email failed", "err", err)
+			}
+		case <-time.After(5 * time.Second):
+			slog.Warn("shutdown notification email timed out")
 		}
 	}
 
@@ -1102,6 +1167,74 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) UpdateConfig(cfg *config.Config) {
 	s.config = cfg
 	slog.Info("Server configuration updated")
+}
+
+// SetShutdownReason records the reason used by the graceful shutdown email.
+func (s *Server) SetShutdownReason(reason string) {
+	s.shutdownReason.Store(reason)
+}
+
+// NotifyStartup logs every successful startup and sends the optional lifecycle
+// email after the server is ready.
+func (s *Server) NotifyStartup(hostname string) {
+	slog.Info("Server started", "version", config.Version, "mode", s.config.Server.Mode)
+	if s.mailer != nil {
+		if err := s.mailer.SendStartup(hostname, config.Version, s.config.Server.Mode); err != nil {
+			slog.Error("startup notification email failed", "err", err)
+		}
+	}
+}
+
+func (s *Server) reportDatabaseStatus(err error) {
+	s.databaseFailureMu.Lock()
+	if err == nil {
+		s.databaseFailureSince = time.Time{}
+		s.databaseFailureNotified = false
+		s.databaseFailureMu.Unlock()
+		return
+	}
+	if s.databaseFailureSince.IsZero() {
+		s.databaseFailureSince = time.Now().UTC()
+	}
+	since := s.databaseFailureSince
+	shouldNotify := !s.databaseFailureNotified
+	if shouldNotify {
+		s.databaseFailureNotified = true
+	}
+	s.databaseFailureMu.Unlock()
+	if shouldNotify && s.mailer != nil {
+		if sendErr := s.mailer.SendDatabaseError(err, since); sendErr != nil {
+			slog.Error("database error notification failed", "err", sendErr)
+		}
+	}
+}
+
+// NotifyUpdateInstalled sends the operator record after a staged update has
+// successfully replaced the binary and the new process is ready.
+func (s *Server) NotifyUpdateInstalled(previousVersion, newVersion string) {
+	slog.Info("update installed", "previous_version", previousVersion, "new_version", newVersion)
+	if s.logManager != nil && s.logManager.Audit() != nil {
+		s.logManager.Audit().LogEvent(logging.AuditActionServerUpdated, logging.AuditCategorySystem, logging.AuditSeverityInfo, logging.AuditActor{Type: "system", Username: "system"}, nil, "success", map[string]interface{}{"previous_version": previousVersion, "new_version": newVersion}, "")
+	}
+	if s.mailer != nil {
+		if err := s.mailer.SendUpdateInstalled(previousVersion, newVersion); err != nil {
+			slog.Error("failed to send update-installed notification", "err", err)
+		}
+	}
+}
+
+// NotifyUpdateFailed records a failed staged update after startup has created
+// the audit logger and configured the notification mailer.
+func (s *Server) NotifyUpdateFailed(reason string) {
+	slog.Error("staged update failed", "reason", reason)
+	if s.logManager != nil && s.logManager.Audit() != nil {
+		s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", nil, reason)
+	}
+	if s.mailer != nil {
+		if err := s.mailer.SendSchedulerError("update_check", reason, ""); err != nil {
+			slog.Error("failed to send update-failed notification", "err", err)
+		}
+	}
 }
 
 // newPageData creates PageData with Tor status and theme automatically set

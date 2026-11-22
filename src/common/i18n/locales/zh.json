@@ -994,6 +994,18 @@
     "active_connections": "活动连接",
     "last_updated": "最后更新：",
     "auto_refresh_in": "自动刷新将在",
+    "mode_debug": "调试",
+    "unavailable": "不可用",
+    "shutting_down": "正在关闭",
+    "restart_required": "需要重启",
+    "section": {
+      "cluster": "集群",
+      "version": "版本",
+      "runtime": "运行时",
+      "features": "功能",
+      "checks": "组件状态",
+      "stats": "服务器统计"
+    },
     "components": {
       "database": "数据库",
       "cache": "缓存",
@@ -2169,7 +2181,8 @@
       "label_new_version": "新版本:",
       "label_release_date": "发布日期:",
       "label_release_notes": "发行说明:",
-      "label_view_update": "查看更新:"
+      "label_view_update": "查看更新:",
+      "manual_command": "手动更新命令：{command}"
     },
     "security_report": {
       "subject": "已收到安全报告：%s",

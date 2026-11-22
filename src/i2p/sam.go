@@ -134,6 +134,10 @@ func loadOrCreateSAMDestination(conn net.Conn, r *bufio.Reader, keysPath string,
 // streams to the dedicated backend port. Returns the .b32.i2p address.
 // Per AI.md PART 31.2 "SAM Session (Model B)".
 func startSAMEepsite(cfg *I2PConfig, keysPath string, i2pBackendPort int, svc *I2PService) (string, error) {
+	return startSAMEepsiteWithBuilding(cfg, keysPath, i2pBackendPort, svc, nil)
+}
+
+func startSAMEepsiteWithBuilding(cfg *I2PConfig, keysPath string, i2pBackendPort int, svc *I2PService, onBuilding func()) (string, error) {
 	conn, err := net.DialTimeout("tcp", cfg.SAMAddress, 5*time.Second)
 	if err != nil {
 		return "", fmt.Errorf("failed to dial SAM %s: %w", cfg.SAMAddress, err)
@@ -163,6 +167,9 @@ func startSAMEepsite(cfg *I2PConfig, keysPath string, i2pBackendPort int, svc *I
 	}
 
 	// 3. Create the STREAM session bound to that destination.
+	if onBuilding != nil {
+		onBuilding()
+	}
 	if _, err := fmt.Fprintf(conn, "SESSION CREATE STYLE=STREAM ID=site DESTINATION=%s "+
 		"inbound.length=%d outbound.length=%d inbound.quantity=%d outbound.quantity=%d\n",
 		dest.priv, cfg.InboundLength, cfg.OutboundLength, cfg.InboundQuantity, cfg.OutboundQuantity); err != nil {

@@ -3947,6 +3947,14 @@ body:has(.nav-checkbox:checked) {
     animation: toast-countdown linear forwards;
 }
 
+.toast-progress-5s {
+    animation-duration: 5s;
+}
+
+.toast-progress-paused {
+    animation-play-state: paused;
+}
+
 /* Pause-on-hover is pure CSS; app.js syncs the removal timer to match */
 .toast:hover .toast-progress {
     animation-play-state: paused;
@@ -6822,6 +6830,11 @@ body:has(.nav-checkbox:checked) {
 .component-ok .component-icon {
     background: var(--color-success-bg);
     color: var(--color-success);
+}
+
+.component-warning .component-icon {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
 }
 
 .component-error .component-icon {

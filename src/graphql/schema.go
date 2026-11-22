@@ -196,6 +196,10 @@ func initSchemaImpl() error {
 			"activeConns": &graphql.Field{Type: graphql.Int},
 		},
 	})
+	clusterInfoType := graphql.NewObject(graphql.ObjectConfig{
+		Name:   "HealthClusterInfo",
+		Fields: graphql.Fields{"enabled": &graphql.Field{Type: graphql.Boolean}},
+	})
 	healthResponseType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "HealthResponse",
 		Description: "Public server health response per AI.md PART 13",
@@ -210,6 +214,7 @@ func initSchemaImpl() error {
 			"uptime":         &graphql.Field{Type: graphql.String},
 			"mode":           &graphql.Field{Type: graphql.String},
 			"timestamp":      &graphql.Field{Type: graphql.String},
+			"cluster":        &graphql.Field{Type: clusterInfoType},
 			"features":       &graphql.Field{Type: featuresInfoType},
 			"checks":         &graphql.Field{Type: checksInfoType},
 			"stats":          &graphql.Field{Type: statsInfoType},
@@ -369,6 +374,8 @@ func initSchemaImpl() error {
 			"shortcut":    &graphql.Field{Type: graphql.String},
 			"name":        &graphql.Field{Type: graphql.String},
 			"url":         &graphql.Field{Type: graphql.String},
+			"engine":      &graphql.Field{Type: graphql.String},
+			"icon":        &graphql.Field{Type: graphql.String},
 			"category":    &graphql.Field{Type: graphql.String},
 			"description": &graphql.Field{Type: graphql.String},
 			"aliases":     &graphql.Field{Type: graphql.NewList(graphql.String)},

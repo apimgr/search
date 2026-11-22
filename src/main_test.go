@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"runtime"
 	"strings"
@@ -385,11 +386,12 @@ func resetFlagVars() {
 	flagBackup = ""
 	flagPID = ""
 	flagAddress = ""
-	flagPort = 0
+	flagPort = ""
 	flagBaseURL = ""
 	flagColor = ""
 	flagLang = ""
 	flagDebug = false
+	flagI2P = false
 }
 
 func TestApplyCliOverrides(t *testing.T) {
@@ -419,7 +421,7 @@ func TestApplyCliOverrides(t *testing.T) {
 	t.Run("port uses canonical environment variable", func(t *testing.T) {
 		defer saveEnvKeys("PORT")()
 		resetFlagVars()
-		flagPort = 8080
+		flagPort = "8080"
 		applyCliOverrides()
 		if got := os.Getenv("PORT"); got != "8080" {
 			t.Errorf("PORT = %q, want 8080", got)
@@ -474,4 +476,72 @@ func TestApplyCliOverrides(t *testing.T) {
 			t.Errorf("LANG = %q, want es", got)
 		}
 	})
+}
+
+func TestCommandHelpPreScan(t *testing.T) {
+	for _, command := range []string{"shell", "service", "maintenance", "update"} {
+		for _, help := range []string{"--help", "-h", "help"} {
+			got, ok := commandHelp([]string{"--" + command, help}, "shell", "service", "maintenance", "update")
+			if !ok || got != command {
+				t.Errorf("commandHelp(--%s %s) = (%q, %v), want (%q, true)", command, help, got, ok, command)
+			}
+		}
+	}
+	if _, ok := commandHelp([]string{"--service", "restart"}, "service"); ok {
+		t.Fatal("commandHelp(--service restart) unexpectedly matched help")
+	}
+}
+
+func TestEarlyPortConfigAcceptsDualPortFlag(t *testing.T) {
+	t.Setenv("PORT", "")
+	t.Setenv("LISTEN", "")
+	originalPort, originalAddress := flagPort, flagAddress
+	flagPort, flagAddress = "8080,8443", ""
+	t.Cleanup(func() { flagPort, flagAddress = originalPort, originalAddress })
+
+	cfg, err := earlyPortConfig()
+	if err != nil {
+		t.Fatalf("earlyPortConfig() error = %v", err)
+	}
+	if cfg.Server.Port != 8080 || cfg.Server.HTTPSPort != 8443 {
+		t.Fatalf("earlyPortConfig() ports = (%d, %d), want (8080, 8443)", cfg.Server.Port, cfg.Server.HTTPSPort)
+	}
+}
+
+func TestServerFlagsIncludeI2P(t *testing.T) {
+	if flag.Lookup("i2p") == nil {
+		t.Fatal("--i2p flag is not registered")
+	}
+}
+
+func TestI2PFlagOverridePrecedence(t *testing.T) {
+	t.Setenv("I2P_ENABLED", "configured")
+	if err := applyI2PFlagOverride(false, false); err != nil {
+		t.Fatalf("unset flag override: %v", err)
+	}
+	if got := os.Getenv("I2P_ENABLED"); got != "configured" {
+		t.Fatalf("unset --i2p changed I2P_ENABLED to %q", got)
+	}
+	if err := applyI2PFlagOverride(true, false); err != nil {
+		t.Fatalf("explicit false flag override: %v", err)
+	}
+	if got := os.Getenv("I2P_ENABLED"); got != "false" {
+		t.Fatalf("explicit --i2p=false set I2P_ENABLED to %q", got)
+	}
+}
+
+func TestCLIPathOverrideValidation(t *testing.T) {
+	originalData, originalPID := flagData, flagPID
+	t.Cleanup(func() { flagData, flagPID = originalData, originalPID })
+	flagData, flagPID = "/var/lib/search", ""
+	if err := validateCLIPathOverrides(); err != nil {
+		t.Fatalf("valid absolute path rejected: %v", err)
+	}
+	if flagData != "/var/lib/search" {
+		t.Fatalf("absolute path changed to %q", flagData)
+	}
+	flagData = "../outside"
+	if err := validateCLIPathOverrides(); err == nil {
+		t.Fatal("path traversal override was accepted")
+	}
 }

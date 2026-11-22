@@ -2,10 +2,37 @@ package service
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/search/src/config"
 )
+
+func TestSystemUserOwnershipMarker(t *testing.T) {
+	dir := t.TempDir()
+	config.SetConfigDirOverride(dir)
+	t.Cleanup(func() { config.SetConfigDirOverride("") })
+	if systemUserOwned("search") {
+		t.Fatal("system user is marked owned before creation")
+	}
+	if err := markSystemUserOwned("search"); err != nil {
+		t.Fatalf("markSystemUserOwned(): %v", err)
+	}
+	if !systemUserOwned("search") {
+		t.Fatal("created system user ownership marker not recognized")
+	}
+	if systemUserOwned("other") {
+		t.Fatal("ownership marker applies to a different account")
+	}
+	if err := clearSystemUserOwnership("search"); err != nil {
+		t.Fatalf("clearSystemUserOwnership(): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".service-account-created")); !os.IsNotExist(err) {
+		t.Fatalf("ownership marker still exists: %v", err)
+	}
+}
 
 func TestNewPrivilegeEscalator(t *testing.T) {
 	pe := NewPrivilegeEscalator()
@@ -15,11 +42,13 @@ func TestNewPrivilegeEscalator(t *testing.T) {
 
 	// Method should be one of the valid options
 	validMethods := map[string]bool{
-		"sudo":   true,
-		"doas":   true,
-		"pkexec": true,
-		"runas":  true,
-		"none":   true,
+		"sudo":      true,
+		"doas":      true,
+		"pkexec":    true,
+		"su":        true,
+		"osascript": true,
+		"runas":     true,
+		"none":      true,
 	}
 
 	if !validMethods[pe.Method()] {
@@ -853,7 +882,7 @@ func TestExecElevatedNoToolAvailable(t *testing.T) {
 	if err == nil {
 		t.Fatal("execElevated() should fail when no tool available")
 	}
-	if !strings.Contains(err.Error(), "no privilege escalation tool") {
-		t.Errorf("execElevated() error = %q, want 'no privilege escalation tool'", err)
+	if !strings.Contains(err.Error(), "no privilege escalation method available") {
+		t.Errorf("execElevated() error = %q, want 'no privilege escalation method available'", err)
 	}
 }

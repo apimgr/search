@@ -30,7 +30,14 @@ func FindAvailableSystemID() (int, error) {
 // CreateSystemUser creates a BSD system user for the service.
 // Per AI.md PART 24: System user creation logic.
 func CreateSystemUser(name string) (*SystemUser, error) {
-	return createFreeBSDSystemUser(name)
+	created, err := createFreeBSDSystemUser(name)
+	if err != nil || !created.Created {
+		return created, err
+	}
+	if err := markSystemUserOwned(name); err != nil {
+		return nil, err
+	}
+	return created, nil
 }
 
 // createFreeBSDSystemUser creates a FreeBSD/BSD system user via pw(8).
@@ -64,11 +71,12 @@ func createFreeBSDSystemUser(name string) (*SystemUser, error) {
 	}
 
 	return &SystemUser{
-		Name:  name,
-		UID:   id,
-		GID:   id,
-		Home:  "/var/lib/apimgr/" + name,
-		Shell: "/usr/sbin/nologin",
+		Name:    name,
+		UID:     id,
+		GID:     id,
+		Home:    "/var/lib/apimgr/" + name,
+		Shell:   "/usr/sbin/nologin",
+		Created: true,
 	}, nil
 }
 
@@ -76,6 +84,9 @@ func createFreeBSDSystemUser(name string) (*SystemUser, error) {
 // server. Per AI.md PART 23 uninstall: pw userdel/pw groupdel are the inverse
 // of the pw useradd creation commands.
 func DeleteSystemUser(name string) error {
+	if !systemUserOwned(name) {
+		return nil
+	}
 	if err := exec.Command("pw", "userdel", name, "-r").Run(); err != nil {
 		if _, lookErr := user.Lookup(name); lookErr != nil {
 			if _, grpErr := user.LookupGroup(name); grpErr != nil {
@@ -89,5 +100,5 @@ func DeleteSystemUser(name string) error {
 			return fmt.Errorf("failed to delete group: %w", err)
 		}
 	}
-	return nil
+	return clearSystemUserOwnership(name)
 }

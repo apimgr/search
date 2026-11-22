@@ -36,6 +36,7 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/geoip"
+	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/i2p"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/logging"
@@ -44,6 +45,7 @@ import (
 	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
+	searchbang "github.com/apimgr/search/src/search/bang"
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/version"
@@ -76,6 +78,7 @@ type HealthSnapshot struct {
 	PendingRestart bool
 	RestartReason  []string
 	Checks         ChecksInfo
+	StatsExtra     []health.Stat
 }
 
 type HealthProvider interface {
@@ -567,14 +570,28 @@ type HealthResponse struct {
 	// current UTC time ISO 8601
 	Timestamp string `json:"timestamp"`
 
-	// 5. Features - PUBLIC only (PARTS 20, 32)
+	// 5. Cluster state is always present, including single-instance deployments.
+	Cluster ClusterInfo `json:"cluster"`
+
+	// 6. Features - PUBLIC only (PARTS 20, 32)
 	Features FeaturesInfo `json:"features"`
 
-	// 6. Component health checks (per AI.md PART 13)
+	// 7. Component health checks (per AI.md PART 13)
 	Checks ChecksInfo `json:"checks"`
 
-	// 7. Statistics (public-safe aggregates)
+	// 8. Statistics (public-safe aggregates)
 	Stats StatsInfo `json:"stats"`
+}
+
+// MarshalJSON fixes API health output to the canonical PART 13 field order.
+func (health HealthResponse) MarshalJSON() ([]byte, error) {
+	type orderedHealth HealthResponse
+	return json.Marshal(orderedHealth(health))
+}
+
+// ClusterInfo reports whether this server participates in a cluster.
+type ClusterInfo struct {
+	Enabled bool `json:"enabled"`
 }
 
 // ProjectInfo represents project identification per AI.md PART 13
@@ -603,7 +620,21 @@ type StatsInfo struct {
 	// Requests in last 24 hours
 	Requests24h int64 `json:"requests_24h"`
 	// Current active connections
-	ActiveConns int `json:"active_connections"`
+	ActiveConns int           `json:"active_connections"`
+	Extra       []health.Stat `json:"-"`
+}
+
+func (stats StatsInfo) MarshalJSON() ([]byte, error) {
+	type ordered StatsInfo
+	base, err := json.Marshal(ordered(stats))
+	if err != nil {
+		return nil, err
+	}
+	fields := make([]health.Field, 0, len(stats.Extra))
+	for _, stat := range stats.Extra {
+		fields = append(fields, health.Field{Key: stat.Key, Value: stat.Value})
+	}
+	return health.AppendFields(base, fields)
 }
 
 // ChecksInfo represents component health per AI.md PART 13
@@ -619,7 +650,21 @@ type ChecksInfo struct {
 	// PART 31: "ok" or "error" (if enabled)
 	Tor string `json:"tor,omitempty"`
 	// PART 31.2: "ok" or "error" (if enabled)
-	I2P string `json:"i2p,omitempty"`
+	I2P   string         `json:"i2p,omitempty"`
+	Extra []health.Check `json:"-"`
+}
+
+func (checks ChecksInfo) MarshalJSON() ([]byte, error) {
+	type ordered ChecksInfo
+	base, err := json.Marshal(ordered(checks))
+	if err != nil {
+		return nil, err
+	}
+	fields := make([]health.Field, 0, len(checks.Extra))
+	for _, check := range checks.Extra {
+		fields = append(fields, health.Field{Key: check.Key, Value: check.Status})
+	}
+	return health.AppendFields(base, fields)
 }
 
 // FeaturesInfo represents PUBLIC feature status per AI.md PART 13.
@@ -653,6 +698,7 @@ type I2PInfo struct {
 	Running bool `json:"running"`
 	// "healthy", "disabled", "starting", "error"
 	Status string `json:"status"`
+	State  string `json:"state"`
 	// ".b32.i2p" eepsite address
 	Hostname string `json:"hostname"`
 	// "i2pd", "sam", or "none"
@@ -819,12 +865,12 @@ func formatHealthText(health HealthResponse) string {
 			fmt.Fprintf(&text, "restart_reason: %s\n", reason)
 		}
 	}
-	fmt.Fprintf(&text, "version: %s\ngo_version: %s\nbuild.commit: %s\nbuild.date: %s\nuptime: %s\nmode: %s\ntimestamp: %s\nfeatures.tor.enabled: %t\nfeatures.tor.running: %t\nfeatures.tor.status: %s\nfeatures.tor.hostname: %s\nfeatures.i2p.enabled: %t\nfeatures.i2p.running: %t\nfeatures.i2p.status: %s\nfeatures.i2p.hostname: %s\nfeatures.i2p.provider: %s\nfeatures.geoip: %t\nchecks.database: %s\nchecks.cache: %s\nchecks.disk: %s\nchecks.scheduler: %s\n",
+	fmt.Fprintf(&text, "version: %s\ngo_version: %s\nbuild.commit: %s\nbuild.date: %s\nuptime: %s\nmode: %s\ntimestamp: %s\ncluster.enabled: %t\nfeatures.tor: %s\nfeatures.i2p: %s\nfeatures.geoip: %s\nchecks.database: %s\nchecks.cache: %s\nchecks.disk: %s\nchecks.scheduler: %s\n",
 		health.Version, health.GoVersion, health.Build.Commit, health.Build.Date, health.Uptime,
-		health.Mode, health.Timestamp, health.Features.Tor.Enabled, health.Features.Tor.Running,
-		health.Features.Tor.Status, health.Features.Tor.Hostname, health.Features.I2P.Enabled,
-		health.Features.I2P.Running, health.Features.I2P.Status, health.Features.I2P.Hostname,
-		health.Features.I2P.Provider, health.Features.GeoIP, health.Checks.Database,
+		health.Mode, health.Timestamp, health.Cluster.Enabled,
+		healthFeatureText(health.Features.Tor.Status, health.Features.Tor.Hostname),
+		healthFeatureText(health.Features.I2P.Status, health.Features.I2P.Hostname),
+		map[bool]string{true: "enabled", false: "disabled"}[health.Features.GeoIP], health.Checks.Database,
 		health.Checks.Cache, health.Checks.Disk, health.Checks.Scheduler)
 	if health.Checks.Tor != "" {
 		fmt.Fprintf(&text, "checks.tor: %s\n", health.Checks.Tor)
@@ -832,8 +878,24 @@ func formatHealthText(health HealthResponse) string {
 	if health.Checks.I2P != "" {
 		fmt.Fprintf(&text, "checks.i2p: %s\n", health.Checks.I2P)
 	}
+	for _, check := range health.Checks.Extra {
+		fmt.Fprintf(&text, "checks.%s: %s\n", check.Key, check.Status)
+	}
 	fmt.Fprintf(&text, "stats.requests_total: %d\nstats.requests_24h: %d\nstats.active_connections: %d\n", health.Stats.RequestsTotal, health.Stats.Requests24h, health.Stats.ActiveConns)
+	for _, stat := range health.Stats.Extra {
+		fmt.Fprintf(&text, "stats.%s: %d\n", stat.Key, stat.Value)
+	}
 	return text.String()
+}
+
+func healthFeatureText(status, hostname string) string {
+	if status == "" {
+		status = "disabled"
+	}
+	if hostname != "" {
+		return status + " " + hostname
+	}
+	return status
 }
 
 // HealthForGraphQL returns the same public health payload as the REST endpoint.
@@ -845,40 +907,42 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 	// Tor status per AI.md PART 13 and PART 32
 	torEnabled := h.config.Server.Tor.Enabled
 	torRunning := false
-	torStatus := ""
+	torStatus := "disabled"
 	torHostname := ""
 	torCheck := ""
 
 	// Check actual Tor service status per AI.md PART 32
 	if torEnabled {
-		if h.torService != nil && h.torService.IsRunning() {
-			torRunning = true
-			torStatus = "healthy"
-			torHostname = h.torService.GetOnionAddress()
-			torCheck = "ok"
+		torState := health.TorState(true, h.torService != nil && h.torService.IsStarting(), h.torService != nil && h.torService.IsRunning(), func() string {
+			if h.torService != nil {
+				return h.torService.GetOnionAddress()
+			}
+			return ""
+		}())
+		torEnabled, torRunning, torStatus, torHostname = torState.Enabled, torState.Running, torState.Status, torState.Hostname
+		if torStatus == "unavailable" {
+			torCheck = "degraded"
 		} else {
-			torStatus = "unavailable"
-			torCheck = "unavailable"
+			torCheck = "ok"
 		}
 	}
 
 	// I2P status per AI.md PART 13 and PART 31.2
 	i2pInfo := I2PInfo{
-		Enabled:  h.config.Server.I2P.Enabled,
+		Enabled:  false,
 		Running:  false,
 		Status:   "disabled",
+		State:    "disabled",
 		Hostname: "",
-		Provider: "none",
+		Provider: "",
 	}
 	i2pCheck := ""
-	if h.config.Server.I2P.Enabled {
-		i2pInfo.Status = "error"
-		i2pCheck = "error"
-		if h.i2pManager != nil && h.i2pManager.IsRunning() {
-			i2pInfo.Running = true
-			i2pInfo.Status = "healthy"
-			i2pInfo.Hostname = h.i2pManager.EepsiteAddress()
-			i2pInfo.Provider = h.i2pManager.ProviderName()
+	if h.config.Server.I2P.Enabled && h.i2pManager != nil {
+		i2pState := health.I2PState(h.i2pManager.LifecycleState(), h.i2pManager.ProviderName(), h.i2pManager.EepsiteAddress())
+		i2pInfo = I2PInfo{Enabled: i2pState.Enabled, Running: i2pState.Running, Status: i2pState.Status, State: i2pState.State, Hostname: i2pState.Hostname, Provider: i2pState.Provider}
+		if i2pInfo.Enabled && i2pInfo.Status == "unavailable" {
+			i2pCheck = "degraded"
+		} else if i2pInfo.Enabled {
 			i2pCheck = "ok"
 		}
 	}
@@ -906,13 +970,14 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 		GoVersion: runtime.Version(),
 		Build: BuildInfo{
 			Commit: config.CommitID,
-			Date:   config.BuildDate,
+			Date:   version.HealthBuildDate(),
 		},
 		// 4. Runtime
 		Uptime:    h.formatDuration(time.Since(h.startTime)),
 		Mode:      h.config.Server.Mode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		// 5. Features per AI.md PART 13
+		Cluster:   ClusterInfo{Enabled: false},
+		// 6. Features per AI.md PART 13
 		Features: FeaturesInfo{
 			Tor: TorInfo{
 				Enabled:  torEnabled,
@@ -923,7 +988,7 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 			I2P:   i2pInfo,
 			GeoIP: h.config.Server.GeoIP.Enabled,
 		},
-		// 6. Checks per AI.md PART 13
+		// 7. Checks per AI.md PART 13
 		Checks: ChecksInfo{
 			Database:  "ok",
 			Cache:     h.checkCacheHealth(),
@@ -932,7 +997,7 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 			Tor:       torCheck,
 			I2P:       i2pCheck,
 		},
-		// 7. Stats
+		// 8. Stats
 		Stats: StatsInfo{
 			RequestsTotal: h.getRequestsTotal(),
 			Requests24h:   h.getRequests24h(),
@@ -946,10 +1011,22 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 		health.PendingRestart = snapshot.PendingRestart
 		health.RestartReason = snapshot.RestartReason
 		health.Checks = snapshot.Checks
-	} else if health.Status != "maintenance" && h.config.PendingRestart() {
-		health.Status = "restart_required"
-		health.PendingRestart = true
-		health.RestartReason = h.config.RestartSettings()
+		health.Stats.Extra = append(health.Stats.Extra[:0], snapshot.StatsExtra...)
+	} else {
+		switch {
+		case h.config.Server.MaintenanceMode:
+			health.Status = "maintenance"
+		case health.Checks.Database == "error" || health.Checks.Disk == "error" || health.Checks.Scheduler == "error":
+			health.Status = "unhealthy"
+		case health.Checks.Cache == "error" || health.Checks.Tor == "degraded" || health.Checks.I2P == "degraded":
+			health.Status = "degraded"
+		case h.config.PendingRestart():
+			health.Status = "restart_required"
+			health.PendingRestart = true
+			health.RestartReason = h.config.RestartSettings()
+		default:
+			health.Status = "healthy"
+		}
 	}
 
 	return health
@@ -1618,17 +1695,23 @@ func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, deta
 }
 
 func (h *Handler) formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	}
 	days := int(d.Hours()) / 24
 	hours := int(d.Hours()) % 24
 	minutes := int(d.Minutes()) % 60
-
+	var parts []string
 	if days > 0 {
-		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+		parts = append(parts, fmt.Sprintf("%dd", days))
 	}
 	if hours > 0 {
-		return fmt.Sprintf("%dh %dm", hours, minutes)
+		parts = append(parts, fmt.Sprintf("%dh", hours))
 	}
-	return fmt.Sprintf("%dm", minutes)
+	if minutes > 0 {
+		parts = append(parts, fmt.Sprintf("%dm", minutes))
+	}
+	return strings.Join(parts, " ")
 }
 
 func (h *Handler) formatBytes(b uint64) string {
@@ -1702,9 +1785,12 @@ func (h *Handler) getRequests24h() int64 {
 // getActiveConnections returns the current number of active connections.
 func (h *Handler) getActiveConnections() int {
 	if h.healthMetrics == nil {
-		return 0
+		return 1
 	}
-	return int(h.healthMetrics.GetActiveConnections())
+	if active := int(h.healthMetrics.GetActiveConnections()); active > 0 {
+		return active
+	}
+	return 1
 }
 
 func extractDomain(urlStr string) string {
@@ -1726,9 +1812,11 @@ func getHostname() (string, error) {
 type BangInfo struct {
 	Shortcut    string   `json:"shortcut"`
 	Name        string   `json:"name"`
-	URL         string   `json:"url"`
+	URL         string   `json:"url,omitempty"`
+	Engine      string   `json:"engine,omitempty"`
 	Category    string   `json:"category"`
 	Description string   `json:"description,omitempty"`
+	Icon        string   `json:"icon,omitempty"`
 	Aliases     []string `json:"aliases,omitempty"`
 }
 
@@ -1736,7 +1824,7 @@ func (h *Handler) handleBangs(w http.ResponseWriter, r *http.Request) {
 	// Return built-in bangs list
 	// Custom bangs are stored client-side in localStorage
 
-	bangs := getBuiltinBangs()
+	bangs := h.AvailableBangs()
 
 	// Filter by category if specified
 	category := r.URL.Query().Get("category")
@@ -1783,82 +1871,49 @@ func (h *Handler) handleBangs(w http.ResponseWriter, r *http.Request) {
 // AvailableBangs returns the same built-in bang catalog exposed by the REST API.
 func AvailableBangs() []BangInfo { return getBuiltinBangs() }
 
-func getBuiltinBangs() []BangInfo {
-	return []BangInfo{
-		// General Search Engines
-		{Shortcut: "g", Name: "Google", URL: "https://www.google.com/search?q={query}", Category: "general", Description: "Google Search", Aliases: []string{"google"}},
-		{Shortcut: "ddg", Name: "DuckDuckGo", URL: "https://duckduckgo.com/?q={query}", Category: "general", Description: "DuckDuckGo Search", Aliases: []string{"duckduckgo", "duck"}},
-		{Shortcut: "b", Name: "Bing", URL: "https://www.bing.com/search?q={query}", Category: "general", Description: "Bing Search", Aliases: []string{"bing"}},
-		{Shortcut: "sp", Name: "Startpage", URL: "https://www.startpage.com/do/search?q={query}", Category: "general", Description: "Startpage Search", Aliases: []string{"startpage"}},
-		{Shortcut: "q", Name: "Qwant", URL: "https://www.qwant.com/?q={query}", Category: "general", Description: "Qwant Search", Aliases: []string{"qwant"}},
-		{Shortcut: "ec", Name: "Ecosia", URL: "https://www.ecosia.org/search?q={query}", Category: "general", Description: "Ecosia Search", Aliases: []string{"ecosia"}},
-		{Shortcut: "br", Name: "Brave Search", URL: "https://search.brave.com/search?q={query}", Category: "general", Description: "Brave Search", Aliases: []string{"brave"}},
-
-		// Images
-		{Shortcut: "gi", Name: "Google Images", URL: "https://www.google.com/search?tbm=isch&q={query}", Category: "images", Description: "Google Image Search", Aliases: []string{"gimg"}},
-		{Shortcut: "bi", Name: "Bing Images", URL: "https://www.bing.com/images/search?q={query}", Category: "images", Description: "Bing Image Search"},
-		{Shortcut: "us", Name: "Unsplash", URL: "https://unsplash.com/s/photos/{query}", Category: "images", Description: "Unsplash Free Photos", Aliases: []string{"unsplash"}},
-
-		// Video
-		{Shortcut: "yt", Name: "YouTube", URL: "https://www.youtube.com/results?search_query={query}", Category: "video", Description: "YouTube Video Search", Aliases: []string{"youtube"}},
-		{Shortcut: "v", Name: "Vimeo", URL: "https://vimeo.com/search?q={query}", Category: "video", Description: "Vimeo Video Search", Aliases: []string{"vimeo"}},
-		{Shortcut: "od", Name: "Odysee", URL: "https://odysee.com/$/search?q={query}", Category: "video", Description: "Odysee Video Search", Aliases: []string{"odysee", "lbry"}},
-
-		// Maps
-		{Shortcut: "gm", Name: "Google Maps", URL: "https://www.google.com/maps/search/{query}", Category: "maps", Description: "Google Maps", Aliases: []string{"gmaps"}},
-		{Shortcut: "osm", Name: "OpenStreetMap", URL: "https://www.openstreetmap.org/search?query={query}", Category: "maps", Description: "OpenStreetMap", Aliases: []string{"openstreetmap"}},
-
-		// News
-		{Shortcut: "gn", Name: "Google News", URL: "https://news.google.com/search?q={query}", Category: "news", Description: "Google News", Aliases: []string{"gnews"}},
-
-		// Knowledge
-		{Shortcut: "w", Name: "Wikipedia", URL: "https://en.wikipedia.org/wiki/Special:Search?search={query}", Category: "knowledge", Description: "Wikipedia", Aliases: []string{"wiki", "wikipedia"}},
-		{Shortcut: "wa", Name: "Wolfram Alpha", URL: "https://www.wolframalpha.com/input/?i={query}", Category: "knowledge", Description: "Wolfram Alpha", Aliases: []string{"wolfram"}},
-
-		// Social
-		{Shortcut: "tw", Name: "Twitter/X", URL: "https://twitter.com/search?q={query}", Category: "social", Description: "Twitter/X Search", Aliases: []string{"twitter", "x"}},
-		{Shortcut: "rd", Name: "Reddit", URL: "https://www.reddit.com/search/?q={query}", Category: "social", Description: "Reddit Search", Aliases: []string{"reddit"}},
-		{Shortcut: "hn", Name: "Hacker News", URL: "https://hn.algolia.com/?q={query}", Category: "social", Description: "Hacker News Search", Aliases: []string{"hackernews"}},
-
-		// Code
-		{Shortcut: "gh", Name: "GitHub", URL: "https://github.com/search?q={query}", Category: "code", Description: "GitHub Code Search", Aliases: []string{"github"}},
-		{Shortcut: "gl", Name: "GitLab", URL: "https://gitlab.com/search?search={query}", Category: "code", Description: "GitLab Search", Aliases: []string{"gitlab"}},
-		{Shortcut: "so", Name: "Stack Overflow", URL: "https://stackoverflow.com/search?q={query}", Category: "code", Description: "Stack Overflow Q&A", Aliases: []string{"stackoverflow"}},
-		{Shortcut: "npm", Name: "npm", URL: "https://www.npmjs.com/search?q={query}", Category: "code", Description: "npm Package Registry"},
-		{Shortcut: "pypi", Name: "PyPI", URL: "https://pypi.org/search/?q={query}", Category: "code", Description: "Python Package Index", Aliases: []string{"pip"}},
-		{Shortcut: "gopkg", Name: "Go Packages", URL: "https://pkg.go.dev/search?q={query}", Category: "code", Description: "Go Package Documentation", Aliases: []string{"go", "golang"}},
-		{Shortcut: "docker", Name: "Docker Hub", URL: "https://hub.docker.com/search?q={query}", Category: "code", Description: "Docker Hub Images", Aliases: []string{"dockerhub"}},
-		{Shortcut: "mdn", Name: "MDN Web Docs", URL: "https://developer.mozilla.org/en-US/search?q={query}", Category: "code", Description: "Mozilla Developer Network"},
-
-		// Shopping
-		{Shortcut: "az", Name: "Amazon", URL: "https://www.amazon.com/s?k={query}", Category: "shopping", Description: "Amazon Shopping", Aliases: []string{"amazon"}},
-		{Shortcut: "eb", Name: "eBay", URL: "https://www.ebay.com/sch/i.html?_nkw={query}", Category: "shopping", Description: "eBay Shopping", Aliases: []string{"ebay"}},
-
-		// Files
-		{Shortcut: "archive", Name: "Internet Archive", URL: "https://archive.org/search.php?query={query}", Category: "files", Description: "Internet Archive", Aliases: []string{"ia"}},
-
-		// Music
-		{Shortcut: "spot", Name: "Spotify", URL: "https://open.spotify.com/search/{query}", Category: "music", Description: "Spotify Music", Aliases: []string{"spotify"}},
-		{Shortcut: "sc", Name: "SoundCloud", URL: "https://soundcloud.com/search?q={query}", Category: "music", Description: "SoundCloud Music", Aliases: []string{"soundcloud"}},
-		{Shortcut: "lyrics", Name: "Genius Lyrics", URL: "https://genius.com/search?q={query}", Category: "music", Description: "Genius Song Lyrics", Aliases: []string{"genius"}},
-
-		// Science
-		{Shortcut: "scholar", Name: "Google Scholar", URL: "https://scholar.google.com/scholar?q={query}", Category: "science", Description: "Google Scholar Academic", Aliases: []string{"gs"}},
-		{Shortcut: "arxiv", Name: "arXiv", URL: "https://arxiv.org/search/?query={query}", Category: "science", Description: "arXiv Preprints"},
-		{Shortcut: "pubmed", Name: "PubMed", URL: "https://pubmed.ncbi.nlm.nih.gov/?term={query}", Category: "science", Description: "PubMed Medical Research"},
-
-		// Translation
-		{Shortcut: "gt", Name: "Google Translate", URL: "https://translate.google.com/?sl=auto&tl=en&text={query}", Category: "translate", Description: "Google Translate", Aliases: []string{"translate"}},
-		{Shortcut: "deepl", Name: "DeepL", URL: "https://www.deepl.com/translator#auto/en/{query}", Category: "translate", Description: "DeepL Translator"},
-		{Shortcut: "ud", Name: "Urban Dictionary", URL: "https://www.urbandictionary.com/define.php?term={query}", Category: "translate", Description: "Urban Dictionary Slang", Aliases: []string{"urban"}},
-
-		// Privacy
-		{Shortcut: "wbm", Name: "Wayback Machine", URL: "https://web.archive.org/web/*/{query}", Category: "privacy", Description: "Internet Archive Wayback Machine", Aliases: []string{"wayback"}},
-
-		// Misc
-		{Shortcut: "imdb", Name: "IMDb", URL: "https://www.imdb.com/find?q={query}", Category: "misc", Description: "Internet Movie Database"},
-		{Shortcut: "goodreads", Name: "Goodreads", URL: "https://www.goodreads.com/search?q={query}", Category: "misc", Description: "Goodreads Books", Aliases: []string{"gr"}},
+// AvailableBangs returns built-in bangs whose mapped local engines can serve searches.
+func (h *Handler) AvailableBangs() []BangInfo {
+	all := getBuiltinBangs()
+	available := make([]BangInfo, 0, len(all))
+	for _, item := range all {
+		if item.Engine != "" && !h.localEngineAvailable(item.Engine) {
+			continue
+		}
+		available = append(available, item)
 	}
+	return available
+}
+
+func (h *Handler) localEngineAvailable(name string) bool {
+	if h == nil || h.registry == nil {
+		return false
+	}
+	configured, err := h.registry.Get(name)
+	if err != nil || !configured.IsEnabled() {
+		return false
+	}
+	if health, ok := configured.(interface{ CanSearch(time.Time) bool }); ok && !health.CanSearch(time.Now()) {
+		return false
+	}
+	return true
+}
+
+func getBuiltinBangs() []BangInfo {
+	definitions := searchbang.Builtins()
+	bangs := make([]BangInfo, 0, len(definitions))
+	for _, item := range definitions {
+		bangs = append(bangs, BangInfo{
+			Shortcut:    item.Shortcut,
+			Name:        item.Name,
+			URL:         item.URL,
+			Engine:      item.Engine,
+			Category:    item.Category,
+			Description: item.Description,
+			Icon:        item.Icon,
+			Aliases:     append([]string(nil), item.Aliases...),
+		})
+	}
+	return bangs
 }
 
 // InstantAnswerResponse represents instant answer API response
@@ -3385,7 +3440,11 @@ func (h *Handler) serverConfigData() map[string]interface{} {
 
 func (h *Handler) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		authStarted := time.Now()
 		if err := h.operatorAuthError(r); err != nil {
+			if delay := 100*time.Millisecond - time.Since(authStarted); delay > 0 {
+				time.Sleep(delay)
+			}
 			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
 			h.errorResponse(w, http.StatusUnauthorized, "Invalid credentials", "")
 			return

@@ -1,13 +1,23 @@
 package email
 
 import (
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"html"
 	"log/slog"
+	"mime"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net"
+	"net/mail"
+	"net/netip"
 	"net/smtp"
+	"net/textproto"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,7 +39,10 @@ var (
 	// netInterfaces allows tests to mock net.Interfaces
 	netInterfaces = net.Interfaces
 	// tlsDialWithDialer allows tests to mock tls.DialWithDialer
-	tlsDialWithDialer = tls.DialWithDialer
+	tlsDialWithDialer  = tls.DialWithDialer
+	credentialPattern  = regexp.MustCompile(`(?i)(password|passwd|token|secret|api[_-]?key)=([^&\s]+)`)
+	urlUserInfoPattern = regexp.MustCompile(`://[^/@\s]+@`)
+	bearerPattern      = regexp.MustCompile(`(?i)Bearer\s+[^\s,;]+`)
 )
 
 // Config holds email configuration
@@ -134,6 +147,9 @@ func NewMailerFromConfig(cfg *config.Config) (*Mailer, bool) {
 	if cfg == nil || cfg.Server.Notifications.Email.SMTP.Host == "" {
 		return nil, false
 	}
+	if smtpHostIsPrivateIP(cfg.Server.Notifications.Email.SMTP.Host) {
+		slog.Info("SMTP host is a private address: TLS certificate verification skipped", "host", cfg.Server.Notifications.Email.SMTP.Host)
+	}
 
 	fromEmail := cfg.Server.Notifications.Email.From.Email
 	if fromEmail == "" {
@@ -223,6 +239,9 @@ func (ml *Mailer) Send(msg *Message) error {
 	if !ml.config.Enabled {
 		return fmt.Errorf("email is not enabled")
 	}
+	if msg == nil {
+		return fmt.Errorf("email message is required")
+	}
 
 	if len(msg.To) == 0 {
 		return fmt.Errorf("no recipients specified")
@@ -244,17 +263,130 @@ func (ml *Mailer) SendNow(msg *Message) error {
 		return fmt.Errorf("email is not enabled")
 	}
 
+	if msg == nil {
+		return fmt.Errorf("email message is required")
+	}
 	if len(msg.To) == 0 {
 		return fmt.Errorf("no recipients specified")
 	}
 
-	// Build email headers
-	headers := make(map[string]string)
-	headers["From"] = ml.formatAddress(ml.config.From.Name, ml.config.From.Email)
-	headers["To"] = strings.Join(msg.To, ", ")
-	headers["Subject"] = ml.encodeHeader(msg.Subject)
-	headers["Date"] = time.Now().Format(time.RFC1123Z)
-	headers["MIME-Version"] = "1.0"
+	if err := validateHeaderValue("subject", msg.Subject); err != nil {
+		return err
+	}
+	if strings.TrimSpace(msg.Subject) == "" {
+		return fmt.Errorf("email subject is required")
+	}
+	if err := validateMailbox("from address", ml.config.From.Email); err != nil {
+		return err
+	}
+	if err := validateHeaderValue("from name", ml.config.From.Name); err != nil {
+		return err
+	}
+	if ml.config.ReplyTo != "" {
+		if err := validateMailbox("reply-to address", ml.config.ReplyTo); err != nil {
+			return err
+		}
+	}
+	for _, recipient := range append(append(append([]string{}, msg.To...), msg.CC...), msg.BCC...) {
+		if err := validateMailbox("recipient", recipient); err != nil {
+			return err
+		}
+	}
+	if msg.Body == "" {
+		return fmt.Errorf("plain-text email body is required")
+	}
+
+	// Deliver a separate message per recipient so no recipient sees another
+	// recipient in To, Cc, or Bcc.
+	recipients := uniqueRecipients(msg.To, msg.CC, msg.BCC)
+	for _, recipient := range recipients {
+		raw, err := ml.buildRawMessage(msg, recipient)
+		if err != nil {
+			return err
+		}
+		if err := ml.sendMail([]string{recipient}, raw); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func uniqueRecipients(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	var recipients []string
+	for _, group := range groups {
+		for _, address := range group {
+			key := strings.ToLower(address)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			recipients = append(recipients, address)
+		}
+	}
+	return recipients
+}
+
+func (ml *Mailer) buildRawMessage(msg *Message, recipient string) ([]byte, error) {
+	messageID, err := newMessageID(ml.config.FQDN)
+	if err != nil {
+		return nil, fmt.Errorf("generate message ID: %w", err)
+	}
+	var body strings.Builder
+	writer := multipart.NewWriter(&body)
+	plainHeader := make(textproto.MIMEHeader)
+	plainHeader.Set("Content-Type", `text/plain; charset=UTF-8`)
+	plainHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+	plainPart, err := writer.CreatePart(plainHeader)
+	if err != nil {
+		return nil, fmt.Errorf("create plain-text email part: %w", err)
+	}
+	qp := quotedprintable.NewWriter(plainPart)
+	if _, err := qp.Write([]byte(msg.Body)); err != nil {
+		return nil, fmt.Errorf("encode plain-text email part: %w", err)
+	}
+	if err := qp.Close(); err != nil {
+		return nil, fmt.Errorf("finish plain-text email part: %w", err)
+	}
+	htmlBody := msg.HTMLBody
+	if htmlBody == "" {
+		htmlBody = "<pre>" + html.EscapeString(msg.Body) + "</pre>"
+	}
+	htmlHeader := make(textproto.MIMEHeader)
+	htmlHeader.Set("Content-Type", `text/html; charset=UTF-8`)
+	htmlHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+	htmlPart, err := writer.CreatePart(htmlHeader)
+	if err != nil {
+		return nil, fmt.Errorf("create HTML email part: %w", err)
+	}
+	qp = quotedprintable.NewWriter(htmlPart)
+	if _, err := qp.Write([]byte(htmlBody)); err != nil {
+		return nil, fmt.Errorf("encode HTML email part: %w", err)
+	}
+	if err := qp.Close(); err != nil {
+		return nil, fmt.Errorf("finish HTML email part: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("finish multipart email: %w", err)
+	}
+
+	fromName := mime.QEncoding.Encode("UTF-8", ml.config.From.Name)
+	from := ml.config.From.Email
+	if ml.config.From.Name != "" {
+		from = fromName + " <" + from + ">"
+	}
+	boundary := writer.Boundary()
+	date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 -0700")
+	headers := map[string]string{
+		"From":           from,
+		"To":             recipient,
+		"Subject":        mime.QEncoding.Encode("UTF-8", msg.Subject),
+		"Date":           date,
+		"Message-ID":     messageID,
+		"MIME-Version":   "1.0",
+		"Auto-Submitted": "auto-generated",
+		"Content-Type":   `multipart/alternative; boundary="` + boundary + `"`,
+	}
 
 	// Per AI.md PART 17 "Default Sender": Reply-To is included only when
 	// server.notifications.email.reply_to is set, otherwise omitted.
@@ -262,41 +394,76 @@ func (ml *Mailer) SendNow(msg *Message) error {
 		headers["Reply-To"] = ml.config.ReplyTo
 	}
 
-	if len(msg.CC) > 0 {
-		headers["Cc"] = strings.Join(msg.CC, ", ")
-	}
-
 	// Merge custom headers
-	for k, v := range msg.Headers {
-		headers[k] = v
+	for key, value := range msg.Headers {
+		if err := validateHeaderName(key); err != nil {
+			return nil, err
+		}
+		if err := validateHeaderValue(key, value); err != nil {
+			return nil, err
+		}
+		switch strings.ToLower(key) {
+		case "from", "to", "cc", "bcc", "subject", "date", "message-id", "mime-version", "auto-submitted", "content-type", "content-transfer-encoding":
+			return nil, fmt.Errorf("custom header %q may not replace a required email header", key)
+		}
+		headers[key] = value
 	}
-
-	// Build message body
-	var body string
-	if msg.HTMLBody != "" {
-		headers["Content-Type"] = "text/html; charset=UTF-8"
-		body = msg.HTMLBody
-	} else {
-		headers["Content-Type"] = "text/plain; charset=UTF-8"
-		body = msg.Body
-	}
-	headers["Content-Transfer-Encoding"] = "base64"
 
 	// Build raw message
 	var rawMsg strings.Builder
 	for k, v := range headers {
+		if len(k)+2+len(v) > 998 {
+			return nil, fmt.Errorf("email header %q exceeds 998 octets", k)
+		}
 		fmt.Fprintf(&rawMsg, "%s: %s\r\n", k, v)
 	}
 	rawMsg.WriteString("\r\n")
-	rawMsg.WriteString(base64.StdEncoding.EncodeToString([]byte(body)))
+	rawMsg.WriteString(body.String())
+	return []byte(rawMsg.String()), nil
+}
 
-	// Get all recipients
-	recipients := append([]string{}, msg.To...)
-	recipients = append(recipients, msg.CC...)
-	recipients = append(recipients, msg.BCC...)
+func validateHeaderValue(name, value string) error {
+	if strings.ContainsAny(value, "\r\n") {
+		return fmt.Errorf("email %s contains a forbidden line break", name)
+	}
+	return nil
+}
 
-	// Send email
-	return ml.sendMail(recipients, []byte(rawMsg.String()))
+func validateHeaderName(name string) error {
+	if name == "" {
+		return fmt.Errorf("email header name is empty")
+	}
+	for _, r := range name {
+		asciiLetter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+		asciiDigit := r >= '0' && r <= '9'
+		if !asciiLetter && !asciiDigit && !strings.ContainsRune("!#$%&'*+-.^_`|~", r) {
+			return fmt.Errorf("invalid email header name %q", name)
+		}
+	}
+	return nil
+}
+
+func validateMailbox(label, value string) error {
+	if err := validateHeaderValue(label, value); err != nil {
+		return err
+	}
+	parsed, err := mail.ParseAddress(value)
+	if err != nil || parsed.Address != value {
+		return fmt.Errorf("invalid %s", label)
+	}
+	return nil
+}
+
+func newMessageID(fqdn string) (string, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	domain := fqdn
+	if domain == "" || strings.ContainsAny(domain, " \r\n<>@") {
+		domain = "localhost"
+	}
+	return "<" + hex.EncodeToString(random[:]) + "@" + domain + ">", nil
 }
 
 // sendMail sends the raw email
@@ -309,14 +476,13 @@ func (ml *Mailer) sendMail(recipients []string, message []byte) error {
 
 	// Per AI.md PART 18: TLS mode handling
 	tlsMode := strings.ToLower(ml.config.SMTP.TLS)
-	useTLS := tlsMode == "tls"
-	useSTARTTLS := tlsMode == "starttls" || tlsMode == "auto"
+	useTLS := tlsMode == "tls" || tlsMode == "auto" && ml.config.SMTP.Port == 465
+	useSTARTTLS := tlsMode == "starttls" || tlsMode == "auto" && !useTLS
+	tlsEstablished := useTLS
 
 	if useTLS {
 		// Direct TLS connection
-		tlsConfig := &tls.Config{
-			ServerName: ml.config.SMTP.Host,
-		}
+		tlsConfig := smtpTLSConfig(ml.config.SMTP.Host)
 		conn, err = tlsDial("tcp", addr, tlsConfig)
 	} else {
 		conn, err = netDialTimeout("tcp", addr, 30*time.Second)
@@ -340,17 +506,21 @@ func (ml *Mailer) sendMail(recipients []string, message []byte) error {
 	// STARTTLS if enabled and not already using TLS
 	if useSTARTTLS && !useTLS {
 		if ok, _ := client.Extension("STARTTLS"); ok {
-			tlsConfig := &tls.Config{
-				ServerName: ml.config.SMTP.Host,
-			}
+			tlsConfig := smtpTLSConfig(ml.config.SMTP.Host)
 			if err := client.StartTLS(tlsConfig); err != nil {
 				return fmt.Errorf("failed to start TLS: %w", err)
 			}
+			tlsEstablished = true
+		} else if tlsMode == "starttls" {
+			return fmt.Errorf("SMTP server does not offer required STARTTLS")
 		}
 	}
 
 	// Authenticate if credentials provided
 	if ml.config.SMTP.Username != "" && ml.config.SMTP.Password != "" {
+		if tlsMode == "auto" && !tlsEstablished {
+			return fmt.Errorf("SMTP credentials require TLS, but the server did not offer it")
+		}
 		auth := smtp.PlainAuth("", ml.config.SMTP.Username, ml.config.SMTP.Password, ml.config.SMTP.Host)
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("failed to authenticate: %w", err)
@@ -384,6 +554,23 @@ func (ml *Mailer) sendMail(recipients []string, message []byte) error {
 	}
 
 	return client.Quit()
+}
+
+func smtpTLSConfig(host string) *tls.Config {
+	config := &tls.Config{ServerName: host}
+	if smtpHostIsPrivateIP(host) {
+		config.InsecureSkipVerify = true
+	}
+	return config
+}
+
+func smtpHostIsPrivateIP(host string) bool {
+	address, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	carrierGrade := netip.MustParsePrefix("100.64.0.0/10")
+	return address.IsPrivate() || address.IsLoopback() || address.IsLinkLocalUnicast() || address.Is4() && carrierGrade.Contains(address)
 }
 
 // formatAddress formats an email address with name
@@ -512,7 +699,7 @@ func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
 // notification. Per AI.md PART 30 "Email Template Translation": translated
 // strings are resolved server-side via i18n.T before being passed as plain
 // {variable} values.
-func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, releaseNotes, updateURL string) error {
+func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, releaseNotes, updateURL string, manualCommand ...string) error {
 	if !ml.CanSend() || !ml.config.Events.UpdateAvailable {
 		return nil
 	}
@@ -523,6 +710,10 @@ func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, r
 	vars["release_date"] = releaseDate
 	vars["release_notes"] = releaseNotes
 	vars["update_url"] = updateURL
+	vars["manual_update_command"] = ""
+	if len(manualCommand) > 0 && strings.TrimSpace(manualCommand[0]) != "" {
+		vars["manual_update_command"] = i18n.Tf(lang, "email.update_available.manual_command", "command", manualCommand[0])
+	}
 	vars["subject_prefix"] = i18n.T(lang, "email.update_available.subject_prefix")
 	vars["heading"] = i18n.T(lang, "email.update_available.heading")
 	vars["intro"] = i18n.T(lang, "email.update_available.intro", vars["app_name"])
@@ -556,6 +747,81 @@ func (ml *Mailer) SendUpdateInstalled(previousVersion, newVersion string) error 
 		return err
 	}
 	return ml.SendToAdmins(subject, body)
+}
+
+// SendStartup sends the optional lifecycle notification after the listener is
+// ready and the process has completed its privilege drop.
+func (ml *Mailer) SendStartup(hostname, version, mode string) error {
+	if !ml.CanSend() || !ml.config.Events.Startup {
+		return nil
+	}
+	vars := ml.baseVars()
+	vars["hostname"] = hostname
+	vars["version"] = version
+	vars["mode"] = mode
+	subject, body, err := NewEmailTemplate().Render(TemplateStartup, vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendToAdmins(subject, body)
+}
+
+// SendShutdown sends the optional graceful-shutdown email synchronously. The
+// caller bounds the best-effort send to the PART 17 five-second limit.
+func (ml *Mailer) SendShutdown(hostname, version, mode, reason string) error {
+	if !ml.CanSend() || !ml.config.Events.Shutdown {
+		return nil
+	}
+	vars := ml.baseVars()
+	vars["hostname"] = hostname
+	vars["version"] = version
+	vars["mode"] = mode
+	vars["reason"] = reason
+	subject, body, err := NewEmailTemplate().Render(TemplateShutdown, vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendNow(NewMessage(ml.config.AdminEmails, subject, body))
+}
+
+// SendDiskLow sends a per-volume disk warning using the PART 17 disk_low
+// template.
+func (ml *Mailer) SendDiskLow(path string, usedPercent float64, free string, thresholdPercent int) error {
+	if !ml.CanSend() {
+		return nil
+	}
+	vars := ml.baseVars()
+	vars["path"] = path
+	vars["used_percent"] = fmt.Sprintf("%.1f", usedPercent)
+	vars["free"] = free
+	vars["threshold_percent"] = fmt.Sprintf("%d", thresholdPercent)
+	subject, body, err := NewEmailTemplate().Render(TemplateDiskLow, vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendToAdmins(subject, body)
+}
+
+// SendDatabaseError reports a database problem without exposing credentials
+// that may appear in a driver error string.
+func (ml *Mailer) SendDatabaseError(problem error, since time.Time) error {
+	if !ml.CanSend() || !ml.config.Events.DatabaseError || problem == nil {
+		return nil
+	}
+	vars := ml.baseVars()
+	vars["error"] = sanitizeDatabaseError(problem.Error())
+	vars["since"] = since.UTC().Format("2006-01-02 15:04:05 UTC")
+	subject, body, err := NewEmailTemplate().Render(TemplateDatabaseError, vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendToAdmins(subject, body)
+}
+
+func sanitizeDatabaseError(message string) string {
+	message = credentialPattern.ReplaceAllString(message, "$1=xxxxx")
+	message = urlUserInfoPattern.ReplaceAllString(message, "://xxxxx@")
+	return bearerPattern.ReplaceAllString(message, "Bearer xxxxx")
 }
 
 // SendBackupCompleted notifies admins that a scheduled or manual backup
@@ -751,16 +1017,15 @@ func (ml *Mailer) TestConnection() error {
 
 	// Per AI.md PART 18: TLS mode handling
 	tlsMode := strings.ToLower(ml.config.SMTP.TLS)
-	useTLS := tlsMode == "tls"
-	useSTARTTLS := tlsMode == "starttls" || tlsMode == "auto"
+	useTLS := tlsMode == "tls" || tlsMode == "auto" && ml.config.SMTP.Port == 465
+	useSTARTTLS := tlsMode == "starttls" || tlsMode == "auto" && !useTLS
+	tlsEstablished := useTLS
 
 	var conn net.Conn
 	var err error
 
 	if useTLS {
-		tlsConfig := &tls.Config{
-			ServerName: ml.config.SMTP.Host,
-		}
+		tlsConfig := smtpTLSConfig(ml.config.SMTP.Host)
 		conn, err = tlsDial("tcp", addr, tlsConfig)
 	} else {
 		conn, err = netDialTimeout("tcp", addr, 10*time.Second)
@@ -784,17 +1049,21 @@ func (ml *Mailer) TestConnection() error {
 	// Test STARTTLS if needed
 	if useSTARTTLS && !useTLS {
 		if ok, _ := client.Extension("STARTTLS"); ok {
-			tlsConfig := &tls.Config{
-				ServerName: ml.config.SMTP.Host,
-			}
+			tlsConfig := smtpTLSConfig(ml.config.SMTP.Host)
 			if err := client.StartTLS(tlsConfig); err != nil {
 				return fmt.Errorf("STARTTLS failed: %w", err)
 			}
+			tlsEstablished = true
+		} else if tlsMode == "starttls" {
+			return fmt.Errorf("SMTP server does not offer required STARTTLS")
 		}
 	}
 
 	// Test authentication if credentials provided
 	if ml.config.SMTP.Username != "" && ml.config.SMTP.Password != "" {
+		if tlsMode == "auto" && !tlsEstablished {
+			return fmt.Errorf("SMTP credentials require TLS, but the server did not offer it")
+		}
 		auth := smtp.PlainAuth("", ml.config.SMTP.Username, ml.config.SMTP.Password, ml.config.SMTP.Host)
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
@@ -820,9 +1089,9 @@ type DetectedSMTP struct {
 // Ports: 25, 587, 465.
 func DetectSMTP(fqdn, globalIPv4 string) *DetectedSMTP {
 	// Per AI.md PART 17: Hosts to check in priority order
-	hosts := []string{
-		"localhost",
-		"127.0.0.1",
+	hosts := []string{"127.0.0.1", "172.17.0.1"}
+	if gateway := getDefaultGateway(); gateway != "" {
+		hosts = append(hosts, gateway)
 	}
 
 	if fqdn != "" {
@@ -835,14 +1104,6 @@ func DetectSMTP(fqdn, globalIPv4 string) *DetectedSMTP {
 
 	if fqdn != "" {
 		hosts = append(hosts, "mail."+fqdn, "smtp."+fqdn)
-	}
-
-	// Docker bridge host
-	hosts = append(hosts, "172.17.0.1")
-
-	// Try to get gateway IP
-	if gateway := getDefaultGateway(); gateway != "" {
-		hosts = append(hosts, gateway)
 	}
 
 	// Per AI.md PART 17: Ports to check (25, 587, 465)
@@ -914,10 +1175,7 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 	var err error
 
 	if useTLS {
-		tlsConfig := &tls.Config{
-			ServerName:         host,
-			InsecureSkipVerify: true,
-		}
+		tlsConfig := smtpTLSConfig(host)
 		conn, err = tlsDialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", addr, tlsConfig)
 	} else {
 		conn, err = netDialTimeout("tcp", addr, 2*time.Second)
@@ -938,10 +1196,15 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 		}
 	}()
 
-	// Check if STARTTLS is supported
+	// Probe using the same connection policy as regular delivery.
 	hasSTARTTLS := false
 	if !useTLS {
 		hasSTARTTLS, _ = client.Extension("STARTTLS")
+		if hasSTARTTLS {
+			if err := client.StartTLS(smtpTLSConfig(host)); err != nil {
+				return nil
+			}
+		}
 	}
 
 	// Check if AUTH is required
@@ -969,20 +1232,12 @@ func DetectAndConfigure(fqdn, globalIPv4 string) *Config {
 		return DefaultConfig()
 	}
 
-	// Determine TLS mode based on detection
-	tlsMode := "auto"
-	if detected.TLS {
-		tlsMode = "tls"
-	} else if detected.STARTTLS {
-		tlsMode = "starttls"
-	}
-
 	return &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
 			Host: detected.Host,
 			Port: detected.Port,
-			TLS:  tlsMode,
+			TLS:  "auto",
 		},
 		// Per AI.md PART 18: From defaults (set at runtime with app_name/fqdn)
 		From:        FromConfig{},

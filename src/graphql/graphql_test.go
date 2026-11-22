@@ -828,8 +828,8 @@ func TestGraphQLHealthQueryAllFields(t *testing.T) {
 		t.Fatal("Data should contain 'health' map")
 	}
 
-	if health["status"] != "healthy" {
-		t.Errorf("health.status = %v, want healthy", health["status"])
+	if health["status"] != "unhealthy" {
+		t.Errorf("health.status = %v, want unhealthy without a database", health["status"])
 	}
 	if health["mode"] != "production" {
 		t.Errorf("health.mode = %v, want production", health["mode"])

@@ -535,7 +535,7 @@ func TestGetPIDFileInContainer(t *testing.T) {
 	}
 }
 
-// TestGetDatabaseDirInContainer verifies GetDatabaseDir returns /data/db in a container.
+// TestGetDatabaseDirInContainer verifies GetDatabaseDir returns the SQLite path in a container.
 func TestGetDatabaseDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
 	os.Unsetenv("DATABASE_DIR")
@@ -544,8 +544,8 @@ func TestGetDatabaseDirInContainer(t *testing.T) {
 	defer SetDatabaseDirOverride("")
 
 	got := GetDatabaseDir()
-	if got != "/data/db" {
-		t.Errorf("GetDatabaseDir() in container = %q, want /data/db", got)
+	if got != "/data/db/sqlite" {
+		t.Errorf("GetDatabaseDir() in container = %q, want /data/db/sqlite", got)
 	}
 }
 

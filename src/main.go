@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	cryptoRand "crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -32,6 +33,7 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/common/netutil"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/mode"
 	"github.com/apimgr/search/src/server"
@@ -49,6 +51,7 @@ var (
 	flagStatus      bool
 	flagDaemon      bool
 	flagDebug       bool
+	flagI2P         bool
 	flagService     string
 	flagMaintenance string
 	flagUpdate      string
@@ -63,7 +66,7 @@ var (
 	flagBackup  string
 	flagPID     string
 	flagAddress string
-	flagPort    int
+	flagPort    string
 	flagBaseURL string
 	flagColor   string
 	flagLang    string
@@ -82,6 +85,7 @@ func init() {
 	flag.BoolVar(&flagStatus, "status", false, "Show server status")
 	flag.BoolVar(&flagDaemon, "daemon", false, "Daemonize (detach from terminal)")
 	flag.BoolVar(&flagDebug, "debug", false, "Enable debug mode (verbose logging, debug endpoints)")
+	flag.BoolVar(&flagI2P, "i2p", false, "Enable the I2P eepsite")
 
 	// Commands with optional arguments
 	flag.StringVar(&flagService, "service", "", "Service management: start|stop|restart|reload|status|--install|--uninstall|--disable|--help")
@@ -98,7 +102,7 @@ func init() {
 	flag.StringVar(&flagBackup, "backup", "", "Set backup directory")
 	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
-	flag.IntVar(&flagPort, "port", 0, "Set listen port")
+	flag.StringVar(&flagPort, "port", "", "Set listen port or HTTP,HTTPS ports")
 	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
 	// Per AI.md PART 8: --color {auto|yes|no}
 	flag.StringVar(&flagColor, "color", "auto", "Set color output mode (auto|yes|no)")
@@ -110,6 +114,10 @@ func main() {
 	// Custom usage function
 	flag.Usage = func() {
 		printHelp()
+	}
+	if command, ok := commandHelp(os.Args[1:], "shell", "service", "maintenance", "update"); ok {
+		printCommandHelp(command)
+		return
 	}
 
 	// Parse flags
@@ -208,6 +216,11 @@ func applyCliOverrides() {
 		}
 		mode.SetDebugEnabled(true)
 	}
+	if err := validateCLIPathOverrides(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		exitFunc(2)
+		return
+	}
 
 	if flagData != "" {
 		config.SetDataDirOverride(flagData)
@@ -227,10 +240,19 @@ func applyCliOverrides() {
 	if flagPID != "" {
 		config.SetPIDFileOverride(flagPID)
 	}
-	if flagPort != 0 {
-		if err := os.Setenv("PORT", fmt.Sprintf("%d", flagPort)); err != nil {
+	if flagPort != "" {
+		if err := os.Setenv("PORT", flagPort); err != nil {
 			slog.Warn("failed to set PORT", "error", err)
 		}
+	}
+	i2pFlagSet := false
+	flag.Visit(func(parsed *flag.Flag) {
+		if parsed.Name == "i2p" {
+			i2pFlagSet = true
+		}
+	})
+	if err := applyI2PFlagOverride(i2pFlagSet, flagI2P); err != nil {
+		slog.Warn("failed to set I2P_ENABLED", "error", err)
 	}
 	if flagAddress != "" {
 		if err := os.Setenv("LISTEN", flagAddress); err != nil {
@@ -261,6 +283,66 @@ func applyCliOverrides() {
 		if err := config.EnsureDirectories(); err != nil {
 			slog.Warn("Failed to create directories", "err", err)
 		}
+	}
+}
+
+func validateCLIPathOverrides() error {
+	paths := []struct {
+		name  string
+		value *string
+	}{
+		{"--config", &flagConfig},
+		{"--data", &flagData},
+		{"--cache", &flagCache},
+		{"--log", &flagLog},
+		{"--backup", &flagBackup},
+		{"--pid", &flagPID},
+	}
+	for _, path := range paths {
+		if *path.value == "" {
+			continue
+		}
+		safe, err := config.SafeDirPath(*path.value)
+		if err != nil {
+			return fmt.Errorf("invalid %s path: %w", path.name, err)
+		}
+		*path.value = safe
+	}
+	return nil
+}
+
+func applyI2PFlagOverride(explicit, enabled bool) error {
+	if !explicit {
+		return nil
+	}
+	return os.Setenv("I2P_ENABLED", strconv.FormatBool(enabled))
+}
+
+func commandHelp(args []string, commands ...string) (string, bool) {
+	for i := 0; i+1 < len(args); i++ {
+		next := args[i+1]
+		if next != "--help" && next != "-h" && next != "help" {
+			continue
+		}
+		for _, command := range commands {
+			if args[i] == "--"+command {
+				return command, true
+			}
+		}
+	}
+	return "", false
+}
+
+func printCommandHelp(command string) {
+	switch command {
+	case "shell":
+		printShellHelp(filepath.Base(os.Args[0]))
+	case "service":
+		printServiceHelp()
+	case "maintenance":
+		runMaintenance("--help")
+	case "update":
+		runUpdate("--help")
 	}
 }
 
@@ -394,8 +476,8 @@ func earlyPortConfig() (*config.Config, error) {
 	cfg := config.DefaultConfig()
 	env := config.LoadFromEnv()
 	portValue := strings.TrimSpace(env.Port)
-	if flagPort > 0 {
-		portValue = strconv.Itoa(flagPort)
+	if flagPort != "" {
+		portValue = flagPort
 	}
 	var port, httpsPort int
 	if portValue != "" {
@@ -456,6 +538,21 @@ func runServerServiceBody() {
 			exitFunc(1)
 		}
 		// Parent exits in daemonize(), only child continues
+	}
+
+	// PART 8 step 7b: a root-started process applies service-user staged updates
+	// before creating users, changing ownership, binding ports, or dropping
+	// privileges. User-started and Windows processes never replace the binary.
+	if config.StartedElevated() {
+		applied, err := update.NewManager().ApplyStagedUpdate()
+		if err != nil {
+			slog.Error("staged update could not be applied; continuing with current binary", "err", err)
+			if setErr := os.Setenv("_SEARCH_UPDATE_FAILED", err.Error()); setErr != nil {
+				slog.Error("failed to record staged update error for notification", "err", setErr)
+			}
+		} else if applied {
+			return
+		}
 	}
 
 	// Per AI.md PART 8 and PART 26: root performs privileged setup and then
@@ -631,6 +728,19 @@ func runServerServiceBody() {
 		slog.Error("Server failed to start within 5-minute timeout")
 		exitFunc(1)
 	}
+	hostname, _ := os.Hostname()
+	srv.NotifyStartup(hostname)
+	previousVersion := os.Getenv("_SEARCH_UPDATE_PREVIOUS_VERSION")
+	newVersion := os.Getenv("_SEARCH_UPDATE_NEW_VERSION")
+	if previousVersion != "" && newVersion != "" {
+		_ = os.Unsetenv("_SEARCH_UPDATE_PREVIOUS_VERSION")
+		_ = os.Unsetenv("_SEARCH_UPDATE_NEW_VERSION")
+		srv.NotifyUpdateInstalled(previousVersion, newVersion)
+	}
+	if updateFailure := os.Getenv("_SEARCH_UPDATE_FAILED"); updateFailure != "" {
+		_ = os.Unsetenv("_SEARCH_UPDATE_FAILED")
+		srv.NotifyUpdateFailed(updateFailure)
+	}
 	if cfg.Server.Scheduler.Tasks.BlocklistUpdate.Enabled {
 		srv.StartBlocklistUpdateIfMissing()
 	}
@@ -679,7 +789,7 @@ func runServerServiceBody() {
 		exitFunc(1)
 		return
 	}
-	exitFunc(0)
+	exitFunc(sigsvc.ShutdownExitCode())
 }
 
 func serverBannerDebugEnabled(cfg *config.Config) bool {
@@ -721,7 +831,8 @@ Runtime Flags:
   --backup <dir>           Set backup directory
   --pid <file>             Set PID file path
   --address <addr>         Set listen address
-  --port <port>            Set listen port
+  --port <port[,https]>   Set listen port(s)
+  --i2p                  Enable the I2P eepsite
   --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
   --color <mode>           Set color output mode (auto|yes|no)
   --lang <code>            Set language for output (default: auto, from LANG env)
@@ -1143,8 +1254,13 @@ func runService(action string) {
 			exitFunc(1)
 			return
 		}
-		// Step 4: delete all data directories and the PID file.
+		// Account ownership is recorded in the configuration directory, so
+		// remove an app-created service account before deleting that directory.
 		var cleanupErrors []error
+		if err := service.DeleteSystemUser(config.InternalName); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("delete system user: %w", err))
+		}
+		// Step 4: delete all data directories and the PID file.
 		for _, dir := range []string{
 			config.GetConfigDir(), config.GetDataDir(), config.GetCacheDir(),
 			config.GetLogDir(), config.GetBackupDir(),
@@ -1159,10 +1275,6 @@ func runService(action string) {
 			if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("remove PID file %s: %w", pidFile, err))
 			}
-		}
-		// Step 5: delete the system user and group created by the server.
-		if err := service.DeleteSystemUser(config.InternalName); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("delete system user: %w", err))
 		}
 		if err := errors.Join(cleanupErrors...); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Service uninstall incomplete: %v\n", err)
@@ -1236,25 +1348,29 @@ func runService(action string) {
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart disabled")
 
 	case "--help":
-		// Per AI.md PART 23 "Service Help Output": --install is what re-enables
-		// a disabled service, so there is no separate --enable action
-		fmt.Println("Service management commands:")
-		fmt.Println()
-		fmt.Println("  start         Start the service")
-		fmt.Println("  stop          Stop the service")
-		fmt.Println("  restart       Restart the service")
-		fmt.Println("  reload        Reload configuration without restart")
-		fmt.Println("  status        Show service status")
-		fmt.Println()
-		fmt.Println("  --install     Install, enable, and start service")
-		fmt.Println("  --disable     Stop and disable service (keeps data)")
-		fmt.Println("  --uninstall   Stop, disable, and remove everything (keeps binary)")
-		fmt.Println("  --help        Show this help")
+		printServiceHelp()
 
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
 		fmt.Println("Valid actions: start, stop, restart, reload, status, --install, --uninstall, --disable, --help")
 	}
+}
+
+func printServiceHelp() {
+	// Per AI.md PART 23 "Service Help Output": --install is what re-enables
+	// a disabled service, so there is no separate --enable action.
+	fmt.Println("Service management commands:")
+	fmt.Println()
+	fmt.Println("  start         Start the service")
+	fmt.Println("  stop          Stop the service")
+	fmt.Println("  restart       Restart the service")
+	fmt.Println("  reload        Reload configuration without restart")
+	fmt.Println("  status        Show service status")
+	fmt.Println()
+	fmt.Println("  --install     Install, enable, and start service")
+	fmt.Println("  --disable     Stop and disable service (keeps data)")
+	fmt.Println("  --uninstall   Stop, disable, and remove everything (keeps binary)")
+	fmt.Println("  --help        Show this help")
 }
 
 // authorizeRestore implements the AI.md PART 21 restore authorization tiers:
@@ -1330,6 +1446,29 @@ func runMaintenance(action string) {
 		// never stored and is resolved via BACKUP_PASSWORD or an interactive
 		// prompt.
 		cfg, cfgErr := config.Initialize()
+		dbMgr, dbErr := database.NewDatabaseManager(&database.Config{
+			Driver:   "sqlite",
+			DataDir:  config.GetDatabaseDir(),
+			MaxOpen:  10,
+			MaxIdle:  5,
+			Lifetime: 300,
+		})
+		if dbErr != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not open server database for backup: %v\n", dbErr)
+			exitFunc(1)
+			return
+		}
+		defer func() {
+			if err := dbMgr.Close(); err != nil {
+				slog.Warn("failed to close maintenance backup database", "err", err)
+			}
+		}()
+		if err := database.InitSchema(context.Background(), dbMgr); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not initialize server database for backup: %v\n", err)
+			exitFunc(1)
+			return
+		}
+		bm.SetServerDatabaseSnapshotter(dbMgr.ServerDB())
 		complianceEnabled := cfgErr == nil && cfg.Server.Compliance.Enabled
 		encryptionEnabled := (cfgErr == nil && cfg.Server.Backup.Encryption.Enabled) || complianceEnabled
 
@@ -1414,6 +1553,13 @@ func runMaintenance(action string) {
 			exitFunc(1)
 			return
 		}
+		restoreLimits, limitsErr := backup.RestoreLimitsFromConfig(authCfg.Server.Restore)
+		if limitsErr != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Invalid restore limits: %v\n", limitsErr)
+			exitFunc(1)
+			return
+		}
+		bm.SetRestoreLimits(restoreLimits)
 		isFirstRun := authCfg.IsFirstRun()
 		isRoot := config.IsPrivileged()
 		isServiceUser := false
@@ -1480,6 +1626,31 @@ func runMaintenance(action string) {
 			fmt.Println("Restore cancelled.")
 			return
 		}
+		restoreDB, dbErr := database.NewDatabaseManager(&database.Config{
+			Driver:   "sqlite",
+			DataDir:  config.GetDatabaseDir(),
+			MaxOpen:  10,
+			MaxIdle:  5,
+			Lifetime: 300,
+		})
+		if dbErr != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not open server database for pre-restore backup: %v\n", dbErr)
+			exitFunc(1)
+			return
+		}
+		bm.SetServerDatabaseSnapshotter(restoreDB.ServerDB())
+		bm.SetBeforeRestore(func() error {
+			err := restoreDB.Close()
+			restoreDB = nil
+			return err
+		})
+		defer func() {
+			if restoreDB != nil {
+				if err := restoreDB.Close(); err != nil {
+					slog.Warn("failed to close restore database", "err", err)
+				}
+			}
+		}()
 
 		fmt.Println("Restoring...")
 		if isEncryptedFile {
@@ -2084,7 +2255,7 @@ _%s_completions() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="--help --version --status --daemon --debug"
+    opts="--help --version --status --daemon --debug --i2p"
     opts="$opts --mode --config --data --cache --log --backup --pid --address --port"
     opts="$opts --service --maintenance --update --shell tor email"
 
@@ -2161,7 +2332,8 @@ _%s() {
         '--backup[Backup directory]:directory:_files -/'
         '--pid[PID file]:file:_files'
         '--address[Listen address]:address:'
-        '--port[Listen port]:port:'
+        '--port[Listen port(s), HTTP or HTTP,HTTPS]:port:'
+        '--i2p[Enable the I2P eepsite]'
         '--service[Service management]:action:(start stop restart reload status --install --uninstall --disable --help)'
         '--maintenance[Maintenance]:action:(backup restore update mode setup pgp secret token data compliance help)'
         '--update[Update management]:action:(check yes branch)'
@@ -2194,7 +2366,8 @@ complete -c %s -l log -d 'Log directory' -xa '(__fish_complete_directories)'
 complete -c %s -l backup -d 'Backup directory' -xa '(__fish_complete_directories)'
 complete -c %s -l pid -d 'PID file'
 complete -c %s -l address -d 'Listen address'
-complete -c %s -l port -d 'Listen port'
+complete -c %s -l port -d 'Listen port(s), HTTP or HTTP,HTTPS'
+complete -c %s -l i2p -d 'Enable the I2P eepsite'
 complete -c %s -l service -d 'Service management' -xa 'start stop restart reload status --install --uninstall --disable --help'
 complete -c %s -l maintenance -d 'Maintenance' -xa 'backup restore update mode setup pgp secret token data compliance help'
 complete -c %s -l update -d 'Update management' -xa 'check yes branch'
@@ -2206,7 +2379,7 @@ complete -c %s -n '__fish_use_subcommand' -a 'email' -d 'Email management' -xa '
 			binaryName, binaryName, binaryName, binaryName, binaryName,
 			binaryName, binaryName, binaryName, binaryName, binaryName,
 			binaryName, binaryName, binaryName, binaryName, binaryName,
-			binaryName)
+			binaryName, binaryName)
 
 	case "powershell", "pwsh":
 		fmt.Printf(`# PowerShell completions for %s
@@ -2231,7 +2404,8 @@ Register-ArgumentCompleter -CommandName %s -ScriptBlock {
         @{Name='--backup'; Description='Backup directory'}
         @{Name='--pid'; Description='PID file'}
         @{Name='--address'; Description='Listen address'}
-        @{Name='--port'; Description='Listen port'}
+        @{Name='--port'; Description='Listen port(s), HTTP or HTTP,HTTPS'}
+        @{Name='--i2p'; Description='Enable the I2P eepsite'}
         @{Name='--service'; Description='Service management'}
         @{Name='--maintenance'; Description='Maintenance'}
         @{Name='--update'; Description='Update management'}

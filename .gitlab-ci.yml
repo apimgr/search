@@ -29,7 +29,7 @@ stages:
     # NOTE: all tooling (git, bash, govulncheck, cyclonedx-gomod, etc.) is pre-installed
     # in casjaysdev/go:latest — never `apk add` or `go install` inside a CI job.
     - go mod download
-    - go run ./src/cmd/apigen
+    - go run ./src/apigen
     - if [ -f release.txt ]; then export VERSION="$(cat release.txt)"; else export VERSION="${CI_COMMIT_TAG#v}"; fi
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
@@ -43,7 +43,7 @@ stages:
         export OFFICIAL_SITE="${OFFICIAL_SITE:-}"
       fi
     - export SERVER_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/version.Version=${VERSION}' -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
-    - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+    - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
 
 # =============================================================================
 # RELEASE BUILDS (Tag Push: v* or semver)
@@ -349,14 +349,14 @@ build:beta:
   before_script:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
     - go mod download
-    - go run ./src/cmd/apigen
+    - go run ./src/apigen
     - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
     - export SERVER_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/version.Version=${VERSION}' -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
-    - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+    - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
   script:
     # Build all 8 platforms
     - GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
@@ -406,9 +406,9 @@ build:devel:
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
     - go mod download
-    - go run ./src/cmd/apigen
+    - go run ./src/apigen
     - export SERVER_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/version.Version=${VERSION}' -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
-    - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+    - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
   script:
     # Build all 8 platforms
     - GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src

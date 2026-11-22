@@ -994,6 +994,18 @@
     "active_connections": "Connessioni attive",
     "last_updated": "Ultimo aggiornamento:",
     "auto_refresh_in": "Aggiornamento automatico tra",
+    "mode_debug": "Debug",
+    "unavailable": "Non disponibile",
+    "shutting_down": "Arresto in corso",
+    "restart_required": "Riavvio richiesto",
+    "section": {
+      "cluster": "Cluster",
+      "version": "Versione",
+      "runtime": "Runtime",
+      "features": "Funzionalita",
+      "checks": "Stato componenti",
+      "stats": "Statistiche server"
+    },
     "components": {
       "database": "Database",
       "cache": "Cache",
@@ -2169,7 +2181,8 @@
       "label_new_version": "Nuova versione:",
       "label_release_date": "Data di rilascio:",
       "label_release_notes": "Note di rilascio:",
-      "label_view_update": "Visualizza aggiornamento:"
+      "label_view_update": "Visualizza aggiornamento:",
+      "manual_command": "Comando di aggiornamento manuale: {command}"
     },
     "security_report": {
       "subject": "Rapporto di sicurezza ricevuto: %s",

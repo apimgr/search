@@ -1441,8 +1441,21 @@
             // Check for bang query
             if (query.startsWith('!')) {
                 var bangQuery = query.slice(1).toLowerCase();
-                var bangSuggestions = filterBangs(bangQuery);
-                showDropdown(bangSuggestions);
+                abortController = new AbortController();
+                fetch(window.location.origin + '/api/v1/bangs?search=' + encodeURIComponent(bangQuery), {
+                    signal: abortController.signal
+                })
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Bang catalog unavailable');
+                    return response.json();
+                })
+                .then(function(data) {
+                    var available = data && data.data && Array.isArray(data.data.bangs) ? data.data.bangs : [];
+                    showDropdown(filterBangs(bangQuery, available));
+                })
+                .catch(function(err) {
+                    if (err.name !== 'AbortError') hideDropdown();
+                });
                 return;
             }
 
@@ -1486,9 +1499,9 @@
         }
 
         // Filter bangs based on query
-        function filterBangs(query) {
+        function filterBangs(query, availableBuiltins) {
             var normalizedQuery = (query || '').toLowerCase();
-            var builtins = BUILTIN_BANGS.filter(function(b) {
+            var builtins = (Array.isArray(availableBuiltins) ? availableBuiltins : []).filter(function(b) {
                 return !normalizedQuery || b.shortcut.toLowerCase().startsWith(normalizedQuery) ||
                        b.name.toLowerCase().includes(normalizedQuery);
             });
@@ -2208,14 +2221,14 @@
         toast._toastTimer = null;
         toast._toastRemaining = Math.max(0, toast._toastRemaining - (Date.now() - toast._toastStartedAt));
         var progress = toast.querySelector('.toast-progress');
-        if (progress) progress.style.animationPlayState = 'paused';
+        if (progress) progress.classList.add('toast-progress-paused');
     }
 
     function resumeToastTimer(toast) {
         if (toast._toastDuration <= 0 || toast._toastTimer) return;
         startToastTimer(toast);
         var progress = toast.querySelector('.toast-progress');
-        if (progress) progress.style.animationPlayState = 'running';
+        if (progress) progress.classList.remove('toast-progress-paused');
     }
 
     function renderToast(pending) {
@@ -2235,10 +2248,11 @@
             info: '\u2139'
         };
 
+        const progressClass = pending.duration === 5000 ? 'toast-progress toast-progress-5s' : 'toast-progress';
         toast.innerHTML = '<span class="toast-icon">' + (icons[pending.type] || icons.info) + '</span>' +
                          '<span class="toast-message">' + escapeHtml(pending.message) + '</span>' +
                          '<button class="toast-close" data-action="close-toast" aria-label="' + escapeHtml(t('common.close', 'Close')) + '">&times;</button>' +
-                         (pending.duration > 0 ? '<div class="toast-progress" style="animation-duration:' + pending.duration + 'ms"></div>' : '');
+                         (pending.duration > 0 ? '<div class="' + progressClass + '"></div>' : '');
 
         container.insertBefore(toast, container.firstChild);
 

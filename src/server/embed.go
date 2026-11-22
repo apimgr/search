@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	stdhtml "html"
 	"html/template"
@@ -23,6 +24,7 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/common/theme"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/health"
 	"github.com/yuin/goldmark"
 	xhtml "golang.org/x/net/html"
 	"golang.org/x/text/cases"
@@ -188,6 +190,20 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 		"formatViewCount":     formatViewCount,
 		// Use a numeric date format so search results do not hardcode English month names.
 		"formatSearchDate": formatSearchDate,
+		"healthDuration":   formatDurationForHuman,
+		"healthTimestamp":  formatHealthTimestamp,
+		"healthCount":      formatHealthCount,
+		"healthLabel": func(kind, key string) string {
+			translationKey := "health." + kind + "." + key
+			if i18nFuncs != nil {
+				if tFunc, ok := i18nFuncs["t"].(func(string, ...interface{}) string); ok {
+					if translated := tFunc(translationKey); translated != translationKey {
+						return translated
+					}
+				}
+			}
+			return humanizeHealthKey(key)
+		},
 		// inSlice reports whether item is in the string slice.
 		"inSlice": func(slice []string, item string) bool {
 			for _, s := range slice {
@@ -740,12 +756,25 @@ type HealthResponse struct {
 	Uptime    string `json:"uptime"`
 	Mode      string `json:"mode"`
 	Timestamp string `json:"timestamp"`
-	// 5. Features - PUBLIC only (PARTS 20, 32)
+	// 5. Cluster state is always present, including single-instance deployments.
+	Cluster ClusterInfo `json:"cluster"`
+	// 6. Features - PUBLIC only (PARTS 20, 32)
 	Features FeaturesInfo `json:"features"`
-	// 6. Component health checks
+	// 7. Component health checks
 	Checks ChecksInfo `json:"checks"`
-	// 7. Statistics (public-safe aggregates)
+	// 8. Statistics (public-safe aggregates)
 	Stats StatsInfo `json:"stats"`
+}
+
+// MarshalJSON fixes health output to the canonical struct field order in PART 13.
+func (health HealthResponse) MarshalJSON() ([]byte, error) {
+	type orderedHealth HealthResponse
+	return json.Marshal(orderedHealth(health))
+}
+
+// ClusterInfo reports whether this server participates in a cluster.
+type ClusterInfo struct {
+	Enabled bool `json:"enabled"`
 }
 
 // ProjectInfo represents project identification per AI.md PART 13.
@@ -786,6 +815,7 @@ type I2PInfo struct {
 	Enabled  bool   `json:"enabled"`
 	Running  bool   `json:"running"`
 	Status   string `json:"status"`
+	State    string `json:"state"`
 	Hostname string `json:"hostname"`
 	Provider string `json:"provider"`
 }
@@ -793,19 +823,47 @@ type I2PInfo struct {
 // ChecksInfo represents component health per AI.md PART 13.
 // Values are "ok" or "error" (or "disabled" when component not configured).
 type ChecksInfo struct {
-	Database  string `json:"database"`
-	Cache     string `json:"cache"`
-	Disk      string `json:"disk"`
-	Scheduler string `json:"scheduler"`
-	Tor       string `json:"tor,omitempty"`
-	I2P       string `json:"i2p,omitempty"`
+	Database  string         `json:"database"`
+	Cache     string         `json:"cache"`
+	Disk      string         `json:"disk"`
+	Scheduler string         `json:"scheduler"`
+	Tor       string         `json:"tor,omitempty"`
+	I2P       string         `json:"i2p,omitempty"`
+	Extra     []health.Check `json:"-"`
+}
+
+func (checks ChecksInfo) MarshalJSON() ([]byte, error) {
+	type ordered ChecksInfo
+	base, err := json.Marshal(ordered(checks))
+	if err != nil {
+		return nil, err
+	}
+	fields := make([]health.Field, 0, len(checks.Extra))
+	for _, check := range checks.Extra {
+		fields = append(fields, health.Field{Key: check.Key, Value: check.Status})
+	}
+	return health.AppendFields(base, fields)
 }
 
 // StatsInfo represents public-safe aggregate statistics per AI.md PART 13.
 type StatsInfo struct {
-	RequestsTotal int64 `json:"requests_total"`
-	Requests24h   int64 `json:"requests_24h"`
-	ActiveConns   int   `json:"active_connections"`
+	RequestsTotal int64         `json:"requests_total"`
+	Requests24h   int64         `json:"requests_24h"`
+	ActiveConns   int           `json:"active_connections"`
+	Extra         []health.Stat `json:"-"`
+}
+
+func (stats StatsInfo) MarshalJSON() ([]byte, error) {
+	type ordered StatsInfo
+	base, err := json.Marshal(ordered(stats))
+	if err != nil {
+		return nil, err
+	}
+	fields := make([]health.Field, 0, len(stats.Extra))
+	for _, stat := range stats.Extra {
+		fields = append(fields, health.Field{Key: stat.Key, Value: stat.Value})
+	}
+	return health.AppendFields(base, fields)
 }
 
 // Pagination represents pagination information

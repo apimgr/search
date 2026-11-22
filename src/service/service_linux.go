@@ -33,17 +33,17 @@ const (
 // openrc-run and systemctl are both absent and /etc/init.d exists with a
 // working update-rc.d or chkconfig.
 func (sm *ServiceManager) detectInitSystem() initSystem {
+	if sm.hasSystemd() {
+		return initSystemd
+	}
+	if sm.hasOpenRC() {
+		return initOpenRC
+	}
 	if sm.hasRunit() {
 		return initRunit
 	}
 	if sm.hasS6() {
 		return initS6
-	}
-	if sm.hasOpenRC() {
-		return initOpenRC
-	}
-	if sm.hasSystemd() {
-		return initSystemd
 	}
 	if sm.hasSysVinit() {
 		return initSysVinit
@@ -214,32 +214,28 @@ func (sm *ServiceManager) InstallUserService() error {
 
 // hasRunit checks if runit is the init system.
 func (sm *ServiceManager) hasRunit() bool {
-	if _, err := exec.LookPath("runsv"); err == nil {
-		if _, err := os.Stat("/var/service"); err == nil {
-			return true
-		}
-		if _, err := os.Stat("/service"); err == nil {
-			return true
-		}
+	if _, err := os.Stat("/etc/runit"); err == nil {
+		return true
 	}
-	return false
+	_, err := exec.LookPath("sv")
+	return err == nil
 }
 
 // hasOpenRC checks if OpenRC is the init system.
 func (sm *ServiceManager) hasOpenRC() bool {
-	if _, err := exec.LookPath("openrc-run"); err == nil {
-		return true
-	}
-	if _, err := exec.LookPath("rc-service"); err == nil {
-		return true
-	}
-	return false
+	return hasOpenRCAt("/sbin/openrc-run", "/run/openrc")
+}
+
+func hasOpenRCAt(openrcRunPath, openrcStatePath string) bool {
+	_, commandErr := os.Stat(openrcRunPath)
+	_, stateErr := os.Stat(openrcStatePath)
+	return commandErr == nil && stateErr == nil
 }
 
 // hasS6 checks if s6 is the supervision suite in use.
 // Per AI.md PART 23: s6 is one of the four supported Linux init systems.
 func (sm *ServiceManager) hasS6() bool {
-	if _, err := exec.LookPath("s6-svscan"); err != nil {
+	if _, err := exec.LookPath("s6-svc"); err != nil {
 		return false
 	}
 	for _, dir := range s6ScanDirs {
@@ -252,20 +248,15 @@ func (sm *ServiceManager) hasS6() bool {
 
 // hasSystemd checks if systemd manages this host.
 func (sm *ServiceManager) hasSystemd() bool {
-	if _, err := exec.LookPath("systemctl"); err == nil {
-		return true
-	}
-	return false
+	_, err := os.Stat("/run/systemd/system")
+	return err == nil
 }
 
 // hasSysVinit checks for a legacy SysVinit host.
 // Per AI.md PART 24 SysVinit "Detection": chosen only when openrc-run and
 // systemctl are absent and /etc/init.d exists with update-rc.d or chkconfig.
 func (sm *ServiceManager) hasSysVinit() bool {
-	if _, err := os.Stat("/sbin/openrc-run"); err == nil {
-		return false
-	}
-	if _, err := exec.LookPath("systemctl"); err == nil {
+	if sm.hasOpenRC() || sm.hasSystemd() {
 		return false
 	}
 	if info, err := os.Stat("/etc/init.d"); err != nil || !info.IsDir() {
@@ -502,7 +493,6 @@ description="%[2]s"
 # actual binary (may differ from %[1]s after rename)
 command="/usr/local/bin/%[3]s"
 command_args=""
-command_user="%[4]s"
 pidfile="%[5]s/%[1]s.pid"
 command_background=true
 output_log="%[6]s/server.log"
@@ -515,10 +505,12 @@ depend() {
 }
 
 start_pre() {
+    checkpath -d -m 0755 %[7]s
+    checkpath -d -m 0755 %[8]s
     checkpath -d -m 0755 -o %[4]s %[5]s
     checkpath -d -m 0755 -o %[4]s %[6]s
 }
-`, name, appDisplayName, config.ProjectName, owner, runDir, logDir)
+`, name, appDisplayName, config.ProjectName, owner, runDir, logDir, filepath.Dir(runDir), filepath.Dir(logDir))
 }
 
 func (sm *ServiceManager) installOpenRC() error {

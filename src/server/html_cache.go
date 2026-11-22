@@ -19,7 +19,7 @@ func HTMLCacheHeaders(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		capture := &htmlResponseCapture{header: make(http.Header), writer: w}
+		capture := &htmlResponseCapture{header: make(http.Header), writer: w, request: r}
 		next.ServeHTTP(capture, r)
 		if capture.passthrough {
 			return
@@ -57,11 +57,12 @@ func HTMLCacheHeaders(next http.Handler) http.Handler {
 			hash := sha256.Sum256(append([]byte(buildAssetStamp()+"\x00"), capture.body.Bytes()...))
 			capture.header.Set("ETag", fmt.Sprintf("\"html-%s-%x\"", buildAssetStamp(), hash[:12]))
 		}
-		copyHeader(w.Header(), capture.header)
 		status := capture.status
 		if status == 0 {
 			status = http.StatusOK
 		}
+		applyBuildStampCookie(capture.header, r, status)
+		copyHeader(w.Header(), capture.header)
 		if status == http.StatusOK && htmlETagMatches(r.Header.Values("If-None-Match"), capture.header.Get("ETag")) {
 			w.Header().Del("Content-Length")
 			w.WriteHeader(http.StatusNotModified)
@@ -80,6 +81,7 @@ type htmlResponseCapture struct {
 	status      int
 	passthrough bool
 	writer      http.ResponseWriter
+	request     *http.Request
 }
 
 func (c *htmlResponseCapture) Header() http.Header { return c.header }
@@ -105,6 +107,10 @@ func (c *htmlResponseCapture) Write(p []byte) (int, error) {
 }
 
 func (c *htmlResponseCapture) flushToWriter() {
+	status := c.status
+	if status == 0 {
+		status = http.StatusOK
+	}
 	contentType := c.header.Get("Content-Type")
 	if contentType == "" && c.body.Len() > 0 {
 		probe := c.body.Bytes()
@@ -126,12 +132,9 @@ func (c *htmlResponseCapture) flushToWriter() {
 		if c.header.Get("ETag") == "" {
 			c.header.Set("ETag", fmt.Sprintf("\"html-%s\"", buildAssetStamp()))
 		}
+		applyBuildStampCookie(c.header, c.request, status)
 	}
 	copyHeader(c.writer.Header(), c.header)
-	status := c.status
-	if status == 0 {
-		status = http.StatusOK
-	}
 	c.writer.WriteHeader(status)
 	_, _ = c.writer.Write(c.body.Bytes())
 	c.body.Reset()
@@ -157,6 +160,36 @@ func hasCacheDirective(value, directive string) bool {
 		}
 	}
 	return false
+}
+
+// applyBuildStampCookie refreshes the browser's build marker on HTML responses
+// and purges stale browser storage only for successful top-level navigations.
+func applyBuildStampCookie(header http.Header, r *http.Request, status int) {
+	const cookieName = "search_build"
+	stamp := buildAssetStamp()
+	if r != nil {
+		if cookie, err := r.Cookie(cookieName); err == nil && cookie.Value != stamp && isTopLevelHTMLNavigation(r, status) {
+			header.Set("Clear-Site-Data", `"cache", "storage"`)
+		}
+	}
+	cookie := (&http.Cookie{
+		Name:     cookieName,
+		Value:    stamp,
+		Path:     "/",
+		MaxAge:   31536000,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	}).String()
+	header.Add("Set-Cookie", cookie)
+}
+
+func isTopLevelHTMLNavigation(r *http.Request, status int) bool {
+	if r == nil || r.Method != http.MethodGet || status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return false
+	}
+	destination := r.Header.Get("Sec-Fetch-Dest")
+	mode := r.Header.Get("Sec-Fetch-Mode")
+	return (destination == "document" && mode == "navigate") || (destination == "" && mode == "")
 }
 
 func copyHeader(dst, src http.Header) {

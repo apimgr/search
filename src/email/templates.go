@@ -2,7 +2,6 @@ package email
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,19 +9,13 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	emailtemplates "github.com/apimgr/search/src/server/template/email"
 )
-
-// defaultTemplateFS holds the embedded default email templates.
-// Per AI.md PART 17, default templates are embedded in the binary; operators
-// override them by placing files in {config_dir}/template/email/.
-//
-//go:embed templates/*.txt
-var defaultTemplateFS embed.FS
 
 // loadDefaultTemplate returns the embedded default template text for the given
 // type, or false if no embedded default exists.
 func loadDefaultTemplate(templateType TemplateType) (string, bool) {
-	data, err := defaultTemplateFS.ReadFile("templates/" + string(templateType) + ".txt")
+	data, err := emailtemplates.Defaults.ReadFile(string(templateType) + ".txt")
 	if err != nil {
 		return "", false
 	}
@@ -44,14 +37,16 @@ const (
 	TemplateSSLRenewed       TemplateType = "ssl_renewed"
 	TemplateSSLRenewalFailed TemplateType = "ssl_renewal_failed"
 	TemplateSchedulerError   TemplateType = "scheduler_error"
+	TemplateStartup          TemplateType = "startup"
+	TemplateShutdown         TemplateType = "shutdown"
+	TemplateDiskLow          TemplateType = "disk_low"
+	TemplateDatabaseError    TemplateType = "database_error"
 	TemplateUpdateAvailable  TemplateType = "update_available"
 	TemplateUpdateInstalled  TemplateType = "update_installed"
 	TemplateTest             TemplateType = "test"
 )
 
-// AllTemplateTypes is the complete set of email templates, in the order of the
-// AI.md PART 17 "Default Templates" table. The table has exactly ten rows and
-// no template may be added outside it.
+// AllTemplateTypes follows the AI.md PART 17 "Default Templates" table.
 var AllTemplateTypes = []TemplateType{
 	TemplateSecurityAlert,
 	TemplateBackupCompleted,
@@ -60,12 +55,16 @@ var AllTemplateTypes = []TemplateType{
 	TemplateSSLRenewed,
 	TemplateSSLRenewalFailed,
 	TemplateSchedulerError,
+	TemplateStartup,
+	TemplateShutdown,
+	TemplateDiskLow,
+	TemplateDatabaseError,
 	TemplateUpdateAvailable,
 	TemplateUpdateInstalled,
 	TemplateTest,
 }
 
-// IsValidTemplateType reports whether t is one of the ten PART 17 templates.
+// IsValidTemplateType reports whether t is one of the PART 17 templates.
 func IsValidTemplateType(t TemplateType) bool {
 	for _, known := range AllTemplateTypes {
 		if known == t {
@@ -231,6 +230,7 @@ func (et *EmailTemplate) PreviewTemplate(templateType TemplateType, siteName, si
 		"filename":              siteName + "_backup_2006-01-02_150405.tar.gz",
 		"size":                  "12.5 MB",
 		"error":                 "disk space exhausted",
+		"since":                 "2026-06-14 02:00:00 UTC",
 		"expires_in":            "14 days",
 		"expiry_date":           "2026-07-01",
 		"valid_until":           "2027-07-01",
@@ -239,6 +239,12 @@ func (et *EmailTemplate) PreviewTemplate(templateType TemplateType, siteName, si
 		"previous_version":      "1.0.0",
 		"domain":                siteURL,
 		"task_name":             "geoip_update",
+		"hostname":              "search.example.com",
+		"mode":                  "production",
+		"path":                  "/var/lib/search",
+		"used_percent":          "91.4",
+		"free":                  "4.2 GB",
+		"threshold_percent":     "85",
 		"next_run":              "2026-06-14 03:00:00 UTC",
 		"alert_type":            "System Warning",
 		"alert_level":           "warning",
@@ -287,6 +293,10 @@ func GetAllTemplateTypes() []TemplateInfo {
 		{TemplateSSLRenewed, "SSL Renewed", "SSL certificate renewal confirmation", false},
 		{TemplateSSLRenewalFailed, "SSL Renewal Failed", "SSL certificate renewal failure notification", false},
 		{TemplateSchedulerError, "Scheduler Error", "Scheduled task failure notification", false},
+		{TemplateStartup, "Server Started", "Server startup notification", false},
+		{TemplateShutdown, "Server Stopped", "Server shutdown notification", false},
+		{TemplateDiskLow, "Disk Space Low", "Low disk space notification", false},
+		{TemplateDatabaseError, "Database Connection Problem", "Database connection failure notification", false},
 		{TemplateUpdateAvailable, "Update Available", "New version available notification", false},
 		{TemplateUpdateInstalled, "Update Installed", "Self-update completion notification", false},
 		{TemplateTest, "Test Email", "Test email to verify SMTP configuration", false},

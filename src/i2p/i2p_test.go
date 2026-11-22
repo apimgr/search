@@ -778,11 +778,14 @@ func TestManagerDisabledReportsDisabled(t *testing.T) {
 	}
 }
 
-func TestManagerStartDisabledReturnsError(t *testing.T) {
+func TestManagerStartDisabledIsSilentNoop(t *testing.T) {
 	cfg := DefaultI2PConfig()
 	mgr := NewI2PManager(context.Background(), &cfg, "127.0.0.1:8080")
-	if err := mgr.Start(); err == nil {
-		t.Error("expected Start to report that I2P is opt-in and disabled")
+	if err := mgr.Start(); err != nil {
+		t.Errorf("Start() with disabled I2P returned error: %v", err)
+	}
+	if mgr.Status() != "Disabled" {
+		t.Errorf("Status() = %q, want Disabled", mgr.Status())
 	}
 }
 

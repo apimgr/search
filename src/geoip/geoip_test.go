@@ -1,6 +1,7 @@
 package geoip
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -13,6 +14,12 @@ import (
 	"testing"
 	"time"
 )
+
+type geoIPRejectTransport struct{}
+
+func (geoIPRejectTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("unexpected outbound GeoIP request to %s", request.URL.Host)
+}
 
 // Tests cover the public Lookup/Config/Result/Country API. Internal MMDB
 // decoding is delegated to github.com/oschwald/maxminddb-golang (PART 19)
@@ -30,16 +37,9 @@ func TestDatabaseURLs(t *testing.T) {
 	}
 }
 
-// Per AI.md PART 19 the ASN and country databases come from the jsDelivr CDN
-// while the split IPv4/IPv6 city databases come from the ip-location-db
-// GitHub release assets.
+// Per AI.md PART 19 all GeoIP databases come from ip-location-db GitHub release assets.
 func TestDatabaseURLSources(t *testing.T) {
-	for _, u := range []string{ASNURL, CountryURL} {
-		if !strings.Contains(u, "cdn.jsdelivr.net") {
-			t.Errorf("URL %q is not on jsdelivr CDN", u)
-		}
-	}
-	for _, u := range []string{CityIPv4URL, CityIPv6URL} {
+	for _, u := range []string{ASNURL, CountryURL, CityIPv4URL, CityIPv6URL} {
 		if !strings.Contains(u, "github.com/sapics/ip-location-db/releases") {
 			t.Errorf("URL %q is not a sapics/ip-location-db release asset", u)
 		}
@@ -293,8 +293,19 @@ func TestHelperConverters(t *testing.T) {
 type mmdbEnc struct{}
 
 func (mmdbEnc) str(s string) []byte {
-	b := []byte{byte(2<<5) | byte(len(s))}
-	return append(b, []byte(s)...)
+	length := len(s)
+	var header []byte
+	switch {
+	case length < 29:
+		header = []byte{byte(2<<5) | byte(length)}
+	case length < 285:
+		header = []byte{byte(2<<5) | 29, byte(length - 29)}
+	case length < 65821:
+		header = []byte{byte(2<<5) | 30, byte((length - 285) >> 8), byte(length - 285)}
+	default:
+		header = []byte{byte(2<<5) | 31, byte((length - 65821) >> 16), byte((length - 65821) >> 8), byte(length - 65821)}
+	}
+	return append(header, []byte(s)...)
 }
 
 func (mmdbEnc) uint16(v uint16) []byte {
@@ -453,7 +464,7 @@ func TestBuildMMDBWithRecordOpens(t *testing.T) {
 // TestOpenMMDBSuccess exercises the success path and checks metadata is populated.
 func TestOpenMMDBSuccess(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "country.mmdb")
+	path := writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -470,7 +481,7 @@ func TestOpenMMDBSuccess(t *testing.T) {
 // TestLookupRecordNilIP exercises the nil IP guard in lookupRecord.
 func TestLookupRecordNilIP(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "country.mmdb")
+	path := writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -485,7 +496,7 @@ func TestLookupRecordNilIP(t *testing.T) {
 // returns nil record for any IP.
 func TestLookupRecordValidIP(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "country.mmdb")
+	path := writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -500,7 +511,7 @@ func TestLookupRecordValidIP(t *testing.T) {
 // TestLookupCountryNilRecord exercises LookupCountry when the DB returns nil.
 func TestLookupCountryNilRecord(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "country.mmdb")
+	path := writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -514,7 +525,7 @@ func TestLookupCountryNilRecord(t *testing.T) {
 // TestLookupASNNilRecord exercises LookupASN when the DB returns nil.
 func TestLookupASNNilRecord(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "asn.mmdb")
+	path := writeTempMMDB(t, dir, "iptoasn-asn.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -529,7 +540,7 @@ func TestLookupASNNilRecord(t *testing.T) {
 // TestLookupCityNilRecord exercises LookupCity when the DB returns nil.
 func TestLookupCityNilRecord(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "city-ipv4.mmdb")
+	path := writeTempMMDB(t, dir, "dbip-city-ipv4.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -554,7 +565,7 @@ func writeRecordMMDB(t *testing.T, dir, name, dbType string, fields map[string]s
 // TestLookupCountryFlatFormat exercises the flat-format country_code lookup path.
 func TestLookupCountryFlatFormat(t *testing.T) {
 	dir := t.TempDir()
-	path := writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "DE"})
+	path := writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"country_code": "DE"})
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -569,7 +580,7 @@ func TestLookupCountryFlatFormat(t *testing.T) {
 // TestLookupCountryIsoCodeFlatFormat exercises the iso_code flat-format lookup path.
 func TestLookupCountryIsoCodeFlatFormat(t *testing.T) {
 	dir := t.TempDir()
-	path := writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"iso_code": "FR"})
+	path := writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"iso_code": "FR"})
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -590,7 +601,7 @@ func TestLookupASNFlatFormat(t *testing.T) {
 	}{
 		{
 			"autonomous_system_organization",
-			map[string]string{"as_org": "Example Org"},
+			map[string]string{"autonomous_system_organization": "Example Org"},
 			"Example Org",
 		},
 		{
@@ -602,7 +613,7 @@ func TestLookupASNFlatFormat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := writeRecordMMDB(t, dir, "asn.mmdb", "asn", tt.fields)
+			path := writeRecordMMDB(t, dir, "iptoasn-asn.mmdb", "asn", tt.fields)
 			db, err := openMMDB(path)
 			if err != nil {
 				t.Fatalf("openMMDB: %v", err)
@@ -620,7 +631,7 @@ func TestLookupASNFlatFormat(t *testing.T) {
 // CountryName and Continent from the country map when a record is found.
 func TestLookupWithKnownCountryCode(t *testing.T) {
 	dir := t.TempDir()
-	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "US"})
+	writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"country_code": "US"})
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: false}
 	l := NewLookup(cfg)
@@ -650,8 +661,8 @@ func TestLookupWithKnownCountryCode(t *testing.T) {
 // TestLookupWithASNLoaded exercises the ASN lookup branch inside Lookup.
 func TestLookupWithASNLoaded(t *testing.T) {
 	dir := t.TempDir()
-	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "US"})
-	writeRecordMMDB(t, dir, "asn.mmdb", "asn", map[string]string{"as_org": "Test ISP"})
+	writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"country_code": "US"})
+	writeRecordMMDB(t, dir, "iptoasn-asn.mmdb", "asn", map[string]string{"autonomous_system_organization": "Test ISP"})
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: true}
 	l := NewLookup(cfg)
@@ -674,7 +685,7 @@ func TestLookupWithASNLoaded(t *testing.T) {
 // code matches the blocklist.
 func TestIsBlockedMatchesCountry(t *testing.T) {
 	dir := t.TempDir()
-	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "CN"})
+	writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"country_code": "CN"})
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true}
 	l := NewLookup(cfg)
@@ -695,7 +706,7 @@ func TestIsBlockedMatchesCountry(t *testing.T) {
 // code is in the allowlist and when it is not.
 func TestIsAllowedMatchesCountry(t *testing.T) {
 	dir := t.TempDir()
-	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "US"})
+	writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"country_code": "US"})
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true}
 	l := NewLookup(cfg)
@@ -717,13 +728,12 @@ func TestIsAllowedMatchesCountry(t *testing.T) {
 // TestLookupWithCityLoaded exercises the city lookup branch inside Lookup.
 func TestLookupWithCityLoaded(t *testing.T) {
 	dir := t.TempDir()
-	writeRecordMMDB(t, dir, "country.mmdb", "country", map[string]string{"country_code": "US"})
+	writeRecordMMDB(t, dir, "iptoasn-country.mmdb", "country", map[string]string{"country_code": "US"})
 	// AI.md PART 19 publishes city data as one database per IP version
-	// (dbip-city-ipv4.mmdb / dbip-city-ipv6.mmdb), so the loader looks for
-	// city-ipv4.mmdb / city-ipv6.mmdb. The retired single "city.mmdb" name is in
+	// (dbip-city-ipv4.mmdb / dbip-city-ipv6.mmdb). The retired single "city.mmdb" name is in
 	// legacyFiles and is deleted on load — writing it here leaves nothing to load
 	// and sends the loader off to download the real database over the network.
-	writeRecordMMDB(t, dir, "city-ipv4.mmdb", "city ipv4", map[string]string{"city": "New York"})
+	writeRecordMMDB(t, dir, "dbip-city-ipv4.mmdb", "city ipv4", map[string]string{"city": "New York"})
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: false, City: true}
 	l := NewLookup(cfg)
@@ -779,16 +789,22 @@ func TestAsFloatFloat32(t *testing.T) {
 func TestDownloadDatabaseSuccess(t *testing.T) {
 	want := []byte("fake mmdb content")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%x  iptoasn-country.mmdb\n", sha256.Sum256(want))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(want)
 	}))
 	defer srv.Close()
 
 	dir := t.TempDir()
-	destPath := filepath.Join(dir, "country.mmdb")
+	destPath := filepath.Join(dir, "iptoasn-country.mmdb")
 
 	l := NewLookup(nil)
-	if err := l.downloadDatabase(srv.URL, destPath); err != nil {
+	l.httpClient = srv.Client()
+	l.checksumURL = srv.URL + "/checksum/"
+	if err := l.downloadDatabase(srv.URL+"/latest/iptoasn-country.mmdb", destPath); err != nil {
 		t.Fatalf("downloadDatabase returned error: %v", err)
 	}
 
@@ -810,10 +826,12 @@ func TestDownloadDatabaseHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	dir := t.TempDir()
-	destPath := filepath.Join(dir, "country.mmdb")
+	destPath := filepath.Join(dir, "iptoasn-country.mmdb")
 
 	l := NewLookup(nil)
-	err := l.downloadDatabase(srv.URL, destPath)
+	l.httpClient = srv.Client()
+	l.checksumURL = srv.URL + "/checksum/"
+	err := l.downloadDatabase(srv.URL+"/latest/iptoasn-country.mmdb", destPath)
 	if err == nil {
 		t.Error("downloadDatabase should fail on 404 response")
 	}
@@ -826,7 +844,12 @@ func TestDownloadDatabaseHTTPError(t *testing.T) {
 // error when the URL is unreachable.
 func TestDownloadDatabaseNetworkError(t *testing.T) {
 	l := NewLookup(nil)
-	err := l.downloadDatabase("http://127.0.0.1:1", "/tmp/should-not-exist.mmdb")
+	closedServer := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	closedURL := closedServer.URL
+	closedServer.Close()
+	l.httpClient = &http.Client{Timeout: time.Second}
+	l.checksumURL = closedURL + "/checksum/"
+	err := l.downloadDatabase(closedURL+"/latest/iptoasn-country.mmdb", filepath.Join(t.TempDir(), "should-not-exist.mmdb"))
 	if err == nil {
 		t.Error("downloadDatabase should fail on unreachable URL")
 	}
@@ -837,14 +860,20 @@ func TestDownloadDatabaseNetworkError(t *testing.T) {
 func TestDownloadDatabaseUnwritableDest(t *testing.T) {
 	want := []byte("data")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%x  test.mmdb\n", sha256.Sum256(want))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(want)
 	}))
 	defer srv.Close()
 
 	l := NewLookup(nil)
+	l.httpClient = srv.Client()
+	l.checksumURL = srv.URL + "/checksum/"
 	// Path to a non-existent directory — os.Create will fail
-	err := l.downloadDatabase(srv.URL, "/nonexistent-dir-12345/file.mmdb")
+	err := l.downloadDatabase(srv.URL+"/latest/test.mmdb", filepath.Join(t.TempDir(), "missing", "file.mmdb"))
 	if err == nil {
 		t.Error("downloadDatabase should fail when dest dir does not exist")
 	}
@@ -874,8 +903,8 @@ func TestLoadDatabasesAllDisabled(t *testing.T) {
 // already exist on disk (skips download, attempts openMMDB).
 func TestLoadDatabasesWithExistingFiles(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
-	writeTempMMDB(t, dir, "asn.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-asn.mmdb")
 
 	cfg := &Config{
 		Enabled: true,
@@ -894,11 +923,11 @@ func TestLoadDatabasesWithExistingFiles(t *testing.T) {
 // when those files exist.
 func TestLoadDatabasesAllExisting(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
-	writeTempMMDB(t, dir, "asn.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-asn.mmdb")
 	// AI.md PART 19: city data ships as one database per IP version.
-	writeTempMMDB(t, dir, "city-ipv4.mmdb")
-	writeTempMMDB(t, dir, "city-ipv6.mmdb")
+	writeTempMMDB(t, dir, "dbip-city-ipv4.mmdb")
+	writeTempMMDB(t, dir, "dbip-city-ipv6.mmdb")
 
 	cfg := &Config{
 		Enabled: true,
@@ -919,8 +948,8 @@ func TestLoadDatabasesAllExisting(t *testing.T) {
 // returns an error.
 func TestLoadDatabasesMissingFileWithBadData(t *testing.T) {
 	dir := t.TempDir()
-	// Write corrupt data for country.mmdb so openMMDB fails without a download
-	badPath := filepath.Join(dir, "country.mmdb")
+	// Write corrupt data for iptoasn-country.mmdb so openMMDB fails without a download
+	badPath := filepath.Join(dir, "iptoasn-country.mmdb")
 	if err := os.WriteFile(badPath, []byte("not-valid-mmdb-data"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -948,7 +977,7 @@ func TestLoadDatabasesMissingFileWithBadData(t *testing.T) {
 func TestLoadDatabasesInvalidMMDB(t *testing.T) {
 	dir := t.TempDir()
 	// Write a junk file (not valid MMDB)
-	badPath := filepath.Join(dir, "country.mmdb")
+	badPath := filepath.Join(dir, "iptoasn-country.mmdb")
 	if err := os.WriteFile(badPath, []byte("this is not mmdb"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -974,9 +1003,9 @@ func TestLoadDatabasesInvalidMMDB(t *testing.T) {
 // a valid country DB still lets loaded=true.
 func TestLoadDatabasesInvalidASN(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 	// Bad ASN file
-	if err := os.WriteFile(filepath.Join(dir, "asn.mmdb"), []byte("garbage"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "iptoasn-asn.mmdb"), []byte("garbage"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -1016,7 +1045,7 @@ func TestLoadDatabasesLastUpdateSet(t *testing.T) {
 // confirming the update-error path is exercised.
 func TestUpdateDatabasesDownloadFails(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 
 	cfg := &Config{
 		Enabled: true,
@@ -1031,10 +1060,10 @@ func TestUpdateDatabasesDownloadFails(t *testing.T) {
 		t.Fatalf("LoadDatabases setup: %v", err)
 	}
 
-	// UpdateDatabases always tries to download; it will fail without real internet
-	// — we just verify it returns an error and doesn't panic.
+	// UpdateDatabases always downloads; reject these requests locally so the test
+	// exercises the update failure without contacting the release host.
+	l.httpClient = &http.Client{Transport: geoIPRejectTransport{}}
 	err := l.UpdateDatabases()
-	// err is expected (download fails in test env) — no panic is the assertion
 	_ = err
 }
 
@@ -1043,6 +1072,10 @@ func TestUpdateDatabasesDownloadFails(t *testing.T) {
 func TestUpdateDatabasesWithMockServer(t *testing.T) {
 	mmdbBytes := buildMinimalMMDB()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%x  test.mmdb\n", sha256.Sum256(mmdbBytes))
+			return
+		}
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(mmdbBytes)))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(mmdbBytes)
@@ -1058,6 +1091,8 @@ func TestUpdateDatabasesWithMockServer(t *testing.T) {
 		City:    false,
 	}
 	l := NewLookup(cfg)
+	l.httpClient = srv.Client()
+	l.checksumURL = srv.URL + "/checksum/"
 
 	// Directly test downloadDatabase with our mock (UpdateDatabases uses
 	// hardcoded URLs, so we exercise downloadDatabase success path directly)
@@ -1083,11 +1118,11 @@ func TestUpdateDatabasesNilConfigError(t *testing.T) {
 // enabled-DB branches without panicking, even when downloads fail.
 func TestUpdateDatabasesAllBranchesWithFailure(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
-	writeTempMMDB(t, dir, "asn.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-asn.mmdb")
 	// AI.md PART 19: city data ships as one database per IP version.
-	writeTempMMDB(t, dir, "city-ipv4.mmdb")
-	writeTempMMDB(t, dir, "city-ipv6.mmdb")
+	writeTempMMDB(t, dir, "dbip-city-ipv4.mmdb")
+	writeTempMMDB(t, dir, "dbip-city-ipv6.mmdb")
 
 	cfg := &Config{
 		Enabled: true,
@@ -1097,12 +1132,13 @@ func TestUpdateDatabasesAllBranchesWithFailure(t *testing.T) {
 		City:    true,
 	}
 	l := NewLookup(cfg)
+	l.httpClient = &http.Client{Transport: geoIPRejectTransport{}}
 	if err := l.LoadDatabases(); err != nil {
 		t.Fatalf("LoadDatabases: %v", err)
 	}
 	defer l.Close()
 
-	// UpdateDatabases will attempt downloads, which fail — errors returned but no panic
+	// UpdateDatabases will attempt downloads, which fail locally without network access.
 	_ = l.UpdateDatabases()
 }
 
@@ -1110,7 +1146,7 @@ func TestUpdateDatabasesAllBranchesWithFailure(t *testing.T) {
 // to LoadDatabases (and that its path is exercised).
 func TestLoadDatabaseCallsLoadDatabases(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true}
 	l := NewLookup(cfg)
@@ -1125,11 +1161,11 @@ func TestLoadDatabaseCallsLoadDatabases(t *testing.T) {
 // including non-nil ones.
 func TestCloseWithLoadedDBs(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
-	writeTempMMDB(t, dir, "asn.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-asn.mmdb")
 	// AI.md PART 19: city data ships as one database per IP version.
-	writeTempMMDB(t, dir, "city-ipv4.mmdb")
-	writeTempMMDB(t, dir, "city-ipv6.mmdb")
+	writeTempMMDB(t, dir, "dbip-city-ipv4.mmdb")
+	writeTempMMDB(t, dir, "dbip-city-ipv6.mmdb")
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: true, City: true}
 	l := NewLookup(cfg)
@@ -1151,7 +1187,7 @@ func TestCloseWithLoadedDBs(t *testing.T) {
 // is loaded; with an empty MMDB the result should be Found=false.
 func TestLookupWithLoadedCountryDB(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true, ASN: false}
 	l := NewLookup(cfg)
@@ -1187,7 +1223,7 @@ func TestLookupWithLoadedCountryDB(t *testing.T) {
 // TestIsBlockedWithLoadedDB exercises IsBlocked paths with a loaded DB.
 func TestIsBlockedWithLoadedDB(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true}
 	l := NewLookup(cfg)
@@ -1209,7 +1245,7 @@ func TestIsBlockedWithLoadedDB(t *testing.T) {
 // TestIsAllowedWithLoadedDB exercises IsAllowed paths with a loaded DB.
 func TestIsAllowedWithLoadedDB(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true}
 	l := NewLookup(cfg)
@@ -1277,7 +1313,7 @@ func TestGetCountryAllContinents(t *testing.T) {
 // calls after a DB is loaded.
 func TestLookupConcurrencyWithDB(t *testing.T) {
 	dir := t.TempDir()
-	writeTempMMDB(t, dir, "country.mmdb")
+	writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 
 	cfg := &Config{Enabled: true, Dir: dir, Country: true}
 	l := NewLookup(cfg)
@@ -1304,7 +1340,7 @@ func TestLookupConcurrencyWithDB(t *testing.T) {
 // TestMmdbReaderCloseReleasesReader verifies that Close sets reader to nil.
 func TestMmdbReaderCloseReleasesReader(t *testing.T) {
 	dir := t.TempDir()
-	path := writeTempMMDB(t, dir, "country.mmdb")
+	path := writeTempMMDB(t, dir, "iptoasn-country.mmdb")
 	db, err := openMMDB(path)
 	if err != nil {
 		t.Fatalf("openMMDB: %v", err)
@@ -1325,6 +1361,10 @@ func TestMmdbReaderCloseReleasesReader(t *testing.T) {
 // causes a copy error (server closes mid-stream).
 func TestDownloadDatabaseServerCloseMidStream(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%x  partial.mmdb\n", sha256.Sum256([]byte("partial")))
+			return
+		}
 		// Force close the connection mid-write by hijacking and closing
 		w.Header().Set("Content-Length", "1000")
 		w.WriteHeader(http.StatusOK)
@@ -1338,6 +1378,8 @@ func TestDownloadDatabaseServerCloseMidStream(t *testing.T) {
 	dir := t.TempDir()
 	destPath := filepath.Join(dir, "partial.mmdb")
 	l := NewLookup(nil)
+	l.httpClient = srv.Client()
+	l.checksumURL = srv.URL + "/checksum/"
 	// This may succeed or fail depending on TCP behavior — we just verify no panic
 	_ = l.downloadDatabase(srv.URL, destPath)
 }

@@ -994,6 +994,18 @@
     "active_connections": "Active Connections",
     "last_updated": "Last updated:",
     "auto_refresh_in": "Auto-refresh in",
+    "mode_debug": "Debug",
+    "unavailable": "Unavailable",
+    "shutting_down": "Shutting down",
+    "restart_required": "Restart required",
+    "section": {
+      "cluster": "Cluster",
+      "version": "Version",
+      "runtime": "Runtime",
+      "features": "Features",
+      "checks": "Component Status",
+      "stats": "Server Statistics"
+    },
     "components": {
       "database": "Database",
       "cache": "Cache",
@@ -2169,7 +2181,8 @@
       "label_new_version": "New version:",
       "label_release_date": "Release date:",
       "label_release_notes": "Release notes:",
-      "label_view_update": "View update:"
+      "label_view_update": "View update:",
+      "manual_command": "Manual update command: {command}"
     },
     "security_report": {
       "subject": "Security report received: %s",

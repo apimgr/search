@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -169,6 +170,48 @@ func RecordReportStatusAccess(ctx context.Context, db *database.DB, trackingID, 
 		return false, fmt.Errorf("read security report status access result: %w", err)
 	}
 	return count == 1, nil
+}
+
+// DeleteClosedReportsBefore removes only closed reports older than cutoff,
+// committing at most 500 rows per transaction and yielding between batches.
+func DeleteClosedReportsBefore(ctx context.Context, db *database.DB, cutoff time.Time) (int64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("security report database is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	table := database.ServerTableName(db, "security_reports")
+	var total int64
+	for {
+		var deleted int64
+		err := db.Write(ctx, func(tx *sql.Tx) error {
+			result, err := tx.ExecContext(ctx, fmt.Sprintf(
+				`DELETE FROM %s WHERE tracking_id IN (
+					SELECT tracking_id FROM %s
+					WHERE closed_at IS NOT NULL AND datetime(closed_at) < datetime(?)
+					ORDER BY closed_at LIMIT 500
+				)`, table, table), cutoff.UTC().Format(time.RFC3339))
+			if err != nil {
+				return fmt.Errorf("delete expired security reports: %w", err)
+			}
+			deleted, err = result.RowsAffected()
+			return err
+		})
+		if err != nil {
+			return total, err
+		}
+		total += deleted
+		if deleted < 500 {
+			return total, nil
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return total, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 // TokenExpired reports whether a report's one-shot status-page token has

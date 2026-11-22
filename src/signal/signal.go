@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,7 +43,18 @@ type ShutdownConfig struct {
 var (
 	shuttingDown bool
 	shutdownMu   sync.RWMutex
+	shutdownExitCode atomic.Int32
 )
+
+// SetShutdownExitCode sets the process exit status after graceful shutdown.
+func SetShutdownExitCode(code int) {
+	shutdownExitCode.Store(int32(code))
+}
+
+// ShutdownExitCode returns the exit status requested before graceful shutdown.
+func ShutdownExitCode() int {
+	return int(shutdownExitCode.Load())
+}
 
 // IsShuttingDown returns true if graceful shutdown is in progress
 func IsShuttingDown() bool {
@@ -62,6 +74,7 @@ func setShuttingDown(v bool) {
 // It returns a channel that is closed when graceful shutdown completes;
 // main() should receive from it and then call os.Exit(0).
 func Setup(cfg ShutdownConfig) <-chan struct{} {
+	shutdownExitCode.Store(0)
 	// Apply defaults
 	if cfg.InFlightTimeout == 0 {
 		cfg.InFlightTimeout = 30 * time.Second

@@ -1022,3 +1022,24 @@ func (m *Manager) GetCertInfo() (*CertInfo, error) {
 		IsExpiring: time.Until(leaf.NotAfter) < renewalThreshold,
 	}, nil
 }
+
+// HealthStatus returns a public-safe state for the active TLS certificate.
+func (m *Manager) HealthStatus() string {
+	if m == nil {
+		return "disabled"
+	}
+	m.mu.RLock()
+	enabled := m.config != nil && m.config.Enabled
+	m.mu.RUnlock()
+	if !enabled {
+		return "disabled"
+	}
+	info, err := m.GetCertInfo()
+	if err != nil || info == nil || time.Now().After(info.NotAfter) {
+		return "error"
+	}
+	if info.IsExpiring {
+		return "degraded"
+	}
+	return "ok"
+}

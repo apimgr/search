@@ -18,6 +18,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
@@ -73,8 +74,12 @@ func extractBearerToken(r *http.Request) (string, bool) {
 // present a valid operator token. Per AI.md PART 10: logs auth attempts to audit log.
 func (s *Server) RequireOperator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		authStarted := time.Now()
 		clientIP := getClientIPSimple(r)
 		if !ValidateOperatorToken(r, s.config) {
+			if delay := 100*time.Millisecond - time.Since(authStarted); delay > 0 {
+				time.Sleep(delay)
+			}
 			// Log failed auth attempt to audit log
 			if s.logManager != nil && s.logManager.Audit() != nil {
 				s.logManager.Audit().Log(logging.AuditEntry{

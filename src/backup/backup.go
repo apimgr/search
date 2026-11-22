@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -24,6 +25,13 @@ import (
 // BackupMetadata contains information about a backup
 // Per AI.md PART 25: manifest.json format with required fields
 type BackupMetadata struct {
+	Type         string               `json:"type,omitempty"`
+	SnapshotAt   time.Time            `json:"snapshot_at,omitempty"`
+	SHA256       string               `json:"sha256,omitempty"`
+	FileManifest []BackupFileMetadata `json:"file_manifest,omitempty"`
+	BaseBackup   string               `json:"base_backup,omitempty"`
+	BaseSHA256   string               `json:"base_sha256,omitempty"`
+	Deleted      []string             `json:"deleted,omitempty"`
 	// Manifest format version (e.g., "1.0.0")
 	Version string `json:"version"`
 	// When backup was created
@@ -51,16 +59,120 @@ type BackupMetadata struct {
 	Files []string `json:"files,omitempty"`
 }
 
+// BackupFileMetadata stores the source state represented by one archive entry.
+type BackupFileMetadata struct {
+	Path       string    `json:"path"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modified_at"`
+	SHA256     string    `json:"sha256"`
+}
+
 // Manager handles backup and restore operations
 type Manager struct {
-	backupDir string
-	configDir string
-	dataDir   string
+	backupDir   string
+	configDir   string
+	dataDir     string
+	databaseDir string
+	serverDB    interface {
+		SnapshotTo(context.Context, string) error
+	}
+	beforeRestore func() error
 	// Backup encryption password (never stored on disk)
 	password string
 	// Username of who created the backup (per PART 25)
-	createdBy string
+	createdBy     string
+	restoreLimits RestoreLimits
 }
+
+// RestoreLimits bounds compressed archives and their cumulative extraction.
+type RestoreLimits struct {
+	MaxArchiveSize  int64
+	MaxExpandedSize int64
+	MaxFiles        int64
+	MaxFileSize     int64
+	MaxRatio        int64
+}
+
+func defaultRestoreLimits() RestoreLimits {
+	return RestoreLimits{MaxArchiveSize: 1 << 30, MaxExpandedSize: 4 << 30, MaxFiles: 10000, MaxFileSize: 512 << 20, MaxRatio: 100}
+}
+
+// RestoreLimitsFromConfig resolves server.restore values with AI.md defaults.
+func RestoreLimitsFromConfig(cfg config.RestoreConfig) (RestoreLimits, error) {
+	defaults := defaultRestoreLimits()
+	archive, err := parseRestoreSize(cfg.MaxArchiveSize, defaults.MaxArchiveSize)
+	if err != nil {
+		return RestoreLimits{}, fmt.Errorf("max_archive_size: %w", err)
+	}
+	expanded, err := parseRestoreSize(cfg.MaxExpandedSize, defaults.MaxExpandedSize)
+	if err != nil {
+		return RestoreLimits{}, fmt.Errorf("max_expanded_size: %w", err)
+	}
+	fileSize, err := parseRestoreSize(cfg.MaxFileSize, defaults.MaxFileSize)
+	if err != nil {
+		return RestoreLimits{}, fmt.Errorf("max_file_size: %w", err)
+	}
+	limits := defaults
+	limits.MaxArchiveSize, limits.MaxExpandedSize, limits.MaxFileSize = archive, expanded, fileSize
+	if cfg.MaxFiles > 0 {
+		limits.MaxFiles = int64(cfg.MaxFiles)
+	}
+	if cfg.MaxRatio > 0 {
+		limits.MaxRatio = int64(cfg.MaxRatio)
+	}
+	return limits, nil
+}
+
+func parseRestoreSize(value string, fallback int64) (int64, error) {
+	value = strings.TrimSpace(strings.ToUpper(value))
+	if value == "" {
+		return fallback, nil
+	}
+	multiplier := int64(1)
+	for _, unit := range []struct {
+		suffix     string
+		multiplier int64
+	}{{"KB", 1 << 10}, {"K", 1 << 10}, {"MB", 1 << 20}, {"M", 1 << 20}, {"GB", 1 << 30}, {"G", 1 << 30}} {
+		if strings.HasSuffix(value, unit.suffix) {
+			multiplier = unit.multiplier
+			value = strings.TrimSpace(strings.TrimSuffix(value, unit.suffix))
+			break
+		}
+	}
+	n, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || n < 1 || n > int64(^uint64(0)>>1)/multiplier {
+		return 0, fmt.Errorf("invalid positive size %q", value)
+	}
+	return n * multiplier, nil
+}
+
+// SetRestoreLimits overrides the restore limits with server.restore settings.
+func (m *Manager) SetRestoreLimits(limits RestoreLimits) { m.restoreLimits = limits }
+
+func (m *Manager) effectiveRestoreLimits() RestoreLimits {
+	limits := m.restoreLimits
+	defaults := defaultRestoreLimits()
+	if limits.MaxArchiveSize <= 0 {
+		limits.MaxArchiveSize = defaults.MaxArchiveSize
+	}
+	if limits.MaxExpandedSize <= 0 {
+		limits.MaxExpandedSize = defaults.MaxExpandedSize
+	}
+	if limits.MaxFiles <= 0 {
+		limits.MaxFiles = defaults.MaxFiles
+	}
+	if limits.MaxFileSize <= 0 {
+		limits.MaxFileSize = defaults.MaxFileSize
+	}
+	if limits.MaxRatio <= 0 {
+		limits.MaxRatio = defaults.MaxRatio
+	}
+	return limits
+}
+
+var ErrNoFullBackup = errors.New("no full backup is available as an incremental base")
+var ErrBaseMissing = errors.New("ERR_BASE_MISSING")
+var ErrBaseCorrupt = errors.New("ERR_BASE_CORRUPT")
 
 // cachedBackupDir holds the backup directory resolved once at server
 // startup, per AI.md PART 21: "Never re-resolve the path at cleanup time."
@@ -104,10 +216,40 @@ func (m *Manager) SetPassword(password string) {
 // NewManager creates a new backup manager
 func NewManager() *Manager {
 	return &Manager{
-		backupDir: resolveBackupDir(),
-		configDir: config.GetConfigDir(),
-		dataDir:   config.GetDataDir(),
+		backupDir:   resolveBackupDir(),
+		configDir:   config.GetConfigDir(),
+		dataDir:     config.GetDataDir(),
+		databaseDir: config.GetDatabaseDir(),
 	}
+}
+
+// SetServerDatabaseSnapshotter supplies the live server database's write
+// handle so backups use SQLite's online snapshot operation.
+func (m *Manager) SetServerDatabaseSnapshotter(db interface {
+	SnapshotTo(context.Context, string) error
+}) {
+	m.serverDB = db
+}
+
+// SetBeforeRestore installs a hook that closes database handles after the
+// pre-restore backup is captured and before database directories are swapped.
+func (m *Manager) SetBeforeRestore(hook func() error) {
+	m.beforeRestore = hook
+}
+
+func (m *Manager) databaseIsWithinData() (string, bool) {
+	rel, err := filepath.Rel(m.dataDir, m.databaseDir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return rel, true
+}
+
+func (m *Manager) databaseArchivePath() string {
+	if rel, ok := m.databaseIsWithinData(); ok {
+		return filepath.ToSlash(filepath.Join("data", rel, "server.db"))
+	}
+	return "database/server.db"
 }
 
 // normalizeBackupFilename resolves the on-disk archive name for a requested
@@ -190,6 +332,11 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 // Per AI.md PART 21: the archive is built in memory and written crash-safely;
 // under compliance mode an unencrypted backup is refused outright.
 func (m *Manager) Create(filename string) (string, error) {
+	return m.CreateAt(filename, time.Now().UTC())
+}
+
+// CreateAt creates a full backup that represents snapshotAt.
+func (m *Manager) CreateAt(filename string, snapshotAt time.Time) (string, error) {
 	if m.password == "" && m.complianceRequiresEncryption() {
 		return "", fmt.Errorf("compliance mode requires encrypted backups: set a backup password before creating a backup")
 	}
@@ -202,7 +349,7 @@ func (m *Manager) Create(filename string) (string, error) {
 	filename = normalizeBackupFilename(filename)
 	backupPath := filepath.Join(m.backupDir, filename)
 
-	archive, err := m.buildArchive()
+	archive, err := m.buildArchiveAt(snapshotAt)
 	if err != nil {
 		return "", err
 	}
@@ -214,10 +361,7 @@ func (m *Manager) Create(filename string) (string, error) {
 	return backupPath, nil
 }
 
-// buildArchive builds the complete .tar.gz backup archive in memory.
-// Per AI.md PART 21: "Unencrypted archive never touches disk" — the caller
-// decides whether the bytes are written as-is or encrypted first.
-func (m *Manager) buildArchive() ([]byte, error) {
+func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 	var buf bytes.Buffer
 
 	gzWriter := gzip.NewWriter(&buf)
@@ -226,6 +370,30 @@ func (m *Manager) buildArchive() ([]byte, error) {
 	var totalSize int64
 	var files []string
 	checksums := make(map[string]string)
+
+	databaseSnapshot := ""
+	if m.serverDB != nil {
+		base := filepath.Join(os.TempDir(), config.InternalOrg)
+		if err := os.MkdirAll(base, 0700); err != nil {
+			return nil, fmt.Errorf("create backup snapshot temp root: %w", err)
+		}
+		snapshotDir, err := os.MkdirTemp(base, config.InternalName+"-")
+		if err != nil {
+			return nil, fmt.Errorf("create backup snapshot temp directory: %w", err)
+		}
+		defer func() {
+			if err := os.RemoveAll(snapshotDir); err != nil {
+				slog.Warn("failed to remove backup snapshot temp directory", "path", snapshotDir, "err", err)
+			}
+		}()
+		databaseSnapshot = filepath.Join(snapshotDir, "server.db")
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		err = m.serverDB.SnapshotTo(ctx, databaseSnapshot)
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("snapshot server database: %w", err)
+		}
+	}
 
 	// Backup config directory
 	configFiles, configSize, configChecksums, err := m.addDirectoryToTar(tarWriter, m.configDir, "config")
@@ -248,6 +416,16 @@ func (m *Manager) buildArchive() ([]byte, error) {
 	for k, v := range dataChecksums {
 		checksums[k] = v
 	}
+	if databaseSnapshot != "" {
+		archiveName := m.databaseArchivePath()
+		name, size, checksum, err := addFileToTar(tarWriter, databaseSnapshot, archiveName)
+		if err != nil {
+			return nil, fmt.Errorf("add server database snapshot: %w", err)
+		}
+		files = append(files, name)
+		totalSize += size
+		checksums[name] = checksum
+	}
 
 	// Load config for metadata
 	cfg, _ := config.Load(filepath.Join(m.configDir, "server.yml"))
@@ -266,12 +444,21 @@ func (m *Manager) buildArchive() ([]byte, error) {
 	// Calculate overall checksum from individual file checksums (per AI.md PART 25)
 	// This provides a single verification value for the entire backup
 	overallChecksum := computeOverallChecksum(checksums)
+	fileManifest, err := m.fileManifest(files, checksums, databaseSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build file manifest: %w", err)
+	}
+	snapshotAt = snapshotAt.UTC().Truncate(time.Second)
 
 	// Create metadata per AI.md PART 25: manifest.json format
 	metadata := BackupMetadata{
+		Type:         "full",
+		SnapshotAt:   snapshotAt,
+		SHA256:       overallChecksum,
+		FileManifest: fileManifest,
 		// Manifest format version
 		Version:   "1.0.0",
-		CreatedAt: time.Now(),
+		CreatedAt: snapshotAt,
 		// Per PART 25: who created the backup
 		CreatedBy: createdBy,
 		// Per PART 25: application version
@@ -298,7 +485,7 @@ func (m *Manager) buildArchive() ([]byte, error) {
 		Name:    "manifest.json",
 		Size:    int64(len(metaJSON)),
 		Mode:    0644,
-		ModTime: time.Now(),
+		ModTime: snapshotAt,
 	}
 	if err := tarWriter.WriteHeader(metaHeader); err != nil {
 		return nil, fmt.Errorf("failed to write metadata header: %w", err)
@@ -317,6 +504,262 @@ func (m *Manager) buildArchive() ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (m *Manager) fileManifest(files []string, checksums map[string]string, databaseSnapshot string) ([]BackupFileMetadata, error) {
+	manifest := make([]BackupFileMetadata, 0, len(files))
+	for _, name := range files {
+		var sourcePath string
+		switch {
+		case strings.HasPrefix(name, "config/"):
+			sourcePath = filepath.Join(m.configDir, filepath.FromSlash(strings.TrimPrefix(name, "config/")))
+		case databaseSnapshot != "" && filepath.ToSlash(name) == m.databaseArchivePath():
+			sourcePath = databaseSnapshot
+		case strings.HasPrefix(name, "data/"):
+			sourcePath = filepath.Join(m.dataDir, filepath.FromSlash(strings.TrimPrefix(name, "data/")))
+		default:
+			return nil, fmt.Errorf("unexpected backup path %q", name)
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			return nil, fmt.Errorf("stat %s: %w", name, err)
+		}
+		manifest = append(manifest, BackupFileMetadata{
+			Path:       filepath.ToSlash(name),
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime().UTC(),
+			SHA256:     checksums[name],
+		})
+	}
+	sort.Slice(manifest, func(i, j int) bool { return manifest[i].Path < manifest[j].Path })
+	return manifest, nil
+}
+
+// CreateIncrementalAt writes a cumulative differential against the newest full backup.
+func (m *Manager) CreateIncrementalAt(filename string, snapshotAt time.Time) (string, error) {
+	if m.password == "" && m.complianceRequiresEncryption() {
+		return "", fmt.Errorf("compliance mode requires encrypted backups: set a backup password before creating a backup")
+	}
+	basePath, base, err := m.latestFullBackup()
+	if err != nil {
+		return "", err
+	}
+	baseSHA, err := hashFile(basePath)
+	if err != nil {
+		return "", fmt.Errorf("hash incremental base: %w", err)
+	}
+	archive, metadata, err := m.buildIncrementalArchive(snapshotAt, base, filepath.Base(basePath), baseSHA)
+	if err != nil {
+		return "", err
+	}
+	_ = metadata
+	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create backup directory: %w", err)
+	}
+	filename = normalizeBackupFilename(filename)
+	path := filepath.Join(m.backupDir, filename)
+	if err := writeFileAtomic(path, archive, 0600); err != nil {
+		return "", fmt.Errorf("failed to write incremental backup: %w", err)
+	}
+	return path, nil
+}
+
+// CreateIncremental creates the fixed daily or hourly cumulative incremental.
+func (m *Manager) CreateIncremental(filename string) (string, error) {
+	return m.CreateIncrementalAt(filename, time.Now().UTC())
+}
+
+// CreateEncryptedIncrementalAt writes an encrypted cumulative differential.
+func (m *Manager) CreateEncryptedIncrementalAt(filename string, snapshotAt time.Time) (string, error) {
+	if m.password == "" {
+		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
+	}
+	basePath, base, err := m.latestFullBackup()
+	if err != nil {
+		return "", err
+	}
+	baseSHA, err := hashFile(basePath)
+	if err != nil {
+		return "", fmt.Errorf("hash incremental base: %w", err)
+	}
+	archive, metadata, err := m.buildIncrementalArchive(snapshotAt, base, filepath.Base(basePath), baseSHA)
+	if err != nil {
+		return "", err
+	}
+	metadata.Encrypted = true
+	metadata.EncryptionMethod = "AES-256-GCM"
+	archive, err = replaceArchiveManifest(archive, metadata, nil)
+	if err != nil {
+		return "", err
+	}
+	encrypted, err := EncryptBackup(archive, m.password)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt incremental backup: %w", err)
+	}
+	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create backup directory: %w", err)
+	}
+	path := filepath.Join(m.backupDir, normalizeBackupFilename(filename)+".enc")
+	if err := writeFileAtomic(path, encrypted, 0600); err != nil {
+		return "", fmt.Errorf("failed to write encrypted incremental backup: %w", err)
+	}
+	return path, nil
+}
+
+func (m *Manager) CreateEncryptedIncremental(filename string) (string, error) {
+	return m.CreateEncryptedIncrementalAt(filename, time.Now().UTC())
+}
+
+func (m *Manager) latestFullBackup() (string, *BackupMetadata, error) {
+	backups, err := m.List()
+	if err != nil {
+		return "", nil, err
+	}
+	sort.Slice(backups, func(i, j int) bool { return backups[i].CreatedAt.After(backups[j].CreatedAt) })
+	for _, item := range backups {
+		metadata, err := m.GetMetadata(item.Path)
+		if err != nil || metadata == nil || metadata.Type == "incremental" {
+			continue
+		}
+		if len(metadata.FileManifest) == 0 {
+			continue
+		}
+		return item.Path, metadata, nil
+	}
+	return "", nil, ErrNoFullBackup
+}
+
+func (m *Manager) buildIncrementalArchive(snapshotAt time.Time, base *BackupMetadata, baseName, baseSHA string) ([]byte, *BackupMetadata, error) {
+	fullArchive, err := m.buildArchiveAt(snapshotAt)
+	if err != nil {
+		return nil, nil, err
+	}
+	return m.buildIncrementalArchiveFromFull(fullArchive, base, baseName, baseSHA)
+}
+
+func (m *Manager) buildIncrementalArchiveFromFull(fullArchive []byte, base *BackupMetadata, baseName, baseSHA string) ([]byte, *BackupMetadata, error) {
+	current, err := m.verifyManifestFromData(fullArchive)
+	if err != nil {
+		return nil, nil, err
+	}
+	baseFiles := make(map[string]BackupFileMetadata, len(base.FileManifest))
+	for _, entry := range base.FileManifest {
+		baseFiles[entry.Path] = entry
+	}
+	changed := make(map[string]bool)
+	currentFiles := make(map[string]bool, len(current.FileManifest))
+	changedManifest := make([]BackupFileMetadata, 0)
+	checksums := make(map[string]string)
+	var size int64
+	for _, entry := range current.FileManifest {
+		currentFiles[entry.Path] = true
+		old, ok := baseFiles[entry.Path]
+		if ok && old.Size == entry.Size && old.ModifiedAt.Equal(entry.ModifiedAt) && old.SHA256 == entry.SHA256 {
+			continue
+		}
+		changed[entry.Path] = true
+		changedManifest = append(changedManifest, entry)
+		checksums[entry.Path] = entry.SHA256
+		size += entry.Size
+	}
+	deleted := make([]string, 0)
+	for _, entry := range base.FileManifest {
+		if !currentFiles[entry.Path] {
+			deleted = append(deleted, entry.Path)
+		}
+	}
+	sort.Strings(deleted)
+	current.Type = "incremental"
+	current.BaseBackup = baseName
+	current.BaseSHA256 = baseSHA
+	current.Deleted = deleted
+	current.FileManifest = changedManifest
+	current.Contents = make([]string, 0, len(changedManifest))
+	for _, entry := range changedManifest {
+		current.Contents = append(current.Contents, entry.Path)
+	}
+	current.Files = append([]string(nil), current.Contents...)
+	current.Checksums = checksums
+	current.Checksum = "sha256:" + computeOverallChecksum(checksums)
+	current.SHA256 = computeOverallChecksum(checksums)
+	current.Size = size
+	archive, err := replaceArchiveManifest(fullArchive, current, changed)
+	if err != nil {
+		return nil, nil, err
+	}
+	return archive, current, nil
+}
+
+func replaceArchiveManifest(data []byte, metadata *BackupMetadata, included map[string]bool) ([]byte, error) {
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
+	tarOut := tar.NewWriter(gz)
+	gzIn, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	tarIn := tar.NewReader(gzIn)
+	for {
+		header, err := tarIn.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			_ = gzIn.Close()
+			return nil, err
+		}
+		if header.Name == "manifest.json" || header.Name == "backup.json" {
+			continue
+		}
+		if included != nil && !included[filepath.ToSlash(header.Name)] {
+			continue
+		}
+		if err := tarOut.WriteHeader(header); err != nil {
+			_ = gzIn.Close()
+			return nil, err
+		}
+		if _, err := io.CopyN(tarOut, tarIn, header.Size); err != nil {
+			_ = gzIn.Close()
+			return nil, err
+		}
+	}
+	if err := gzIn.Close(); err != nil {
+		return nil, err
+	}
+	manifest, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := tarOut.WriteHeader(&tar.Header{Name: "manifest.json", Size: int64(len(manifest)), Mode: 0644, ModTime: metadata.SnapshotAt}); err != nil {
+		return nil, err
+	}
+	if _, err := tarOut.Write(manifest); err != nil {
+		return nil, err
+	}
+	if err := tarOut.Close(); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func hashFile(path string) (checksum string, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close file after hashing: %w", closeErr))
+		}
+	}()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // addDirectoryToTar adds a directory to the tar archive with SHA256 checksums
@@ -340,6 +783,9 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 
 		// Skip directories we don't want to backup
 		if info.IsDir() {
+			if prefix == "data" && filepath.Clean(path) != filepath.Clean(srcDir) && filepath.Clean(path) == filepath.Clean(m.databaseDir) {
+				return filepath.SkipDir
+			}
 			name := info.Name()
 			if name == "logs" || name == "cache" || name == "tmp" {
 				return filepath.SkipDir
@@ -354,6 +800,9 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 			slog.Warn("skipping non-regular file in backup", "path", path, "mode", info.Mode().String())
 			return nil
 		}
+		if prefix == "data" && isSQLiteDatabaseArtifact(m.databaseDir, path) {
+			return nil
+		}
 
 		// Get relative path
 		relPath, err := filepath.Rel(srcDir, path)
@@ -361,20 +810,12 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 			return err
 		}
 
-		// Skip large files (>100MB) so a single oversized artifact cannot
-		// exhaust memory while the archive is assembled; the omission is
-		// logged so the operator can see what is not covered
-		if info.Size() > 100*1024*1024 {
-			slog.Warn("skipping oversized file in backup", "path", path, "size", info.Size())
-			return nil
-		}
-
 		// Create tar header
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
 		}
-		header.Name = filepath.Join(prefix, relPath)
+		header.Name = filepath.ToSlash(filepath.Join(prefix, relPath))
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
@@ -416,6 +857,47 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 	})
 
 	return files, totalSize, checksums, err
+}
+
+func isSQLiteDatabaseArtifact(databaseDir, path string) bool {
+	rel, err := filepath.Rel(databaseDir, path)
+	if err != nil || filepath.Dir(rel) != "." {
+		return false
+	}
+	name := filepath.Base(rel)
+	for _, base := range []string{"server.db", "user.db"} {
+		if name == base || name == base+"-wal" || name == base+"-shm" {
+			return true
+		}
+	}
+	return false
+}
+
+// addFileToTar writes one file and records the checksum for its archive path.
+func addFileToTar(tw *tar.Writer, sourcePath, archivePath string) (string, int64, string, error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", 0, "", err
+	}
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return "", 0, "", err
+	}
+	header.Name = filepath.ToSlash(archivePath)
+	if err := tw.WriteHeader(header); err != nil {
+		return "", 0, "", err
+	}
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return "", 0, "", err
+	}
+	hash := sha256.New()
+	written, copyErr := io.CopyN(io.MultiWriter(tw, hash), file, header.Size)
+	closeErr := file.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return "", written, "", err
+	}
+	return header.Name, written, hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // computeOverallChecksum calculates a combined checksum from individual file checksums
@@ -461,14 +943,32 @@ func (m *Manager) Restore(backupPath string) error {
 	if err != nil {
 		return err
 	}
-
-	return m.restoreFromData(data)
+	metadata, err := m.verifyManifestFromData(data)
+	if err != nil {
+		return err
+	}
+	if metadata.Type != "incremental" {
+		return m.restoreFromData(data)
+	}
+	basePath := filepath.Join(filepath.Dir(backupPath), metadata.BaseBackup)
+	baseData, err := m.readArchive(basePath)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrBaseCorrupt, err)
+	}
+	return m.restoreFromLayers([][]byte{baseData, data}, metadata.Deleted)
 }
 
 // readArchive loads a backup archive into memory, decrypting it first when the
 // file carries the encrypted .enc extension. The decrypted archive is never
 // written to disk.
 func (m *Manager) readArchive(backupPath string) ([]byte, error) {
+	info, err := os.Stat(backupPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat backup file: %w", err)
+	}
+	if info.Size() > m.effectiveRestoreLimits().MaxArchiveSize {
+		return nil, fmt.Errorf("restore max_archive_size exceeded: %d > %d", info.Size(), m.effectiveRestoreLimits().MaxArchiveSize)
+	}
 	raw, err := os.ReadFile(backupPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read backup file: %w", err)
@@ -492,9 +992,17 @@ func (m *Manager) readArchive(backupPath string) ([]byte, error) {
 // restoreTargetPath maps an archive entry to its destination inside targetRoot,
 // rejecting any entry that would escape the destination directory (tar slip).
 func restoreTargetPath(targetRoot, relPath string) (string, error) {
-	cleaned := filepath.Clean("/" + filepath.FromSlash(relPath))
-	cleaned = strings.TrimPrefix(cleaned, string(os.PathSeparator))
-	if cleaned == "" || cleaned == "." {
+	slashPath := filepath.ToSlash(relPath)
+	if slashPath == "" || strings.HasPrefix(slashPath, "/") || (len(slashPath) > 1 && slashPath[1] == ':') {
+		return "", fmt.Errorf("unsafe path in archive: %s", relPath)
+	}
+	for _, segment := range strings.Split(slashPath, "/") {
+		if segment == ".." || segment == "" {
+			return "", fmt.Errorf("unsafe path in archive: %s", relPath)
+		}
+	}
+	cleaned := filepath.Clean(filepath.FromSlash(slashPath))
+	if cleaned == "" || cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("empty path in archive")
 	}
 
@@ -513,6 +1021,10 @@ func restoreTargetPath(targetRoot, relPath string) (string, error) {
 // failure aborts before the first rename, and a failure between renames rolls
 // the already-swapped directory back.
 func (m *Manager) restoreFromData(data []byte) error {
+	return m.restoreFromLayers([][]byte{data}, nil)
+}
+
+func (m *Manager) restoreFromLayers(archives [][]byte, deleted []string) error {
 	// Create backup of current state before restoring
 	preRestoreName := fmt.Sprintf("pre-restore-%s.tar.gz", time.Now().Format("20060102-150405"))
 	var preRestoreErr error
@@ -525,28 +1037,60 @@ func (m *Manager) restoreFromData(data []byte) error {
 		// Non-fatal, just warn
 		slog.Warn("could not create pre-restore backup", "err", preRestoreErr)
 	}
+	if m.beforeRestore != nil {
+		if err := m.beforeRestore(); err != nil {
+			return fmt.Errorf("failed to close database before restore: %w", err)
+		}
+	}
 
 	stamp := time.Now().Format("20060102-150405.000000000")
 	targets := map[string]string{
 		"config": m.configDir,
 		"data":   m.dataDir,
 	}
+	if _, withinData := m.databaseIsWithinData(); !withinData && archivesContainServerDatabase(archives) {
+		targets["database"] = m.databaseDir
+	}
 	staging := make(map[string]string, len(targets))
 
-	// Stage a copy of the live directories so files absent from the archive
-	// survive the swap
+	// Restore stages begin empty so a full archive replaces the prior state.
 	for prefix, dir := range targets {
 		stage := fmt.Sprintf("%s.restore-%s", dir, stamp)
-		if err := copyTree(dir, stage); err != nil {
+		if err := os.MkdirAll(stage, 0700); err != nil {
 			removeAll(staging)
-			return fmt.Errorf("failed to stage %s directory: %w", prefix, err)
+			return fmt.Errorf("failed to create %s restore staging directory: %w", prefix, err)
 		}
 		staging[prefix] = stage
 	}
 
-	if err := m.applyArchiveToStaging(data, staging); err != nil {
-		removeAll(staging)
-		return err
+	for _, data := range archives {
+		if err := m.applyArchiveToStaging(data, staging); err != nil {
+			removeAll(staging)
+			return err
+		}
+	}
+	for _, name := range deleted {
+		var root, rel string
+		switch {
+		case strings.HasPrefix(name, "config/"):
+			root, rel = staging["config"], strings.TrimPrefix(name, "config/")
+		case strings.HasPrefix(name, "data/"):
+			root, rel = staging["data"], strings.TrimPrefix(name, "data/")
+		case strings.HasPrefix(name, "database/") && staging["database"] != "":
+			root, rel = staging["database"], strings.TrimPrefix(name, "database/")
+		default:
+			removeAll(staging)
+			return fmt.Errorf("refusing to restore incremental: unsafe deleted path %q", name)
+		}
+		relPath := filepath.FromSlash(rel)
+		if filepath.IsAbs(relPath) || filepath.Clean(relPath) != relPath || relPath == "." || relPath == ".." || (len(relPath) > 1 && relPath[1] == ':') || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+			removeAll(staging)
+			return fmt.Errorf("refusing to restore incremental: unsafe deleted path %q", name)
+		}
+		if err := os.RemoveAll(filepath.Join(root, relPath)); err != nil {
+			removeAll(staging)
+			return fmt.Errorf("failed to apply deleted path %q: %w", name, err)
+		}
 	}
 
 	// Swap staged directories into place, rolling back on failure
@@ -584,6 +1128,28 @@ func (m *Manager) restoreFromData(data []byte) error {
 	}
 
 	return nil
+}
+
+func archivesContainServerDatabase(archives [][]byte) bool {
+	for _, data := range archives {
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			continue
+		}
+		tarReader := tar.NewReader(reader)
+		for {
+			header, err := tarReader.Next()
+			if err != nil {
+				break
+			}
+			if header.Name == "database/server.db" {
+				_ = reader.Close()
+				return true
+			}
+		}
+		_ = reader.Close()
+	}
+	return false
 }
 
 // applyArchiveToStaging writes every archive entry into the matching staging
@@ -624,9 +1190,15 @@ func (m *Manager) applyArchiveToStaging(data []byte, staging map[string]string) 
 		case strings.HasPrefix(header.Name, "data/"):
 			stageRoot = staging["data"]
 			relPath = strings.TrimPrefix(header.Name, "data/")
+		case strings.HasPrefix(header.Name, "database/") && staging["database"] != "":
+			stageRoot = staging["database"]
+			relPath = strings.TrimPrefix(header.Name, "database/")
 		default:
 			// Skip unknown paths
 			continue
+		}
+		if header.Typeflag == tar.TypeDir {
+			relPath = strings.TrimSuffix(relPath, "/")
 		}
 
 		targetPath, err := restoreTargetPath(stageRoot, relPath)
@@ -690,82 +1262,6 @@ func removeAll(paths map[string]string) {
 	}
 }
 
-// copyTree copies the directory tree at src into dst, creating dst even when
-// src does not exist yet (first-run restore into an empty install).
-func copyTree(src, dst string) error {
-	info, err := os.Stat(src)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return os.MkdirAll(dst, 0755)
-		}
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", src)
-	}
-
-	if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
-		return err
-	}
-
-	return filepath.Walk(src, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		target := filepath.Join(dst, rel)
-
-		switch {
-		case fi.IsDir():
-			return os.MkdirAll(target, fi.Mode().Perm())
-		case fi.Mode()&os.ModeSymlink != 0:
-			link, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			return os.Symlink(link, target)
-		case fi.Mode().IsRegular():
-			return copyFile(path, target, fi.Mode().Perm())
-		default:
-			// Sockets, devices and pipes are runtime artifacts, not state
-			return nil
-		}
-	})
-}
-
-// copyFile copies a single regular file, preserving its permission bits.
-func copyFile(src, dst string, perm os.FileMode) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := in.Close(); err != nil {
-			slog.Warn("failed to close backup source file", "error", err)
-		}
-	}()
-
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(out, in); err != nil {
-		if closeErr := out.Close(); closeErr != nil {
-			slog.Warn("failed to close backup destination file", "error", closeErr)
-		}
-		return err
-	}
-	return out.Close()
-}
-
 // List returns all available backups
 func (m *Manager) List() ([]BackupInfo, error) {
 	var backups []BackupInfo
@@ -815,46 +1311,11 @@ func (m *Manager) List() ([]BackupInfo, error) {
 // GetMetadata reads metadata from a backup archive
 // Looks for manifest.json (per AI.md PART 26) or legacy backup.json
 func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
-	file, err := os.Open(backupPath)
+	data, err := m.readArchive(backupPath)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Warn("failed to close backup metadata file", "error", err)
-		}
-	}()
-
-	gzReader, err := gzip.NewReader(file)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := gzReader.Close(); err != nil {
-			slog.Warn("failed to close backup gzip reader", "error", err)
-		}
-	}()
-
-	tarReader := tar.NewReader(gzReader)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			return nil, fmt.Errorf("metadata not found in backup")
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		// Look for manifest.json (new format) or backup.json (legacy)
-		if header.Name == "manifest.json" || header.Name == "backup.json" {
-			var metadata BackupMetadata
-			if err := json.NewDecoder(tarReader).Decode(&metadata); err != nil {
-				return nil, err
-			}
-			return &metadata, nil
-		}
-	}
+	return m.verifyManifestFromData(data)
 }
 
 // Delete deletes a backup file
@@ -1052,7 +1513,10 @@ func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 		}
 	}
 
-	// Delete everything not claimed by a bucket, oldest-first
+	// Keep any full archive referenced by a currently retained incremental.
+	for baseName := range m.retainedIncrementalBases() {
+		kept[baseName] = true
+	}
 	var toDelete []BackupInfo
 	for _, b := range countable {
 		if !kept[b.Filename] {
@@ -1074,6 +1538,34 @@ func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 	}
 
 	return nil
+}
+
+func (m *Manager) retainedIncrementalBases() map[string]bool {
+	protected := make(map[string]bool)
+	backups, err := m.List()
+	if err != nil {
+		return protected
+	}
+	for _, item := range backups {
+		if !isIncrementalBackup(item.Filename) {
+			continue
+		}
+		metadata, err := m.GetMetadata(item.Path)
+		if err != nil || metadata == nil {
+			// If an encrypted incremental cannot be read because no password is
+			// available, conservatively retain all full backups.
+			for _, candidate := range backups {
+				if !isIncrementalBackup(candidate.Filename) {
+					protected[candidate.Filename] = true
+				}
+			}
+			continue
+		}
+		if metadata.BaseBackup != "" {
+			protected[metadata.BaseBackup] = true
+		}
+	}
+	return protected
 }
 
 // enforceMaxTotalSize prunes oldest backups first until total backup-directory
@@ -1105,20 +1597,34 @@ func (m *Manager) enforceMaxTotalSize(maxTotalSize string) error {
 		total += b.Size
 	}
 
-	for _, incrementalsOnly := range []bool{false, true} {
-		for _, b := range backups {
-			if total <= limitBytes {
-				return nil
+	for total > limitBytes {
+		protected := m.retainedIncrementalBases()
+		candidate := -1
+		for i, b := range backups {
+			if !isIncrementalBackup(b.Filename) && !protected[b.Filename] {
+				candidate = i
+				break
 			}
-			if isIncrementalBackup(b.Filename) != incrementalsOnly {
-				continue
-			}
-			if err := m.Delete(b.Filename); err != nil {
-				slog.Warn("failed to delete backup over max_total_size", "file", b.Filename, "err", err)
-				continue
-			}
-			total -= b.Size
 		}
+		if candidate < 0 {
+			for i, b := range backups {
+				if isIncrementalBackup(b.Filename) {
+					candidate = i
+					break
+				}
+			}
+		}
+		if candidate < 0 {
+			break
+		}
+		b := backups[candidate]
+		if err := m.Delete(b.Filename); err != nil {
+			slog.Warn("failed to delete backup over max_total_size", "file", b.Filename, "err", err)
+			backups = append(backups[:candidate], backups[candidate+1:]...)
+			continue
+		}
+		total -= b.Size
+		backups = append(backups[:candidate], backups[candidate+1:]...)
 	}
 
 	return nil
@@ -1209,6 +1715,11 @@ func (m *Manager) CheckDiskSpace(thresholdPercent int) (ok bool, freeBytes uint6
 // CreateEncrypted creates an encrypted backup with .enc extension
 // Per AI.md PART 21: .enc extension for encrypted backups
 func (m *Manager) CreateEncrypted(filename string) (string, error) {
+	return m.CreateEncryptedAt(filename, time.Now().UTC())
+}
+
+// CreateEncryptedAt creates an encrypted full archive representing snapshotAt.
+func (m *Manager) CreateEncryptedAt(filename string, snapshotAt time.Time) (string, error) {
 	if m.password == "" {
 		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
 	}
@@ -1220,7 +1731,17 @@ func (m *Manager) CreateEncrypted(filename string) (string, error) {
 
 	// Per AI.md PART 21: the plaintext archive is built in memory and encrypted
 	// before anything is written — the unencrypted archive never touches disk
-	archive, err := m.buildArchive()
+	archive, err := m.buildArchiveAt(snapshotAt)
+	if err != nil {
+		return "", err
+	}
+	metadata, err := m.verifyManifestFromData(archive)
+	if err != nil {
+		return "", err
+	}
+	metadata.Encrypted = true
+	metadata.EncryptionMethod = "AES-256-GCM"
+	archive, err = replaceArchiveManifest(archive, metadata, nil)
 	if err != nil {
 		return "", err
 	}
@@ -1272,6 +1793,7 @@ type VerificationResult struct {
 	ManifestValid bool `json:"manifest_valid"`
 	ContentValid  bool `json:"content_valid"`
 	DatabaseValid bool `json:"database_valid"`
+	BaseValid     bool `json:"base_valid"`
 	// Only for encrypted backups
 	DecryptValid bool     `json:"decrypt_valid"`
 	AllPassed    bool     `json:"all_passed"`
@@ -1288,10 +1810,16 @@ type VerificationResult struct {
 // - Database integrity (verify SQLite is valid, if present)
 // - Decrypt test (if encrypted)
 func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
+	return m.verifyBackup(backupPath, true)
+}
+
+func (m *Manager) verifyBackup(backupPath string, enforceRestoreLimits bool) (*VerificationResult, error) {
 	result := &VerificationResult{
 		// Default true for non-encrypted
 		DecryptValid: true,
+		BaseValid:    true,
 	}
+	var compressedTotal int64
 
 	// Check 1: File exists
 	info, err := os.Stat(backupPath)
@@ -1300,12 +1828,18 @@ func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
 		return result, nil
 	}
 	result.FileExists = true
+	compressedTotal = info.Size()
 
 	// Check 2: Size > 0
 	if info.Size() == 0 {
 		result.Errors = append(result.Errors, "backup file is empty (size = 0)")
 	} else {
 		result.SizeValid = true
+	}
+	if enforceRestoreLimits && info.Size() > m.effectiveRestoreLimits().MaxArchiveSize {
+		result.SizeValid = false
+		result.Errors = append(result.Errors, fmt.Sprintf("restore max_archive_size exceeded: %d > %d", info.Size(), m.effectiveRestoreLimits().MaxArchiveSize))
+		return result, nil
 	}
 
 	// Check 3 & 4: For encrypted backups, decrypt first
@@ -1344,16 +1878,30 @@ func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
 
 	// Check 3: Manifest readable
 	metadata, err := m.verifyManifestFromData(dataToVerify)
+	combinedArchives := [][]byte{dataToVerify}
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("manifest verification failed: %v", err))
 	} else {
 		result.ManifestValid = true
+		if metadata.Type == "incremental" {
+			baseData, baseErr := m.verifyIncrementalBase(backupPath, metadata)
+			if baseErr != nil {
+				result.BaseValid = false
+				result.Errors = append(result.Errors, baseErr.Error())
+			} else {
+				combinedArchives = append(combinedArchives, baseData)
+				baseInfo, statErr := os.Stat(filepath.Join(filepath.Dir(backupPath), metadata.BaseBackup))
+				if statErr == nil {
+					compressedTotal += baseInfo.Size()
+				}
+			}
+		}
 
 		// Check 4: Checksum valid (verify stored checksum)
 		if metadata.Checksum != "" && metadata.Checksums != nil {
 			expectedChecksum := computeOverallChecksum(metadata.Checksums)
 			storedChecksum := strings.TrimPrefix(metadata.Checksum, "sha256:")
-			if expectedChecksum == storedChecksum {
+			if expectedChecksum == storedChecksum && (metadata.SHA256 == "" || expectedChecksum == metadata.SHA256) {
 				result.ChecksumValid = true
 			} else {
 				result.Errors = append(result.Errors, "checksum mismatch: backup may be corrupted")
@@ -1363,18 +1911,117 @@ func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
 			result.ChecksumValid = true
 		}
 	}
+	limitsValid := true
+	if enforceRestoreLimits {
+		if limitErr := m.validateRestoreLimits(combinedArchives, compressedTotal); limitErr != nil {
+			limitsValid = false
+			result.Errors = append(result.Errors, limitErr.Error())
+		}
+	}
 
 	// Check 5 & 6: Content extraction and database integrity
 	contentValid, databaseValid, contentErrs := m.verifyContentAndDatabase(dataToVerify)
-	result.ContentValid = contentValid
+	result.ContentValid = contentValid && limitsValid
 	result.DatabaseValid = databaseValid
 	result.Errors = append(result.Errors, contentErrs...)
 
 	// Determine overall result
 	result.AllPassed = result.FileExists && result.SizeValid && result.ChecksumValid && result.ManifestValid &&
-		result.ContentValid && result.DatabaseValid && result.DecryptValid
+		result.ContentValid && result.DatabaseValid && result.DecryptValid && result.BaseValid
 
 	return result, nil
+}
+
+func (m *Manager) verifyIncrementalBase(incrementalPath string, incremental *BackupMetadata) ([]byte, error) {
+	if incremental.BaseBackup == "" || filepath.Base(incremental.BaseBackup) != incremental.BaseBackup {
+		return nil, fmt.Errorf("%w: invalid base backup name", ErrBaseMissing)
+	}
+	basePath := filepath.Join(filepath.Dir(incrementalPath), incremental.BaseBackup)
+	if _, err := os.Stat(basePath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %s", ErrBaseMissing, incremental.BaseBackup)
+		}
+		return nil, fmt.Errorf("%w: %v", ErrBaseMissing, err)
+	}
+	actualSHA, err := hashFile(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBaseCorrupt, err)
+	}
+	if incremental.BaseSHA256 == "" || actualSHA != incremental.BaseSHA256 {
+		return nil, fmt.Errorf("%w: %s checksum mismatch", ErrBaseCorrupt, incremental.BaseBackup)
+	}
+	baseData, err := m.readArchive(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBaseCorrupt, err)
+	}
+	baseMetadata, err := m.verifyManifestFromData(baseData)
+	if err != nil || (baseMetadata.Type != "" && baseMetadata.Type != "full") {
+		return nil, fmt.Errorf("%w: base is not a valid full archive", ErrBaseCorrupt)
+	}
+	return baseData, nil
+}
+
+func (m *Manager) validateRestoreLimits(archives [][]byte, compressedTotal int64) error {
+	limits := m.effectiveRestoreLimits()
+	if compressedTotal > limits.MaxArchiveSize {
+		return fmt.Errorf("restore max_archive_size exceeded: %d > %d", compressedTotal, limits.MaxArchiveSize)
+	}
+	var expanded, files int64
+	for _, data := range archives {
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return fmt.Errorf("restore archive is not valid gzip: %w", err)
+		}
+		tarReader := tar.NewReader(reader)
+		for {
+			header, err := tarReader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				_ = reader.Close()
+				return fmt.Errorf("read restore archive: %w", err)
+			}
+			name := filepath.FromSlash(header.Name)
+			if name == "" || filepath.IsAbs(name) || strings.HasPrefix(name, ".."+string(os.PathSeparator)) || name == ".." || (len(name) > 1 && name[1] == ':') {
+				_ = reader.Close()
+				return fmt.Errorf("restore archive contains unsafe path %q", header.Name)
+			}
+			if header.Size < 0 || header.Size > limits.MaxFileSize {
+				_ = reader.Close()
+				return fmt.Errorf("restore max_file_size exceeded for %q", header.Name)
+			}
+			switch header.Typeflag {
+			case tar.TypeDir:
+				continue
+			case tar.TypeReg:
+				files++
+				if files > limits.MaxFiles {
+					_ = reader.Close()
+					return fmt.Errorf("restore max_files exceeded: %d > %d", files, limits.MaxFiles)
+				}
+				expanded += header.Size
+				if expanded > limits.MaxExpandedSize {
+					_ = reader.Close()
+					return fmt.Errorf("restore max_expanded_size exceeded: %d > %d", expanded, limits.MaxExpandedSize)
+				}
+				if _, err := io.CopyN(io.Discard, tarReader, header.Size); err != nil {
+					_ = reader.Close()
+					return fmt.Errorf("read restore file %q: %w", header.Name, err)
+				}
+			default:
+				_ = reader.Close()
+				return fmt.Errorf("restore archive contains unsupported entry %q", header.Name)
+			}
+		}
+		if err := reader.Close(); err != nil {
+			return err
+		}
+	}
+	if compressedTotal == 0 && expanded > 0 || compressedTotal > 0 && float64(expanded)/float64(compressedTotal) > float64(limits.MaxRatio) {
+		return fmt.Errorf("restore max_ratio exceeded: expanded %d bytes from %d bytes", expanded, compressedTotal)
+	}
+	return nil
 }
 
 // verifyContentAndDatabase test-extracts every file in the backup archive to a
@@ -1549,6 +2196,124 @@ func (m *Manager) CreateAndVerify(filename string) (string, *VerificationResult,
 	}
 
 	return backupPath, result, nil
+}
+
+// CreateAtAndVerify creates and verifies a full backup representing snapshotAt.
+func (m *Manager) CreateAtAndVerify(filename string, snapshotAt time.Time) (string, *VerificationResult, error) {
+	path, err := m.CreateAt(filename, snapshotAt)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.verifyCreated(path)
+}
+
+// CreateEncryptedAtAndVerify creates and verifies an encrypted full backup at snapshotAt.
+func (m *Manager) CreateEncryptedAtAndVerify(filename string, snapshotAt time.Time) (string, *VerificationResult, error) {
+	path, err := m.CreateEncryptedAt(filename, snapshotAt)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.verifyCreated(path)
+}
+
+// CreateIncrementalAndVerify writes and verifies a differential backup.
+func (m *Manager) CreateIncrementalAndVerify(filename string, snapshotAt time.Time) (string, *VerificationResult, error) {
+	path, err := m.CreateIncrementalAt(filename, snapshotAt)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.verifyCreated(path)
+}
+
+// CreateEncryptedIncrementalAndVerify writes and verifies an encrypted differential backup.
+func (m *Manager) CreateEncryptedIncrementalAndVerify(filename string, snapshotAt time.Time) (string, *VerificationResult, error) {
+	path, err := m.CreateEncryptedIncrementalAt(filename, snapshotAt)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.verifyCreated(path)
+}
+
+// CreateDailyPairAndVerify captures one archive and derives the incremental and
+// full backup from the same captured bytes. The incremental is written first.
+func (m *Manager) CreateDailyPairAndVerify(incrementalName, fullName string, snapshotAt time.Time) (string, string, *VerificationResult, *VerificationResult, bool, error) {
+	if m.password == "" && m.complianceRequiresEncryption() {
+		return "", "", nil, nil, false, fmt.Errorf("compliance mode requires encrypted backups")
+	}
+	snapshotAt = snapshotAt.UTC().Truncate(time.Second)
+	fullArchive, err := m.buildArchiveAt(snapshotAt)
+	if err != nil {
+		return "", "", nil, nil, false, err
+	}
+	basePath, base, err := m.latestFullBackup()
+	skipIncremental := errors.Is(err, ErrNoFullBackup)
+	if err != nil && !skipIncremental {
+		return "", "", nil, nil, false, err
+	}
+	var incrementalPath string
+	var incrementalVerify *VerificationResult
+	if !skipIncremental {
+		baseSHA, hashErr := hashFile(basePath)
+		if hashErr != nil {
+			return "", "", nil, nil, false, fmt.Errorf("hash incremental base: %w", hashErr)
+		}
+		incrementalArchive, _, buildErr := m.buildIncrementalArchiveFromFull(fullArchive, base, filepath.Base(basePath), baseSHA)
+		if buildErr != nil {
+			return "", "", nil, nil, false, buildErr
+		}
+		incrementalPath, incrementalVerify, err = m.writeAndVerifyArchive(incrementalName, incrementalArchive)
+		if err != nil {
+			return "", "", incrementalVerify, nil, false, err
+		}
+	}
+	fullPath, fullVerify, err := m.writeAndVerifyArchive(fullName, fullArchive)
+	if err != nil {
+		return incrementalPath, "", incrementalVerify, fullVerify, skipIncremental, err
+	}
+	return incrementalPath, fullPath, incrementalVerify, fullVerify, skipIncremental, nil
+}
+
+func (m *Manager) writeAndVerifyArchive(filename string, archive []byte) (string, *VerificationResult, error) {
+	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+		return "", nil, fmt.Errorf("failed to create backup directory: %w", err)
+	}
+	if m.password != "" {
+		metadata, err := m.verifyManifestFromData(archive)
+		if err != nil {
+			return "", nil, err
+		}
+		metadata.Encrypted = true
+		metadata.EncryptionMethod = "AES-256-GCM"
+		archive, err = replaceArchiveManifest(archive, metadata, nil)
+		if err != nil {
+			return "", nil, err
+		}
+		archive, err = EncryptBackup(archive, m.password)
+		if err != nil {
+			return "", nil, err
+		}
+		filename = normalizeBackupFilename(filename) + ".enc"
+	} else {
+		filename = normalizeBackupFilename(filename)
+	}
+	path := filepath.Join(m.backupDir, filename)
+	if err := writeFileAtomic(path, archive, 0600); err != nil {
+		return "", nil, err
+	}
+	return m.verifyCreated(path)
+}
+
+func (m *Manager) verifyCreated(path string) (string, *VerificationResult, error) {
+	result, err := m.verifyBackup(path, false)
+	if err != nil {
+		removeErr := os.Remove(path)
+		return "", nil, fmt.Errorf("backup verification process failed: %w", errors.Join(err, removeErr))
+	}
+	if !result.AllPassed {
+		removeErr := os.Remove(path)
+		return "", result, fmt.Errorf("backup verification failed: %v", errors.Join(errors.New(strings.Join(result.Errors, "; ")), removeErr))
+	}
+	return path, result, nil
 }
 
 // CreateEncryptedAndVerify creates an encrypted backup and verifies it

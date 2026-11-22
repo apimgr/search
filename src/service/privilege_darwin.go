@@ -30,7 +30,14 @@ func FindAvailableSystemID() (int, error) {
 // CreateSystemUser creates a macOS service account.
 // Per AI.md PART 24: System user creation logic.
 func CreateSystemUser(name string) (*SystemUser, error) {
-	return createMacOSServiceAccount(name)
+	created, err := createMacOSServiceAccount(name)
+	if err != nil || !created.Created {
+		return created, err
+	}
+	if err := markSystemUserOwned(name); err != nil {
+		return nil, err
+	}
+	return created, nil
 }
 
 // findAvailableMacOSSystemID finds an available ID for macOS (uses _underscored users).
@@ -124,11 +131,12 @@ func createMacOSServiceAccount(name string) (*SystemUser, error) {
 	}
 
 	return &SystemUser{
-		Name:  svcName,
-		UID:   id,
-		GID:   id,
-		Home:  "/var/empty",
-		Shell: "/usr/bin/false",
+		Name:    svcName,
+		UID:     id,
+		GID:     id,
+		Home:    "/var/empty",
+		Shell:   "/usr/bin/false",
+		Created: true,
 	}, nil
 }
 
@@ -136,6 +144,9 @@ func createMacOSServiceAccount(name string) (*SystemUser, error) {
 // server. Per AI.md PART 23 uninstall: dscl . -delete entries are the inverse
 // of the dscl . -create commands.
 func DeleteSystemUser(name string) error {
+	if !systemUserOwned(name) {
+		return nil
+	}
 	svcName := "_" + name
 	var lastErr error
 	for _, args := range [][]string{
@@ -150,5 +161,5 @@ func DeleteSystemUser(name string) error {
 	if lastErr != nil && UserExists(svcName) {
 		return lastErr
 	}
-	return nil
+	return clearSystemUserOwnership(name)
 }

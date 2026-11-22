@@ -886,6 +886,7 @@ func healthResponseSchema() *Schema {
 		"version":         {Type: "string", Example: "1.0.0"}, "go_version": {Type: "string"},
 		"build":  {Type: "object", Properties: map[string]Schema{"commit": {Type: "string"}, "date": {Type: "string"}}},
 		"uptime": {Type: "string"}, "mode": {Type: "string"}, "timestamp": {Type: "string"},
+		"cluster": {Type: "object", Properties: map[string]Schema{"enabled": {Type: "boolean"}}},
 		"features": {Type: "object", Properties: map[string]Schema{
 			"tor":   {Type: "object", Properties: map[string]Schema{"enabled": {Type: "boolean"}, "running": {Type: "boolean"}, "status": {Type: "string"}, "hostname": {Type: "string"}}},
 			"i2p":   {Type: "object", Properties: map[string]Schema{"enabled": {Type: "boolean"}, "running": {Type: "boolean"}, "status": {Type: "string"}, "hostname": {Type: "string"}, "provider": {Type: "string"}}},

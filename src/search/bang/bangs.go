@@ -3,6 +3,7 @@ package bang
 import (
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -11,7 +12,8 @@ import (
 type Bang struct {
 	Shortcut    string   `json:"shortcut" yaml:"shortcut"`
 	Name        string   `json:"name" yaml:"name"`
-	URL         string   `json:"url" yaml:"url"`
+	URL         string   `json:"url,omitempty" yaml:"url,omitempty"`
+	Engine      string   `json:"engine,omitempty" yaml:"engine,omitempty"`
 	Category    string   `json:"category" yaml:"category"`
 	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
 	Icon        string   `json:"icon,omitempty" yaml:"icon,omitempty"`
@@ -33,7 +35,15 @@ type Manager struct {
 	builtins map[string]*Bang
 	custom   map[string]*Bang
 	// per-request user bangs from localStorage
-	user map[string]*Bang
+	user            map[string]*Bang
+	engineAvailable func(string) bool
+}
+
+// SetEngineAvailability connects local-engine bangs to the live engine state.
+func (m *Manager) SetEngineAvailability(available func(string) bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.engineAvailable = available
 }
 
 // NewManager creates a new bang manager with built-in defaults
@@ -53,6 +63,18 @@ func NewManager() *Manager {
 	}
 
 	return m
+}
+
+// Builtins returns a stable copy of the built-in shortcut definitions.
+func Builtins() []*Bang {
+	result := make([]*Bang, 0, len(defaultBangs))
+	for _, item := range defaultBangs {
+		copy := *item
+		copy.Aliases = append([]string(nil), item.Aliases...)
+		result = append(result, &copy)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Shortcut < result[j].Shortcut })
+	return result
 }
 
 // SetCustomBangs sets custom bangs from server configuration
@@ -147,20 +169,36 @@ func (m *Manager) lookup(shortcut string) *Bang {
 
 	// Check user bangs first (highest priority)
 	if b, ok := m.user[shortcut]; ok {
-		return b
+		if m.isAvailable(b) {
+			return b
+		}
+		return nil
 	}
 
 	// Check custom bangs (server config)
 	if b, ok := m.custom[shortcut]; ok {
-		return b
+		if m.isAvailable(b) {
+			return b
+		}
+		return nil
 	}
 
 	// Check built-in bangs
 	if b, ok := m.builtins[shortcut]; ok {
-		return b
+		if m.isAvailable(b) {
+			return b
+		}
+		return nil
 	}
 
 	return nil
+}
+
+func (m *Manager) isAvailable(b *Bang) bool {
+	if b.Engine == "" || m.engineAvailable == nil {
+		return true
+	}
+	return m.engineAvailable(b.Engine)
 }
 
 // buildURL builds the target URL with the search query
@@ -249,7 +287,7 @@ func (m *Manager) GetAll() []*Bang {
 
 	// Add user bangs first
 	for _, b := range m.user {
-		if !seen[b.Shortcut] {
+		if !seen[b.Shortcut] && m.isAvailable(b) {
 			seen[b.Shortcut] = true
 			result = append(result, b)
 		}
@@ -257,7 +295,7 @@ func (m *Manager) GetAll() []*Bang {
 
 	// Add custom bangs
 	for _, b := range m.custom {
-		if !seen[b.Shortcut] {
+		if !seen[b.Shortcut] && m.isAvailable(b) {
 			seen[b.Shortcut] = true
 			result = append(result, b)
 		}
@@ -265,7 +303,7 @@ func (m *Manager) GetAll() []*Bang {
 
 	// Add built-in bangs
 	for _, b := range m.builtins {
-		if !seen[b.Shortcut] {
+		if !seen[b.Shortcut] && m.isAvailable(b) {
 			seen[b.Shortcut] = true
 			result = append(result, b)
 		}
@@ -283,7 +321,7 @@ func (m *Manager) GetBuiltins() []*Bang {
 	var result []*Bang
 
 	for _, b := range m.builtins {
-		if !seen[b.Shortcut] {
+		if !seen[b.Shortcut] && m.isAvailable(b) {
 			seen[b.Shortcut] = true
 			result = append(result, b)
 		}

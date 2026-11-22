@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apimgr/search/src/config"
@@ -93,6 +94,7 @@ type TorService struct {
 	backendPort int
 	// Last startup failure, surfaced as status "error:{message}"
 	lastError string
+	starting  atomic.Bool
 }
 
 // NewTorService creates a new Tor service manager
@@ -306,6 +308,8 @@ func (t *TorService) readOnionHostname() (string, error) {
 // Per AI.md PART 31: "Auto-enabled if tor binary is installed - no enable flag needed".
 // A failure is recorded so status can report error:{message} per PART 31.
 func (t *TorService) StartTorService() error {
+	t.starting.Store(true)
+	defer t.starting.Store(false)
 	err := t.startTorProcess()
 	t.mu.Lock()
 	if err != nil {
@@ -521,6 +525,9 @@ func (t *TorService) IsRunning() bool {
 	defer t.mu.RUnlock()
 	return t.running
 }
+
+// IsStarting reports whether Tor is currently bootstrapping.
+func (t *TorService) IsStarting() bool { return t != nil && t.starting.Load() }
 
 // GetOnionAddress returns the .onion address
 func (t *TorService) GetOnionAddress() string {

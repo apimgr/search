@@ -110,10 +110,10 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestNewDatabaseManager_NilConfigUsesDefaults(t *testing.T) {
 	// Pass nil — the function must substitute DefaultConfig().
-	// DefaultConfig().DataDir is /data/db which likely doesn't exist and
+	// DefaultConfig().DataDir is /data/db/sqlite which likely doesn't exist and
 	// os.MkdirAll may fail in a sandboxed environment. We only assert that
 	// the function does not panic and returns a consistent error or a valid
-	// manager (depending on whether /data/db is writable).
+	// manager (depending on whether /data/db/sqlite is writable).
 	dm, err := NewDatabaseManager(nil)
 	if err == nil {
 		defer dm.Close()
@@ -186,6 +186,36 @@ func TestDatabaseManager_Close(t *testing.T) {
 	}
 }
 
+func TestDBSnapshotToIncludesCommittedSQLiteData(t *testing.T) {
+	dm := newManagerTempDir(t)
+	db := dm.ServerDB()
+	ctx := context.Background()
+	if _, err := db.Exec(ctx, "CREATE TABLE snapshot_test (value TEXT NOT NULL)"); err != nil {
+		t.Fatalf("create snapshot test table: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO snapshot_test (value) VALUES (?)", "committed"); err != nil {
+		t.Fatalf("insert snapshot test row: %v", err)
+	}
+
+	destination := filepath.Join(t.TempDir(), "server.db")
+	if err := db.SnapshotTo(ctx, destination); err != nil {
+		t.Fatalf("SnapshotTo: %v", err)
+	}
+
+	snapshot, err := sql.Open("sqlite", destination)
+	if err != nil {
+		t.Fatalf("open snapshot: %v", err)
+	}
+	defer snapshot.Close()
+	var value string
+	if err := snapshot.QueryRowContext(ctx, "SELECT value FROM snapshot_test").Scan(&value); err != nil {
+		t.Fatalf("read snapshot row: %v", err)
+	}
+	if value != "committed" {
+		t.Fatalf("snapshot value = %q, want committed", value)
+	}
+}
+
 func TestDatabaseManager_IsReady_AfterClose(t *testing.T) {
 	dm := newManagerTempDir(t)
 	dm.Close()
@@ -240,7 +270,7 @@ func TestNewDB_SQLiteInMemory(t *testing.T) {
 }
 
 func TestNewDB_NilConfigUsesDefault(t *testing.T) {
-	// nil config → DefaultConfig() which uses /data/db — just confirm no panic.
+	// nil config → DefaultConfig() which uses /data/db/sqlite — just confirm no panic.
 	db, err := NewDB(nil)
 	if err == nil {
 		defer db.Close()

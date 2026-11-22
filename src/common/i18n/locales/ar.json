@@ -994,6 +994,18 @@
     "active_connections": "الاتصالات النشطة",
     "last_updated": "اخر تحديث:",
     "auto_refresh_in": "التحديث التلقائي خلال",
+    "mode_debug": "تصحيح",
+    "unavailable": "غير متاح",
+    "shutting_down": "جارٍ الإيقاف",
+    "restart_required": "إعادة التشغيل مطلوبة",
+    "section": {
+      "cluster": "العنقود",
+      "version": "الاصدار",
+      "runtime": "وقت التشغيل",
+      "features": "الميزات",
+      "checks": "حالة المكونات",
+      "stats": "احصاءات الخادم"
+    },
     "components": {
       "database": "قاعدة البيانات",
       "cache": "التخزين المؤقت",
@@ -2169,7 +2181,8 @@
       "label_new_version": "الإصدار الجديد:",
       "label_release_date": "تاريخ الإصدار:",
       "label_release_notes": "ملاحظات الإصدار:",
-      "label_view_update": "عرض التحديث:"
+      "label_view_update": "عرض التحديث:",
+      "manual_command": "أمر التحديث اليدوي: {command}"
     },
     "security_report": {
       "subject": "تم استلام تقرير الأمان: %s",

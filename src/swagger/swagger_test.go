@@ -262,7 +262,7 @@ func TestGenerateSpecHasRequiredPaths(t *testing.T) {
 		}
 	}
 	healthSchema := spec.Components.Schemas["HealthResponse"]
-	for _, property := range []string{"project", "status", "version", "go_version", "build", "uptime", "mode", "timestamp", "features", "checks", "stats"} {
+	for _, property := range []string{"project", "status", "version", "go_version", "build", "uptime", "mode", "timestamp", "cluster", "features", "checks", "stats"} {
 		if _, exists := healthSchema.Properties[property]; !exists {
 			t.Errorf("HealthResponse schema is missing %q", property)
 		}

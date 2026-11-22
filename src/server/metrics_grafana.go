@@ -358,12 +358,12 @@ func grafanaPanelSpecs() []grafanaPanelSpec {
 		// Authentication
 		{
 			title:       "Authentication",
-			description: "search_auth_attempts_total and search_auth_sessions_active",
+			description: "search_auth_attempts_total and search_owner_tokens_active",
 			panelType:   "timeseries",
 			unit:        "short",
 			queries: []grafanaQuery{
 				{expr: "sum(rate(search_auth_attempts_total[5m])) by (method, status)", legend: "{{method}} {{status}}"},
-				{expr: "search_auth_sessions_active", legend: "active sessions"},
+				{expr: "search_owner_tokens_active", legend: "active owner tokens {{kind}}"},
 			},
 		},
 

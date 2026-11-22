@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/apimgr/search/src/client/cmd"
+	"github.com/apimgr/search/src/client/command"
 	clientupdate "github.com/apimgr/search/src/client/update"
 )
 

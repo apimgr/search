@@ -15,9 +15,9 @@ func TestDownloadAndInstallRejectsInvalidChecksum(t *testing.T) {
 		if r.URL.Path != "/cli/binaries/search-cli-linux-amd64" {
 			t.Errorf("request path = %q", r.URL.Path)
 		}
-	if _, err := w.Write([]byte("not a binary")); err != nil {
-		t.Errorf("write test binary response: %v", err)
-	}
+		if _, err := w.Write([]byte("not a binary")); err != nil {
+			t.Errorf("write test binary response: %v", err)
+		}
 	}))
 	defer server.Close()
 

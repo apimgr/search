@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"strconv"
 	"syscall"
 )
@@ -42,30 +43,7 @@ func isElevated() bool {
 // canEscalate returns true when a privilege escalation tool or privileged group membership exists.
 // Per AI.md PART 7: checks sudo/doas availability and wheel/sudo/admin group membership.
 func canEscalate() bool {
-	for _, tool := range []string{"sudo", "doas"} {
-		if _, err := exec.LookPath(tool); err == nil {
-			return true
-		}
-	}
-	u, err := user.Current()
-	if err != nil {
-		return false
-	}
-	gids, err := u.GroupIds()
-	if err != nil {
-		return false
-	}
-	privilegedGroups := map[string]bool{"wheel": true, "sudo": true, "admin": true}
-	for _, gid := range gids {
-		g, err := user.LookupGroupId(gid)
-		if err != nil {
-			continue
-		}
-		if privilegedGroups[g.Name] {
-			return true
-		}
-	}
-	return false
+	return detectPrivilegeEscalationMethod() != "none"
 }
 
 // execElevated re-executes the current binary via sudo or doas with the same arguments.
@@ -75,18 +53,19 @@ func execElevated() error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve executable path: %w", err)
 	}
-	var tool string
-	for _, t := range []string{"sudo", "doas"} {
-		if _, err := exec.LookPath(t); err == nil {
-			tool = t
-			break
-		}
-	}
-	if tool == "" {
-		return fmt.Errorf("no privilege escalation tool available (sudo/doas not found)")
-	}
 	args := append([]string{self}, os.Args[1:]...)
-	cmd := exec.Command(tool, args...)
+	method := detectPrivilegeEscalationMethod()
+	var cmd *exec.Cmd
+	switch method {
+	case "sudo", "doas", "pkexec":
+		cmd = exec.Command(method, args...)
+	case "su":
+		cmd = exec.Command("su", "-c", shellCommand(args))
+	case "osascript":
+		cmd = exec.Command("osascript", "-e", appleScriptCommand(args))
+	default:
+		return fmt.Errorf("no privilege escalation method available")
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -99,16 +78,49 @@ func detectPrivilegeEscalationMethod() string {
 	if os.Geteuid() == 0 {
 		return "none"
 	}
-	if _, err := exec.LookPath("sudo"); err == nil {
-		return "sudo"
-	}
-	if _, err := exec.LookPath("doas"); err == nil {
-		return "doas"
-	}
-	if _, err := exec.LookPath("pkexec"); err == nil {
-		return "pkexec"
+	for _, method := range escalationMethodOrder() {
+		if method == "sudo" && !hasPrivilegedGroupMembership() {
+			continue
+		}
+		if _, err := exec.LookPath(method); err == nil {
+			return method
+		}
 	}
 	return "none"
+}
+
+func escalationMethodOrder() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"sudo", "osascript"}
+	case "freebsd", "openbsd", "netbsd", "dragonfly":
+		return []string{"doas", "sudo", "su"}
+	default:
+		return []string{"sudo", "su", "pkexec", "doas"}
+	}
+}
+
+func hasPrivilegedGroupMembership() bool {
+	current, err := user.Current()
+	if err != nil {
+		return false
+	}
+	gids, err := current.GroupIds()
+	if err != nil {
+		return false
+	}
+	privilegedGroups := map[string]bool{"wheel": true, "sudo": true, "admin": true}
+	for _, gid := range gids {
+		group, err := user.LookupGroupId(gid)
+		if err == nil && privilegedGroups[group.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+func shellCommand(args []string) string {
+	return shellQuoteArgs(args)
 }
 
 // DropPrivileges drops from root to the specified user.
@@ -150,18 +162,19 @@ func CanEscalate() bool {
 // ExecElevated re-executes the given binary path with the provided args under sudo/doas.
 // Per AI.md PART 23: Re-exec with escalation tool when user confirms escalation.
 func ExecElevated(args []string) error {
-	var tool string
-	for _, t := range []string{"sudo", "doas"} {
-		if _, err := exec.LookPath(t); err == nil {
-			tool = t
-			break
-		}
+	if len(args) == 0 {
+		return fmt.Errorf("no command supplied for privilege escalation")
 	}
-	if tool == "" {
-		return fmt.Errorf("no privilege escalation tool available (sudo/doas not found)")
+	if isElevated() {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		return cmd.Run()
 	}
-	sudoArgs := append([]string{tool}, args...)
-	cmd := exec.Command(sudoArgs[0], sudoArgs[1:]...)
+	escalator := NewPrivilegeEscalator()
+	if !escalator.IsAvailable() {
+		return fmt.Errorf("no privilege escalation method available")
+	}
+	cmd := escalator.EscalateCommand(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

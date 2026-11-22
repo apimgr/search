@@ -564,6 +564,8 @@ type ServerConfig struct {
 
 	// Backup configuration per AI.md PART 22
 	Backup BackupConfig `yaml:"backup"`
+	// Restore limits per AI.md PART 21.
+	Restore RestoreConfig `yaml:"restore"`
 
 	// Compliance configuration per AI.md PART 22
 	Compliance ComplianceConfig `yaml:"compliance"`
@@ -819,8 +821,17 @@ type TorConfig struct {
 // public WebUI toasts (client-side, visitor-facing) and email (SMTP),
 // including per-event email enable/disable switches.
 type NotificationsConfig struct {
-	WebUI WebUINotifyConfig `yaml:"webui"`
-	Email EmailConfig       `yaml:"email"`
+	WebUI   WebUINotifyConfig `yaml:"webui"`
+	Email   EmailConfig       `yaml:"email"`
+	DiskLow DiskLowConfig     `yaml:"disk_low"`
+}
+
+// DiskLowConfig configures scheduled per-volume low-disk notifications.
+type DiskLowConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	ThresholdPercent int    `yaml:"threshold_percent"`
+	CheckInterval    string `yaml:"check_interval"`
+	Repeat           string `yaml:"repeat"`
 }
 
 // WebUINotifyConfig represents client-side toast notification defaults.
@@ -856,6 +867,7 @@ type EmailEventsConfig struct {
 	SSLRenewalFailed bool `yaml:"ssl_renewal_failed"`
 	SecurityAlert    bool `yaml:"security_alert"`
 	SchedulerError   bool `yaml:"scheduler_error"`
+	DatabaseError    bool `yaml:"database_error"`
 	UpdateAvailable  bool `yaml:"update_available"`
 	UpdateInstalled  bool `yaml:"update_installed"`
 }
@@ -995,12 +1007,18 @@ type SecurityConfig struct {
 		IncludeSubDomains bool    `yaml:"include_subdomains"`
 		SampleRate        float64 `yaml:"sample_rate"`
 	} `yaml:"nel"`
+	Reports SecurityReportsConfig `yaml:"reports"`
 	// Allowlist lists IPs/CIDRs that bypass blocklist, rate-limit, and GeoIP checks.
 	Allowlist []AllowlistEntry `yaml:"allowlist"`
 	// BlockedIPs lists IPs/prefixes that are always rejected (403) before any other check.
 	BlockedIPs []string `yaml:"blocked_ips"`
 	// ExtraSources adds operator-selected IP, CIDR, and domain feeds.
 	ExtraSources []BlocklistSourceConfig `yaml:"extra_sources"`
+}
+
+// SecurityReportsConfig controls retention of closed coordinated-disclosure reports.
+type SecurityReportsConfig struct {
+	RetentionDays int `yaml:"retention_days"`
 }
 
 // AuthConfig represents external authentication configuration per AI.md PART 31
@@ -1422,6 +1440,7 @@ type SchedulerTasksConfig struct {
 	CVEUpdate TaskConfig `yaml:"cve_update"`
 	// Update check (skippable) - notify-only newer-version check at 06:00
 	UpdateCheck     TaskConfig `yaml:"update_check"`
+	DiskCheck       TaskConfig `yaml:"disk_check"`
 	TokenCleanup    TaskConfig `yaml:"token_cleanup"`
 	LogRotation     TaskConfig `yaml:"log_rotation"`
 	HealthcheckSelf TaskConfig `yaml:"healthcheck_self"`
@@ -1659,6 +1678,16 @@ type BackupConfig struct {
 	Retention BackupRetentionConfig `yaml:"retention"`
 	// Percent disk usage above which scheduled backups are skipped (default: 90)
 	DiskThreshold int `yaml:"disk_threshold"`
+}
+
+// RestoreConfig bounds archives accepted by restore and import operations.
+// Size values use the same byte suffixes as other size settings.
+type RestoreConfig struct {
+	MaxArchiveSize  string `yaml:"max_archive_size"`
+	MaxExpandedSize string `yaml:"max_expanded_size"`
+	MaxFiles        int    `yaml:"max_files"`
+	MaxFileSize     string `yaml:"max_file_size"`
+	MaxRatio        int    `yaml:"max_ratio"`
 }
 
 // BackupEncryptionConfig represents backup encryption settings
@@ -2219,6 +2248,12 @@ func DefaultConfig() *Config {
 				OutboundQuantity: 5,
 			},
 			Notifications: NotificationsConfig{
+				DiskLow: DiskLowConfig{
+					Enabled:          true,
+					ThresholdPercent: 85,
+					CheckInterval:    "5m",
+					Repeat:           "24h",
+				},
 				WebUI: WebUINotifyConfig{
 					Position: "top-right",
 					Duration: 5,
@@ -2240,6 +2275,7 @@ func DefaultConfig() *Config {
 						SSLRenewalFailed: true,
 						SecurityAlert:    true,
 						SchedulerError:   true,
+						DatabaseError:    true,
 						UpdateAvailable:  false,
 						UpdateInstalled:  true,
 					},
@@ -2249,6 +2285,7 @@ func DefaultConfig() *Config {
 				InstallationSecret:   generateBase64Secret(),
 				EncryptionKey:        generateBase64Secret(),
 				EncryptionKeyVersion: 1,
+				Reports:              SecurityReportsConfig{RetentionDays: 365},
 				CSRF: CSRFConfig{
 					Enabled:    true,
 					CookieName: "csrf_token",
@@ -2522,6 +2559,7 @@ func DefaultConfig() *Config {
 					SSLRenewal:      TaskConfig{Schedule: "0 3 * * *", Enabled: true, RetryOnFail: true},
 					BackupDaily:     TaskConfig{Schedule: "0 2 * * *", Enabled: true, RetryOnFail: true},
 					BackupHourly:    TaskConfig{Schedule: "@hourly", Enabled: false},
+					DiskCheck:       TaskConfig{Enabled: true},
 					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true, RetryOnFail: true},
 					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
 					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
@@ -2687,6 +2725,10 @@ func DefaultConfig() *Config {
 					MaxTotalSize: "10%",
 				},
 				DiskThreshold: 90,
+			},
+			Restore: RestoreConfig{
+				MaxArchiveSize: "1G", MaxExpandedSize: "4G", MaxFiles: 10000,
+				MaxFileSize: "512M", MaxRatio: 100,
 			},
 		},
 		Search: SearchConfig{
@@ -3001,6 +3043,7 @@ func Load(path string) (*Config, error) {
 	if legacySecretPaths["server.security.encryption_key"] {
 		legacySecretPaths["server.security.encryption_key_version"] = true
 	}
+	legacyMaintenanceMode := removeConfigPath(root, "server.maintenance_mode")
 	if err := normalizeDualPortNode(root); err != nil {
 		return nil, err
 	}
@@ -3012,7 +3055,7 @@ func Load(path string) (*Config, error) {
 	strictDecoder := yaml.NewDecoder(bytes.NewReader(encoded))
 	strictDecoder.KnownFields(true)
 	if err := strictDecoder.Decode(&strictCheck); err != nil {
-		slog.Warn("merged config contains unrecognized fields (ignored)", "detail", err)
+		return nil, fmt.Errorf("decode merged configuration with strict fields: %w", err)
 	}
 	cfg := DefaultConfig()
 	cfg.firstRun = false
@@ -3082,7 +3125,7 @@ func Load(path string) (*Config, error) {
 	if err := cfg.encryptDNSCredentials(); err != nil {
 		return nil, err
 	}
-	cfg.needsSave = cfg.needsSave || len(warnings) > 0 || len(legacySecretPaths) > 0
+	cfg.needsSave = cfg.needsSave || legacyMaintenanceMode || len(warnings) > 0 || len(legacySecretPaths) > 0
 	for _, warning := range warnings {
 		slog.Warn("merged configuration validation warning", "field", warning.Field, "message", warning.Message)
 	}

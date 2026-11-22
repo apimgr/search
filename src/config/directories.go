@@ -1,11 +1,14 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"unicode"
 )
 
 const (
@@ -25,12 +28,37 @@ const (
 	InternalName = "search"
 )
 
+// SafeDirPath validates a filesystem path while preserving absolute paths.
+func SafeDirPath(input string) (string, error) {
+	if input == "" {
+		return "", errors.New("empty path")
+	}
+	for _, r := range input {
+		if unicode.IsControl(r) {
+			return "", errors.New("invalid control character")
+		}
+	}
+	for _, segment := range strings.Split(filepath.ToSlash(input), "/") {
+		if segment == ".." {
+			return "", errors.New("path traversal")
+		}
+	}
+	return filepath.Clean(input), nil
+}
+
 // CLI directory overrides (per AI.md PART 17)
 var (
 	cliOverrides    = make(map[string]string)
 	cliOverrideMu   sync.RWMutex
 	startedElevated = IsPrivileged()
 )
+
+// StartedElevated reports whether this process began with elevated privileges.
+// This value is captured before any service privilege drop and remains stable
+// for the lifetime of the process.
+func StartedElevated() bool {
+	return startedElevated
+}
 
 // SetConfigDirOverride sets a CLI override for the config directory
 func SetConfigDirOverride(dir string) {
@@ -500,7 +528,7 @@ func GetDatabaseDir() string {
 		return dir
 	}
 	if IsRunningInContainer() {
-		return "/data/db"
+		return "/data/db/sqlite"
 	}
 	if runtime.GOOS == "linux" && startedElevated {
 		return "/var/lib/" + InternalOrg + "/" + InternalName + "/db"

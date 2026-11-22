@@ -1,10 +1,11 @@
 package server
 
 import (
-	"bufio"
+	"context"
+	"database/sql"
+	"errors"
 	"net"
 	"net/http"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -23,9 +23,10 @@ import (
 	"github.com/apimgr/search/src/version"
 )
 
-type requestSecond struct {
-	second int64
-	count  int64
+type requestStatsStore interface {
+	ReadSQL() *sql.DB
+	Write(context.Context, func(*sql.Tx) error) error
+	RequestStatsTable() string
 }
 
 // Metrics collects server metrics using Prometheus client library.
@@ -39,12 +40,16 @@ type Metrics struct {
 	registry     *prometheus.Registry
 	ownerManager *owner.Manager
 
-	// Per AI.md PART 13: Atomic counters for health endpoint stats
-	// These are separate from Prometheus counters for easy access
-	totalRequests     atomic.Int64
+	// Request health statistics are cached in memory and persisted in hourly
+	// batches; health reads never query the database.
+	requestStatsMu    sync.RWMutex
+	requestStatsDB    requestStatsStore
+	persistedRequests int64
+	pendingRequests   int64
+	persistedHours    map[int64]int64
+	pendingHours      map[int64]int64
+	requestStatsFlush sync.Mutex
 	activeConnections atomic.Int64
-	requestWindowMu   sync.Mutex
-	requestWindow     [24 * 60 * 60]requestSecond
 
 	// HTTP metrics
 	httpRequestsTotal   *prometheus.CounterVec
@@ -76,8 +81,7 @@ type Metrics struct {
 	schedulerLastRun      *prometheus.GaugeVec
 
 	// Authentication metrics
-	authAttempts       *prometheus.CounterVec
-	authSessionsActive prometheus.Gauge
+	authAttempts *prometheus.CounterVec
 
 	// Rate limiting metrics
 	ratelimitRequestsTotal *prometheus.CounterVec
@@ -166,6 +170,8 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		config:            cfg,
 		startTime:         time.Now(),
 		registry:          reg,
+		persistedHours:    make(map[int64]int64),
+		pendingHours:      make(map[int64]int64),
 		ownerTokensActive: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{Name: "search_owner_tokens_active", Help: "Active owner tokens (not revoked or expired)"}, []string{"kind"}),
 
 		// HTTP metrics per AI.md PART 20
@@ -332,13 +338,6 @@ func NewMetrics(cfg *config.Config) *Metrics {
 			},
 			[]string{"method", "status"},
 		),
-		authSessionsActive: promauto.With(reg).NewGauge(
-			prometheus.GaugeOpts{
-				Name: "search_auth_sessions_active",
-				Help: "Number of active sessions",
-			},
-		),
-
 		// Rate limiting metrics per AI.md PART 20
 		ratelimitRequestsTotal: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
@@ -549,11 +548,6 @@ func (m *Metrics) SetTorState(enabled, running, circuitEstablished bool) {
 	m.torCircuitEstablished.Set(boolGauge(circuitEstablished))
 }
 
-// SetActiveSessions sets the number of active sessions.
-func (m *Metrics) SetActiveSessions(n int) {
-	m.authSessionsActive.Set(float64(n))
-}
-
 // boolGauge maps a boolean to the Prometheus 1/0 gauge convention.
 func boolGauge(b bool) float64 {
 	if b {
@@ -623,20 +617,17 @@ func (m *Metrics) collectSystemMetrics() {
 // RecordRequest records an HTTP request
 // Per AI.md PART 13: Also increments atomic counter for health endpoint stats
 func (m *Metrics) RecordRequest(method, path string, statusCode int, duration time.Duration, reqSize, respSize int64) {
-	m.recordRequestAt(method, path, statusCode, duration, reqSize, respSize, time.Now())
+	m.recordRequestAt(method, path, statusCode, duration, reqSize, respSize, time.Now(), true)
 }
 
-func (m *Metrics) recordRequestAt(method, path string, statusCode int, duration time.Duration, reqSize, respSize int64, at time.Time) {
-	m.totalRequests.Add(1)
-	second := at.Unix()
-	m.requestWindowMu.Lock()
-	bucket := &m.requestWindow[second%int64(len(m.requestWindow))]
-	if bucket.second != second {
-		bucket.second = second
-		bucket.count = 0
+func (m *Metrics) recordRequestAt(method, path string, statusCode int, duration time.Duration, reqSize, respSize int64, at time.Time, countHealthStat bool) {
+	if countHealthStat {
+		hour := at.UTC().Truncate(time.Hour).Unix()
+		m.requestStatsMu.Lock()
+		m.pendingRequests++
+		m.pendingHours[hour]++
+		m.requestStatsMu.Unlock()
 	}
-	bucket.count++
-	m.requestWindowMu.Unlock()
 
 	status := strconv.Itoa(statusCode)
 	m.httpRequestsTotal.WithLabelValues(method, path, status).Inc()
@@ -731,23 +722,141 @@ func (m *Metrics) SetCacheStats(cache string, size int, bytes int64) {
 // GetTotalRequests returns total requests for health endpoint
 // Per AI.md PART 13: stats.requests_total must return actual count
 func (m *Metrics) GetTotalRequests() int64 {
-	return m.totalRequests.Load()
+	m.requestStatsMu.RLock()
+	defer m.requestStatsMu.RUnlock()
+	return m.persistedRequests + m.pendingRequests
 }
 
 // GetRequestsLast24Hours returns the request count from the trailing 24 hours.
 func (m *Metrics) GetRequestsLast24Hours() int64 {
-	now := time.Now().Unix()
-	cutoff := now - int64(len(m.requestWindow)) + 1
+	now := time.Now().UTC().Truncate(time.Hour).Unix()
+	cutoff := now - int64(23*time.Hour/time.Second)
 	var total int64
-	m.requestWindowMu.Lock()
-	for i := range m.requestWindow {
-		bucket := &m.requestWindow[i]
-		if bucket.second >= cutoff && bucket.second <= now {
-			total += bucket.count
+	m.requestStatsMu.RLock()
+	for hour, count := range m.persistedHours {
+		if hour >= cutoff && hour <= now {
+			total += count
 		}
 	}
-	m.requestWindowMu.Unlock()
+	for hour, count := range m.pendingHours {
+		if hour >= cutoff && hour <= now {
+			total += count
+		}
+	}
+	m.requestStatsMu.RUnlock()
 	return total
+}
+
+// SetRequestStatsDB loads persisted counters once at startup. Subsequent health
+// reads use only the in-memory cache.
+func (m *Metrics) SetRequestStatsDB(ctx context.Context, db requestStatsStore) error {
+	if m == nil || db == nil || db.ReadSQL() == nil {
+		return nil
+	}
+	var total int64
+	table := db.RequestStatsTable()
+	if err := db.ReadSQL().QueryRowContext(ctx, `SELECT COALESCE(SUM(request_count), 0) FROM `+table).Scan(&total); err != nil {
+		return err
+	}
+	cutoff := time.Now().UTC().Truncate(time.Hour).Add(-23 * time.Hour).Unix()
+	rows, err := db.ReadSQL().QueryContext(ctx, `SELECT hour, request_count FROM `+table+` WHERE hour >= ? ORDER BY hour`, cutoff)
+	if err != nil {
+		return err
+	}
+	hours := make(map[int64]int64)
+	for rows.Next() {
+		var hour, count int64
+		if err := rows.Scan(&hour, &count); err != nil {
+			return errors.Join(err, rows.Close())
+		}
+		hours[hour] = count
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Join(err, rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	m.requestStatsMu.Lock()
+	m.requestStatsDB = db
+	m.persistedRequests = total
+	m.persistedHours = hours
+	m.requestStatsMu.Unlock()
+	return nil
+}
+
+// PersistRequestStats batches request counts and refreshes the cached values
+// from shared storage so clustered nodes observe one another within a minute.
+func (m *Metrics) PersistRequestStats(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	m.requestStatsFlush.Lock()
+	defer m.requestStatsFlush.Unlock()
+	m.requestStatsMu.RLock()
+	db := m.requestStatsDB
+	batch := make(map[int64]int64, len(m.pendingHours))
+	var batchTotal int64
+	for hour, count := range m.pendingHours {
+		batch[hour] = count
+		batchTotal += count
+	}
+	m.requestStatsMu.RUnlock()
+	if db == nil {
+		return nil
+	}
+	if batchTotal > 0 {
+		err := db.Write(ctx, func(tx *sql.Tx) error {
+			for hour, count := range batch {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO `+db.RequestStatsTable()+` (hour, request_count) VALUES (?, ?) ON CONFLICT(hour) DO UPDATE SET request_count = request_count + excluded.request_count`, hour, count); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		m.requestStatsMu.Lock()
+		m.persistedRequests += batchTotal
+		for hour, count := range batch {
+			m.persistedHours[hour] += count
+			m.pendingHours[hour] -= count
+			if m.pendingHours[hour] <= 0 {
+				delete(m.pendingHours, hour)
+			}
+		}
+		m.pendingRequests -= batchTotal
+		m.requestStatsMu.Unlock()
+	}
+	cutoff := time.Now().UTC().Truncate(time.Hour).Add(-23 * time.Hour).Unix()
+	var persistedTotal int64
+	if err := db.ReadSQL().QueryRowContext(ctx, `SELECT COALESCE(SUM(request_count), 0) FROM `+db.RequestStatsTable()).Scan(&persistedTotal); err != nil {
+		return err
+	}
+	rows, err := db.ReadSQL().QueryContext(ctx, `SELECT hour, request_count FROM `+db.RequestStatsTable()+` WHERE hour >= ? ORDER BY hour`, cutoff)
+	if err != nil {
+		return err
+	}
+	hours := make(map[int64]int64)
+	for rows.Next() {
+		var hour, count int64
+		if err := rows.Scan(&hour, &count); err != nil {
+			return errors.Join(err, rows.Close())
+		}
+		hours[hour] = count
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Join(err, rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	m.requestStatsMu.Lock()
+	m.persistedRequests = persistedTotal
+	m.persistedHours = hours
+	m.requestStatsMu.Unlock()
+	return nil
 }
 
 // GetActiveConnections returns current active connections for health endpoint
@@ -781,7 +890,7 @@ func (m *Metrics) refreshOwnerTokenMetrics(r *http.Request) {
 }
 
 // MetricsMiddleware creates middleware for recording request metrics
-// Per AI.md PART 13: Tracks active connections for health endpoint stats
+// Per AI.md PART 13: Tracks active connections and request totals at the outer router.
 func (m *Metrics) MetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -815,8 +924,22 @@ func (m *Metrics) MetricsMiddleware(next http.Handler) http.Handler {
 		if path == "" {
 			path = normalizePath(r.URL.Path)
 		}
-		m.RecordRequest(r.Method, path, wrapped.statusCode, duration, r.ContentLength, int64(wrapped.bytesWritten))
+		countHealthStat := !isHealthOrMetricsPath(path)
+		m.recordRequestAt(r.Method, path, wrapped.statusCode, duration, r.ContentLength, int64(wrapped.bytesWritten), time.Now(), countHealthStat)
 	})
+}
+
+func isHealthOrMetricsPath(path string) bool {
+	switch path {
+	case "/server/healthz", "/server/healthz.txt", "/healthz", "/healthz.txt", "/api/v1/server/healthz", "/api/v1/server/healthz.txt", "/api/healthz":
+		return true
+	}
+	for _, base := range []string{"/server/metrics", version.APIPrefix + "/server/metrics", "/api/metrics", "/metrics"} {
+		if path == base || strings.HasPrefix(path, base+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // metricsResponseWriter wraps http.ResponseWriter to capture status code and bytes written
@@ -855,95 +978,7 @@ func normalizePath(path string) string {
 	return strings.Join(parts, "/")
 }
 
-// getCPUUsage returns the current CPU usage percentage (Linux only)
-func getCPUUsage() float64 {
-	if runtime.GOOS != "linux" {
-		return 0
-	}
-
-	file, err := os.Open("/proc/stat")
-	if err != nil {
-		return 0
-	}
-	defer closeutil.Close(file)
-
-	scanner := bufio.NewScanner(file)
-	if !scanner.Scan() {
-		return 0
-	}
-
-	line := scanner.Text()
-	if !strings.HasPrefix(line, "cpu ") {
-		return 0
-	}
-
-	fields := strings.Fields(line)
-	if len(fields) < 5 {
-		return 0
-	}
-
-	user, _ := strconv.ParseFloat(fields[1], 64)
-	nice, _ := strconv.ParseFloat(fields[2], 64)
-	system, _ := strconv.ParseFloat(fields[3], 64)
-	idle, _ := strconv.ParseFloat(fields[4], 64)
-
-	total := user + nice + system + idle
-	if total == 0 {
-		return 0
-	}
-
-	return ((total - idle) / total) * 100
-}
-
-// getMemoryUsage returns system memory (used, total) in bytes (Linux only)
-func getMemoryUsage() (used, total uint64) {
-	if runtime.GOOS != "linux" {
-		return 0, 0
-	}
-
-	file, err := os.Open("/proc/meminfo")
-	if err != nil {
-		return 0, 0
-	}
-	defer closeutil.Close(file)
-
-	var memTotal, memAvailable uint64
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-
-		value, _ := strconv.ParseUint(fields[1], 10, 64)
-		switch fields[0] {
-		case "MemTotal:":
-			memTotal = value
-		case "MemAvailable:":
-			memAvailable = value
-		}
-
-		if memTotal > 0 && memAvailable > 0 {
-			break
-		}
-	}
-
-	if memTotal == 0 {
-		return 0, 0
-	}
-
-	// /proc/meminfo reports kibibytes
-	total = memTotal * 1024
-	used = (memTotal - memAvailable) * 1024
-	return used, total
-}
-
 // getDiskUsage returns the disk usage in bytes (used, total) for the given path
 func getDiskUsage(path string) (used, total uint64) {
-	if runtime.GOOS == "windows" {
-		return 0, 0
-	}
-
 	return getDiskUsageUnix(path)
 }

@@ -994,6 +994,18 @@
     "active_connections": "Actieve verbindingen",
     "last_updated": "Laatst bijgewerkt:",
     "auto_refresh_in": "Automatisch verversen over",
+    "mode_debug": "Debug",
+    "unavailable": "Niet beschikbaar",
+    "shutting_down": "Wordt afgesloten",
+    "restart_required": "Herstart vereist",
+    "section": {
+      "cluster": "Cluster",
+      "version": "Versie",
+      "runtime": "Runtime",
+      "features": "Functies",
+      "checks": "Componentstatus",
+      "stats": "Serverstatistieken"
+    },
     "components": {
       "database": "Database",
       "cache": "Cache",
@@ -2169,7 +2181,8 @@
       "label_new_version": "Nieuwe versie:",
       "label_release_date": "Releasedatum:",
       "label_release_notes": "Release-opmerkingen:",
-      "label_view_update": "Update bekijken:"
+      "label_view_update": "Update bekijken:",
+      "manual_command": "Handmatige updateopdracht: {command}"
     },
     "security_report": {
       "subject": "Beveiligingsrapport ontvangen: %s",

@@ -16,6 +16,7 @@ import (
 
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
@@ -100,8 +101,8 @@ func TestHealthzEndpoint(t *testing.T) {
 
 	handler.handleHealthz(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Expected status %d for a missing required scheduler, got %d", http.StatusServiceUnavailable, w.Code)
 	}
 
 	var response HealthResponse
@@ -109,8 +110,8 @@ func TestHealthzEndpoint(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if response.Status != "healthy" {
-		t.Errorf("Expected status 'healthy', got %v", response.Status)
+	if response.Status != "unhealthy" || response.Checks.Scheduler != "error" {
+		t.Errorf("Expected missing scheduler to make health unhealthy, got status %q and scheduler check %q", response.Status, response.Checks.Scheduler)
 	}
 }
 
@@ -372,6 +373,7 @@ func TestAutocompleteEmptyQuery(t *testing.T) {
 
 func TestBangsEndpoint(t *testing.T) {
 	handler := newTestHandler()
+	handler.registry = engine.DefaultRegistry()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bangs", nil)
 	w := httptest.NewRecorder()
@@ -434,8 +436,8 @@ func TestFormatDuration(t *testing.T) {
 
 	// Test zero duration
 	result := handler.formatDuration(0)
-	if result != "0m" {
-		t.Errorf("formatDuration(0) = %q, want %q", result, "0m")
+	if result != "0s" {
+		t.Errorf("formatDuration(0) = %q, want %q", result, "0s")
 	}
 
 	// Test minutes
@@ -452,8 +454,8 @@ func TestFormatDuration(t *testing.T) {
 
 	// Test days
 	result = handler.formatDuration(25 * time.Hour)
-	if result != "1d 1h 0m" {
-		t.Errorf("formatDuration(25h) = %q, want %q", result, "1d 1h 0m")
+	if result != "1d 1h" {
+		t.Errorf("formatDuration(25h) = %q, want %q", result, "1d 1h")
 	}
 }
 
@@ -1088,7 +1090,7 @@ func TestRespondWithFormatText(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, "status: healthy\n") {
+	if !strings.Contains(body, "status: unhealthy\n") {
 		t.Errorf("Expected complete health text, got %q", body)
 	}
 }
@@ -1237,8 +1239,8 @@ func TestGetActiveConnections(t *testing.T) {
 	handler := newTestHandler()
 
 	result := handler.getActiveConnections()
-	if result != 0 {
-		t.Errorf("getActiveConnections() = %d, want 0", result)
+	if result != 1 {
+		t.Errorf("getActiveConnections() = %d, want 1 for the active health request", result)
 	}
 }
 
@@ -1268,6 +1270,51 @@ func TestGetBuiltinBangs(t *testing.T) {
 
 	if !foundGoogle {
 		t.Error("Expected to find Google bang with shortcut 'g'")
+	}
+}
+
+func TestAvailableBangsFollowLocalEngineConfiguration(t *testing.T) {
+	handler := newTestHandler()
+	handler.registry = engine.DefaultRegistry()
+	hasBang := func(shortcut string) bool {
+		for _, item := range handler.AvailableBangs() {
+			if item.Shortcut == shortcut {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasBang("gh") {
+		t.Fatal("enabled GitHub engine's bang is not available")
+	}
+	github, err := handler.registry.Get("github")
+	if err != nil {
+		t.Fatal(err)
+	}
+	github.GetConfig().Enabled = false
+	if hasBang("gh") {
+		t.Fatal("GitHub bang remained available after its local engine was disabled")
+	}
+	if !hasBang("sp") {
+		t.Fatal("external Startpage shortcut was affected by local engine configuration")
+	}
+	tracker, ok := github.(interface {
+		RecordFailure(error)
+		RecordSuccess(time.Duration)
+	})
+	if !ok {
+		t.Fatal("GitHub engine does not expose its health tracker")
+	}
+	for range 3 {
+		tracker.RecordFailure(model.ErrEngineUnavailable)
+	}
+	if hasBang("gh") {
+		t.Fatal("GitHub bang remained available while its local engine was in cooldown")
+	}
+	github.GetConfig().Enabled = true
+	tracker.RecordSuccess(time.Millisecond)
+	if !hasBang("gh") {
+		t.Fatal("GitHub bang did not return after the local engine recovered")
 	}
 }
 
@@ -1313,6 +1360,7 @@ func TestBangsEndpointWithCategory(t *testing.T) {
 
 func TestBangsEndpointWithSearch(t *testing.T) {
 	handler := newTestHandler()
+	handler.registry = engine.DefaultRegistry()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bangs?search=google", nil)
 	w := httptest.NewRecorder()
@@ -1378,6 +1426,44 @@ func TestHealthResponseSerialization(t *testing.T) {
 
 	if unmarshaled.Status != health.Status {
 		t.Errorf("Status mismatch: got %q, want %q", unmarshaled.Status, health.Status)
+	}
+	orderedKeys := []string{`"project"`, `"status"`, `"version"`, `"go_version"`, `"build"`, `"uptime"`, `"mode"`, `"timestamp"`, `"cluster"`, `"features"`, `"checks"`, `"stats"`}
+	last := -1
+	for _, key := range orderedKeys {
+		index := strings.Index(string(data), key)
+		if index <= last {
+			t.Errorf("health JSON key %s was missing or out of order: %s", key, data)
+		}
+		last = index
+	}
+}
+
+func TestFormatHealthTextEmitsI2PCheckOnce(t *testing.T) {
+	text := formatHealthText(HealthResponse{
+		Status: "degraded",
+		Checks: ChecksInfo{I2P: "degraded"},
+	})
+	if got := strings.Count(text, "checks.i2p:"); got != 1 {
+		t.Fatalf("formatHealthText emitted checks.i2p %d times, want 1", got)
+	}
+}
+
+func TestAPIHealthTextGoldenFieldOrder(t *testing.T) {
+	body := formatHealthText(HealthResponse{
+		Project: ProjectInfo{Name: "Search", Tagline: "Private", Description: "Metasearch"},
+		Status:  "healthy", Version: "1.2.3", GoVersion: "go1.x",
+		Build: BuildInfo{Commit: "abc123", Date: "2026-01-02T03:04:05Z"}, Uptime: "2h 5m", Mode: "production", Timestamp: "2026-01-02T03:04:05Z",
+		Cluster: ClusterInfo{Enabled: false}, Features: FeaturesInfo{Tor: TorInfo{Status: "disabled"}, I2P: I2PInfo{Status: "disabled"}},
+		Checks: ChecksInfo{Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok", Extra: []health.Check{{Key: "engine_alpha", Status: "ok"}}},
+		Stats:  StatsInfo{RequestsTotal: 1, Requests24h: 1, ActiveConns: 1, Extra: []health.Stat{{Key: "engines_total", Value: 2}}},
+	})
+	last := -1
+	for _, marker := range []string{"project.name:", "project.tagline:", "project.description:", "status:", "version:", "go_version:", "build.commit:", "build.date:", "uptime:", "mode:", "timestamp:", "cluster.enabled: false", "features.tor:", "features.i2p:", "features.geoip:", "checks.database:", "checks.cache:", "checks.disk:", "checks.scheduler:", "checks.engine_alpha:", "stats.requests_total:", "stats.requests_24h:", "stats.active_connections:", "stats.engines_total:"} {
+		index := strings.Index(body, marker)
+		if index <= last {
+			t.Fatalf("API text marker %q missing or out of order in:\n%s", marker, body)
+		}
+		last = index
 	}
 }
 
@@ -1930,14 +2016,14 @@ func TestFormatDurationDaysOnly(t *testing.T) {
 
 	// Test exactly 24 hours
 	result := handler.formatDuration(24 * time.Hour)
-	if result != "1d 0h 0m" {
-		t.Errorf("formatDuration(24h) = %q, want %q", result, "1d 0h 0m")
+	if result != "1d" {
+		t.Errorf("formatDuration(24h) = %q, want %q", result, "1d")
 	}
 
 	// Test multiple days
 	result = handler.formatDuration(72 * time.Hour)
-	if result != "3d 0h 0m" {
-		t.Errorf("formatDuration(72h) = %q, want %q", result, "3d 0h 0m")
+	if result != "3d" {
+		t.Errorf("formatDuration(72h) = %q, want %q", result, "3d")
 	}
 }
 
@@ -1946,14 +2032,14 @@ func TestFormatDurationHoursOnly(t *testing.T) {
 
 	// Test exactly 1 hour
 	result := handler.formatDuration(1 * time.Hour)
-	if result != "1h 0m" {
-		t.Errorf("formatDuration(1h) = %q, want %q", result, "1h 0m")
+	if result != "1h" {
+		t.Errorf("formatDuration(1h) = %q, want %q", result, "1h")
 	}
 
 	// Test 23 hours
 	result = handler.formatDuration(23 * time.Hour)
-	if result != "23h 0m" {
-		t.Errorf("formatDuration(23h) = %q, want %q", result, "23h 0m")
+	if result != "23h" {
+		t.Errorf("formatDuration(23h) = %q, want %q", result, "23h")
 	}
 }
 
@@ -2566,8 +2652,8 @@ func TestVersionedHealthzTxtAliasReturnsPlainText(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			mux.ServeHTTP(recorder, request)
 
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("health request status = %d, want %d", recorder.Code, http.StatusOK)
+			if recorder.Code != http.StatusServiceUnavailable {
+				t.Fatalf("health request status = %d, want %d when the required scheduler is missing", recorder.Code, http.StatusServiceUnavailable)
 			}
 			if contentType := recorder.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
 				t.Fatalf("Content-Type = %q, want text/plain", contentType)

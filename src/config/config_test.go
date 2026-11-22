@@ -184,6 +184,42 @@ func TestLoadNonExistent(t *testing.T) {
 	}
 }
 
+func TestSafeDirPath(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  string
+		bad   bool
+	}{
+		{input: "/var/lib/search", want: filepath.Clean("/var/lib/search")},
+		{input: "relative/data", want: filepath.Clean("relative/data")},
+		{input: "../outside", bad: true},
+		{input: "/var/lib/../outside", bad: true},
+		{input: "bad\npath", bad: true},
+	} {
+		got, err := SafeDirPath(test.input)
+		if test.bad {
+			if err == nil {
+				t.Errorf("SafeDirPath(%q) error = nil, want rejection", test.input)
+			}
+			continue
+		}
+		if err != nil || got != test.want {
+			t.Errorf("SafeDirPath(%q) = (%q, %v), want (%q, nil)", test.input, got, err, test.want)
+		}
+	}
+}
+
+func TestLoadRejectsUnknownConfigFields(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "server.yml")
+	if err := os.WriteFile(configPath, []byte("server:\n  unknown_field: true\n"), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if _, err := Load(configPath); err == nil || !strings.Contains(err.Error(), "unknown_field") {
+		t.Fatalf("Load() error = %v, want unknown config field to be rejected", err)
+	}
+}
+
 func TestLoadOrCreate(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "config-load-test-*")
 	if err != nil {

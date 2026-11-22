@@ -25,6 +25,11 @@ import (
 // defaultTimezone is the default timezone for the scheduler (allows testing)
 var defaultTimezone = "America/New_York"
 
+// DefaultTimezoneName returns the scheduler's configured default timezone.
+func DefaultTimezoneName() string {
+	return defaultTimezone
+}
+
 // TaskID represents a unique task identifier
 type TaskID string
 
@@ -35,10 +40,12 @@ const (
 	TaskBlocklistUpdate TaskID = "blocklist_update"
 	TaskCVEUpdate       TaskID = "cve_update"
 	TaskUpdateCheck     TaskID = "update_check"
+	TaskSecurityCleanup TaskID = "security_cleanup"
 	TaskTokenCleanup    TaskID = "token_cleanup"
 	TaskLogRotation     TaskID = "log_rotation"
 	TaskBackupDaily     TaskID = "backup_daily"
 	TaskBackupHourly    TaskID = "backup_hourly"
+	TaskDiskCheck       TaskID = "disk_check"
 	TaskHealthcheckSelf TaskID = "healthcheck_self"
 	TaskTorHealth       TaskID = "tor_health"
 	TaskI2PHealth       TaskID = "i2p_health"
@@ -259,7 +266,8 @@ func newScheduler(db *sql.DB, writer *database.DB, nodeID string) *Scheduler {
 	// Default to America/New_York per spec
 	tz, err := time.LoadLocation(defaultTimezone)
 	if err != nil {
-		tz = time.Local
+		tz = time.UTC
+		slog.Warn("scheduler timezone default could not be loaded; using UTC", "config_key", "server.scheduler.timezone", "default", defaultTimezone, "error", err)
 	}
 
 	s := &Scheduler{
@@ -495,6 +503,21 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		}
 	}
 
+	if handlers.SecurityCleanup != nil {
+		if err := s.Register(&Task{
+			ID:          TaskSecurityCleanup,
+			Name:        "Security Data Cleanup",
+			Description: "Remove expired closed security reports and retired PGP private keys",
+			Schedule:    "30 3 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.SecurityCleanup,
+			Skippable:   false,
+			Enabled:     true,
+		}); err != nil {
+			slog.Error("failed to register security cleanup task", "error", err)
+		}
+	}
+
 	// Update Check - Daily at 06:00, skippable
 	// Per AI.md PART 18/22: notify-only check for a newer release; honors
 	// update.defer_days and stays notify-only unless update.auto_install is set.
@@ -571,6 +594,25 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		s.registerBuiltinTask(task)
 		// Disable after registration (Register sets Enabled=true by default)
 		task.Enabled = false
+	}
+
+	if handlers.DiskCheck != nil {
+		schedule := handlers.DiskCheckSchedule
+		if schedule == "" {
+			schedule = "@every 5m"
+		}
+		if err := s.Register(&Task{
+			ID:          TaskDiskCheck,
+			Name:        "Disk Space Check",
+			Description: "Check configured filesystem volumes for low free space",
+			Schedule:    schedule,
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.DiskCheck,
+			Skippable:   true,
+			Enabled:     true,
+		}); err != nil {
+			slog.Error("failed to register disk check task", "error", err)
+		}
 	}
 
 	// Health Check Self - Every 5 minutes, NOT skippable
@@ -687,17 +729,20 @@ func (s *Scheduler) registerBuiltinTask(task *Task) {
 
 // TaskHandlers holds handler functions for built-in tasks
 type TaskHandlers struct {
-	SSLRenewal      func(ctx context.Context) error
-	GeoIPUpdate     func(ctx context.Context) error
-	BlocklistUpdate func(ctx context.Context) error
-	CVEUpdate       func(ctx context.Context) error
-	UpdateCheck     func(ctx context.Context) error
-	TokenCleanup    func(ctx context.Context) error
-	LogRotation     func(ctx context.Context) error
-	BackupDaily     func(ctx context.Context) error
-	BackupHourly    func(ctx context.Context) error
-	HealthcheckSelf func(ctx context.Context) error
-	TorHealth       func(ctx context.Context) error
+	SSLRenewal        func(ctx context.Context) error
+	SecurityCleanup   func(ctx context.Context) error
+	GeoIPUpdate       func(ctx context.Context) error
+	BlocklistUpdate   func(ctx context.Context) error
+	CVEUpdate         func(ctx context.Context) error
+	UpdateCheck       func(ctx context.Context) error
+	TokenCleanup      func(ctx context.Context) error
+	LogRotation       func(ctx context.Context) error
+	BackupDaily       func(ctx context.Context) error
+	BackupHourly      func(ctx context.Context) error
+	DiskCheck         func(ctx context.Context) error
+	DiskCheckSchedule string
+	HealthcheckSelf   func(ctx context.Context) error
+	TorHealth         func(ctx context.Context) error
 	// I2PHealth is supplied only when I2P is enabled (AI.md PART 31.2:
 	// I2P is opt-in and disabled by default).
 	I2PHealth       func(ctx context.Context) error

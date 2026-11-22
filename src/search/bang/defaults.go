@@ -5,15 +5,15 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// GENERAL SEARCH ENGINES
 	// ============================================================================
-	{Shortcut: "g", Name: "Google", URL: "https://www.google.com/search?q={query}", Category: "general", Aliases: []string{"google"}},
-	{Shortcut: "ddg", Name: "DuckDuckGo", URL: "https://duckduckgo.com/?q={query}", Category: "general", Aliases: []string{"duckduckgo", "duck"}},
-	{Shortcut: "b", Name: "Bing", URL: "https://www.bing.com/search?q={query}", Category: "general", Aliases: []string{"bing"}},
+	{Shortcut: "g", Name: "Google", URL: "https://www.google.com/search?q={query}", Engine: "google", Category: "general", Aliases: []string{"google"}},
+	{Shortcut: "ddg", Name: "DuckDuckGo", URL: "https://duckduckgo.com/?q={query}", Engine: "duckduckgo", Category: "general", Aliases: []string{"duckduckgo", "duck"}},
+	{Shortcut: "b", Name: "Bing", URL: "https://www.bing.com/search?q={query}", Engine: "bing", Category: "general", Aliases: []string{"bing"}},
 	{Shortcut: "sp", Name: "Startpage", URL: "https://www.startpage.com/do/search?q={query}", Category: "general", Aliases: []string{"startpage"}},
 	{Shortcut: "q", Name: "Qwant", URL: "https://www.qwant.com/?q={query}", Category: "general", Aliases: []string{"qwant"}},
 	{Shortcut: "ec", Name: "Ecosia", URL: "https://www.ecosia.org/search?q={query}", Category: "general", Aliases: []string{"ecosia"}},
-	{Shortcut: "br", Name: "Brave Search", URL: "https://search.brave.com/search?q={query}", Category: "general", Aliases: []string{"brave"}},
-	{Shortcut: "ya", Name: "Yandex", URL: "https://yandex.com/search/?text={query}", Category: "general", Aliases: []string{"yandex"}},
-	{Shortcut: "bd", Name: "Baidu", URL: "https://www.baidu.com/s?wd={query}", Category: "general", Aliases: []string{"baidu"}},
+	{Shortcut: "br", Name: "Brave Search", URL: "https://search.brave.com/search?q={query}", Engine: "brave", Category: "general", Aliases: []string{"brave"}},
+	{Shortcut: "ya", Name: "Yandex", URL: "https://yandex.com/search/?text={query}", Engine: "yandex", Category: "general", Aliases: []string{"yandex"}},
+	{Shortcut: "bd", Name: "Baidu", URL: "https://www.baidu.com/s?wd={query}", Engine: "baidu", Category: "general", Aliases: []string{"baidu"}},
 	{Shortcut: "swisscows", Name: "Swisscows", URL: "https://swisscows.com/web?query={query}", Category: "general"},
 	{Shortcut: "mojeek", Name: "Mojeek", URL: "https://www.mojeek.com/search?q={query}", Category: "general"},
 	{Shortcut: "metager", Name: "MetaGer", URL: "https://metager.org/meta/meta.ger3?eingabe={query}", Category: "general"},
@@ -27,15 +27,15 @@ var defaultBangs = []*Bang{
 	{Shortcut: "sogou", Name: "Sogou", URL: "https://www.sogou.com/web?query={query}", Category: "general"},
 	{Shortcut: "ask", Name: "Ask.com", URL: "https://www.ask.com/web?q={query}", Category: "general"},
 	{Shortcut: "aol", Name: "AOL Search", URL: "https://search.aol.com/aol/search?q={query}", Category: "general"},
-	{Shortcut: "yahoo", Name: "Yahoo", URL: "https://search.yahoo.com/search?p={query}", Category: "general", Aliases: []string{"y"}},
+	{Shortcut: "yahoo", Name: "Yahoo", URL: "https://search.yahoo.com/search?p={query}", Engine: "yahoo", Category: "general", Aliases: []string{"y"}},
 	{Shortcut: "lycos", Name: "Lycos", URL: "https://search.lycos.com/web/?q={query}", Category: "general"},
 
 	// ============================================================================
 	// IMAGE SEARCH
 	// ============================================================================
-	{Shortcut: "gi", Name: "Google Images", URL: "https://www.google.com/search?tbm=isch&q={query}", Category: "images", Aliases: []string{"gimg", "googleimages"}},
-	{Shortcut: "bi", Name: "Bing Images", URL: "https://www.bing.com/images/search?q={query}", Category: "images", Aliases: []string{"bingimages"}},
-	{Shortcut: "yi", Name: "Yandex Images", URL: "https://yandex.com/images/search?text={query}", Category: "images", Aliases: []string{"yandeximages"}},
+	{Shortcut: "gi", Name: "Google Images", URL: "https://www.google.com/search?tbm=isch&q={query}", Engine: "google", Category: "images", Aliases: []string{"gimg", "googleimages"}},
+	{Shortcut: "bi", Name: "Bing Images", URL: "https://www.bing.com/images/search?q={query}", Engine: "bing", Category: "images", Aliases: []string{"bingimages"}},
+	{Shortcut: "yi", Name: "Yandex Images", URL: "https://yandex.com/images/search?text={query}", Engine: "yandex", Category: "images", Aliases: []string{"yandeximages"}},
 	{Shortcut: "fl", Name: "Flickr", URL: "https://www.flickr.com/search/?text={query}", Category: "images", Aliases: []string{"flickr"}},
 	{Shortcut: "us", Name: "Unsplash", URL: "https://unsplash.com/s/photos/{query}", Category: "images", Aliases: []string{"unsplash"}},
 	{Shortcut: "pexels", Name: "Pexels", URL: "https://www.pexels.com/search/{query}/", Category: "images"},
@@ -61,17 +61,17 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// VIDEO SEARCH
 	// ============================================================================
-	{Shortcut: "yt", Name: "YouTube", URL: "https://www.youtube.com/results?search_query={query}", Category: "video", Aliases: []string{"youtube"}},
+	{Shortcut: "yt", Name: "YouTube", URL: "https://www.youtube.com/results?search_query={query}", Engine: "youtube", Category: "video", Aliases: []string{"youtube"}},
 	{Shortcut: "v", Name: "Vimeo", URL: "https://vimeo.com/search?q={query}", Category: "video", Aliases: []string{"vimeo"}},
 	{Shortcut: "dtube", Name: "Dailymotion", URL: "https://www.dailymotion.com/search/{query}", Category: "video", Aliases: []string{"dailymotion", "dm"}},
-	{Shortcut: "pt", Name: "PeerTube", URL: "https://sepiasearch.org/search?search={query}", Category: "video", Aliases: []string{"peertube"}},
+	{Shortcut: "pt", Name: "PeerTube", URL: "https://sepiasearch.org/search?search={query}", Engine: "peertube", Category: "video", Aliases: []string{"peertube"}},
 	{Shortcut: "od", Name: "Odysee", URL: "https://odysee.com/$/search?q={query}", Category: "video", Aliases: []string{"odysee", "lbry"}},
 	{Shortcut: "rumble", Name: "Rumble", URL: "https://rumble.com/search/video?q={query}", Category: "video"},
 	{Shortcut: "bitchute", Name: "BitChute", URL: "https://www.bitchute.com/search/?query={query}", Category: "video"},
 	{Shortcut: "twitch", Name: "Twitch", URL: "https://www.twitch.tv/search?term={query}", Category: "video"},
 	{Shortcut: "tiktok", Name: "TikTok", URL: "https://www.tiktok.com/search?q={query}", Category: "video", Aliases: []string{"tt"}},
-	{Shortcut: "gv", Name: "Google Video", URL: "https://www.google.com/search?tbm=vid&q={query}", Category: "video", Aliases: []string{"googlevideo"}},
-	{Shortcut: "bv", Name: "Bing Video", URL: "https://www.bing.com/videos/search?q={query}", Category: "video", Aliases: []string{"bingvideo"}},
+	{Shortcut: "gv", Name: "Google Video", URL: "https://www.google.com/search?tbm=vid&q={query}", Engine: "google", Category: "video", Aliases: []string{"googlevideo"}},
+	{Shortcut: "bv", Name: "Bing Video", URL: "https://www.bing.com/videos/search?q={query}", Engine: "bing", Category: "video", Aliases: []string{"bingvideo"}},
 	{Shortcut: "veoh", Name: "Veoh", URL: "https://www.veoh.com/find/{query}", Category: "video"},
 	{Shortcut: "metacafe", Name: "Metacafe", URL: "https://www.metacafe.com/videos_about/{query}", Category: "video"},
 	{Shortcut: "nebula", Name: "Nebula", URL: "https://nebula.tv/search?q={query}", Category: "video"},
@@ -80,9 +80,9 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// MAPS & LOCATION
 	// ============================================================================
-	{Shortcut: "gm", Name: "Google Maps", URL: "https://www.google.com/maps/search/{query}", Category: "maps", Aliases: []string{"gmaps", "googlemaps"}},
-	{Shortcut: "osm", Name: "OpenStreetMap", URL: "https://www.openstreetmap.org/search?query={query}", Category: "maps", Aliases: []string{"openstreetmap"}},
-	{Shortcut: "bm", Name: "Bing Maps", URL: "https://www.bing.com/maps?q={query}", Category: "maps", Aliases: []string{"bingmaps"}},
+	{Shortcut: "gm", Name: "Google Maps", URL: "https://www.google.com/maps/search/{query}", Engine: "google", Category: "maps", Aliases: []string{"gmaps", "googlemaps"}},
+	{Shortcut: "osm", Name: "OpenStreetMap", URL: "https://www.openstreetmap.org/search?query={query}", Engine: "openstreetmap", Category: "maps", Aliases: []string{"openstreetmap"}},
+	{Shortcut: "bm", Name: "Bing Maps", URL: "https://www.bing.com/maps?q={query}", Engine: "bing", Category: "maps", Aliases: []string{"bingmaps"}},
 	{Shortcut: "applemaps", Name: "Apple Maps", URL: "https://maps.apple.com/?q={query}", Category: "maps", Aliases: []string{"apple"}},
 	{Shortcut: "here", Name: "HERE WeGo", URL: "https://wego.here.com/search/{query}", Category: "maps", Aliases: []string{"herewego"}},
 	{Shortcut: "waze", Name: "Waze", URL: "https://www.waze.com/live-map/directions?q={query}", Category: "maps"},
@@ -90,15 +90,15 @@ var defaultBangs = []*Bang{
 	{Shortcut: "yelp", Name: "Yelp", URL: "https://www.yelp.com/search?find_desc={query}", Category: "maps"},
 	{Shortcut: "tripadvisor", Name: "TripAdvisor", URL: "https://www.tripadvisor.com/Search?q={query}", Category: "maps", Aliases: []string{"ta"}},
 	{Shortcut: "foursquare", Name: "Foursquare", URL: "https://foursquare.com/explore?q={query}", Category: "maps", Aliases: []string{"4sq"}},
-	{Shortcut: "gmapsat", Name: "Google Maps Satellite", URL: "https://www.google.com/maps/search/{query}?hl=en&layer=s", Category: "maps"},
-	{Shortcut: "gearth", Name: "Google Earth", URL: "https://earth.google.com/web/search/{query}", Category: "maps"},
+	{Shortcut: "gmapsat", Name: "Google Maps Satellite", URL: "https://www.google.com/maps/search/{query}?hl=en&layer=s", Engine: "google", Category: "maps"},
+	{Shortcut: "gearth", Name: "Google Earth", URL: "https://earth.google.com/web/search/{query}", Engine: "google", Category: "maps"},
 
 	// ============================================================================
 	// NEWS
 	// ============================================================================
-	{Shortcut: "gn", Name: "Google News", URL: "https://news.google.com/search?q={query}", Category: "news", Aliases: []string{"gnews", "googlenews"}},
-	{Shortcut: "bn", Name: "Bing News", URL: "https://www.bing.com/news/search?q={query}", Category: "news", Aliases: []string{"bingnews"}},
-	{Shortcut: "yn", Name: "Yahoo News", URL: "https://news.search.yahoo.com/search?p={query}", Category: "news", Aliases: []string{"yahoonews"}},
+	{Shortcut: "gn", Name: "Google News", URL: "https://news.google.com/search?q={query}", Engine: "google", Category: "news", Aliases: []string{"gnews", "googlenews"}},
+	{Shortcut: "bn", Name: "Bing News", URL: "https://www.bing.com/news/search?q={query}", Engine: "bing", Category: "news", Aliases: []string{"bingnews"}},
+	{Shortcut: "yn", Name: "Yahoo News", URL: "https://news.search.yahoo.com/search?p={query}", Engine: "yahoo", Category: "news", Aliases: []string{"yahoonews"}},
 	{Shortcut: "reuters", Name: "Reuters", URL: "https://www.reuters.com/search/news?blob={query}", Category: "news"},
 	{Shortcut: "ap", Name: "AP News", URL: "https://apnews.com/search?q={query}", Category: "news", Aliases: []string{"apnews"}},
 	{Shortcut: "bbc", Name: "BBC", URL: "https://www.bbc.co.uk/search?q={query}", Category: "news"},
@@ -127,7 +127,7 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// KNOWLEDGE & ENCYCLOPEDIA
 	// ============================================================================
-	{Shortcut: "w", Name: "Wikipedia", URL: "https://en.wikipedia.org/wiki/Special:Search?search={query}", Category: "knowledge", Aliases: []string{"wiki", "wikipedia"}},
+	{Shortcut: "w", Name: "Wikipedia", URL: "https://en.wikipedia.org/wiki/Special:Search?search={query}", Engine: "wikipedia", Category: "knowledge", Aliases: []string{"wiki", "wikipedia"}},
 	{Shortcut: "wd", Name: "Wikidata", URL: "https://www.wikidata.org/wiki/Special:Search?search={query}", Category: "knowledge", Aliases: []string{"wikidata"}},
 	{Shortcut: "wt", Name: "Wiktionary", URL: "https://en.wiktionary.org/wiki/Special:Search?search={query}", Category: "knowledge", Aliases: []string{"wiktionary"}},
 	{Shortcut: "wb", Name: "Wikibooks", URL: "https://en.wikibooks.org/wiki/Special:Search?search={query}", Category: "knowledge", Aliases: []string{"wikibooks"}},
@@ -151,8 +151,8 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	{Shortcut: "tw", Name: "Twitter/X", URL: "https://twitter.com/search?q={query}", Category: "social", Aliases: []string{"twitter", "x"}},
 	{Shortcut: "mast", Name: "Mastodon", URL: "https://mastodon.social/search?q={query}", Category: "social", Aliases: []string{"mastodon"}},
-	{Shortcut: "r", Name: "Reddit", URL: "https://www.reddit.com/search/?q={query}", Category: "social", Aliases: []string{"reddit", "rd"}},
-	{Shortcut: "hn", Name: "Hacker News", URL: "https://hn.algolia.com/?q={query}", Category: "social", Aliases: []string{"hackernews"}},
+	{Shortcut: "r", Name: "Reddit", URL: "https://www.reddit.com/search/?q={query}", Engine: "reddit", Category: "social", Aliases: []string{"reddit", "rd"}},
+	{Shortcut: "hn", Name: "Hacker News", URL: "https://hn.algolia.com/?q={query}", Engine: "hackernews", Category: "social", Aliases: []string{"hackernews"}},
 	{Shortcut: "lb", Name: "Lobsters", URL: "https://lobste.rs/search?q={query}", Category: "social", Aliases: []string{"lobsters"}},
 	{Shortcut: "fb", Name: "Facebook", URL: "https://www.facebook.com/search/top/?q={query}", Category: "social", Aliases: []string{"facebook"}},
 	{Shortcut: "ig", Name: "Instagram", URL: "https://www.instagram.com/explore/tags/{query}", Category: "social", Aliases: []string{"instagram"}},
@@ -178,17 +178,17 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// CODE & DEVELOPMENT
 	// ============================================================================
-	{Shortcut: "gh", Name: "GitHub", URL: "https://github.com/search?q={query}", Category: "code", Aliases: []string{"github"}},
-	{Shortcut: "ghc", Name: "GitHub Code", URL: "https://github.com/search?type=code&q={query}", Category: "code"},
-	{Shortcut: "ghr", Name: "GitHub Repos", URL: "https://github.com/search?type=repositories&q={query}", Category: "code"},
-	{Shortcut: "ghu", Name: "GitHub Users", URL: "https://github.com/search?type=users&q={query}", Category: "code"},
-	{Shortcut: "ghi", Name: "GitHub Issues", URL: "https://github.com/search?type=issues&q={query}", Category: "code"},
-	{Shortcut: "ghd", Name: "GitHub Discussions", URL: "https://github.com/search?type=discussions&q={query}", Category: "code"},
-	{Shortcut: "gist", Name: "GitHub Gist", URL: "https://gist.github.com/search?q={query}", Category: "code"},
+	{Shortcut: "gh", Name: "GitHub", URL: "https://github.com/search?q={query}", Engine: "github", Category: "code", Aliases: []string{"github"}},
+	{Shortcut: "ghc", Name: "GitHub Code", URL: "https://github.com/search?type=code&q={query}", Engine: "github", Category: "code"},
+	{Shortcut: "ghr", Name: "GitHub Repos", URL: "https://github.com/search?type=repositories&q={query}", Engine: "github", Category: "code"},
+	{Shortcut: "ghu", Name: "GitHub Users", URL: "https://github.com/search?type=users&q={query}", Engine: "github", Category: "code"},
+	{Shortcut: "ghi", Name: "GitHub Issues", URL: "https://github.com/search?type=issues&q={query}", Engine: "github", Category: "code"},
+	{Shortcut: "ghd", Name: "GitHub Discussions", URL: "https://github.com/search?type=discussions&q={query}", Engine: "github", Category: "code"},
+	{Shortcut: "gist", Name: "GitHub Gist", URL: "https://gist.github.com/search?q={query}", Engine: "github", Category: "code"},
 	{Shortcut: "gl", Name: "GitLab", URL: "https://gitlab.com/search?search={query}", Category: "code", Aliases: []string{"gitlab"}},
 	{Shortcut: "bb", Name: "Bitbucket", URL: "https://bitbucket.org/repo/all?name={query}", Category: "code", Aliases: []string{"bitbucket"}},
 	{Shortcut: "sr", Name: "Sourcegraph", URL: "https://sourcegraph.com/search?q={query}", Category: "code", Aliases: []string{"sourcegraph"}},
-	{Shortcut: "so", Name: "Stack Overflow", URL: "https://stackoverflow.com/search?q={query}", Category: "code", Aliases: []string{"stackoverflow"}},
+	{Shortcut: "so", Name: "Stack Overflow", URL: "https://stackoverflow.com/search?q={query}", Engine: "stackoverflow", Category: "code", Aliases: []string{"stackoverflow"}},
 	{Shortcut: "se", Name: "Stack Exchange", URL: "https://stackexchange.com/search?q={query}", Category: "code", Aliases: []string{"stackexchange"}},
 	{Shortcut: "su", Name: "Super User", URL: "https://superuser.com/search?q={query}", Category: "code", Aliases: []string{"superuser"}},
 	{Shortcut: "sf", Name: "Server Fault", URL: "https://serverfault.com/search?q={query}", Category: "code", Aliases: []string{"serverfault"}},
@@ -211,7 +211,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "haskell", Name: "Hackage", URL: "https://hackage.haskell.org/packages/search?terms={query}", Category: "code", Aliases: []string{"hackage"}},
 	{Shortcut: "docker", Name: "Docker Hub", URL: "https://hub.docker.com/search?q={query}", Category: "code", Aliases: []string{"dockerhub"}},
 	{Shortcut: "quay", Name: "Quay.io", URL: "https://quay.io/search?q={query}", Category: "code"},
-	{Shortcut: "ghcr", Name: "GitHub Container Registry", URL: "https://github.com/orgs/community/packages?q={query}", Category: "code"},
+	{Shortcut: "ghcr", Name: "GitHub Container Registry", URL: "https://github.com/orgs/community/packages?q={query}", Engine: "github", Category: "code"},
 	{Shortcut: "helm", Name: "Helm Hub", URL: "https://artifacthub.io/packages/search?ts_query_web={query}", Category: "code"},
 	{Shortcut: "terraform", Name: "Terraform Registry", URL: "https://registry.terraform.io/search/modules?q={query}", Category: "code", Aliases: []string{"tf"}},
 	{Shortcut: "ansible", Name: "Ansible Galaxy", URL: "https://galaxy.ansible.com/search?keywords={query}", Category: "code"},
@@ -284,7 +284,7 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	{Shortcut: "spot", Name: "Spotify", URL: "https://open.spotify.com/search/{query}", Category: "music", Aliases: []string{"spotify"}},
 	{Shortcut: "applemusic", Name: "Apple Music", URL: "https://music.apple.com/search?term={query}", Category: "music"},
-	{Shortcut: "ytm", Name: "YouTube Music", URL: "https://music.youtube.com/search?q={query}", Category: "music", Aliases: []string{"youtubemusic"}},
+	{Shortcut: "ytm", Name: "YouTube Music", URL: "https://music.youtube.com/search?q={query}", Engine: "youtube", Category: "music", Aliases: []string{"youtubemusic"}},
 	{Shortcut: "sc", Name: "SoundCloud", URL: "https://soundcloud.com/search?q={query}", Category: "music", Aliases: []string{"soundcloud"}},
 	{Shortcut: "bc", Name: "Bandcamp", URL: "https://bandcamp.com/search?q={query}", Category: "music", Aliases: []string{"bandcamp"}},
 	{Shortcut: "lastfm", Name: "Last.fm", URL: "https://www.last.fm/search?q={query}", Category: "music"},
@@ -307,9 +307,9 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// SCIENCE & ACADEMIC
 	// ============================================================================
-	{Shortcut: "scholar", Name: "Google Scholar", URL: "https://scholar.google.com/scholar?q={query}", Category: "science", Aliases: []string{"gs", "googlescholar"}},
-	{Shortcut: "arxiv", Name: "arXiv", URL: "https://arxiv.org/search/?query={query}", Category: "science"},
-	{Shortcut: "pubmed", Name: "PubMed", URL: "https://pubmed.ncbi.nlm.nih.gov/?term={query}", Category: "science"},
+	{Shortcut: "scholar", Name: "Google Scholar", URL: "https://scholar.google.com/scholar?q={query}", Engine: "google", Category: "science", Aliases: []string{"gs", "googlescholar"}},
+	{Shortcut: "arxiv", Name: "arXiv", URL: "https://arxiv.org/search/?query={query}", Engine: "arxiv", Category: "science"},
+	{Shortcut: "pubmed", Name: "PubMed", URL: "https://pubmed.ncbi.nlm.nih.gov/?term={query}", Engine: "pubmed", Category: "science"},
 	{Shortcut: "semanticscholar", Name: "Semantic Scholar", URL: "https://www.semanticscholar.org/search?q={query}", Category: "science", Aliases: []string{"s2"}},
 	{Shortcut: "researchgate", Name: "ResearchGate", URL: "https://www.researchgate.net/search?q={query}", Category: "science", Aliases: []string{"rg"}},
 	{Shortcut: "academia", Name: "Academia.edu", URL: "https://www.academia.edu/search?q={query}", Category: "science"},
@@ -340,9 +340,9 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// TRANSLATION & DICTIONARY
 	// ============================================================================
-	{Shortcut: "gt", Name: "Google Translate", URL: "https://translate.google.com/?sl=auto&tl=en&text={query}", Category: "translate", Aliases: []string{"translate", "googletranslate"}},
+	{Shortcut: "gt", Name: "Google Translate", URL: "https://translate.google.com/?sl=auto&tl=en&text={query}", Engine: "google", Category: "translate", Aliases: []string{"translate", "googletranslate"}},
 	{Shortcut: "deepl", Name: "DeepL", URL: "https://www.deepl.com/translator#auto/en/{query}", Category: "translate"},
-	{Shortcut: "btrans", Name: "Bing Translator", URL: "https://www.bing.com/translator/?text={query}", Category: "translate", Aliases: []string{"bingtranslate"}},
+	{Shortcut: "btrans", Name: "Bing Translator", URL: "https://www.bing.com/translator/?text={query}", Engine: "bing", Category: "translate", Aliases: []string{"bingtranslate"}},
 	{Shortcut: "reverso", Name: "Reverso", URL: "https://www.reverso.net/text-translation#sl=auto&tl=en&text={query}", Category: "translate"},
 	{Shortcut: "linguee", Name: "Linguee", URL: "https://www.linguee.com/english-german/search?source=auto&query={query}", Category: "translate"},
 	{Shortcut: "dict", Name: "Dictionary.com", URL: "https://www.dictionary.com/browse/{query}", Category: "translate", Aliases: []string{"dictionary"}},
@@ -443,7 +443,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "storygraph", Name: "StoryGraph", URL: "https://app.thestorygraph.com/browse?search_term={query}", Category: "books"},
 	{Shortcut: "bookdepository", Name: "Book Depository", URL: "https://www.bookdepository.com/search?searchTerm={query}", Category: "books"},
 	{Shortcut: "worldcat", Name: "WorldCat", URL: "https://www.worldcat.org/search?q={query}", Category: "books"},
-	{Shortcut: "googlebooks", Name: "Google Books", URL: "https://books.google.com/books?q={query}", Category: "books", Aliases: []string{"gbooks"}},
+	{Shortcut: "googlebooks", Name: "Google Books", URL: "https://books.google.com/books?q={query}", Engine: "google", Category: "books", Aliases: []string{"gbooks"}},
 	{Shortcut: "overdrive", Name: "OverDrive", URL: "https://www.overdrive.com/search?q={query}", Category: "books"},
 	{Shortcut: "libby", Name: "Libby", URL: "https://libbyapp.com/search/{query}", Category: "books"},
 	{Shortcut: "audible", Name: "Audible", URL: "https://www.audible.com/search?keywords={query}", Category: "books"},
@@ -516,7 +516,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "expedia", Name: "Expedia", URL: "https://www.expedia.com/Hotel-Search?destination={query}", Category: "travel"},
 	{Shortcut: "kayak", Name: "Kayak", URL: "https://www.kayak.com/explore/{query}", Category: "travel"},
 	{Shortcut: "skyscanner", Name: "Skyscanner", URL: "https://www.skyscanner.com/transport/flights/search?query={query}", Category: "travel"},
-	{Shortcut: "googleflights", Name: "Google Flights", URL: "https://www.google.com/travel/flights?q={query}", Category: "travel", Aliases: []string{"gflights"}},
+	{Shortcut: "googleflights", Name: "Google Flights", URL: "https://www.google.com/travel/flights?q={query}", Engine: "google", Category: "travel", Aliases: []string{"gflights"}},
 	{Shortcut: "flightaware", Name: "FlightAware", URL: "https://flightaware.com/live/search?q={query}", Category: "travel"},
 	{Shortcut: "rome2rio", Name: "Rome2rio", URL: "https://www.rome2rio.com/s/{query}", Category: "travel"},
 	{Shortcut: "seat61", Name: "Seat61", URL: "https://www.seat61.com/search.htm?q={query}", Category: "travel"},
@@ -529,8 +529,8 @@ var defaultBangs = []*Bang{
 	// ============================================================================
 	// FINANCE & CRYPTO
 	// ============================================================================
-	{Shortcut: "yfin", Name: "Yahoo Finance", URL: "https://finance.yahoo.com/quote/{query}", Category: "finance", Aliases: []string{"yf"}},
-	{Shortcut: "gfinance", Name: "Google Finance", URL: "https://www.google.com/finance/quote/{query}", Category: "finance", Aliases: []string{"gf", "googlefinance"}},
+	{Shortcut: "yfin", Name: "Yahoo Finance", URL: "https://finance.yahoo.com/quote/{query}", Engine: "yahoo", Category: "finance", Aliases: []string{"yf"}},
+	{Shortcut: "gfinance", Name: "Google Finance", URL: "https://www.google.com/finance/quote/{query}", Engine: "google", Category: "finance", Aliases: []string{"gf", "googlefinance"}},
 	{Shortcut: "tradingview", Name: "TradingView", URL: "https://www.tradingview.com/symbols/{query}/", Category: "finance", Aliases: []string{"tv"}},
 	{Shortcut: "marketwatch", Name: "MarketWatch", URL: "https://www.marketwatch.com/search?q={query}", Category: "finance"},
 	{Shortcut: "seekingalpha", Name: "Seeking Alpha", URL: "https://seekingalpha.com/search?q={query}", Category: "finance"},
@@ -567,7 +567,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "caselaw", Name: "Caselaw Access", URL: "https://case.law/search/?q={query}", Category: "legal"},
 	{Shortcut: "oyez", Name: "Oyez", URL: "https://www.oyez.org/search/{query}", Category: "legal"},
 	{Shortcut: "cornell", Name: "Cornell Law", URL: "https://www.law.cornell.edu/search/site/{query}", Category: "legal"},
-	{Shortcut: "patents", Name: "Google Patents", URL: "https://patents.google.com/?q={query}", Category: "legal"},
+	{Shortcut: "patents", Name: "Google Patents", URL: "https://patents.google.com/?q={query}", Engine: "google", Category: "legal"},
 	{Shortcut: "uspto", Name: "USPTO", URL: "https://ppubs.uspto.gov/pubwebapp/static/pages/searchable/published-application/search.html?q={query}", Category: "legal"},
 	{Shortcut: "trademark", Name: "USPTO Trademark", URL: "https://tmsearch.uspto.gov/bin/showfield?f=toc&state=4810%3Ah6l8dq.1.1&p_search=searchss&p_L=50&BackReference=&p_plural=yes&p_s_PARA1=&p_taession=&p_op_ALL=AND&a_default=search&a_search=Submit+Query&a_search=Submit+Query&p_s_PARA2={query}", Category: "legal"},
 

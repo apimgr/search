@@ -345,7 +345,11 @@ func resolveBangs(params graphql.ResolveParams) (interface{}, error) {
 	category, _ := params.Args["category"].(string)
 	searchTerm, _ := params.Args["search"].(string)
 	searchTerm = strings.ToLower(strings.TrimSpace(searchTerm))
+	dependencies := dependenciesFromContext(params.Context)
 	bangs := api.AvailableBangs()
+	if dependencies.API != nil {
+		bangs = dependencies.API.AvailableBangs()
+	}
 	filtered := make([]api.BangInfo, 0, len(bangs))
 	for _, bang := range bangs {
 		if category != "" && bang.Category != category {

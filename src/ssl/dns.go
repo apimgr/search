@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -26,12 +25,12 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/rfc2136"
 	"github.com/go-acme/lego/v4/providers/dns/route53"
 
+	appdata "github.com/apimgr/search/src/data"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/net/publicsuffix"
 )
 
-//go:embed dns_providers.json
-var legoDNSProviderCatalog []byte
+var legoDNSProviderCatalog = appdata.DNSProviderCatalog
 
 type legoProviderDefinition struct {
 	ID          string `json:"id"`
@@ -40,6 +39,21 @@ type legoProviderDefinition struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 	} `json:"credentials"`
+}
+
+// DNSProviderCatalogHealth validates the embedded structured lookup table used
+// to expose DNS challenge provider metadata.
+func DNSProviderCatalogHealth() string {
+	var definitions []legoProviderDefinition
+	if err := json.Unmarshal(legoDNSProviderCatalog, &definitions); err != nil || len(definitions) == 0 {
+		return "error"
+	}
+	for _, definition := range definitions {
+		if strings.TrimSpace(definition.ID) == "" || strings.TrimSpace(definition.Name) == "" {
+			return "error"
+		}
+	}
+	return "ok"
 }
 
 var legoProviderEnvMu sync.Mutex

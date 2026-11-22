@@ -309,24 +309,23 @@ func TestHasOpenRCFalseWhenNoInitSystem(t *testing.T) {
 	}
 }
 
-// TestHasOpenRCTrueViaRCService verifies that hasOpenRC returns true when
-// rc-service (but not openrc-run) is available in PATH.
-func TestHasOpenRCTrueViaRCService(t *testing.T) {
+// TestHasOpenRCAtRequiresRunningOpenRC verifies that OpenRC is recognized only
+// when both its runner and its live state directory exist.
+func TestHasOpenRCAtRequiresRunningOpenRC(t *testing.T) {
 	tmpDir := t.TempDir()
-	fakeRC := filepath.Join(tmpDir, "rc-service")
-	if err := os.WriteFile(fakeRC, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
-		t.Fatalf("write fake rc-service: %v", err)
+	openrcRun := filepath.Join(tmpDir, "openrc-run")
+	openrcState := filepath.Join(tmpDir, "openrc")
+	if err := os.WriteFile(openrcRun, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatalf("write fake openrc-run: %v", err)
 	}
-
-	orig := os.Getenv("PATH")
-	// Strip real tools out; add tmpDir with fake rc-service only
-	os.Setenv("PATH", tmpDir+":/usr/bin:/bin")
-	defer os.Setenv("PATH", orig)
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-	if !sm.hasOpenRC() {
-		t.Error("hasOpenRC() = false, want true when rc-service is in PATH")
+	if hasOpenRCAt(openrcRun, openrcState) {
+		t.Fatal("hasOpenRCAt() = true before OpenRC state exists")
+	}
+	if err := os.Mkdir(openrcState, 0755); err != nil {
+		t.Fatalf("create fake OpenRC state directory: %v", err)
+	}
+	if !hasOpenRCAt(openrcRun, openrcState) {
+		t.Error("hasOpenRCAt() = false when runner and live state both exist")
 	}
 }
 
@@ -362,26 +361,15 @@ func TestDispatchSystemdFallback(t *testing.T) {
 	_ = sm.Disable()
 }
 
-// TestHasRunitFakeRunsvNoServiceDirs exercises the inner body of hasRunit when
-// runsv is found in PATH but neither /var/service nor /service exists on the system.
-// This covers the statements inside the LookPath-success branch.
-func TestHasRunitFakeRunsvNoServiceDirs(t *testing.T) {
-	if _, err := os.Stat("/var/service"); err == nil {
-		t.Skip("/var/service exists — cannot test the no-service-dirs fallback")
-	}
-	if _, err := os.Stat("/service"); err == nil {
-		t.Skip("/service exists — cannot test the no-service-dirs fallback")
+// TestHasRunitFalseWithoutMarkerOrSV verifies runit is not detected when the
+// host marker and the sv command are both absent.
+func TestHasRunitFalseWithoutMarkerOrSV(t *testing.T) {
+	if _, err := os.Stat("/etc/runit"); err == nil {
+		t.Skip("/etc/runit exists — runit is installed")
 	}
 
 	tmpDir := t.TempDir()
-	fakeRunsv := filepath.Join(tmpDir, "runsv")
-	if err := os.WriteFile(fakeRunsv, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
-		t.Fatalf("write fake runsv: %v", err)
-	}
-
-	orig := os.Getenv("PATH")
-	os.Setenv("PATH", tmpDir+":/usr/bin:/bin")
-	defer os.Setenv("PATH", orig)
+	t.Setenv("PATH", tmpDir)
 
 	cfg := config.DefaultConfig()
 	sm := NewServiceManager(cfg)

@@ -297,6 +297,10 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			rotated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS {prefix}server_request_stats_hourly (
+			hour INTEGER PRIMARY KEY,
+			request_count INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 	for _, stmt := range statements {
 		sql := applyPrefix(stmt)
@@ -389,4 +393,9 @@ func initUsersSchema(ctx context.Context, db *DB) error {
 // Use this helper when building queries to ensure correct prefix is applied.
 func ServerTableName(db *DB, table string) string {
 	return serverTablePrefix(db) + table
+}
+
+// RequestStatsTable returns the prefix-aware server request statistics table.
+func (db *DB) RequestStatsTable() string {
+	return ServerTableName(db, "server_request_stats_hourly")
 }

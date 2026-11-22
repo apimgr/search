@@ -80,7 +80,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Driver:   "sqlite",
-		DataDir:  "/data/db",
+		DataDir:  "/data/db/sqlite",
 		MaxOpen:  10,
 		MaxIdle:  5,
 		Lifetime: 300,
@@ -512,13 +512,13 @@ func (db *DB) Write(ctx context.Context, fn func(*sql.Tx) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	var err error
-	for attempt := 0; attempt <= 5; attempt++ {
+	for attempt := 0; attempt < 5; attempt++ {
 		attemptStart := time.Now()
 		err = db.writeOnce(ctx, fn)
 		if IsSQLiteBusy(err) {
 			busyWait += time.Since(attemptStart)
 		}
-		if !IsSQLiteBusy(err) || attempt == 5 {
+		if !IsSQLiteBusy(err) || attempt == 4 {
 			break
 		}
 		wait := time.Duration(25<<attempt)*time.Millisecond + time.Duration(rand.Intn(25))*time.Millisecond
@@ -527,7 +527,7 @@ func (db *DB) Write(ctx context.Context, fn func(*sql.Tx) error) error {
 		case <-time.After(wait):
 		case <-ctx.Done():
 			err = ctx.Err()
-			attempt = 5
+			attempt = 4
 		}
 		busyWait += time.Since(waitStart)
 	}
@@ -615,6 +615,28 @@ func (db *DB) ReadSQL() *sql.DB {
 		return db.readDB
 	}
 	return db.db
+}
+
+// SnapshotTo writes a consistent SQLite snapshot through the serialized write
+// handle using VACUUM INTO, which includes committed WAL contents.
+func (db *DB) SnapshotTo(ctx context.Context, destination string) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if db.driver != "sqlite" || db.db == nil {
+		return fmt.Errorf("SQLite snapshot requires an open SQLite database")
+	}
+	if destination == "" {
+		return fmt.Errorf("SQLite snapshot destination is required")
+	}
+	if _, err := os.Stat(destination); err == nil {
+		return fmt.Errorf("SQLite snapshot destination already exists")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("check SQLite snapshot destination: %w", err)
+	}
+	if _, err := db.db.ExecContext(ctx, "VACUUM INTO ?", destination); err != nil {
+		return fmt.Errorf("create SQLite snapshot: %w", err)
+	}
+	return nil
 }
 
 // Ping checks database connectivity

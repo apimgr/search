@@ -731,6 +731,7 @@ func TestCalculateNextRunCronInvalid(t *testing.T) {
 func TestTaskHandlersStruct(t *testing.T) {
 	handlers := &TaskHandlers{
 		SSLRenewal:      func(ctx context.Context) error { return nil },
+		SecurityCleanup: func(ctx context.Context) error { return nil },
 		GeoIPUpdate:     func(ctx context.Context) error { return nil },
 		HealthcheckSelf: func(ctx context.Context) error { return nil },
 	}
@@ -748,6 +749,7 @@ func TestRegisterBuiltinTasks(t *testing.T) {
 
 	handlers := &TaskHandlers{
 		SSLRenewal:      func(ctx context.Context) error { return nil },
+		SecurityCleanup: func(ctx context.Context) error { return nil },
 		TokenCleanup:    func(ctx context.Context) error { return nil },
 		HealthcheckSelf: func(ctx context.Context) error { return nil },
 	}
@@ -773,23 +775,32 @@ func TestRegisterBuiltinTasksAllHandlers(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
 	handlers := &TaskHandlers{
-		SSLRenewal:      func(ctx context.Context) error { return nil },
-		GeoIPUpdate:     func(ctx context.Context) error { return nil },
-		BlocklistUpdate: func(ctx context.Context) error { return nil },
-		CVEUpdate:       func(ctx context.Context) error { return nil },
-		TokenCleanup:    func(ctx context.Context) error { return nil },
-		LogRotation:     func(ctx context.Context) error { return nil },
-		BackupDaily:     func(ctx context.Context) error { return nil },
-		BackupHourly:    func(ctx context.Context) error { return nil },
-		HealthcheckSelf: func(ctx context.Context) error { return nil },
-		TorHealth:       func(ctx context.Context) error { return nil },
+		SSLRenewal:        func(ctx context.Context) error { return nil },
+		SecurityCleanup:   func(ctx context.Context) error { return nil },
+		GeoIPUpdate:       func(ctx context.Context) error { return nil },
+		BlocklistUpdate:   func(ctx context.Context) error { return nil },
+		CVEUpdate:         func(ctx context.Context) error { return nil },
+		TokenCleanup:      func(ctx context.Context) error { return nil },
+		LogRotation:       func(ctx context.Context) error { return nil },
+		BackupDaily:       func(ctx context.Context) error { return nil },
+		BackupHourly:      func(ctx context.Context) error { return nil },
+		DiskCheck:         func(ctx context.Context) error { return nil },
+		DiskCheckSchedule: "@every 5m",
+		HealthcheckSelf:   func(ctx context.Context) error { return nil },
+		TorHealth:         func(ctx context.Context) error { return nil },
 	}
 
 	s.RegisterBuiltinTasks(handlers)
 
 	tasks := s.GetTasks()
-	if len(tasks) != 10 {
-		t.Errorf("Expected 10 builtin tasks, got %d", len(tasks))
+	if len(tasks) != 12 {
+		t.Errorf("Expected 12 builtin tasks, got %d", len(tasks))
+	}
+	if _, err := s.GetTask(TaskSecurityCleanup); err != nil {
+		t.Fatalf("Security cleanup task not found: %v", err)
+	}
+	if task, err := s.GetTask(TaskDiskCheck); err != nil || task.Schedule != "@every 5m" {
+		t.Fatalf("Disk check task = %#v, %v; want @every 5m", task, err)
 	}
 
 	// Check BackupHourly is disabled by default

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -15,8 +16,11 @@ import (
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
+	"github.com/apimgr/search/src/logging"
 	"github.com/apimgr/search/src/notify"
 	"github.com/apimgr/search/src/scheduler"
+	"github.com/apimgr/search/src/security"
+	sigsvc "github.com/apimgr/search/src/signal"
 	"github.com/apimgr/search/src/update"
 )
 
@@ -49,9 +53,21 @@ var updateNotifyState updateNotifyTracker
 // update_check task found eligible, as AI.md PART 22 requires when
 // server.update.auto_install is true
 func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.UpdateInfo) error {
+	if runtime.GOOS == "windows" || !config.StartedElevated() {
+		manualCommand := config.ProjectName + " --update yes"
+		if runtime.GOOS != "windows" {
+			manualCommand = "sudo " + manualCommand
+		}
+		slog.Warn("scheduled update not installed because the process did not start elevated", "latest_version", info.LatestVersion, "manual_command", manualCommand)
+		if s.logManager != nil && s.logManager.Audit() != nil {
+			s.logManager.Audit().LogEvent(logging.AuditAction("update.install_skipped"), logging.AuditCategorySystem, logging.AuditSeverityInfo, logging.AuditActor{Type: "system", Username: "system"}, nil, "skipped", map[string]interface{}{"reason": "not_elevated", "version": info.LatestVersion}, "")
+		}
+		return nil
+	}
 	if info.DownloadURL == "" {
 		err := fmt.Errorf("release %s has no binary for this platform", info.LatestVersion)
 		slog.Error("auto-install skipped", "latest_version", info.LatestVersion, "err", err)
+		s.recordUpdateFailure(info.LatestVersion, err)
 		return err
 	}
 
@@ -60,32 +76,40 @@ func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.Update
 	downloadPath, err := mgr.DownloadUpdate(info.DownloadURL, nil)
 	if err != nil {
 		slog.Error("auto-install download failed", "latest_version", info.LatestVersion, "err", err)
+		s.recordUpdateFailure(info.LatestVersion, err)
 		return err
 	}
 
-	if err := mgr.InstallUpdate(downloadPath, info.AssetName, info.ChecksumURL); err != nil {
-		slog.Error("auto-install failed", "latest_version", info.LatestVersion, "err", err)
+	if err := mgr.StageUpdate(downloadPath, info.AssetName, info.ChecksumURL, info.LatestVersion, info.PublishedAt); err != nil {
+		slog.Error("auto-install staging failed", "latest_version", info.LatestVersion, "err", err)
+		s.recordUpdateFailure(info.LatestVersion, err)
 		return err
 	}
-
-	slog.Info("update installed", "previous_version", info.CurrentVersion, "new_version", info.LatestVersion)
-
-	// Per AI.md PART 17 Operator Notifications: record the change by email
-	if s.mailer != nil && s.mailer.IsEnabled() {
-		if err := s.mailer.SendUpdateInstalled(info.CurrentVersion, info.LatestVersion); err != nil {
-			slog.Error("failed to send update-installed notification", "err", err)
-		}
+	if s.logManager != nil && s.logManager.Audit() != nil {
+		s.logManager.Audit().LogEvent(logging.AuditAction("update.staged"), logging.AuditCategorySystem, logging.AuditSeverityInfo, logging.AuditActor{Type: "system", Username: "system"}, nil, "success", map[string]interface{}{"version": info.LatestVersion}, "")
 	}
-
-	// Per AI.md PART 22 "Service-Aware Update": the replaced binary only takes
-	// effect once this process restarts - through the service manager when one
-	// supervises it, otherwise by re-executing in place
-	slog.Info("restarting to run the new version", "service_managed", update.ServiceManaged())
-	if err := update.Restart(); err != nil {
-		slog.Error("restart after update failed", "err", err)
-		return err
+	sigsvc.SetShutdownExitCode(75)
+	s.SetShutdownReason("update restart")
+	process, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		sigsvc.SetShutdownExitCode(0)
+		s.recordUpdateFailure(info.LatestVersion, err)
+		return fmt.Errorf("find process for staged update restart: %w", err)
+	}
+	if err := process.Signal(os.Interrupt); err != nil {
+		sigsvc.SetShutdownExitCode(0)
+		s.SetShutdownReason("signal")
+		s.recordUpdateFailure(info.LatestVersion, err)
+		return fmt.Errorf("request graceful shutdown for staged update: %w", err)
 	}
 	return nil
+}
+
+func (s *Server) recordUpdateFailure(version string, cause error) {
+	if s.logManager == nil || s.logManager.Audit() == nil {
+		return
+	}
+	s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", map[string]interface{}{"version": version}, cause.Error())
 }
 
 // initScheduler initializes and starts the scheduler per AI.md PART 19
@@ -98,7 +122,7 @@ func (s *Server) initScheduler(db *database.DB) {
 	// Configure timezone
 	if tz := s.config.Server.Scheduler.Timezone; tz != "" {
 		if err := sched.SetTimezone(tz); err != nil {
-			slog.Warn("invalid timezone, using default", "timezone", tz, "err", err)
+			slog.Warn("invalid scheduler timezone, using default", "config_key", "server.scheduler.timezone", "timezone", tz, "default", scheduler.DefaultTimezoneName(), "err", err)
 		}
 	}
 
@@ -112,6 +136,27 @@ func (s *Server) initScheduler(db *database.DB) {
 	// Register all built-in tasks with handlers
 	handlers := s.createTaskHandlers()
 	sched.RegisterBuiltinTasks(handlers)
+	if s.currentHealthRegistry() != nil {
+		if err := sched.Register(&scheduler.Task{
+			ID:          scheduler.TaskID("health_registry_refresh"),
+			Name:        "Refresh Health Registry",
+			Description: "Refresh cached dependency checks and aggregate statistics",
+			Schedule:    "@every 60s",
+			TaskType:    scheduler.TaskTypeLocal,
+			Run: func(ctx context.Context) error {
+				s.refreshHealthRegistry()
+				if s.metrics != nil {
+					return s.metrics.PersistRequestStats(ctx)
+				}
+				return nil
+			},
+			Skippable:  false,
+			RunOnStart: true,
+			Enabled:    true,
+		}); err != nil {
+			slog.Error("health registry refresh task registration failed", "err", err)
+		}
+	}
 
 	// Apply task-specific config (for skippable tasks)
 	s.applyTaskConfig(sched)
@@ -128,7 +173,7 @@ func (s *Server) initScheduler(db *database.DB) {
 
 // createTaskHandlers creates handler functions for all built-in tasks
 func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
-	return &scheduler.TaskHandlers{
+	handlers := &scheduler.TaskHandlers{
 		// SSL Renewal - check and renew certs 7 days before expiry
 		// Per AI.md PART 18 Built-in Tasks (daily 03:00) and PART 15
 		// (SSL/TLS & Let's Encrypt): renews via DNS-01 when the cert is
@@ -179,9 +224,14 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			slog.Info("SSL certificate renewal check complete")
 			return nil
 		},
+		SecurityCleanup: func(ctx context.Context) error {
+			return s.cleanupSecurityData(ctx)
+		},
+		DiskCheckSchedule: diskCheckSchedule(s.config.Server.Notifications.DiskLow.CheckInterval),
 
 		// GeoIP Update - download ip-location-db databases
 		GeoIPUpdate: func(ctx context.Context) error {
+			defer s.refreshHealthRegistry()
 			if !s.config.Server.GeoIP.Enabled {
 				// GeoIP is disabled; skip update
 				return nil
@@ -200,6 +250,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 		// Blocklist Update - download IP/domain blocklists
 		// Per AI.md PART 18: blocklist_update runs daily at 04:00
 		BlocklistUpdate: func(ctx context.Context) error {
+			defer s.refreshHealthRegistry()
 			if s.blocklistManager == nil {
 				return nil
 			}
@@ -214,6 +265,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 		// CVE Update - download security databases (optional feature)
 		CVEUpdate: func(ctx context.Context) error {
+			defer s.refreshHealthRegistry()
 			if s.cveManager == nil {
 				return nil
 			}
@@ -274,12 +326,19 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 				if s.mailer != nil && s.mailer.IsEnabled() {
 					updateURL := s.config.Server.BaseURL + "/update"
+					var manualCommand string
+					if runtime.GOOS == "windows" {
+						manualCommand = config.ProjectName + " --update yes (run from an elevated prompt)"
+					} else if !config.StartedElevated() {
+						manualCommand = config.ProjectName + " --update yes"
+					}
 					if err := s.mailer.SendUpdateAvailable(
 						info.CurrentVersion,
 						info.LatestVersion,
 						info.PublishedAt.Format("2006-01-02"),
 						info.ReleaseNotes,
 						updateURL,
+						manualCommand,
 					); err != nil {
 						slog.Error("failed to send update-available notification", "err", err)
 					} else {
@@ -333,6 +392,13 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 		// Healthcheck Self - verify own health
 		HealthcheckSelf: func(ctx context.Context) error {
+			if s.dbManager != nil {
+				if err := s.dbManager.Ping(ctx); err != nil {
+					s.reportDatabaseStatus(err)
+				} else {
+					s.reportDatabaseStatus(nil)
+				}
+			}
 			if s.aggregator != nil {
 				if err := s.aggregator.RefreshEngineHealth(ctx); err != nil {
 					return err
@@ -382,6 +448,179 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			return s.refreshPublicIP(ctx)
 		},
 	}
+	if s.config.Server.Notifications.DiskLow.Enabled {
+		handlers.DiskCheck = s.checkDiskLow
+	}
+	return handlers
+}
+
+func diskCheckSchedule(interval string) string {
+	if strings.TrimSpace(interval) == "" {
+		return "@every 5m"
+	}
+	duration, err := time.ParseDuration(strings.TrimSpace(interval))
+	if err != nil || duration <= 0 {
+		slog.Warn("invalid disk-low check interval, using default", "config_key", "server.notifications.disk_low.check_interval", "value", interval, "default", "5m")
+		return "@every 5m"
+	}
+	return "@every " + duration.String()
+}
+
+type diskLowState struct {
+	lastNotification time.Time
+}
+
+func (s *Server) checkDiskLow(ctx context.Context) error {
+	if s.config == nil || !s.config.Server.Notifications.DiskLow.Enabled {
+		return nil
+	}
+	cfg := s.config.Server.Notifications.DiskLow
+	threshold := cfg.ThresholdPercent
+	if threshold < 1 || threshold > 100 {
+		threshold = 85
+	}
+	repeat := 24 * time.Hour
+	if value := strings.TrimSpace(cfg.Repeat); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed <= 0 {
+			slog.Warn("invalid disk-low repeat interval, using default", "config_key", "server.notifications.disk_low.repeat", "value", value, "default", repeat.String())
+		} else {
+			repeat = parsed
+		}
+	}
+	paths := []string{config.GetDataDir(), config.GetLogDir(), config.GetBackupDir()}
+	seen := make(map[string]struct{}, len(paths))
+	now := time.Now()
+	var errs []error
+	for _, path := range paths {
+		select {
+		case <-ctx.Done():
+			return errors.Join(append(errs, ctx.Err())...)
+		default:
+		}
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		volumePath, err := existingDiskPath(path)
+		if err != nil {
+			slog.Warn("disk space volume could not be resolved", "path", path, "err", err)
+			continue
+		}
+		volume, err := diskVolumeKey(volumePath)
+		if err != nil {
+			slog.Warn("disk space volume could not be identified", "path", path, "err", err)
+			continue
+		}
+		if _, exists := seen[volume]; exists {
+			continue
+		}
+		seen[volume] = struct{}{}
+		used, total, err := backup.DiskUsage(volumePath)
+		if err != nil {
+			slog.Warn("disk space check failed", "path", path, "err", err)
+			continue
+		}
+		if total == 0 {
+			continue
+		}
+		usedPercent := float64(used) * 100 / float64(total)
+		freeBytes := total - used
+		if usedPercent < float64(threshold-5) {
+			s.diskLowMu.Lock()
+			if s.diskLowState != nil {
+				if _, exists := s.diskLowState[volume]; exists {
+					delete(s.diskLowState, volume)
+					s.diskLowMu.Unlock()
+					slog.Info("Disk space recovered", "path", path, "used_percent", usedPercent)
+					continue
+				}
+			}
+			s.diskLowMu.Unlock()
+			continue
+		}
+		if usedPercent < float64(threshold) {
+			continue
+		}
+
+		s.diskLowMu.Lock()
+		if s.diskLowState == nil {
+			s.diskLowState = make(map[string]diskLowState)
+		}
+		state, notified := s.diskLowState[volume]
+		if notified && now.Sub(state.lastNotification) < repeat {
+			s.diskLowMu.Unlock()
+			continue
+		}
+		s.diskLowState[volume] = diskLowState{lastNotification: now}
+		s.diskLowMu.Unlock()
+
+		slog.Warn("Disk space low", "path", path, "used_percent", usedPercent, "free_bytes", freeBytes)
+		if s.mailer != nil && s.mailer.CanSend() {
+			if err := s.mailer.SendDiskLow(path, usedPercent, formatDiskBytes(freeBytes), threshold); err != nil {
+				slog.Error("disk space low notification email failed", "path", path, "err", err)
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func formatDiskBytes(bytes uint64) string {
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
+	value := float64(bytes)
+	unit := 0
+	for value >= 1024 && unit < len(units)-1 {
+		value /= 1024
+		unit++
+	}
+	if unit == 0 {
+		return fmt.Sprintf("%d %s", bytes, units[unit])
+	}
+	return fmt.Sprintf("%.1f %s", value, units[unit])
+}
+
+func (s *Server) cleanupSecurityData(ctx context.Context) error {
+	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return fmt.Errorf("security cleanup database is unavailable")
+	}
+	retentionDays := s.config.Server.Security.Reports.RetentionDays
+	if retentionDays <= 0 {
+		retentionDays = 365
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+	deleted, err := security.DeleteClosedReportsBefore(ctx, s.dbManager.ServerDB(), cutoff)
+	if err != nil {
+		return err
+	}
+	if deleted > 0 {
+		slog.Info("expired closed security reports removed", "count", deleted)
+	}
+
+	pgpDir := filepath.Join(config.GetConfigDir(), security.PGPDirName)
+	expiryPath := filepath.Join(pgpDir, "pgp.old.expires")
+	expiryBytes, err := os.ReadFile(expiryPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read retired PGP key expiry: %w", err)
+	}
+	expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(string(expiryBytes)))
+	if err != nil {
+		return fmt.Errorf("parse retired PGP key expiry: %w", err)
+	}
+	if time.Now().Before(expiresAt) {
+		return nil
+	}
+	privateKeyPath := filepath.Join(pgpDir, "pgp.priv.old.asc.enc")
+	if err := os.Remove(privateKeyPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove retired PGP private key: %w", err)
+	}
+	if err := os.Remove(expiryPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove retired PGP key expiry: %w", err)
+	}
+	slog.Info("retired PGP private key removed after grace period")
+	return nil
 }
 
 // applyTaskConfig applies user configuration to skippable tasks
@@ -421,6 +660,7 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 	applySettings(scheduler.TaskBlocklistUpdate, tasks.BlocklistUpdate)
 	applySettings(scheduler.TaskCVEUpdate, tasks.CVEUpdate)
 	applySettings(scheduler.TaskUpdateCheck, tasks.UpdateCheck)
+	applySettings(scheduler.TaskDiskCheck, tasks.DiskCheck)
 	applySettings(scheduler.TaskTokenCleanup, tasks.TokenCleanup)
 	applySettings(scheduler.TaskLogRotation, tasks.LogRotation)
 	applySettings(scheduler.TaskHealthcheckSelf, tasks.HealthcheckSelf)
@@ -462,6 +702,11 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 			slog.Warn("failed to disable update check task", "error", err)
 		}
 	}
+	if !tasks.DiskCheck.Enabled || !s.config.Server.Notifications.DiskLow.Enabled {
+		if err := sched.Disable(scheduler.TaskDiskCheck); err != nil {
+			slog.Warn("failed to disable disk check task", "error", err)
+		}
+	}
 }
 
 // GetSchedulerTasks returns all scheduler tasks for API/UI
@@ -497,8 +742,8 @@ func (s *Server) StartCVEUpdateIfMissing() {
 	if s.cveManager == nil {
 		return
 	}
-	trivyMissing := s.config.Data.Trivy.Enabled && !s.cveManager.HasTrivyDB()
-	if !s.cveManager.NeedsInitialUpdate() && !trivyMissing {
+	trivyNeedsUpdate := s.config.Data.Trivy.Enabled && s.cveManager.TrivyHealthStatus() != "ok"
+	if !s.cveManager.NeedsInitialUpdate() && !trivyNeedsUpdate {
 		return
 	}
 	if err := s.RunSchedulerTask(string(scheduler.TaskCVEUpdate)); err != nil {
@@ -572,6 +817,9 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 
 	// Create backup manager
 	mgr := backup.NewManager()
+	if s.dbManager != nil && s.dbManager.ServerDB() != nil {
+		mgr.SetServerDatabaseSnapshotter(s.dbManager.ServerDB())
+	}
 	// Per AI.md PART 25: set attribution before storing backup metadata
 	mgr.SetCreatedBy("scheduler")
 
@@ -628,62 +876,57 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 		ext = ".tar.gz.enc"
 	}
 
-	// Per AI.md PART 21: the daily job produces a timestamped full backup
-	// (search_backup_YYYY-MM-DD<ext>, pruned by max_backups); the hourly job
-	// produces only the fixed-name incremental below
-	var backupPath string
-	var verifyResult *backup.VerificationResult
-	var err error
-
+	// Daily artifacts are derived from one in-memory snapshot. The incremental
+	// is written against the previous full before the new full is written.
+	snapshotAt := time.Now().UTC()
 	if backupType == "daily" {
-		fullFilename := fmt.Sprintf("search_backup_%s%s", time.Now().Format("2006-01-02"), ext)
-
-		// Create the full backup with verification
-		// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
-		if encryptionEnabled && backupPassword != "" {
-			backupPath, verifyResult, err = mgr.CreateEncryptedAndVerify(fullFilename)
-		} else {
-			backupPath, verifyResult, err = mgr.CreateAndVerify(fullFilename)
-		}
-
+		incrementalFilename := fmt.Sprintf("search-daily%s", ext)
+		fullFilename := fmt.Sprintf("search_backup_%s%s", snapshotAt.Format("2006-01-02"), ext)
+		incrementalPath, fullPath, incrementalVerify, fullVerify, skippedIncremental, err := mgr.CreateDailyPairAndVerify(incrementalFilename, fullFilename, snapshotAt)
 		if err != nil {
-			// Per AI.md PART 22: On failure, DO NOT delete any existing backups
 			slog.Error("backup failed", "type", backupType, "err", err)
 			s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s backup failed: %v", backupType, err))
 			s.sendBackupFailedNotification(fullFilename, err)
 			return err
 		}
-
-		if verifyResult != nil && verifyResult.AllPassed {
-			slog.Info("backup created and verified", "type", backupType, "path", backupPath)
-			s.logAuditEvent("backup.created", fmt.Sprintf("%s backup created: %s (verified: file=%v, size=%v, checksum=%v, manifest=%v)",
-				backupType, backupPath, verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid, verifyResult.ManifestValid))
-			s.sendBackupCompletedNotification(backupPath)
+		if skippedIncremental {
+			slog.Info("skipping first daily incremental because no full backup exists")
 		}
-	}
-
-	// Per AI.md PART 21: fixed-name incremental (always exactly one file,
-	// replaced each run), excluded entirely from counted retention
-	incrementalFilename := fmt.Sprintf("search-%s%s", backupType, ext)
-	var incrementalPath string
-	var incrementalVerify *backup.VerificationResult
-	if encryptionEnabled && backupPassword != "" {
-		incrementalPath, incrementalVerify, err = mgr.CreateEncryptedAndVerify(incrementalFilename)
+		if incrementalVerify != nil && incrementalVerify.AllPassed {
+			slog.Info("incremental backup created and verified", "type", backupType, "path", incrementalPath)
+			s.logAuditEvent("backup.daily_updated", fmt.Sprintf("%s incremental backup updated: %s", backupType, incrementalPath))
+			s.sendBackupCompletedNotification(incrementalPath)
+		}
+		if fullVerify != nil && fullVerify.AllPassed {
+			slog.Info("backup created and verified", "type", backupType, "path", fullPath)
+			s.logAuditEvent("backup.created", fmt.Sprintf("%s backup created: %s (verified: file=%v, size=%v, checksum=%v, manifest=%v)", backupType, fullPath, fullVerify.FileExists, fullVerify.SizeValid, fullVerify.ChecksumValid, fullVerify.ManifestValid))
+			s.sendBackupCompletedNotification(fullPath)
+		}
 	} else {
-		incrementalPath, incrementalVerify, err = mgr.CreateAndVerify(incrementalFilename)
-	}
-
-	if err != nil {
-		slog.Error("incremental backup failed", "type", backupType, "err", err)
-		s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s incremental backup failed: %v", backupType, err))
-		s.sendBackupFailedNotification(incrementalFilename, err)
-		return err
-	}
-
-	if incrementalVerify != nil && incrementalVerify.AllPassed {
-		slog.Info("incremental backup created and verified", "type", backupType, "path", incrementalPath)
-		s.logAuditEvent("backup.daily_updated", fmt.Sprintf("%s incremental backup updated: %s", backupType, incrementalPath))
-		s.sendBackupCompletedNotification(incrementalPath)
+		incrementalFilename := fmt.Sprintf("search-hourly%s", ext)
+		var incrementalPath string
+		var incrementalVerify *backup.VerificationResult
+		var err error
+		if encryptionEnabled && backupPassword != "" {
+			incrementalPath, incrementalVerify, err = mgr.CreateEncryptedIncrementalAndVerify(incrementalFilename, snapshotAt)
+		} else {
+			incrementalPath, incrementalVerify, err = mgr.CreateIncrementalAndVerify(incrementalFilename, snapshotAt)
+		}
+		if err != nil {
+			if errors.Is(err, backup.ErrNoFullBackup) {
+				slog.Info("skipping hourly incremental because no full backup exists")
+				return nil
+			}
+			slog.Error("incremental backup failed", "type", backupType, "err", err)
+			s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s incremental backup failed: %v", backupType, err))
+			s.sendBackupFailedNotification(incrementalFilename, err)
+			return err
+		}
+		if incrementalVerify != nil && incrementalVerify.AllPassed {
+			slog.Info("incremental backup created and verified", "type", backupType, "path", incrementalPath)
+			s.logAuditEvent("backup.daily_updated", fmt.Sprintf("%s incremental backup updated: %s", backupType, incrementalPath))
+			s.sendBackupCompletedNotification(incrementalPath)
+		}
 	}
 
 	// Apply retention policy only after verification passes

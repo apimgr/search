@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,9 +16,11 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
+	"github.com/apimgr/search/src/security"
 	"github.com/apimgr/search/src/swagger"
 	"github.com/apimgr/search/src/version"
 	"github.com/go-chi/chi/v5"
@@ -120,6 +123,185 @@ func TestOfflinePageUsesSharedShellAndRequestPreferences(t *testing.T) {
 	}
 	if got := response.Header().Get("Cache-Control"); got != "private, no-store" {
 		t.Errorf("offline page Cache-Control = %q, want private, no-store", got)
+	}
+}
+
+func TestBangNavigationPassesThroughServiceWorkerAndRedirects(t *testing.T) {
+	server := newTestServer(t)
+	server.config.Search.Bangs.Enabled = true
+
+	request := httptest.NewRequest(http.MethodGet, "/search?q=%21gh+rex", nil)
+	response := httptest.NewRecorder()
+	server.handleSearch(response, request)
+	if response.Code != http.StatusFound {
+		t.Fatalf("bang search status = %d, want %d", response.Code, http.StatusFound)
+	}
+	if got := response.Header().Get("Location"); !strings.Contains(got, "github.com/search") {
+		t.Fatalf("bang redirect Location = %q, want GitHub search", got)
+	}
+
+	worker, err := GetStaticFile("sw.js")
+	if err != nil {
+		t.Fatalf("GetStaticFile(sw.js): %v", err)
+	}
+	workerText := string(worker)
+	if !strings.Contains(workerText, "request.mode === 'navigate' && isPotentialBangNavigation(url)") {
+		t.Fatal("service worker does not pass bang navigations through to the browser")
+	}
+	if !strings.Contains(workerText, "return /(^|\\s)![^\\s]+/.test(query)") {
+		t.Fatal("service worker bang-navigation matcher does not recognize !gh queries")
+	}
+}
+
+func TestHealthResponseSerializesRegisteredChecksAndStatsInOrder(t *testing.T) {
+	response := HealthResponse{
+		Checks: ChecksInfo{
+			Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok",
+			Extra: []health.Check{{Key: "engine_duckduckgo", Status: "ok"}, {Key: "engines", Status: "degraded"}},
+		},
+		Stats: StatsInfo{
+			RequestsTotal: 1,
+			Extra:         []health.Stat{{Key: "engines_total", Value: 12}, {Key: "engines_healthy", Value: 11}},
+		},
+	}
+	data, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("json.Marshal(health): %v", err)
+	}
+	body := string(data)
+	for before, after := range map[string]string{
+		`"scheduler":"ok"`:         `"engine_duckduckgo":"ok"`,
+		`"engine_duckduckgo":"ok"`: `"engines":"degraded"`,
+		`"active_connections":0`:   `"engines_total":12`,
+		`"engines_total":12`:       `"engines_healthy":11`,
+	} {
+		if !strings.Contains(body, before) || !strings.Contains(body, after) || strings.Index(body, before) >= strings.Index(body, after) {
+			t.Errorf("health JSON order does not place %s before %s: %s", before, after, body)
+		}
+	}
+}
+
+func TestFrontendHealthTextGoldenSectionOrder(t *testing.T) {
+	manager, err := i18n.DefaultManager()
+	if err != nil {
+		t.Fatalf("i18n.DefaultManager(): %v", err)
+	}
+	s := &Server{config: config.DefaultConfig(), i18nManager: manager}
+	response := &HealthResponse{
+		Project: ProjectInfo{Name: "Search", Tagline: "Private"}, Status: "healthy", Version: "1.2.3",
+		Features: FeaturesInfo{Tor: TorInfo{Status: "disabled"}, I2P: I2PInfo{Status: "disabled"}},
+		Checks:   ChecksInfo{Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok", Extra: []health.Check{{Key: "geoip_country", Status: "ok"}}},
+		Stats:    StatsInfo{RequestsTotal: 1, Requests24h: 1, ActiveConns: 1, Extra: []health.Stat{{Key: "engines_total", Value: 2}}},
+	}
+	w := httptest.NewRecorder()
+	s.respondHealthText(w, response)
+	body := w.Body.String()
+	assertTextOrder(t, body, "Status:", "Version:", "Checked:", "Cluster: Disabled", "Features", "Component Status", "GeoIP Country", "Server Statistics", "Engines total")
+}
+
+func assertTextOrder(t *testing.T, body string, markers ...string) {
+	t.Helper()
+	last := -1
+	for _, marker := range markers {
+		index := strings.Index(body, marker)
+		if index <= last {
+			t.Fatalf("text marker %q missing or out of order in:\n%s", marker, body)
+		}
+		last = index
+	}
+}
+
+func TestCriticalDynamicHealthDegradationIsUnhealthy(t *testing.T) {
+	critical, degraded := aggregateDynamicHealth([]health.Check{{Key: "data_geoip", Critical: true, Status: "degraded"}})
+	if !critical || degraded {
+		t.Fatalf("aggregateDynamicHealth() = (%v, %v), want (true, false)", critical, degraded)
+	}
+	critical, degraded = aggregateDynamicHealth([]health.Check{{Key: "blocklist_ads", Status: "degraded"}})
+	if critical || !degraded {
+		t.Fatalf("noncritical degraded check = (%v, %v), want (false, true)", critical, degraded)
+	}
+}
+
+func TestNVDHealthUses48HourFreshnessWindow(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name  string
+		count int
+		age   time.Duration
+		want  string
+	}{
+		{"empty", 0, 0, "error"},
+		{"current", 5, 24 * time.Hour, "ok"},
+		{"at bound", 5, 48 * time.Hour, "ok"},
+		{"stale", 5, 48*time.Hour + time.Second, "degraded"},
+		{"unknown sync", 5, 0, "degraded"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lastSync := time.Time{}
+			if test.age > 0 {
+				lastSync = now.Add(-test.age)
+			}
+			if got := nvdHealthStatus(test.count, lastSync, now); got != test.want {
+				t.Fatalf("nvdHealthStatus() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestHealthRegistryRebuildsDynamicBlocklistSources(t *testing.T) {
+	manager := security.NewBlocklistManagerWithSecurityDir(t.TempDir(), t.TempDir(), []security.BlocklistSource{{Name: "old_feed", URL: "https://example.test/old", Type: "cidr", Enabled: true}})
+	s := &Server{config: config.DefaultConfig(), blocklistManager: manager}
+	s.rebuildHealthRegistry()
+	if !hasHealthCheck(s.currentHealthRegistry().Checks(), "blocklist_old_feed") {
+		t.Fatal("initial blocklist source was not registered")
+	}
+	manager.SetSources([]security.BlocklistSource{{Name: "new_feed", URL: "https://example.test/new", Type: "cidr", Enabled: true}})
+	s.rebuildHealthRegistry()
+	checks := s.currentHealthRegistry().Checks()
+	if !hasHealthCheck(checks, "blocklist_new_feed") || hasHealthCheck(checks, "blocklist_old_feed") {
+		t.Fatalf("blocklist registry did not follow updated sources: %#v", checks)
+	}
+}
+
+func hasHealthCheck(checks []health.Check, key string) bool {
+	for _, check := range checks {
+		if check.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func TestHealthBuildDateIsRFC3339UTCWholeSecond(t *testing.T) {
+	s := &Server{config: config.DefaultConfig(), startTime: time.Now()}
+	health := s.buildHealthInfo()
+	parsed, err := time.Parse(time.RFC3339, health.Build.Date)
+	if err != nil {
+		t.Fatalf("health build.date %q is not RFC3339: %v", health.Build.Date, err)
+	}
+	if parsed.Location() != time.UTC || parsed.Nanosecond() != 0 || parsed.Format("2006-01-02T15:04:05Z") != health.Build.Date {
+		t.Fatalf("health build.date = %q, want UTC whole-second RFC3339 with Z suffix", health.Build.Date)
+	}
+}
+
+func TestServiceWorkerOfflineLastResortUsesThemeAndSharedShell(t *testing.T) {
+	worker, err := GetStaticFile("sw.js")
+	if err != nil {
+		t.Fatalf("GetStaticFile(sw.js): %v", err)
+	}
+	workerText := string(worker)
+	for _, marker := range []string{
+		"offlineFallbackResponse(request)",
+		"requestCookie(request, 'theme')",
+		`class="theme-' + theme`,
+		`class="skip-link"`,
+		`id="main-content"`,
+		`class="section-card"`,
+		"if (response.redirected || response.type === 'opaqueredirect')",
+	} {
+		if !strings.Contains(workerText, marker) {
+			t.Errorf("service worker offline fallback missing shared-shell marker %q", marker)
+		}
 	}
 }
 
@@ -2261,13 +2443,13 @@ func TestFormatDuration(t *testing.T) {
 		input time.Duration
 		want  string
 	}{
-		{"zero", 0, "0m"},
-		{"45 seconds", 45 * time.Second, "0m"},
+		{"zero", 0, "0s"},
+		{"45 seconds", 45 * time.Second, "45s"},
 		{"one minute", time.Minute, "1m"},
 		{"90 seconds", 90 * time.Second, "1m"},
-		{"one hour", time.Hour, "1h 0m"},
+		{"one hour", time.Hour, "1h"},
 		{"1h30m", time.Hour + 30*time.Minute, "1h 30m"},
-		{"one day", 24 * time.Hour, "1d 0h 0m"},
+		{"one day", 24 * time.Hour, "1d"},
 		{"2d 5h 30m", 2*24*time.Hour + 5*time.Hour + 30*time.Minute, "2d 5h 30m"},
 	}
 	for _, tt := range tests {
@@ -2276,6 +2458,43 @@ func TestFormatDuration(t *testing.T) {
 				t.Errorf("formatDuration(%v) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFormatDurationForHuman(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"45s", "45 seconds"},
+		{"24m", "24 minutes"},
+		{"1h", "1 hour"},
+		{"1h 4m", "1 hour 4 minutes"},
+		{"2d 5h 30m", "2 days 5 hours 30 minutes"},
+		{"0m", "0 seconds"},
+	}
+	for _, test := range tests {
+		if got := formatDurationForHuman(test.input); got != test.want {
+			t.Errorf("formatDurationForHuman(%q) = %q, want %q", test.input, got, test.want)
+		}
+	}
+}
+
+func TestHealthFeatureTextStates(t *testing.T) {
+	tests := []struct {
+		status string
+		host   string
+		want   string
+	}{
+		{"disabled", "", "disabled"},
+		{"starting", "", "starting"},
+		{"healthy", "site.onion", "healthy - site.onion"},
+		{"unavailable", "", "unavailable"},
+	}
+	for _, test := range tests {
+		if got := healthFeatureText(test.status, test.host); got != test.want {
+			t.Errorf("healthFeatureText(%q, %q) = %q, want %q", test.status, test.host, got, test.want)
+		}
 	}
 }
 
@@ -2332,19 +2551,19 @@ func TestHandleLivez(t *testing.T) {
 	}
 }
 
-func TestHandleReadyzHealthy(t *testing.T) {
+func TestHandleReadyzWithoutRequiredScheduler(t *testing.T) {
 	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
 	r := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReadyz(w, r)
 
-	// With no DB and no maintenance mode, should be 200 READY
-	if w.Code != http.StatusOK {
-		t.Errorf("handleReadyz() status = %d, want %d", w.Code, http.StatusOK)
+	// A server without its required built-in scheduler is not ready.
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleReadyz() status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
-	if !strings.Contains(w.Body.String(), "READY") {
-		t.Errorf("handleReadyz() body = %q, want to contain 'READY'", w.Body.String())
+	if !strings.Contains(w.Body.String(), "NOT READY") {
+		t.Errorf("handleReadyz() body = %q, want to contain 'NOT READY'", w.Body.String())
 	}
 }
 
@@ -2472,7 +2691,11 @@ func TestRespondHealthJSONMaintenance(t *testing.T) {
 }
 
 func TestRespondHealthText(t *testing.T) {
-	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	manager, err := i18n.DefaultManager()
+	if err != nil {
+		t.Fatalf("i18n.DefaultManager(): %v", err)
+	}
+	s := &Server{config: &config.Config{}, i18nManager: manager}
 	health := &HealthResponse{
 		Status:  "healthy",
 		Version: "1.0.0",
@@ -2493,10 +2716,10 @@ func TestRespondHealthText(t *testing.T) {
 		t.Errorf("respondHealthText() status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "status: healthy") {
-		t.Errorf("respondHealthText() body missing 'status: healthy': %q", body)
+	if !strings.Contains(body, "Status:    Healthy") {
+		t.Errorf("respondHealthText() body missing human-readable status: %q", body)
 	}
-	if !strings.Contains(body, "version: 1.0.0") {
+	if !strings.Contains(body, "Version:   1.0.0") {
 		t.Errorf("respondHealthText() body missing version: %q", body)
 	}
 }
@@ -2527,14 +2750,20 @@ func TestBuildHealthInfoMinimal(t *testing.T) {
 	if health == nil {
 		t.Fatal("buildHealthInfo() returned nil")
 	}
-	if health.Status != "healthy" {
-		t.Errorf("buildHealthInfo() status = %q, want 'healthy'", health.Status)
+	if health.Status != "unhealthy" {
+		t.Errorf("buildHealthInfo() status = %q, want 'unhealthy' when required scheduler is absent", health.Status)
 	}
 	if health.Mode != "production" {
 		t.Errorf("buildHealthInfo() mode = %q, want 'production'", health.Mode)
 	}
 	if health.Checks.Database != "ok" {
 		t.Errorf("buildHealthInfo() checks.database = %q, want 'ok'", health.Checks.Database)
+	}
+	if health.Checks.Scheduler != "error" {
+		t.Errorf("buildHealthInfo() checks.scheduler = %q, want 'error' when required scheduler is absent", health.Checks.Scheduler)
+	}
+	if health.Cluster.Enabled {
+		t.Error("single-instance health response must report cluster.enabled=false")
 	}
 }
 
@@ -2774,6 +3003,19 @@ func TestRequireOperatorSetsWWWAuthenticate(t *testing.T) {
 
 	if hdr := w.Header().Get("WWW-Authenticate"); hdr == "" {
 		t.Error("RequireOperator() should set WWW-Authenticate header on 401")
+	}
+}
+
+func TestRequireOperatorPadsFailedAuthTiming(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Token = "expected-token"
+	s := &Server{config: cfg}
+	req := httptest.NewRequest(http.MethodGet, "/server/status", nil)
+	recorder := httptest.NewRecorder()
+	started := time.Now()
+	s.RequireOperator(func(http.ResponseWriter, *http.Request) {})(recorder, req)
+	if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
+		t.Fatalf("failed operator auth returned in %s; want at least 100ms", elapsed)
 	}
 }
 

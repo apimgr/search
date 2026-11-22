@@ -172,6 +172,14 @@
                         }
                       }
                     },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -317,6 +325,14 @@
                         },
                         "tor": {
                           "type": "string"
+                        }
+                      }
+                    },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         }
                       }
                     },
@@ -3491,6 +3507,14 @@
                         }
                       }
                     },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -3636,6 +3660,14 @@
                         },
                         "tor": {
                           "type": "string"
+                        }
+                      }
+                    },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         }
                       }
                     },
@@ -3804,6 +3836,14 @@
                         }
                       }
                     },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -3949,6 +3989,14 @@
                         },
                         "tor": {
                           "type": "string"
+                        }
+                      }
+                    },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         }
                       }
                     },
@@ -6815,6 +6863,14 @@
                         }
                       }
                     },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -6960,6 +7016,14 @@
                         },
                         "tor": {
                           "type": "string"
+                        }
+                      }
+                    },
+                    "cluster": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         }
                       }
                     },
@@ -7115,6 +7179,14 @@
               },
               "tor": {
                 "type": "string"
+              }
+            }
+          },
+          "cluster": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
               }
             }
           },

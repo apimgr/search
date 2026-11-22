@@ -994,6 +994,18 @@
     "active_connections": "חיבורים פעילים",
     "last_updated": "עודכן לאחרונה:",
     "auto_refresh_in": "רענון אוטומטי בעוד",
+    "mode_debug": "ניפוי שגיאות",
+    "unavailable": "לא זמין",
+    "shutting_down": "מתבצע כיבוי",
+    "restart_required": "נדרשת הפעלה מחדש",
+    "section": {
+      "cluster": "אשכול",
+      "version": "גרסה",
+      "runtime": "זמן ריצה",
+      "features": "תכונות",
+      "checks": "מצב רכיבים",
+      "stats": "סטטיסטיקות שרת"
+    },
     "components": {
       "database": "מסד נתונים",
       "cache": "מטמון",
@@ -2169,7 +2181,8 @@
       "label_new_version": "גרסה חדשה:",
       "label_release_date": "תאריך שחרור:",
       "label_release_notes": "הערות גרסה:",
-      "label_view_update": "צפה בעדכון:"
+      "label_view_update": "צפה בעדכון:",
+      "manual_command": "פקודת עדכון ידנית: {command}"
     },
     "security_report": {
       "subject": "דוח אבטחה התקבל: %s",

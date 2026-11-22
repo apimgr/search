@@ -37,7 +37,7 @@ func resetAllFlagVars() {
 	flagBackup = ""
 	flagPID = ""
 	flagAddress = ""
-	flagPort = 0
+	flagPort = ""
 	flagBaseURL = ""
 	flagColor = ""
 	flagLang = ""

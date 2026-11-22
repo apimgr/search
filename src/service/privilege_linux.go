@@ -32,7 +32,14 @@ func FindAvailableSystemID() (int, error) {
 // CreateSystemUser creates a Linux system user for the service.
 // Per AI.md PART 24: System user creation logic.
 func CreateSystemUser(name string) (*SystemUser, error) {
-	return createLinuxSystemUser(name)
+	created, err := createLinuxSystemUser(name)
+	if err != nil || !created.Created {
+		return created, err
+	}
+	if err := markSystemUserOwned(name); err != nil {
+		return nil, err
+	}
+	return created, nil
 }
 
 // createLinuxSystemUser creates a Linux system user via groupadd/useradd.
@@ -76,11 +83,12 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 	}
 
 	return &SystemUser{
-		Name:  name,
-		UID:   id,
-		GID:   id,
-		Home:  homeDir,
-		Shell: "/sbin/nologin",
+		Name:    name,
+		UID:     id,
+		GID:     id,
+		Home:    homeDir,
+		Shell:   "/sbin/nologin",
+		Created: true,
 	}, nil
 }
 
@@ -88,6 +96,9 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 // server. Per AI.md PART 23 uninstall: userdel/groupdel are the inverse of the
 // groupadd/useradd creation commands.
 func DeleteSystemUser(name string) error {
+	if !systemUserOwned(name) {
+		return nil
+	}
 	// userdel also removes any lingering membership references.
 	if err := exec.Command("userdel", "--remove", name).Run(); err != nil {
 		if _, lookErr := user.Lookup(name); lookErr != nil {
@@ -105,5 +116,5 @@ func DeleteSystemUser(name string) error {
 			return fmt.Errorf("failed to delete group: %w", err)
 		}
 	}
-	return nil
+	return clearSystemUserOwnership(name)
 }

@@ -1100,7 +1100,7 @@ func TestDetectResponseFormat(t *testing.T) {
 func TestRespondHealthText_RequiredFields(t *testing.T) {
 	s := newTestServer(t)
 	health := &HealthResponse{
-		Status:    "ok",
+		Status:    "healthy",
 		Version:   "1.0.0",
 		Mode:      "production",
 		Uptime:    "1h",
@@ -1121,7 +1121,7 @@ func TestRespondHealthText_RequiredFields(t *testing.T) {
 		t.Errorf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"status: ok", "version: 1.0.0", "mode: production", "checks.database: ok"} {
+	for _, want := range []string{"Status:    Healthy", "Version:   1.0.0", "Mode:      production", "Database:   ok"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("text health response missing %q; got:\n%s", want, body)
 		}
@@ -1147,14 +1147,14 @@ func TestRespondHealthText_Unhealthy(t *testing.T) {
 func TestRespondHealthText_TorFields(t *testing.T) {
 	s := newTestServer(t)
 	health := &HealthResponse{
-		Status: "ok",
+		Status: "healthy",
 		Checks: ChecksInfo{Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok"},
 		Build:  BuildInfo{},
 		Features: FeaturesInfo{
 			Tor: TorInfo{
 				Enabled:  true,
 				Running:  true,
-				Status:   "running",
+				Status:   "healthy",
 				Hostname: "abc.onion",
 			},
 			GeoIP: true,
@@ -1163,10 +1163,10 @@ func TestRespondHealthText_TorFields(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.respondHealthText(rec, health)
 	body := rec.Body.String()
-	if !strings.Contains(body, "features.tor.enabled: true") {
+	if !strings.Contains(body, "healthy - abc.onion") {
 		t.Errorf("expected tor fields in text output; got:\n%s", body)
 	}
-	if !strings.Contains(body, "features.geoip: true") {
+	if !strings.Contains(body, "GeoIP:   Enabled") {
 		t.Errorf("expected geoip field; got:\n%s", body)
 	}
 }
@@ -3738,10 +3738,12 @@ func TestCreatePIDFile_UsingDataDirEnv(t *testing.T) {
 func TestRegisterDebugRoutes_DebugEnabled(t *testing.T) {
 	t.Setenv("DEBUG", "true")
 	cfg := config.DefaultConfig()
+	cfg.Server.Token = "debug-test-token"
 	s := &Server{config: cfg}
 	r := chi.NewRouter()
 	s.registerDebugRoutes(r)
 	req := httptest.NewRequest(http.MethodGet, "/debug/vars", nil)
+	req.Header.Set("Authorization", "Bearer debug-test-token")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code == http.StatusNotFound {

@@ -15,6 +15,7 @@ Subject: {subject_prefix} - {app_name}
 {release_notes}
 
 {label_view_update} {update_url}
+{manual_update_command}
 
 --
 {app_name}

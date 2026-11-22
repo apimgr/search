@@ -994,6 +994,18 @@
     "active_connections": "فعال روابط",
     "last_updated": "آخری اپ ڈیٹ:",
     "auto_refresh_in": "خودکار تازہ کاری ميں",
+    "mode_debug": "ڈیبگ",
+    "unavailable": "دستیاب نہیں",
+    "shutting_down": "بند ہو رہا ہے",
+    "restart_required": "دوبارہ شروع کرنا ضروری ہے",
+    "section": {
+      "cluster": "کلسٹر",
+      "version": "ورژن",
+      "runtime": "رَن ٹائم",
+      "features": "خصوصيات",
+      "checks": "اجزا کی حالت",
+      "stats": "سرور کے اعدادوشمار"
+    },
     "components": {
       "database": "ڈيٹا بيس",
       "cache": "کيش",
@@ -2169,7 +2181,8 @@
       "label_new_version": "نیا ورژن:",
       "label_release_date": "ریلیز کی تاریخ:",
       "label_release_notes": "ریلیز نوٹس:",
-      "label_view_update": "اپ ڈیٹ دیکھیں:"
+      "label_view_update": "اپ ڈیٹ دیکھیں:",
+      "manual_command": "دستی اپ ڈیٹ کمانڈ: {command}"
     },
     "security_report": {
       "subject": "سیکیورٹی رپورٹ موصول ہوئی: %s",

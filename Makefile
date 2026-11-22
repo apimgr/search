@@ -47,11 +47,11 @@ LDFLAGS := -s -w \
 
 # CLI linker flags (per AI.md PART 25)
 CLI_LDFLAGS := -s -w \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.ProjectName=$(PROJECTNAME)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.Version=$(VERSION)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.CommitID=$(COMMIT_ID)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.BuildEpoch=$(BUILD_EPOCH)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.OfficialSite=$(OFFICIAL_SITE)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/command.ProjectName=$(PROJECTNAME)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/command.Version=$(VERSION)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/command.CommitID=$(COMMIT_ID)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/command.BuildEpoch=$(BUILD_EPOCH)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/command.OfficialSite=$(OFFICIAL_SITE)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.ProjectName=$(PROJECTNAME)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.Version=$(VERSION)'
 
@@ -96,7 +96,7 @@ GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
 dev:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) go mod tidy
-	@$(GO_DOCKER) go run ./src/cmd/apigen
+	@$(GO_DOCKER) go run ./src/apigen
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
 	BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
 	echo "Quick dev build to $$BUILD_DIR..." && \
@@ -119,7 +119,7 @@ local:
 	@echo "Building local binaries version $(VERSION)..."
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
-	@$(GO_DOCKER) go run ./src/cmd/apigen
+	@$(GO_DOCKER) go run ./src/apigen
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
 		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY)-$(VERSION) ./src"
 	@if [ -d "src/client" ]; then \
@@ -140,7 +140,7 @@ build:
 	@echo "Tidying and downloading Go modules..."
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
-	@$(GO_DOCKER) go run ./src/cmd/apigen
+	@$(GO_DOCKER) go run ./src/apigen
 	@echo "Building host binary..."
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
 		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY) ./src"
@@ -235,19 +235,23 @@ test:
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD)
 	@echo "Running tests with coverage..." && \
 	COVDIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
+	TEST_NET=$(PROJECTNAME)-test-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) && \
+	trap 'docker network rm "$$TEST_NET" >/dev/null 2>&1 || true; case "$$COVDIR" in "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-"*) rm -rf -- "$$COVDIR" ;; esac' EXIT && \
+	docker network create --driver bridge "$$TEST_NET" >/dev/null && \
 	mkdir -p "$$COVDIR/testtmp" && \
-	trap 'case "$$COVDIR" in "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-"*) rm -rf -- "$$COVDIR" ;; esac' EXIT && \
 	docker run --rm \
 		--name $(PROJECTNAME)-test-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+		--network "$$TEST_NET" \
 		--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
 		-v $(PWD):/app \
 		-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
 		-v $(GO_BUILD):/usr/local/share/go/cache \
-		-v $$COVDIR:/tmp/covout \
+		-v "$$COVDIR:$$COVDIR" \
 		-w /app \
 		-e CGO_ENABLED=0 \
 		-e GOFLAGS=-buildvcs=false \
-		-e TMPDIR=/tmp/covout/testtmp \
+		-e "COVDIR=$$COVDIR" \
+		-e "TMPDIR=$$COVDIR/testtmp" \
 		casjaysdev/go:latest \
-		ash -c 'set -e; go mod download; go run ./src/cmd/apigen; go test -v -cover -coverprofile=/tmp/covout/coverage.out $(TEST_PACKAGES); COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep "^total:" | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 60" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 60%"; exit 1; fi'
+		ash -c 'set -e; go mod download; go run ./src/apigen; go test -v -cover -coverprofile=$$COVDIR/coverage.out $(TEST_PACKAGES); COVERAGE=$$(go tool cover -func=$$COVDIR/coverage.out | grep "^total:" | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 60" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 60%"; exit 1; fi'
 	@echo "Tests complete"

@@ -162,6 +162,10 @@ func waitForI2PDAddress(ctx context.Context, keysPath string, timeout time.Durat
 // i2pd child process, then reads the .b32.i2p from the persisted destination
 // once it is ready. i2pd creates/persists site-keys.dat at keysPath.
 func startI2PD(ctx context.Context, cfg *I2PConfig, binary, keysPath string, i2pBackendPort int, svc *I2PService) (string, error) {
+	return startI2PDWithBuilding(ctx, cfg, binary, keysPath, i2pBackendPort, svc, nil)
+}
+
+func startI2PDWithBuilding(ctx context.Context, cfg *I2PConfig, binary, keysPath string, i2pBackendPort int, svc *I2PService, onBuilding func()) (string, error) {
 	configDir := config.GetConfigDir()
 	dataDir := config.GetDataDir()
 	tunnelsPath := filepath.Join(configDir, "i2p", "tunnels.conf")
@@ -197,6 +201,9 @@ func startI2PD(ctx context.Context, cfg *I2PConfig, binary, keysPath string, i2p
 	}()
 
 	// Wait for i2pd to publish the destination, then derive the address.
+	if onBuilding != nil {
+		onBuilding()
+	}
 	deadline := time.Duration(cfg.BootstrapTimeout) * time.Second
 	addr, err := waitForI2PDAddress(ctx, keysPath, deadline)
 	if err != nil {
@@ -223,6 +230,10 @@ func startI2PD(ctx context.Context, cfg *I2PConfig, binary, keysPath string, i2p
 // clearnetAddr is the loopback address of the app's clearnet HTTP listener that
 // relayed eepsite connections are handed to.
 func startDedicatedI2P(ctx context.Context, cfg *I2PConfig, clearnetAddr string) (*I2PService, error) {
+	return startDedicatedI2PWithLifecycle(ctx, cfg, clearnetAddr, nil)
+}
+
+func startDedicatedI2PWithLifecycle(ctx context.Context, cfg *I2PConfig, clearnetAddr string, onBuilding func()) (*I2PService, error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("i2p disabled (opt-in) - eepsite not started")
 	}
@@ -263,7 +274,7 @@ func startDedicatedI2P(ctx context.Context, cfg *I2PConfig, clearnetAddr string)
 	case I2PProviderI2PD:
 		// Model A: regenerate tunnels.conf every startup (derived state), then
 		// start a dedicated i2pd. i2pd persists the destination in keysPath.
-		addr, err := startI2PD(ctx, cfg, i2pdBinary, keysPath, i2pBackendPort, svc)
+		addr, err := startI2PDWithBuilding(ctx, cfg, i2pdBinary, keysPath, i2pBackendPort, svc, onBuilding)
 		if err != nil {
 			return nil, errors.Join(err, backend.Close())
 		}
@@ -271,7 +282,7 @@ func startDedicatedI2P(ctx context.Context, cfg *I2PConfig, clearnetAddr string)
 	case I2PProviderSAM:
 		// Model B: create a STREAM session from the persisted destination and
 		// STREAM FORWARD incoming connections to the backend port.
-		addr, err := startSAMEepsite(cfg, keysPath, i2pBackendPort, svc)
+		addr, err := startSAMEepsiteWithBuilding(cfg, keysPath, i2pBackendPort, svc, onBuilding)
 		if err != nil {
 			return nil, errors.Join(err, backend.Close())
 		}

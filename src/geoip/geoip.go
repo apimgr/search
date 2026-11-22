@@ -1,6 +1,8 @@
 package geoip
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -13,29 +15,28 @@ import (
 	"time"
 )
 
-// Database URLs from sapics/ip-location-db (NON-NEGOTIABLE per AI.md PART 19).
-// ASN and Country ship on the jsDelivr CDN; the DB-IP city databases are
-// published as GitHub release assets, one per IP version.
+// Database URLs from canonical sapics/ip-location-db release assets.
 const (
-	ASNURL      = "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
-	CountryURL  = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
+	ASNURL      = "https://github.com/sapics/ip-location-db/releases/download/latest/iptoasn-asn.mmdb"
+	CountryURL  = "https://github.com/sapics/ip-location-db/releases/download/latest/iptoasn-country.mmdb"
 	CityIPv4URL = "https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv4.mmdb"
 	CityIPv6URL = "https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv6.mmdb"
+	ChecksumURL = "https://github.com/sapics/ip-location-db/releases/download/checksum/"
 )
 
 // On-disk file names for the downloaded databases.
 const (
-	asnFile      = "asn.mmdb"
-	countryFile  = "country.mmdb"
-	cityIPv4File = "city-ipv4.mmdb"
-	cityIPv6File = "city-ipv6.mmdb"
+	asnFile      = "iptoasn-asn.mmdb"
+	countryFile  = "iptoasn-country.mmdb"
+	cityIPv4File = "dbip-city-ipv4.mmdb"
+	cityIPv6File = "dbip-city-ipv6.mmdb"
 )
 
 // legacyFiles are database files written by earlier revisions of this package.
 // They are removed on load so the data directory never keeps a stale database
 // around, notably the retired "whois" pseudo-database that AI.md PART 19
 // forbids: no such dataset exists in ip-location-db.
-var legacyFiles = []string{"whois.mmdb", "city.mmdb"}
+var legacyFiles = []string{"whois.mmdb", "city.mmdb", "asn.mmdb", "country.mmdb", "city-ipv4.mmdb", "city-ipv6.mmdb"}
 
 // Lookup represents a GeoIP lookup service using MMDB format
 type Lookup struct {
@@ -43,13 +44,15 @@ type Lookup struct {
 	countryDB *mmdbReader
 	asnDB     *mmdbReader
 	// City data is split by IP version upstream, so one reader per version
-	cityDB4    *mmdbReader
-	cityDB6    *mmdbReader
-	loaded     bool
-	dbDir      string
-	countries  map[string]*Country
-	lastUpdate time.Time
-	config     *Config
+	cityDB4     *mmdbReader
+	cityDB6     *mmdbReader
+	loaded      bool
+	dbDir       string
+	countries   map[string]*Country
+	lastUpdate  time.Time
+	config      *Config
+	httpClient  *http.Client
+	checksumURL string
 }
 
 // Country represents country information
@@ -116,9 +119,11 @@ func NewLookup(cfg *Config) *Lookup {
 	}
 
 	l := &Lookup{
-		countries: make(map[string]*Country),
-		dbDir:     cfg.Dir,
-		config:    cfg,
+		countries:   make(map[string]*Country),
+		dbDir:       cfg.Dir,
+		config:      cfg,
+		httpClient:  &http.Client{Timeout: 5 * time.Minute},
+		checksumURL: ChecksumURL,
 	}
 
 	// Initialize country names
@@ -205,8 +210,33 @@ func (l *Lookup) removeLegacyFiles() error {
 
 // downloadDatabase downloads an MMDB database from URL
 func (l *Lookup) downloadDatabase(url, destPath string) (err error) {
-	client := &http.Client{
-		Timeout: 5 * time.Minute,
+	client := l.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Minute}
+	}
+	checksumURL := l.checksumURL
+	if checksumURL == "" {
+		checksumURL = ChecksumURL
+	}
+	filename := filepath.Base(url)
+	checksumResp, err := client.Get(checksumURL + filename + ".sha256")
+	if err != nil {
+		return fmt.Errorf("download checksum failed: %w", err)
+	}
+	checksumBody, readErr := io.ReadAll(io.LimitReader(checksumResp.Body, 4097))
+	closeErr := checksumResp.Body.Close()
+	if readErr != nil || closeErr != nil {
+		return fmt.Errorf("read GeoIP checksum: %w", errors.Join(readErr, closeErr))
+	}
+	if checksumResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download checksum failed: status %d", checksumResp.StatusCode)
+	}
+	fields := strings.Fields(string(checksumBody))
+	if len(fields) == 0 || len(fields[0]) != sha256.Size*2 {
+		return fmt.Errorf("invalid GeoIP checksum response")
+	}
+	if _, err := hex.DecodeString(fields[0]); err != nil {
+		return fmt.Errorf("invalid GeoIP checksum response: %w", err)
 	}
 
 	resp, err := client.Get(url)
@@ -218,34 +248,30 @@ func (l *Lookup) downloadDatabase(url, destPath string) (err error) {
 			err = errors.Join(err, fmt.Errorf("close GeoIP download response: %w", closeErr))
 		}
 	}()
-
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: status %d", resp.StatusCode)
 	}
-
-	// Create temp file first
-	tmpPath := destPath + ".tmp"
-	out, err := os.Create(tmpPath)
+	tmp, err := os.CreateTemp(filepath.Dir(destPath), ".geoip-download-*")
 	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+		return fmt.Errorf("failed to create temporary GeoIP database: %w", err)
 	}
-
-	_, copyErr := io.Copy(out, resp.Body)
-	closeErr := out.Close()
+	tmpPath := tmp.Name()
+	defer func() {
+		if removeErr := os.Remove(tmpPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			err = errors.Join(err, fmt.Errorf("remove temporary GeoIP database: %w", removeErr))
+		}
+	}()
+	hash := sha256.New()
+	_, copyErr := io.Copy(tmp, io.TeeReader(resp.Body, hash))
+	closeErr = tmp.Close()
 	if copyErr != nil || closeErr != nil {
-		writeErr := errors.Join(copyErr, closeErr)
-		if removeErr := os.Remove(tmpPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			writeErr = errors.Join(writeErr, fmt.Errorf("remove incomplete GeoIP download: %w", removeErr))
-		}
-		return fmt.Errorf("failed to write GeoIP database: %w", writeErr)
+		return fmt.Errorf("failed to write GeoIP database: %w", errors.Join(copyErr, closeErr))
 	}
-
-	// Rename to final path
+	if !strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), fields[0]) {
+		return fmt.Errorf("GeoIP database checksum mismatch")
+	}
 	if err := os.Rename(tmpPath, destPath); err != nil {
-		if removeErr := os.Remove(tmpPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			err = errors.Join(err, fmt.Errorf("remove failed GeoIP download: %w", removeErr))
-		}
-		return fmt.Errorf("failed to rename GeoIP database: %w", err)
+		return fmt.Errorf("failed to install GeoIP database: %w", err)
 	}
 
 	return nil
@@ -395,6 +421,44 @@ func (l *Lookup) LastUpdate() time.Time {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return l.lastUpdate
+}
+
+// DatabaseHealth reports configured MMDB datasets using only public-safe states.
+func (l *Lookup) DatabaseHealth() map[string]string {
+	result := make(map[string]string)
+	if l == nil {
+		return result
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.config == nil {
+		return result
+	}
+	databases := []struct {
+		name    string
+		enabled bool
+		reader  *mmdbReader
+	}{
+		{"country", l.config.Country, l.countryDB},
+		{"asn", l.config.ASN, l.asnDB},
+		{"city_ipv4", l.config.City, l.cityDB4},
+		{"city_ipv6", l.config.City, l.cityDB6},
+	}
+	for _, database := range databases {
+		if !database.enabled {
+			continue
+		}
+		status := "error"
+		if database.reader != nil && database.reader.metadata != nil && database.reader.metadata.NodeCount > 0 {
+			status = "ok"
+			built := time.Unix(int64(database.reader.metadata.BuildEpoch), 0)
+			if database.reader.metadata.BuildEpoch == 0 || time.Since(built) > 7*24*time.Hour {
+				status = "degraded"
+			}
+		}
+		result[database.name] = status
+	}
+	return result
 }
 
 // GetCountry returns country info by code

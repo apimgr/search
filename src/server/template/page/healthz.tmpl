@@ -16,7 +16,7 @@
     </header>
 
     {{/* Status Banner - per AI.md PART 13 */}}
-    <div class="status-banner {{if eq .Health.Status "healthy"}}status-ok{{else if eq .Health.Status "degraded"}}status-warning{{else}}status-error{{end}}">
+    <div class="status-banner {{if eq .Health.Status "healthy"}}status-ok{{else if or (eq .Health.Status "degraded") (eq .Health.Status "restart_required")}}status-warning{{else}}status-error{{end}}">
         {{if eq .Health.Status "healthy"}}
         <span class="status-icon">✅</span>
         <span class="status-text">{{t "health.banner_healthy"}}</span>
@@ -25,14 +25,14 @@
         <span class="status-text">{{t "health.banner_degraded"}}</span>
         {{else}}
         <span class="status-icon">❌</span>
-        <span class="status-text">{{t "health.banner_unhealthy"}}</span>
+        <span class="status-text">{{t (printf "health.%s" .Health.Status)}}</span>
         {{end}}
     </div>
 
     <div class="health-grid">
         {{/* Version & Build per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>ℹ️ {{t "health.version_heading"}}</h2>
+            <h2>ℹ️ {{t "health.section.version"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>{{t "health.version"}}</dt>
@@ -48,80 +48,62 @@
                 </div>
                 <div class="info-row">
                     <dt>{{t "health.build_date"}}</dt>
-                    <dd>{{if .Health.Build.Date}}{{.Health.Build.Date}}{{else}}{{t "health.local_build"}}{{end}}</dd>
+                    <dd>{{if .Health.Build.Date}}{{healthTimestamp .Health.Build.Date}}{{else}}{{t "health.local_build"}}{{end}}</dd>
                 </div>
             </dl>
         </section>
 
         {{/* Runtime per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>⏱️ {{t "health.runtime_heading"}}</h2>
+            <h2>⏱️ {{t "health.section.runtime"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>{{t "health.uptime"}}</dt>
-                    <dd>{{.Health.Uptime}}</dd>
+                    <dd>{{healthDuration .Health.Uptime}}</dd>
                 </div>
                 <div class="info-row">
                     <dt>{{t "health.mode"}}</dt>
                     <dd>
                         {{if eq .Health.Mode "production"}}
                         <span class="badge badge-production">{{t "health.mode_production"}}</span>
-                        {{else}}
+                        {{else if eq .Health.Mode "development"}}
                         <span class="badge badge-development">{{t "health.mode_development"}}</span>
+                        {{else}}
+                        <span class="badge badge-debug">{{t "health.mode_debug"}}</span>
                         {{end}}
                     </dd>
                 </div>
                 <div class="info-row">
                     <dt>{{t "health.last_check"}}</dt>
-                    <dd><time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></dd>
+                    <dd><time datetime="{{.Health.Timestamp}}">{{healthTimestamp .Health.Timestamp}}</time></dd>
                 </div>
             </dl>
         </section>
 
-        {{/* Component Status per AI.md PART 13 */}}
+        {{/* Cluster is always visible, including for this single-instance service. */}}
         <section class="section-card">
-            <h2>🔧 {{t "health.component_status_heading"}}</h2>
-            <ul class="component-list">
-                <li class="component-item {{if eq .Health.Checks.Database "ok"}}component-ok{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Database "ok"}}✓{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.database"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Database "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                <li class="component-item {{if eq .Health.Checks.Cache "ok"}}component-ok{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Cache "ok"}}✓{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.cache"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Cache "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                <li class="component-item {{if eq .Health.Checks.Disk "ok"}}component-ok{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Disk "ok"}}✓{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.disk_space"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Disk "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                <li class="component-item {{if eq .Health.Checks.Scheduler "ok"}}component-ok{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Scheduler "ok"}}✓{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.scheduler"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                {{if .Health.Checks.Tor}}
-                <li class="component-item {{if eq .Health.Checks.Tor "ok"}}component-ok{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Tor "ok"}}✓{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.tor"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Tor "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                {{end}}
-            </ul>
+            <h2>{{t "health.section.cluster"}}</h2>
+            <dl class="health-info">
+                <div class="info-row">
+                    <dt>{{t "health.section.cluster"}}</dt>
+                    <dd>{{if .Health.Cluster.Enabled}}{{t "common.enabled"}}{{else}}{{t "common.disabled"}}{{end}}</dd>
+                </div>
+            </dl>
         </section>
 
         {{/* Features per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>🎛️ {{t "health.features_heading"}}</h2>
+            <h2>🎛️ {{t "health.section.features"}}</h2>
             <ul class="feature-list">
-                {{if .Health.Features.Tor.Enabled}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">🧅</span>
                     <span class="feature-name">{{t "health.tor_hidden_service"}}</span>
-                    {{if .Health.Features.Tor.Running}}
+                    {{if eq .Health.Features.Tor.Status "healthy"}}
                     <span class="feature-status status-ok">{{t "health.active"}}</span>
+                    {{else if eq .Health.Features.Tor.Status "unavailable"}}
+                    <span class="feature-status status-warning">{{t "health.unavailable"}}</span>
+                    {{else if eq .Health.Features.Tor.Status "disabled"}}
+                    <span class="feature-status">{{t "common.disabled"}}</span>
                     {{else}}
                     <span class="feature-status status-warning">{{t "health.starting"}}</span>
                     {{end}}
@@ -137,42 +119,118 @@
                     </div>
                 </li>
                 {{end}}
-                {{end}}
 
+                <li class="feature-item feature-enabled">
+                    <span class="feature-name">I2P</span>
+                    {{if eq .Health.Features.I2P.Status "healthy"}}
+                    <span class="feature-status status-ok">{{t "health.active"}}</span>
+                    {{else if eq .Health.Features.I2P.Status "unavailable"}}
+                    <span class="feature-status status-warning">{{t "health.unavailable"}}</span>
+                    {{else if eq .Health.Features.I2P.Status "disabled"}}
+                    <span class="feature-status">{{t "common.disabled"}}</span>
+                    {{else}}
+                    <span class="feature-status status-warning">{{t "health.starting"}}</span>
+                    {{end}}
+                </li>
+                {{if .Health.Features.I2P.Hostname}}
+                <li class="feature-detail">
+                    <code class="code-content">{{.Health.Features.I2P.Hostname}}</code>
+                </li>
+                {{end}}
                 {{if .Health.Features.GeoIP}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">🌍</span>
                     <span class="feature-name">{{t "health.geoip"}}</span>
                     <span class="feature-status status-ok">{{t "common.enabled"}}</span>
                 </li>
+                {{else}}
+                <li class="feature-item">
+                    <span class="feature-name">{{t "health.geoip"}}</span>
+                    <span class="feature-status">{{t "common.disabled"}}</span>
+                </li>
                 {{end}}
             </ul>
         </section>
 
 
+
+        {{/* Component Status per AI.md PART 13 */}}
+        <section class="section-card">
+            <h2>🔧 {{t "health.section.checks"}}</h2>
+            <ul class="component-list">
+                <li class="component-item {{if eq .Health.Checks.Database "ok"}}component-ok{{else if eq .Health.Checks.Database "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Health.Checks.Database "ok"}}✓{{else if eq .Health.Checks.Database "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">{{t "health.components.database"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Database "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Database "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                <li class="component-item {{if eq .Health.Checks.Cache "ok"}}component-ok{{else if eq .Health.Checks.Cache "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Health.Checks.Cache "ok"}}✓{{else if eq .Health.Checks.Cache "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">{{t "health.components.cache"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Cache "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Cache "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                <li class="component-item {{if eq .Health.Checks.Disk "ok"}}component-ok{{else if eq .Health.Checks.Disk "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Health.Checks.Disk "ok"}}✓{{else if eq .Health.Checks.Disk "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">{{t "health.components.disk_space"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Disk "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Disk "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                <li class="component-item {{if eq .Health.Checks.Scheduler "ok"}}component-ok{{else if eq .Health.Checks.Scheduler "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Health.Checks.Scheduler "ok"}}✓{{else if eq .Health.Checks.Scheduler "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">{{t "health.components.scheduler"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Scheduler "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                {{if .Health.Checks.Tor}}
+                <li class="component-item {{if eq .Health.Checks.Tor "ok"}}component-ok{{else if eq .Health.Checks.Tor "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Health.Checks.Tor "ok"}}✓{{else if eq .Health.Checks.Tor "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">{{t "health.components.tor"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Tor "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Tor "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                {{end}}
+                {{if .Health.Checks.I2P}}
+                <li class="component-item {{if eq .Health.Checks.I2P "ok"}}component-ok{{else if eq .Health.Checks.I2P "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Health.Checks.I2P "ok"}}✓{{else if eq .Health.Checks.I2P "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">I2P</span>
+                    <span class="component-status">{{if eq .Health.Checks.I2P "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.I2P "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                {{end}}
+                {{range .Health.Checks.Extra}}
+                <li class="component-item {{if eq .Status "ok"}}component-ok{{else if eq .Status "degraded"}}component-warning{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq .Status "ok"}}✓{{else if eq .Status "degraded"}}!{{else}}✕{{end}}</span>
+                    <span class="component-name">{{healthLabel "check" .Key}}</span>
+                    <span class="component-status">{{if eq .Status "ok"}}{{t "health.component_operational"}}{{else if eq .Status "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
+                </li>
+                {{end}}
+            </ul>
+        </section>
+
         {{/* Statistics per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>📈 {{t "health.statistics_heading"}}</h2>
+            <h2>📈 {{t "health.section.stats"}}</h2>
             <dl class="health-info stats-info">
                 <div class="info-row">
                     <dt>{{t "health.total_requests"}}</dt>
-                    <dd>{{.Health.Stats.RequestsTotal}}</dd>
+                    <dd>{{healthCount .Health.Stats.RequestsTotal}}</dd>
                 </div>
                 <div class="info-row">
                     <dt>{{t "health.requests_24h"}}</dt>
-                    <dd>{{.Health.Stats.Requests24h}}</dd>
+                    <dd>{{healthCount .Health.Stats.Requests24h}}</dd>
                 </div>
                 <div class="info-row">
                     <dt>{{t "health.active_connections"}}</dt>
-                    <dd>{{.Health.Stats.ActiveConns}}</dd>
+                    <dd>{{healthCount .Health.Stats.ActiveConns}}</dd>
                 </div>
+                {{range .Health.Stats.Extra}}
+                <div class="info-row">
+                    <dt>{{healthLabel "stat" .Key}}</dt>
+                    <dd>{{healthCount .Value}}</dd>
+                </div>
+                {{end}}
             </dl>
         </section>
     </div>
 
     {{/* Footer */}}
     <footer class="health-footer">
-        <p>{{t "health.last_updated"}} <time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></p>
+        <p>{{t "health.last_updated"}} <time datetime="{{.Health.Timestamp}}">{{healthTimestamp .Health.Timestamp}}</time></p>
         <p class="auto-refresh">
             <span class="refresh-indicator"></span>
             {{t "health.auto_refresh_in"}} <span id="countdown">30</span>s

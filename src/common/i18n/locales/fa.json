@@ -994,6 +994,18 @@
     "active_connections": "اتصالات فعال",
     "last_updated": "اخرين به روزرساني:",
     "auto_refresh_in": "نوسازي خودکار در",
+    "mode_debug": "اشکال‌زدایی",
+    "unavailable": "در دسترس نیست",
+    "shutting_down": "در حال خاموش شدن",
+    "restart_required": "نیاز به راه‌اندازی مجدد",
+    "section": {
+      "cluster": "خوشه",
+      "version": "نسخه",
+      "runtime": "زمان اجرا",
+      "features": "امکانات",
+      "checks": "وضعيت اجزا",
+      "stats": "امار سرور"
+    },
     "components": {
       "database": "پايگاه داده",
       "cache": "کش",
@@ -2169,7 +2181,8 @@
       "label_new_version": "نسخه جدید:",
       "label_release_date": "تاریخ انتشار:",
       "label_release_notes": "یادداشت‌های انتشار:",
-      "label_view_update": "مشاهده بروزرسانی:"
+      "label_view_update": "مشاهده بروزرسانی:",
+      "manual_command": "دستور به‌روزرسانی دستی: {command}"
     },
     "security_report": {
       "subject": "گزارش امنیتی دریافت شد: %s",

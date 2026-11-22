@@ -60,6 +60,45 @@ func TestHTMLCacheMiddlewareLeavesNonHTMLResponsesAlone(t *testing.T) {
 	}
 }
 
+func TestHTMLBuildStampCookiePurgesOnlyTopLevelStaleNavigation(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		destination string
+		mode        string
+		status      int
+		wantPurge   bool
+	}{
+		{name: "legacy browser", status: http.StatusOK, wantPurge: true},
+		{name: "top level navigation", destination: "document", mode: "navigate", status: http.StatusOK, wantPurge: true},
+		{name: "iframe", destination: "iframe", mode: "navigate", status: http.StatusOK},
+		{name: "fetch", destination: "empty", mode: "cors", status: http.StatusOK},
+		{name: "not found", destination: "document", mode: "navigate", status: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := HTMLCacheHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte("<html>page</html>"))
+			}))
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set("Accept", "text/html")
+			r.AddCookie(&http.Cookie{Name: "search_build", Value: "old-build"})
+			if tc.destination != "" {
+				r.Header.Set("Sec-Fetch-Dest", tc.destination)
+				r.Header.Set("Sec-Fetch-Mode", tc.mode)
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if got := w.Header().Get("Clear-Site-Data"); (got != "") != tc.wantPurge {
+				t.Errorf("Clear-Site-Data = %q, want purge %v", got, tc.wantPurge)
+			}
+			if cookies := w.Result().Cookies(); len(cookies) == 0 || cookies[0].Name != "search_build" || cookies[0].Value != buildAssetStamp() || !cookies[0].Secure {
+				t.Errorf("build stamp cookie = %#v, want secure current-build cookie", cookies)
+			}
+		})
+	}
+}
+
 func TestHTMLCacheMiddlewareRetainsHeadersWhenResponseExceedsBufferLimit(t *testing.T) {
 	handler := HTMLCacheHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

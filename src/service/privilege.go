@@ -52,6 +52,10 @@ func (p *PrivilegeEscalator) EscalateCommand(cmd string, args ...string) *exec.C
 	case "pkexec":
 		fullArgs := append([]string{cmd}, args...)
 		return exec.Command("pkexec", fullArgs...)
+	case "su":
+		return exec.Command("su", "-c", shellQuoteArgs(append([]string{cmd}, args...)))
+	case "osascript":
+		return exec.Command("osascript", "-e", appleScriptCommand(append([]string{cmd}, args...)))
 	case "runas":
 		// Windows: use powershell Start-Process with -Verb RunAs
 		fullArgs := strings.Join(append([]string{cmd}, args...), " ")
@@ -63,14 +67,29 @@ func (p *PrivilegeEscalator) EscalateCommand(cmd string, args ...string) *exec.C
 	}
 }
 
+func shellQuoteArgs(args []string) string {
+	quoted := make([]string, len(args))
+	for i, argument := range args {
+		quoted[i] = "'" + strings.ReplaceAll(argument, "'", "'\"'\"'") + "'"
+	}
+	return strings.Join(quoted, " ")
+}
+
+func appleScriptCommand(args []string) string {
+	command := shellQuoteArgs(args)
+	escaped := strings.NewReplacer("\\", "\\\\", `"`, `\"`).Replace(command)
+	return `do shell script "` + escaped + `" with administrator privileges`
+}
+
 // SystemUser represents a system service user
 // Per AI.md PART 24: System user creation logic
 type SystemUser struct {
-	Name  string
-	UID   int
-	GID   int
-	Home  string
-	Shell string
+	Name    string
+	UID     int
+	GID     int
+	Home    string
+	Shell   string
+	Created bool
 }
 
 // reservedSystemIDs contains IDs to avoid per AI.md PART 24

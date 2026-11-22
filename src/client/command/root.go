@@ -55,12 +55,12 @@ var (
 	// Per AI.md PART 8: --shell flag for shell completions
 	shellFlag string
 	// Per AI.md PART 8: --lang flag for output language
-	langFlag  string
+	langFlag   string
 	updateFlag string
-	timeout   int
-	debugMode bool
-	page      int
-	limit     int
+	timeout    int
+	debugMode  bool
+	page       int
+	limit      int
 
 	apiClient *api.Client
 )

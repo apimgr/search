@@ -411,13 +411,13 @@ func TestTryDetectSMTPSuccess(t *testing.T) {
 	}
 }
 
-func TestTryDetectSMTPSuccessWithSTARTTLS(t *testing.T) {
+func TestTryDetectSMTPRejectsBrokenSTARTTLS(t *testing.T) {
 	host, port, stop := startFakeServer(&fakeServer{supportsSTARTTLS: true})
 	defer stop()
 
 	result := tryDetectSMTP(host, port, false)
-	if result == nil {
-		t.Fatal("tryDetectSMTP() should return non-nil when server responds")
+	if result != nil {
+		t.Fatalf("tryDetectSMTP() = %+v, want nil when advertised STARTTLS cannot be established", result)
 	}
 }
 

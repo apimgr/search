@@ -994,6 +994,18 @@
     "active_connections": "アクティブ接続",
     "last_updated": "最終更新:",
     "auto_refresh_in": "自動更新まで",
+    "mode_debug": "デバッグ",
+    "unavailable": "利用不可",
+    "shutting_down": "シャットダウン中",
+    "restart_required": "再起動が必要",
+    "section": {
+      "cluster": "クラスター",
+      "version": "バージョン",
+      "runtime": "ランタイム",
+      "features": "機能",
+      "checks": "コンポーネント状態",
+      "stats": "サーバー統計"
+    },
     "components": {
       "database": "データベース",
       "cache": "キャッシュ",
@@ -2169,7 +2181,8 @@
       "label_new_version": "新しいバージョン:",
       "label_release_date": "リリース日:",
       "label_release_notes": "リリースノート:",
-      "label_view_update": "更新を表示:"
+      "label_view_update": "更新を表示:",
+      "manual_command": "手動更新コマンド: {command}"
     },
     "security_report": {
       "subject": "セキュリティレポートを受信しました: %s",

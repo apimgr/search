@@ -141,6 +141,17 @@ func TestManagerIsEnabled(t *testing.T) {
 	}
 }
 
+func TestManagerHealthStatusDisabledAndMissingCertificate(t *testing.T) {
+	disabled := &Manager{config: &config.SSLConfig{Enabled: false}}
+	if got := disabled.HealthStatus(); got != "disabled" {
+		t.Fatalf("disabled TLS HealthStatus() = %q, want disabled", got)
+	}
+	enabledWithoutCert := &Manager{config: &config.SSLConfig{Enabled: true}}
+	if got := enabledWithoutCert.HealthStatus(); got != "error" {
+		t.Fatalf("enabled TLS without certificate HealthStatus() = %q, want error", got)
+	}
+}
+
 func TestManagerIsEnabledNilConfig(t *testing.T) {
 	m := &Manager{
 		config: nil,

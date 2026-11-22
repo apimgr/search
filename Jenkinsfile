@@ -66,11 +66,11 @@ pipeline {
                         "-X 'github.com/apimgr/search/src/version.CommitID=${env.COMMIT_ID}' " +
                         "-X 'github.com/apimgr/search/src/version.BuildEpoch=${env.BUILD_EPOCH}'"
                     env.CLI_LDFLAGS = "-s -w " +
-                        "-X 'github.com/apimgr/search/src/client/cmd.ProjectName=search' " +
-                        "-X 'github.com/apimgr/search/src/client/cmd.Version=${env.VERSION}' " +
-                        "-X 'github.com/apimgr/search/src/client/cmd.CommitID=${env.COMMIT_ID}' " +
-                        "-X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${env.BUILD_EPOCH}' " +
-                        "-X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${env.OFFICIAL_SITE}' " +
+                        "-X 'github.com/apimgr/search/src/client/command.ProjectName=search' " +
+                        "-X 'github.com/apimgr/search/src/client/command.Version=${env.VERSION}' " +
+                        "-X 'github.com/apimgr/search/src/client/command.CommitID=${env.COMMIT_ID}' " +
+                        "-X 'github.com/apimgr/search/src/client/command.BuildEpoch=${env.BUILD_EPOCH}' " +
+                        "-X 'github.com/apimgr/search/src/client/command.OfficialSite=${env.OFFICIAL_SITE}' " +
                         "-X 'github.com/apimgr/search/src/client/api.ProjectName=search' " +
                         "-X 'github.com/apimgr/search/src/client/api.Version=${env.VERSION}'"
                     env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
@@ -92,7 +92,7 @@ pipeline {
                         -w /app \
                         -e GOFLAGS=-buildvcs=false \
                         casjaysdev/go:latest \
-                        sh -c "go mod download && go run ./src/cmd/apigen"
+                        sh -c "go mod download && go run ./src/apigen"
                 '''
             }
         }

@@ -57,6 +57,7 @@ type Manager struct {
 	binaryPath string
 	backupDir  string
 	tempDir    string
+	dataDir    string
 }
 
 // Release represents a GitHub release
@@ -110,7 +111,8 @@ func NewManager() *Manager {
 		buildEpoch:     epoch,
 		binaryPath:     binaryPath,
 		backupDir:      config.GetBackupDir(),
-		tempDir:        os.TempDir(),
+		tempDir:        filepath.Join(os.TempDir(), config.ProjectOrg),
+		dataDir:        config.GetDataDir(),
 	}
 }
 
@@ -357,16 +359,30 @@ func (m *Manager) DownloadUpdate(downloadURL string, progressFn func(downloaded,
 		return "", fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
-	// Create temp file
-	tempFile, err := os.CreateTemp(m.tempDir, config.ProjectName+"-update-*")
+	// Keep update artifacts in a project-scoped, owner-only temporary directory.
+	orgDir := m.tempDir
+	if orgDir == "" {
+		orgDir = filepath.Join(os.TempDir(), config.ProjectOrg)
+	}
+	if err := os.MkdirAll(orgDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create update temp namespace: %w", err)
+	}
+	tempDir, err := os.MkdirTemp(orgDir, config.InternalName+"-")
+	if err != nil {
+		return "", fmt.Errorf("failed to create update temp directory: %w", err)
+	}
+	keepTempDir := false
+	defer func() {
+		if !keepTempDir {
+			if err := os.RemoveAll(tempDir); err != nil {
+				slog.Warn("failed to remove update temp directory", "error", err)
+			}
+		}
+	}()
+	tempFile, err := os.CreateTemp(tempDir, "update-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer func() {
-		if err := tempFile.Close(); err != nil {
-			slog.Warn("failed to close update temp file", "error", err)
-		}
-	}()
 
 	// Download with progress
 	total := resp.ContentLength
@@ -377,7 +393,7 @@ func (m *Manager) DownloadUpdate(downloadURL string, progressFn func(downloaded,
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
 			if _, werr := tempFile.Write(buf[:n]); werr != nil {
-				return "", fmt.Errorf("failed to write: %w", werr)
+				return "", errors.Join(fmt.Errorf("failed to write: %w", werr), tempFile.Close())
 			}
 			downloaded += int64(n)
 			if progressFn != nil {
@@ -388,10 +404,17 @@ func (m *Manager) DownloadUpdate(downloadURL string, progressFn func(downloaded,
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("failed to read: %w", err)
+			return "", errors.Join(fmt.Errorf("failed to read: %w", err), tempFile.Close())
 		}
 	}
+	if err := tempFile.Sync(); err != nil {
+		return "", errors.Join(fmt.Errorf("failed to flush update temp file: %w", err), tempFile.Close())
+	}
+	if err := tempFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close update temp file: %w", err)
+	}
 
+	keepTempDir = true
 	return tempFile.Name(), nil
 }
 
@@ -474,6 +497,7 @@ func (m *Manager) VerifyChecksum(filePath, assetName, checksumURL string) error 
 // points at that sha256.txt. Per AI.md PART 22 the flow is
 // "verify SHA-256 -> back up current binary -> replace running binary".
 func (m *Manager) InstallUpdate(downloadPath, assetName, checksumURL string) error {
+	defer cleanupUpdateDownload(downloadPath)
 	// Per AI.md PART 22: check binary path is writable before proceeding;
 	// escalate privileges if not, then return so the elevated process continues.
 	// ErrNotExist is skipped — the backup step will fail with a clearer message.
@@ -521,6 +545,200 @@ func (m *Manager) InstallUpdate(downloadPath, assetName, checksumURL string) err
 		return fmt.Errorf("update installed but failed to remove download: %w", err)
 	}
 	return nil
+}
+
+type stagedVersion struct {
+	Version     string    `json:"version"`
+	PublishedAt time.Time `json:"published_at"`
+}
+
+// StageUpdate verifies a scheduled release and atomically places it under
+// {data_dir}/update for the next root-started process to install.
+func (m *Manager) StageUpdate(downloadPath, assetName, checksumURL, version string, publishedAt time.Time) error {
+	defer cleanupUpdateDownload(downloadPath)
+	if filepath.Base(version) != version || strings.TrimSpace(version) == "" {
+		return fmt.Errorf("invalid staged update version %q", version)
+	}
+	if err := m.VerifyChecksum(downloadPath, assetName, checksumURL); err != nil {
+		return fmt.Errorf("checksum verification failed: %w", err)
+	}
+	if runtime.GOOS == "windows" {
+		return errors.New("scheduled self-update is not supported on Windows services")
+	}
+	dataDir := m.dataDir
+	if dataDir == "" {
+		dataDir = config.GetDataDir()
+	}
+	updateDir := filepath.Join(dataDir, "update")
+	if err := os.MkdirAll(updateDir, 0700); err != nil {
+		return fmt.Errorf("create staged update directory: %w", err)
+	}
+	if err := os.Chmod(updateDir, 0700); err != nil {
+		return fmt.Errorf("secure staged update directory: %w", err)
+	}
+
+	stagedBinary := filepath.Join(updateDir, config.ProjectName+".new")
+	temporaryBinary := stagedBinary + ".tmp"
+	_ = os.Remove(temporaryBinary)
+	if err := copyFile(temporaryBinary, downloadPath); err != nil {
+		return fmt.Errorf("copy verified update into staging: %w", err)
+	}
+	if err := os.Rename(temporaryBinary, stagedBinary); err != nil {
+		_ = os.Remove(temporaryBinary)
+		return fmt.Errorf("publish staged update binary: %w", err)
+	}
+
+	digest, err := hashUpdateFile(stagedBinary)
+	if err != nil {
+		return fmt.Errorf("hash staged update binary: %w", err)
+	}
+	if err := writeStagedFile(filepath.Join(updateDir, config.ProjectName+".sha256"), []byte(digest+"\n")); err != nil {
+		return err
+	}
+	metadata, err := json.Marshal(stagedVersion{Version: version, PublishedAt: publishedAt.UTC()})
+	if err != nil {
+		return fmt.Errorf("encode staged update metadata: %w", err)
+	}
+	if err := writeStagedFile(filepath.Join(updateDir, config.ProjectName+".json"), append(metadata, '\n')); err != nil {
+		return err
+	}
+	slog.Info("update staged", "version", version)
+	return nil
+}
+
+// ApplyStagedUpdate verifies and installs a staged release during root startup.
+// On success it re-executes the new binary; a false result means no update was
+// staged.
+func (m *Manager) ApplyStagedUpdate() (bool, error) {
+	if runtime.GOOS == "windows" || !config.StartedElevated() {
+		return false, nil
+	}
+	dataDir := m.dataDir
+	if dataDir == "" {
+		dataDir = config.GetDataDir()
+	}
+	updateDir := filepath.Join(dataDir, "update")
+	binaryPath := filepath.Join(updateDir, config.ProjectName+".new")
+	metadataPath := filepath.Join(updateDir, config.ProjectName+".json")
+	checksumPath := filepath.Join(updateDir, config.ProjectName+".sha256")
+	if _, err := os.Stat(updateDir); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("inspect staged update directory: %w", err)
+	}
+	cleanup := func() {
+		if err := os.RemoveAll(updateDir); err != nil {
+			slog.Error("failed to remove staged update files", "err", err)
+		}
+	}
+	metadataBytes, err := os.ReadFile(metadataPath)
+	if err != nil {
+		cleanup()
+		return false, fmt.Errorf("read staged update metadata: %w", err)
+	}
+	var metadata stagedVersion
+	if err := json.Unmarshal(metadataBytes, &metadata); err != nil || metadata.Version == "" {
+		cleanup()
+		return false, fmt.Errorf("invalid staged update metadata")
+	}
+	if !m.isNewerRelease(Release{TagName: metadata.Version, PublishedAt: metadata.PublishedAt}) {
+		cleanup()
+		return false, fmt.Errorf("staged update %s is not newer than %s", metadata.Version, m.currentVersion)
+	}
+	expectedBytes, err := os.ReadFile(checksumPath)
+	if err != nil {
+		cleanup()
+		return false, fmt.Errorf("read staged update checksum: %w", err)
+	}
+	actualChecksum, err := hashUpdateFile(binaryPath)
+	if err != nil {
+		cleanup()
+		return false, fmt.Errorf("hash staged update binary: %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(string(expectedBytes)), actualChecksum) {
+		cleanup()
+		return false, errors.New("staged update checksum mismatch")
+	}
+	if err := m.backupCurrentBinary(); err != nil {
+		cleanup()
+		return false, fmt.Errorf("backup current binary before staged update: %w", err)
+	}
+	if err := m.replaceBinary(binaryPath); err != nil {
+		cleanup()
+		return false, fmt.Errorf("replace binary from staged update: %w", err)
+	}
+	cleanup()
+	if err := os.Setenv("_SEARCH_UPDATE_PREVIOUS_VERSION", m.currentVersion); err != nil {
+		rollbackErr := m.replaceBinary(filepath.Join(m.backupDir, fmt.Sprintf("search-%s.backup", m.currentVersion)))
+		return false, errors.Join(fmt.Errorf("record previous version for update restart: %w", err), rollbackErr)
+	}
+	if err := os.Setenv("_SEARCH_UPDATE_NEW_VERSION", metadata.Version); err != nil {
+		_ = os.Unsetenv("_SEARCH_UPDATE_PREVIOUS_VERSION")
+		rollbackErr := m.replaceBinary(filepath.Join(m.backupDir, fmt.Sprintf("search-%s.backup", m.currentVersion)))
+		return false, errors.Join(fmt.Errorf("record new version for update restart: %w", err), rollbackErr)
+	}
+	if err := RestartSelf(); err != nil {
+		_ = os.Unsetenv("_SEARCH_UPDATE_PREVIOUS_VERSION")
+		_ = os.Unsetenv("_SEARCH_UPDATE_NEW_VERSION")
+		backupPath := filepath.Join(m.backupDir, fmt.Sprintf("search-%s.backup", m.currentVersion))
+		rollbackErr := m.replaceBinary(backupPath)
+		return false, errors.Join(fmt.Errorf("restart after staged update: %w", err), rollbackErr)
+	}
+	return true, nil
+}
+
+func writeStagedFile(path string, content []byte) (result error) {
+	temporary := path + ".tmp"
+	defer func() {
+		if err := os.Remove(temporary); err != nil && !errors.Is(err, os.ErrNotExist) {
+			result = errors.Join(result, fmt.Errorf("remove staged update metadata: %w", err))
+		}
+	}()
+	file, err := os.OpenFile(temporary, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("create staged update metadata: %w", err)
+	}
+	if _, err := file.Write(content); err != nil {
+		return errors.Join(fmt.Errorf("write staged update metadata: %w", err), file.Close())
+	}
+	if err := file.Sync(); err != nil {
+		return errors.Join(fmt.Errorf("sync staged update metadata: %w", err), file.Close())
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close staged update metadata: %w", err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("publish staged update metadata: %w", err)
+	}
+	return nil
+}
+
+func hashUpdateFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.New()
+	_, copyErr := io.Copy(hash, file)
+	closeErr := file.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func cleanupUpdateDownload(downloadPath string) {
+	if !strings.HasPrefix(filepath.Base(downloadPath), "update-") {
+		return
+	}
+	tempDir := filepath.Dir(downloadPath)
+	orgDir := filepath.Join(os.TempDir(), config.ProjectOrg)
+	if filepath.Dir(tempDir) != orgDir || !strings.HasPrefix(filepath.Base(tempDir), config.InternalName+"-") {
+		return
+	}
+	if err := os.RemoveAll(tempDir); err != nil {
+		slog.Warn("failed to remove update temp directory", "error", err)
+	}
 }
 
 // backupCurrentBinary creates a backup of the current binary

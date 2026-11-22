@@ -1,7 +1,12 @@
 package update
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,6 +34,61 @@ func newTestManager(t *testing.T, version string) *Manager {
 		binaryPath:     binaryPath,
 		backupDir:      filepath.Join(dir, "backups"),
 		tempDir:        filepath.Join(dir, "tmp"),
+		dataDir:        filepath.Join(dir, "data"),
+	}
+}
+
+func TestStageUpdateVerifiesAndStoresRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("scheduled staged updates are not supported on Windows services")
+	}
+	payload := []byte("verified update binary")
+	digest := sha256.Sum256(payload)
+	checksum := hex.EncodeToString(digest[:])
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/checksums" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = fmt.Fprintf(w, "%s search-linux-amd64\n", checksum)
+	}))
+	defer server.Close()
+
+	m := newTestManager(t, "1.0.0")
+	downloadPath := filepath.Join(t.TempDir(), "update-linux-amd64")
+	if err := os.WriteFile(downloadPath, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	published := time.Date(2026, time.November, 22, 0, 0, 0, 0, time.UTC)
+	if err := m.StageUpdate(downloadPath, "search-linux-amd64", server.URL+"/checksums", "1.1.0", published); err != nil {
+		t.Fatalf("StageUpdate() error = %v", err)
+	}
+
+	updateDir := filepath.Join(m.dataDir, "update")
+	staged, err := os.ReadFile(filepath.Join(updateDir, "search.new"))
+	if err != nil {
+		t.Fatalf("ReadFile(staged binary) error = %v", err)
+	}
+	if string(staged) != string(payload) {
+		t.Fatalf("staged binary = %q, want %q", staged, payload)
+	}
+	gotChecksum, err := os.ReadFile(filepath.Join(updateDir, "search.sha256"))
+	if err != nil {
+		t.Fatalf("ReadFile(staged checksum) error = %v", err)
+	}
+	if strings.TrimSpace(string(gotChecksum)) != checksum {
+		t.Fatalf("staged checksum = %q, want %q", gotChecksum, checksum)
+	}
+	metadata, err := os.ReadFile(filepath.Join(updateDir, "search.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(staged metadata) error = %v", err)
+	}
+	var stagedRelease stagedVersion
+	if err := json.Unmarshal(metadata, &stagedRelease); err != nil {
+		t.Fatalf("unmarshal staged metadata: %v", err)
+	}
+	if stagedRelease.Version != "1.1.0" || !stagedRelease.PublishedAt.Equal(published) {
+		t.Fatalf("staged metadata = %+v, want version 1.1.0 published at %s", stagedRelease, published)
 	}
 }
 

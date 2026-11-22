@@ -1,0 +1,15 @@
+Subject: Database Connection Problem - {app_name}
+---
+DATABASE CONNECTION PROBLEM
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+The server encountered a database connection problem.
+
+Problem began: {since}
+Error: {error}
+
+--
+{app_name}
+{app_url}

@@ -118,6 +118,10 @@ func TestHandleHealthzMaintenanceMode(t *testing.T) {
 func TestHandleHealthzTorEnabledNilService(t *testing.T) {
 	handler := newTestHandler()
 	handler.config.Server.Tor.Enabled = true
+	handler.SetHealthProvider(fakeHealthProvider{snapshot: HealthSnapshot{
+		Status: "degraded",
+		Checks: ChecksInfo{Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok", Tor: "degraded"},
+	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
 	w := httptest.NewRecorder()
@@ -135,7 +139,41 @@ func TestHandleHealthzTorEnabledNilService(t *testing.T) {
 	if resp.Features.Tor.Status != "unavailable" {
 		t.Errorf("tor.status = %v, want unavailable", resp.Features.Tor.Status)
 	}
+	if resp.Checks.Tor != "degraded" || resp.Status != "degraded" {
+		t.Errorf("unavailable Tor must produce degraded check and overall status; got check=%q status=%q", resp.Checks.Tor, resp.Status)
+	}
+	if resp.Cluster.Enabled {
+		t.Error("single-instance health response must report cluster.enabled=false")
+	}
 	if !resp.Features.Tor.Enabled {
 		t.Errorf("tor.enabled = %v, want true", resp.Features.Tor.Enabled)
+	}
+}
+
+func TestHandleHealthzDisabledOverlayInvariant(t *testing.T) {
+	handler := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
+	w := httptest.NewRecorder()
+	handler.handleHealthz(w, req)
+
+	var response HealthResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	for name, feature := range map[string]struct {
+		enabled bool
+		running bool
+		status  string
+		host    string
+	}{
+		"Tor": {response.Features.Tor.Enabled, response.Features.Tor.Running, response.Features.Tor.Status, response.Features.Tor.Hostname},
+		"I2P": {response.Features.I2P.Enabled, response.Features.I2P.Running, response.Features.I2P.Status, response.Features.I2P.Hostname},
+	} {
+		if feature.enabled || feature.running || feature.status != "disabled" || feature.host != "" {
+			t.Errorf("disabled %s invariant violated: %+v", name, feature)
+		}
+	}
+	if response.Checks.Tor != "" || response.Checks.I2P != "" {
+		t.Errorf("disabled overlay checks must be omitted, got tor=%q i2p=%q", response.Checks.Tor, response.Checks.I2P)
 	}
 }

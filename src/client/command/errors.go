@@ -10,7 +10,7 @@ import (
 // Per AI.md PART 32 Exit Codes table.
 var (
 	// ErrConfiguration indicates missing/invalid client configuration (exit 2).
-	ErrConfiguration = errors.New("configuration error")
+	ErrConfiguration        = errors.New("configuration error")
 	ErrClientUpdateRequired = errors.New("client update required")
 	// ErrUsage indicates invalid command-line arguments (exit 64).
 	ErrUsage = errors.New("usage error")

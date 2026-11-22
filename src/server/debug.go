@@ -17,6 +17,14 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 	}
 
 	r.Route("/debug", func(r chi.Router) {
+		// Debug mode exposes process and configuration details, so every debug
+		// endpoint still requires the operator credential.
+		r.Use(func(next http.Handler) http.Handler {
+			return s.RequireOperator(func(w http.ResponseWriter, req *http.Request) {
+				next.ServeHTTP(w, req)
+			})
+		})
+
 		r.HandleFunc("/pprof/", pprof.Index)
 		r.HandleFunc("/pprof/cmdline", pprof.Cmdline)
 		r.HandleFunc("/pprof/profile", pprof.Profile)

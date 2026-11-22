@@ -555,6 +555,64 @@ func (m *BlocklistManager) DomainCount() int {
 	return len(m.blockedDomains)
 }
 
+// HealthStates returns cached blocklist sources as public-safe status words.
+func (m *BlocklistManager) HealthStates() map[string]string {
+	result := make(map[string]string)
+	if m == nil {
+		return result
+	}
+	directory := m.blocklistDir()
+	for _, source := range m.sourceSnapshot() {
+		if !source.Enabled {
+			continue
+		}
+		status := "error"
+		path := filepath.Join(directory, source.Name+".txt")
+		info, err := os.Stat(path)
+		if err == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= blocklistMaxDownloadBytes {
+			file, openErr := os.Open(path)
+			if openErr == nil {
+				var count int
+				var parseErr error
+				if source.Type == "domain" {
+					var entries map[string]bool
+					entries, parseErr = parseDomainBlocklist(file)
+					count = len(entries)
+				} else {
+					var ips map[string]bool
+					var nets []*net.IPNet
+					ips, nets, parseErr = m.parseBlocklist(file, source.Type)
+					count = len(ips) + len(nets)
+				}
+				if closeErr := file.Close(); parseErr == nil {
+					parseErr = closeErr
+				}
+				if parseErr == nil && count > 0 {
+					status = "ok"
+					if time.Since(info.ModTime()) > 72*time.Hour {
+						status = "degraded"
+					}
+				}
+			}
+		}
+		result[source.Name] = status
+	}
+	return result
+}
+
+// HealthSourceNames returns configured source identifiers in stable source order.
+func (m *BlocklistManager) HealthSourceNames() []string {
+	if m == nil {
+		return nil
+	}
+	sources := m.sourceSnapshot()
+	result := make([]string, 0, len(sources))
+	for _, source := range sources {
+		result = append(result, source.Name)
+	}
+	return result
+}
+
 // NeedsInitialUpdate reports whether enabled feeds exist but no usable rules
 // have been loaded yet.
 func (m *BlocklistManager) NeedsInitialUpdate() bool {

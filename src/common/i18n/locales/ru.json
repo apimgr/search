@@ -994,6 +994,18 @@
     "active_connections": "Активные соединения",
     "last_updated": "Последнее обновление:",
     "auto_refresh_in": "Автообновление через",
+    "mode_debug": "Отладка",
+    "unavailable": "Недоступно",
+    "shutting_down": "Завершение работы",
+    "restart_required": "Требуется перезапуск",
+    "section": {
+      "cluster": "Кластер",
+      "version": "Версия",
+      "runtime": "Время работы",
+      "features": "Возможности",
+      "checks": "Состояние компонентов",
+      "stats": "Статистика сервера"
+    },
     "components": {
       "database": "База данных",
       "cache": "Кэш",
@@ -2169,7 +2181,8 @@
       "label_new_version": "Новая версия:",
       "label_release_date": "Дата выпуска:",
       "label_release_notes": "Примечания к выпуску:",
-      "label_view_update": "Просмотреть обновление:"
+      "label_view_update": "Просмотреть обновление:",
+      "manual_command": "Команда ручного обновления: {command}"
     },
     "security_report": {
       "subject": "Отчёт о безопасности получен: %s",

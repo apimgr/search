@@ -4,6 +4,7 @@ package version
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -69,6 +70,22 @@ func init() {
 	if n := buildEpoch(); n > 0 {
 		BuildDate = time.Unix(n, 0).UTC().Format("2006-01-02T15:04:05Z")
 	}
+}
+
+// HealthBuildDate returns an RFC 3339 UTC build date for the mandatory health
+// response field. If the build epoch was not embedded, use the executable's
+// timestamp; the current time is the last-resort valid value for unusual
+// environments where the executable cannot be statted.
+func HealthBuildDate() string {
+	if parsed, err := time.Parse(time.RFC3339, BuildDate); err == nil {
+		return parsed.UTC().Truncate(time.Second).Format("2006-01-02T15:04:05Z")
+	}
+	if executable, err := os.Executable(); err == nil {
+		if info, err := os.Stat(executable); err == nil {
+			return info.ModTime().UTC().Truncate(time.Second).Format("2006-01-02T15:04:05Z")
+		}
+	}
+	return time.Now().UTC().Truncate(time.Second).Format("2006-01-02T15:04:05Z")
 }
 
 // Info contains all version information

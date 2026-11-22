@@ -110,6 +110,42 @@ func TestManagerSetCustomBangs(t *testing.T) {
 	}
 }
 
+func TestLocalEngineBangAvailabilityTracksHealth(t *testing.T) {
+	manager := NewManager()
+	healthy := false
+	manager.SetEngineAvailability(func(engineID string) bool {
+		return engineID == "github" && healthy
+	})
+
+	if manager.Parse("!gh repo") != nil {
+		t.Fatal("GitHub bang parsed while its local engine was unavailable")
+	}
+	if manager.Parse("!sp repo") == nil {
+		t.Fatal("external Startpage bang was hidden by local engine availability")
+	}
+	for _, item := range manager.GetAll() {
+		if item.Shortcut == "gh" {
+			t.Fatal("GitHub bang appeared in the catalog while its local engine was unavailable")
+		}
+	}
+
+	healthy = true
+	result := manager.Parse("!gh repo")
+	if result == nil || result.Bang.Engine != "github" || !strings.Contains(result.TargetURL, "github.com/search") {
+		t.Fatalf("healthy GitHub bang = %#v, want its external URL shortcut", result)
+	}
+	found := false
+	for _, item := range manager.GetAll() {
+		if item.Shortcut == "gh" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("GitHub bang did not reappear after its local engine became available")
+	}
+}
+
 func TestManagerSetUserBangs(t *testing.T) {
 	m := NewManager()
 	userBangs := []*Bang{
