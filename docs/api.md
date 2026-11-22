@@ -179,7 +179,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/categories` | GET | Available search categories |
 | `/api/v1/engines` | GET | Search engine list and health |
 | `/api/v1/engines/{id}` | GET | Details for a single engine |
-| `/api/v1/bangs` | GET | Bang shortcut definitions (filter with `category`) |
+| `/api/v1/bangs` | GET | Bang shortcut definitions (filter with `category`); bang entries associated with local engines reflect their enabled/cooldown state |
 | `/api/v1/widgets` | GET | Available instant-answer widgets (filter with `category`) |
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
 | `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list (404 when MCP is disabled) |
@@ -355,15 +355,29 @@ enabled with `server.healthz.root.enabled`.
   "uptime": "3d 14h 22m",
   "mode": "production",
   "timestamp": "2026-01-04T14:22:00Z",
+  "cluster": {"enabled": false},
   "features": {
     "tor": {"enabled": false, "running": false, "status": "disabled", "hostname": ""},
-    "i2p": {"enabled": false, "running": false, "status": "disabled", "hostname": "", "provider": "none"},
+    "i2p": {"enabled": false, "running": false, "status": "disabled", "state": "disabled", "hostname": "", "provider": ""},
     "geoip": true
   },
-  "checks": {"database": "ok", "cache": "ok", "disk": "ok", "scheduler": "ok"},
-  "stats": {"requests_total": 0, "requests_24h": 0, "active_connections": 0}
+  "checks": {
+    "database": "ok", "cache": "ok", "disk": "ok", "scheduler": "ok",
+    "engine_duckduckgo": "ok", "engines": "ok", "geoip_country": "ok"
+  },
+  "stats": {
+    "requests_total": 123456, "requests_24h": 789, "active_connections": 1,
+    "engines_total": 12, "engines_healthy": 11
+  }
 }
 ```
+
+The health probe itself contributes to `active_connections`, so that value is
+at least `1` while this response is built. Health probes and `/server/metrics`
+scrapes do not increment request totals. Component and project-stat keys are
+registered dynamically and follow the fixed core fields in registration order;
+disabled components are omitted. Tor/I2P details use only the documented
+four-state status values, and I2P also includes its lifecycle `state`.
 
 ### Scheduler
 

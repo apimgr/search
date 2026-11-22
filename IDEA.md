@@ -129,7 +129,7 @@ The following inventory records the API surface implemented by this project, inc
 | GET | `/api/v1/engines` | None | List search engines | No body; returns engine metadata and state |
 | GET | `/api/v1/engines/*` | None | Inspect an engine | Engine path; returns engine details |
 | GET | `/api/v1/categories` | None | List search categories | No body; returns categories |
-| GET | `/api/v1/bangs` | None | List search bang shortcuts | No body; returns bang definitions |
+| GET | `/api/v1/bangs` | None | List currently available search bang shortcuts | No body; local-engine bangs reflect the current engine availability |
 | GET | `/api/v1/widgets` | None | List instant-answer widgets | No body; returns widget metadata |
 | GET | `/api/v1/widgets/*` | None | Fetch widget data | Widget path and query; returns widget data |
 | GET | `/api/v1/instant` | None | Fetch an instant answer | Query parameters; returns answer data |
@@ -1810,6 +1810,8 @@ Quick redirects to specific sites/engines. 500+ bangs implemented across categor
 - **Custom Bangs**: Define your own shortcuts in settings
 - **Bang Autocomplete**: Suggestions as you type `!`
 - **Bang Categories**: Organize bangs by type (search, shopping, dev, etc.)
+
+Local-engine bang availability is dynamic. A built-in bang associated with one of this server's search engines is available only while that engine is enabled and eligible for search under the engine health monitor. When the engine is disabled or in cooldown after repeated failures, the bang is omitted from the available-bangs API, autocomplete, and bang tools, and parsing it does not trigger its shortcut. It becomes available again when the engine is re-enabled and its health monitor permits searches. The shortcut's configured action is retained while available; external destination health is not probed. All surfaces use the same live local-engine availability state. Bangs with no associated local engine remain unaffected.
 
 #### Keyboard Shortcuts
 

@@ -9,7 +9,7 @@ Read: `AI.md` PART 2 (License & Attribution), PART 3 (Project Structure), PART 4
 - Ship a direct `go.mod` dependency that is not attributed in `LICENSE.md`
 - Create a root file that is not on the PART 3 § Allowed Root Files list
 - Create a root directory that is not on the PART 3 § Allowed Root Directories list
-- Create `pkg/`, `internal/`, `cmd/`, `vendor/`, `node_modules/`, `utils/`, `common/`, `lib/`, or `libs/`
+- Create `pkg/`, `internal/`, `cmd/`, `vendor/`, `node_modules/`, `utils/`, `lib/`, or `libs/`; `src/common/` is required by PART 7, 30, and 32
 - Put runtime output (`config/`, `data/`, `logs/`, `tmp/`, `build/`, `dist/`) in the repo tree
 - Hardcode an OS path anywhere outside the path-resolution package
 - Use `{project_org}`/`{project_name}` for filesystem paths — PART 4 paths key on `{internal_org}`/`{internal_name}`

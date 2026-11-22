@@ -1,0 +1,56 @@
+# Project Audit
+
+Started: 2026-11-21
+
+## AI.md PART Coverage (not yet exhaustive)
+
+PART 0: not audited; PART 1: not audited; PART 2: focused dependency/license and NOTICE audit; PART 3: focused source-layout audit; PART 4: focused path audit; PART 5: not audited; PART 6: focused debug-route auth audit; PART 7: not audited; PART 8: not audited; PART 9: focused PWA cache recovery audit; PART 10: focused SQLite retry/path audit; PART 11: focused password/token cryptography and failed-auth timing; PART 12: focused trusted-proxy/Tor client-IP slice; PART 13: health registry, persistence, serializers, overlays and dataset coverage in progress; PART 14: health route/formatting and route naming slice only; PART 15: not audited; PART 16: health/PWA frontend slices and bang-navigation bypass; PART 17: not audited; PART 18: scheduler/data update slices including Trivy extraction and freshness; PART 19: GeoIP health source slice only; PART 20: not audited; PART 21: not audited; PART 22: not audited; PART 23: not audited; PART 24: not audited; PART 25: focused temporary output path audit; PART 26: not audited; PART 27: not audited; PART 28: not audited; PART 29: not audited; PART 30: health locale-key additions only; PART 31: I2P health provider-state slice only; PART 32: not audited; PART 33: not audited; FINAL CHECKPOINT: not audited.
+
+## Pass 1: Security
+- [x] Part 6 debug routes: pprof, expvar, and custom debug endpoints lacked the required operator-token middleware — fixed in `src/server/debug.go`; existing coverage now sends an operator token.
+- [x] Part 11 failed-auth timing: operator-token failures returned immediately, contrary to the required 100 ms minimum — added delay in server and API auth middleware and a server regression test.
+
+## Pass 2: Code Quality
+- [x] Part 2 licensing: `LICENSE.md` omitted package-level dependencies and had stale x/image and x/net versions — added all 287 go-licenses package entries, corrected the two versions, and verified the scanner's `modernc.org/mathutil` unknown using its module LICENSE/AUTHORS.
+
+## Pass 3: Logic
+- [x] Part 4 database paths: container SQLite directory returned `/data/db` instead of `/data/db/sqlite` — corrected in `src/config/directories.go` and `src/database/database.go`; updated path assertions and stale path comments in `src/config/config_coverage_test.go` and `src/database/database_test.go`.
+- [x] Part 10 SQLite retries: `DB.Write` made six attempts despite the specified five-attempt limit — changed to five total attempts in `src/database/database.go`.
+- [ ] Part 5 strict configuration fields: the strict YAML decoder warned and continued on unknown fields, then the permissive decoder accepted them. `Load` now returns a configuration error for unknown fields and `TestLoadRejectsUnknownConfigFields` covers it; primary validation remains.
+- [ ] Part 5 filesystem overrides: implemented `config.SafeDirPath` and CLI override validation for config/data/cache/log/backup/PID paths, preserving absolute paths and rejecting control characters and `..` segments; `TestSafeDirPath` covers those cases. Primary validation remains.
+- [ ] Part 8 CLI flags/help: `--i2p` now overrides `I2P_ENABLED` only when explicitly supplied (including `--i2p=false`); `--port` accepts single or comma-separated HTTP/HTTPS values; command-help pre-scan recognizes `<flag> --help`, `-h`, and `help`. Added focused tests; primary validation remains.
+- [ ] Part 7 embedded application data: moved the runtime DNS provider JSON catalog into `src/data/dns_providers.json` and added a small embedded-data package consumed by `src/ssl`; primary validation remains.
+- [x] Part 9 browser recovery: HTML responses did not set the build-stamp cookie or purge stale browser storage on a stale top-level navigation — implemented in `src/server/html_cache.go` with regression coverage in `src/server/pwa_etag_test.go`.
+
+## Pass 4: Documentation
+- [x] Part 13 API docs: `docs/api.md` health example omitted the single-instance cluster object and I2P lifecycle state, used disabled provider `none`, set active connections to zero, and omitted dynamic checks/stats; updated the example and documented dynamic fields. README and IDEA contain no conflicting health payload example.
+
+## Pass 5: Spec Compliance
+- [x] Part 3 source layout: `src/cmd/apigen` violated the prohibition on `cmd/` directories — moved to `src/apigen` with build/workflow references updated by the primary workspace edits.
+- [x] Part 3 source layout: `src/client/cmd` violated the same prohibition; Part 32 requires `src/client/` but specifies no `cmd/` package path — moved to `src/client/command` with call sites updated by the primary workspace edits.
+- [x] Part 25 temporary output: test coverage artifacts used the fixed container path `/tmp/covout` — now bind-mounted and consumed under the same project-scoped `COVDIR` generated on the host.
+- [x] Part 13 health contract: responses omitted the required single-instance `cluster` object and reported active-but-unavailable overlay services as errors — added `cluster.enabled=false`, aligned overlay check/status values, and applied shutdown/maintenance/critical-check precedence in the server health builder; updated the API and GraphQL schema.
+- [x] Part 13 health surfaces: frontend plain text used API dotted keys and the HTML sections were out of required order and omitted Cluster — switched frontend text to human-readable, request-language labels and aligned HTML sections, feature states, component warnings, timestamps, uptime, and statistics formatting.
+- [x] Part 16 bang navigation: the service worker could turn a server-recognized `!gh` redirect navigation into an offline fallback — bypassed service-worker interception for `/search` bang candidates so the browser follows the HTTP redirect directly; added handler and worker-source regression coverage.
+- [ ] Part 13 residual health contract: added cached registration for engines, GeoIP, blocklists, CVE/Trivy, TLS certificates, DNS provider catalog, and supported embedded locales; config reload rebuilds the registry after source changes. NVD stale data uses the user-selected 48h `max_age` (parent is documenting the choice in TODO.API.md); reload tests beyond blocklists remain. Generated `src/swagger/openapi.json` must be refreshed by primary using `src/apigen` (AI.md forbids manual edits).
+- [ ] Part 13 request statistics: added prefix-aware hourly DB table, startup cache load, 60-second scheduled persistence/cluster refresh and shutdown flush. Health/metrics scrapes are excluded from persisted totals while middleware still captures static/error responses; health reads use cached values only. Added `TestMetricsRequestStatsPersistAndRefreshFromSharedDatabase`; primary agent must run it.
+- [ ] Part 13/20 metrics scrape aliases: request totals now exclude every mounted `/server/metrics`, versioned API, `/api/metrics`, and `/metrics` service endpoint (including Prometheus/Grafana/Loki suffixes); `TestHealthAndMetricsScrapesAreExcludedFromRequestTotals` covers canonical aliases. Primary validation remains.
+- [ ] Part 20 authentication metrics: removed the unsupported, never-updated `search_auth_sessions_active` gauge (the product has no sessions) and updated the Grafana auth panel to use `search_owner_tokens_active`, which the owner-token manager already refreshes. Primary validation remains.
+- [ ] Part 16 inline styles: removed the generated inline `style` attribute from toast progress markup and moved pause/duration styling into `public.css` classes. Primary validation remains.
+- [ ] Part 13 overlay lifecycle: added `features.i2p.state`, surfaced `building` at SAM session creation / i2pd destination bootstrap, and mapped statuses through shared public-safe helpers. Added `TestTorStatePublicContract` and `TestI2PStatePublicContract` covering required states and detail leakage; server/API integration coverage and primary gates remain.
+- [ ] Part 13 critical registry severity and serialization: non-`ok` critical checks now aggregate to unhealthy; added `TestCriticalDynamicHealthDegradationIsUnhealthy`. Added JSON and plain-text order tests: `TestHealthResponseSerializesRegisteredChecksAndStatsInOrder`, `TestFrontendHealthTextGoldenSectionOrder`, and `TestAPIHealthTextGoldenFieldOrder`. Added `TestHealthBuildDateIsRFC3339UTCWholeSecond`.
+- [ ] Part 13 scheduler health: server health now matches the API check and reports the required built-in scheduler as `error` when nil or stopped; an absent scheduler makes overall health `unhealthy`, except where shutdown or maintenance has higher precedence. `TestBuildHealthInfoMinimal` covers the absent-scheduler case; primary validation remains.
+- [ ] Part 13 data inventory: `src/data/dns_providers.json` is runtime-decoded and now has `data_ssl_dns_providers`; `src/common/i18n/locales/*.json` are runtime-loaded embedded translations with per-supported-language checks. `src/server/template/data/{en,de,es,fr}.json` are stale and unreferenced at runtime; `src/search/engine/testdata/*.json` are test fixtures; `src/server/static/manifest.json` and HTML/email/license text are presentation assets rather than runtime datasets.
+- [ ] Part 18 Trivy data contract: replaced raw `trivy/db.tar.gz` storage with bounded extraction of `trivy.db` and `metadata.json`, path/type/size validation, SQLite header and `NextUpdate` validation, `.last_updated`, and staged directory swap with rollback. Health reports stale when `NextUpdate` has passed, and updates skip fetching while it is future. Added extraction/health/skip coverage in `src/security/trivy_test.go`; primary must run tests.
+
+## Pass 6: Code Flow Trace
+- [ ] Remaining code flow trace not yet completed.
+- [ ] PART 23–24 service compliance findings from the line review: init detection checks/order differ from AI.md; Unix escalation omits `su`/macOS `osascript`, and detected `pkexec` is not used by service-install escalation; uninstall deletes an existing service account without creation provenance; OpenRC service generation sets `command_user` and omits required parent-directory setup. These require additional implementation and tests.
+
+## Completed
+- Part 4 container SQLite path correction.
+- Part 6 debug route operator authentication.
+- Part 9 build-stamp cookie and stale-navigation recovery.
+- Part 25 project-scoped coverage output path.
+- Part 2 full Go package license inventory and verified BSD-3-Clause attribution for modernc.org/mathutil.
+- Part 10 SQLite retry attempt count.
