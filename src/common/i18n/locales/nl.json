@@ -342,7 +342,19 @@
     "density_compact": "Compact",
     "density_comfortable": "Comfortabel",
     "density_spacious": "Ruim",
-    "accent_color": "Accentkleur"
+    "accent_color": "Accentkleur",
+    "appearance_heading": "Weergave en taal",
+    "application_heading": "Zoekvoorkeuren",
+    "erase_everything": "Alles wissen",
+    "more_title": "Meer voorkeuren",
+    "reset_everything_warning": "Hiermee worden je thema, taal, zoekvoorkeuren, toestemmingskeuzes, CCPA-afmelding en door deze site opgeslagen gegevens gewist. Je blijft aangemeld.",
+    "sync_description": "Neem je voorkeuren mee naar een ander apparaat.",
+    "sync_export_heading": "Voorkeuren exporteren",
+    "sync_import_button": "Importeren",
+    "sync_import_heading": "Voorkeuren importeren",
+    "sync_title": "Voorkeuren synchroniseren",
+    "tools_page_title": "Zoekhulpmiddelen",
+    "tools_page_description": "Beheer aangepaste bangs, filters, aangepaste CSS en OpenSearch."
   },
   "nav": {
     "home": "Home",
@@ -352,7 +364,9 @@
     "help": "Help",
     "settings": "Instellingen",
     "admin": "Admin",
-    "profile": "Profiel"
+    "profile": "Profiel",
+    "search": "Zoeken",
+    "toggle_theme": "Thema wisselen"
   },
   "footer": {
     "privacy_policy": "Privacybeleid",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Dialoog sluiten",
     "input_value": "Invoerwaarde",
     "copy_to_clipboard": "Naar klembord kopieren",
-    "skip_to_main_content": "Naar hoofdinhoud springen"
+    "skip_to_main_content": "Naar hoofdinhoud springen",
+    "breadcrumb": "Kruimelpad"
   },
   "header": {
     "theme_label_dark": "Lichte modus",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Ga naar het Wikipedia-artikel",
       "ex_gh_desc": "Zoek op GitHub",
       "ex_npm_desc": "Zoek het npm-pakket op",
-      "full_list_link": "Volledige bang-lijst bekijken (JSON)"
+      "full_list_link": "Volledige bang-lijst bekijken (JSON)",
+      "all_caption": "Ingebouwde snelkoppelingen die deze zoekinstantie ondersteunt.",
+      "all_heading": "Alle beschikbare snelkoppelingen",
+      "th_description": "Beschrijving",
+      "th_name": "Naam",
+      "th_shortcut": "Snelkoppeling"
     },
     "direct": {
       "heading": "Directe en instant antwoorden",
@@ -1925,11 +1945,13 @@
         "ip": "Uw huidige IP-adres",
         "color": "Kleurvoorbeeld en -conversie"
       }
-    }
+    },
+    "more_title": "Meer hulp"
   },
   "form": {
     "save": "Opslaan",
-    "cancel": "Annuleren"
+    "cancel": "Annuleren",
+    "reset": "Herstellen"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

@@ -342,7 +342,19 @@
     "density_compact": "紧凑",
     "density_comfortable": "舒适",
     "density_spacious": "宽松",
-    "accent_color": "强调色"
+    "accent_color": "强调色",
+    "appearance_heading": "外观和语言",
+    "application_heading": "搜索偏好设置",
+    "erase_everything": "全部清除",
+    "more_title": "更多偏好设置",
+    "reset_everything_warning": "这会清除主题、语言、搜索偏好、同意选项、CCPA 退出选择以及此网站存储的数据。登录状态会保留。",
+    "sync_description": "将偏好设置带到另一台设备。",
+    "sync_export_heading": "导出偏好设置",
+    "sync_import_button": "导入",
+    "sync_import_heading": "导入偏好设置",
+    "sync_title": "同步偏好设置",
+    "tools_page_title": "搜索工具",
+    "tools_page_description": "管理自定义 bang、筛选器、自定义 CSS 和 OpenSearch。"
   },
   "nav": {
     "home": "首页",
@@ -352,7 +364,9 @@
     "help": "帮助",
     "settings": "设置",
     "admin": "管理",
-    "profile": "个人资料"
+    "profile": "个人资料",
+    "search": "搜索",
+    "toggle_theme": "切换主题"
   },
   "footer": {
     "privacy_policy": "隐私政策",
@@ -1127,7 +1141,8 @@
     "close_dialog": "关闭对话框",
     "input_value": "输入值",
     "copy_to_clipboard": "复制到剪贴板",
-    "skip_to_main_content": "跳转到主要内容"
+    "skip_to_main_content": "跳转到主要内容",
+    "breadcrumb": "面包屑导航"
   },
   "header": {
     "theme_label_dark": "浅色模式",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Go to Wikipedia article",
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
-      "full_list_link": "View full bang list (JSON)"
+      "full_list_link": "View full bang list (JSON)",
+      "all_caption": "此搜索实例支持的内置快捷搜索。",
+      "all_heading": "所有可用快捷搜索",
+      "th_description": "说明",
+      "th_name": "名称",
+      "th_shortcut": "快捷方式"
     },
     "direct": {
       "heading": "Instant & Direct Answers",
@@ -1925,11 +1945,13 @@
         "ip": "Your current IP address",
         "color": "Color preview and conversion"
       }
-    }
+    },
+    "more_title": "更多帮助"
   },
   "form": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "reset": "重置"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

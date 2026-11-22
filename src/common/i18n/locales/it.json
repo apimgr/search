@@ -342,7 +342,19 @@
     "density_compact": "Compatta",
     "density_comfortable": "Confortevole",
     "density_spacious": "Spaziosa",
-    "accent_color": "Colore accento"
+    "accent_color": "Colore accento",
+    "appearance_heading": "Aspetto e lingua",
+    "application_heading": "Preferenze di ricerca",
+    "erase_everything": "Cancella tutto",
+    "more_title": "Altre preferenze",
+    "reset_everything_warning": "Verranno cancellati tema, lingua, preferenze di ricerca, consensi, rinuncia CCPA e dati salvati da questo sito. L’accesso resterà attivo.",
+    "sync_description": "Trasferisci le preferenze su un altro dispositivo.",
+    "sync_export_heading": "Esporta preferenze",
+    "sync_import_button": "Importa",
+    "sync_import_heading": "Importa preferenze",
+    "sync_title": "Sincronizza preferenze",
+    "tools_page_title": "Strumenti di ricerca",
+    "tools_page_description": "Gestisci bang personalizzati, filtri, CSS personalizzato e OpenSearch."
   },
   "nav": {
     "home": "Home",
@@ -352,7 +364,9 @@
     "help": "Aiuto",
     "settings": "Impostazioni",
     "admin": "Admin",
-    "profile": "Profilo"
+    "profile": "Profilo",
+    "search": "Cerca",
+    "toggle_theme": "Cambia tema"
   },
   "footer": {
     "privacy_policy": "Informativa sulla privacy",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Chiudi finestra di dialogo",
     "input_value": "Valore di input",
     "copy_to_clipboard": "Copia negli appunti",
-    "skip_to_main_content": "Vai al contenuto principale"
+    "skip_to_main_content": "Vai al contenuto principale",
+    "breadcrumb": "Percorso di navigazione"
   },
   "header": {
     "theme_label_dark": "Modalita chiara",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Vai all'articolo di Wikipedia",
       "ex_gh_desc": "Cerca su GitHub",
       "ex_npm_desc": "Cerca il pacchetto npm",
-      "full_list_link": "Visualizza l'elenco completo dei bang (JSON)"
+      "full_list_link": "Visualizza l'elenco completo dei bang (JSON)",
+      "all_caption": "Scorciatoie integrate disponibili in questa istanza di ricerca.",
+      "all_heading": "Tutte le scorciatoie disponibili",
+      "th_description": "Descrizione",
+      "th_name": "Nome",
+      "th_shortcut": "Scorciatoia"
     },
     "direct": {
       "heading": "Risposte istantanee e dirette",
@@ -1925,11 +1945,13 @@
         "ip": "Il tuo indirizzo IP attuale",
         "color": "Anteprima e conversione colore"
       }
-    }
+    },
+    "more_title": "Ulteriore assistenza"
   },
   "form": {
     "save": "Salva",
-    "cancel": "Annulla"
+    "cancel": "Annulla",
+    "reset": "Reimposta"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

@@ -1,0 +1,36 @@
+{{define "content"}}
+<div class="container container-sm preferences-sync-page">
+    <header class="page-header">
+        <nav class="breadcrumb" aria-label="{{t "accessibility.breadcrumb"}}"><a href="/server/preferences">← {{t "preferences.title"}}</a></nav>
+        <h1 class="page-title">{{t "preferences.sync_title"}}</h1>
+        <p class="page-lead">{{t "preferences.sync_description"}}</p>
+    </header>
+
+    <section class="section-card" aria-labelledby="sync-export-heading">
+        <h2 id="sync-export-heading">{{t "preferences.sync_export_heading"}}</h2>
+        <div class="form-group">
+            <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
+            <a id="sync-url" class="copy-value" href="{{index .Data "syncURL"}}">{{index .Data "syncURL"}}</a>
+            <button type="button" class="copy-btn" data-copy="{{index .Data "syncURL"}}" data-copied-label="{{t "common.copied"}}" aria-live="polite">{{t "common.copy"}}</button>
+        </div>
+        <div class="form-group">
+            <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
+            <code id="sync-code" class="copy-value" tabindex="0">{{index .Data "syncCode"}}</code>
+            <button type="button" class="copy-btn" data-copy="{{index .Data "syncCode"}}" data-copied-label="{{t "common.copied"}}" aria-live="polite">{{t "common.copy"}}</button>
+        </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="sync-import-heading">
+        <h2 id="sync-import-heading">{{t "preferences.sync_import_heading"}}</h2>
+        <form action="/server/preferences/sync" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="form-group">
+                <label for="sync-code-input">{{t "preferences.sync_paste_label"}}</label>
+                <textarea class="form-input" id="sync-code-input" name="code" maxlength="2048" aria-describedby="sync-code-help"></textarea>
+                <p class="form-help" id="sync-code-help">{{t "preferences.sync_paste_placeholder"}}</p>
+            </div>
+            <button type="submit" class="btn btn-primary">{{t "preferences.sync_import_button"}}</button>
+        </form>
+    </section>
+</div>
+{{end}}

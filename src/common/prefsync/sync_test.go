@@ -12,7 +12,7 @@ import (
 var testLanguages = []string{"en", "fr", "de"}
 
 func TestImportDirectValuesWinAndRemainAdditive(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?code=theme%3Dlight%26lang%3Dfr%26search_pref_units%3Dmetric&theme=dark&cookie_consent=no&search_owner_token=secret&search_pref_video_previews=0", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?code=theme%3Dlight%26lang%3Dfr%26search_pref_units%3Dmetric&theme=dark&cookie_consent=no&search_owner_token=secret&search_pref_video_previews=0", nil)
 	req.AddCookie(&http.Cookie{Name: "search_pref_category", Value: "news"})
 	result := Import(req, "search", "en", testLanguages)
 	if result.State.Theme != "dark" || result.State.Lang != "fr" || result.State.Prefs["units"] != "metric" || result.State.Prefs["category"] != "news" {
@@ -43,7 +43,7 @@ func TestImportDirectValuesWinAndRemainAdditive(t *testing.T) {
 
 func TestImportPaddedCodeAndUnsupportedRegionFallback(t *testing.T) {
 	encoded := base64.URLEncoding.EncodeToString([]byte("lang=fr-CA&search_pref_safe_search=2"))
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?code="+url.QueryEscape(encoded), nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?code="+url.QueryEscape(encoded), nil)
 	result := Import(req, "search", "en", testLanguages)
 	if result.State.Lang != "fr" || result.State.Prefs["safe_search"] != "2" {
 		t.Fatalf("state=%#v", result.State)
@@ -52,20 +52,23 @@ func TestImportPaddedCodeAndUnsupportedRegionFallback(t *testing.T) {
 
 func TestImportInvalidAndOversizedValuesAreIgnored(t *testing.T) {
 	oversized := strings.Repeat("x", 2049)
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?theme=neon&lang=zz&search_pref_units=stones&search_pref_private=not+safe&code="+oversized, nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?theme=neon&lang=zz&search_pref_units=stones&search_pref_private=not+safe&code="+oversized, nil)
 	result := Import(req, "search", "en", testLanguages)
 	if result.State.Theme != "dark" || result.State.Lang != "en" || len(result.State.Prefs) != 0 {
 		t.Fatalf("state=%#v", result.State)
 	}
-	for _, name := range []string{"theme", "lang", "search_pref_units", "search_pref_private", "code"} {
+	for _, name := range []string{"theme", "lang", "search_pref_units", "search_pref_private"} {
 		if !contains(result.Ignored, name) {
 			t.Errorf("ignored list missing %s: %v", name, result.Ignored)
 		}
 	}
+	if contains(result.Ignored, "code") {
+		t.Errorf("control field code was reported as ignored: %v", result.Ignored)
+	}
 }
 
 func TestImportControlFieldsAreNotReportedAsPreferences(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?csrf_token=x&code=bad&redirect=%2Fsearch&action=save&consent_form=1&consent_preferences=on&consent_analytics=on&ccpa_opt_out=on", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?csrf_token=x&code=bad&redirect=%2Fsearch&action=save&consent_form=1&consent_preferences=on&consent_analytics=on&ccpa_opt_out=on", nil)
 	result := Import(req, "search", "en", testLanguages)
 	if len(result.Applied) != 0 || len(result.Ignored) != 0 {
 		t.Fatalf("control fields affected result: applied=%v ignored=%v", result.Applied, result.Ignored)
@@ -73,7 +76,7 @@ func TestImportControlFieldsAreNotReportedAsPreferences(t *testing.T) {
 }
 
 func TestExportCanonicalIncludesOnlyPreferences(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "https://search.example/server/preferences/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://search.example/server/preferences/sync", nil)
 	req.AddCookie(&http.Cookie{Name: "theme", Value: "light"})
 	req.AddCookie(&http.Cookie{Name: "lang", Value: "de"})
 	req.AddCookie(&http.Cookie{Name: "search_pref_units", Value: "metric"})
@@ -102,7 +105,7 @@ func TestExportCanonicalIncludesOnlyPreferences(t *testing.T) {
 
 func TestEnginePreferenceCookiesCanBeExportedAndImported(t *testing.T) {
 	value := "AQIDBA"
-	request := httptest.NewRequest(http.MethodGet, "/server/preferences/export", nil)
+	request := httptest.NewRequest(http.MethodGet, "/server/preferences/sync", nil)
 	request.AddCookie(&http.Cookie{Name: "search_pref_engines", Value: value})
 	request.AddCookie(&http.Cookie{Name: "search_pref_engine_order", Value: value})
 	state, fullURL, code := Export(request, "search", "en", []string{"en"})
@@ -116,7 +119,7 @@ func TestEnginePreferenceCookiesCanBeExportedAndImported(t *testing.T) {
 	if parsed.Query().Get("search_pref_engines") != value || parsed.Query().Get("search_pref_engine_order") != value {
 		t.Fatalf("engine preferences missing from sync URL: %s", parsed.RawQuery)
 	}
-	importRequest := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_engines=AQIDBA&search_pref_engine_order=AQIDBA", nil)
+	importRequest := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?search_pref_engines=AQIDBA&search_pref_engine_order=AQIDBA", nil)
 	result := Import(importRequest, "search", "en", []string{"en"})
 	if result.State.Prefs["engines"] != value || result.State.Prefs["engine_order"] != value {
 		t.Fatalf("engine preference cookies did not round-trip through sync: %#v", result.State.Prefs)
@@ -124,12 +127,12 @@ func TestEnginePreferenceCookiesCanBeExportedAndImported(t *testing.T) {
 }
 
 func TestImportValidatesVisualPreferences(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=large&search_pref_results_density=spacious&search_pref_accent_color=%23ABCDEF&search_pref_weather_units=metric", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?search_pref_font_size=large&search_pref_results_density=spacious&search_pref_accent_color=%23ABCDEF&search_pref_weather_units=metric", nil)
 	result := Import(req, "search", "en", testLanguages)
 	if result.State.Prefs["font_size"] != "large" || result.State.Prefs["results_density"] != "spacious" || result.State.Prefs["accent_color"] != "#ABCDEF" || result.State.Prefs["weather_units"] != "metric" {
 		t.Fatalf("valid values not imported: %#v", result.State.Prefs)
 	}
-	invalid := httptest.NewRequest(http.MethodGet, "/server/preferences/import?search_pref_font_size=huge&search_pref_results_density=tight&search_pref_accent_color=red&search_pref_weather_units=kelvin", nil)
+	invalid := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?search_pref_font_size=huge&search_pref_results_density=tight&search_pref_accent_color=red&search_pref_weather_units=kelvin", nil)
 	result = Import(invalid, "search", "en", testLanguages)
 	if len(result.State.Prefs) != 0 || !contains(result.Ignored, "search_pref_font_size") || !contains(result.Ignored, "search_pref_results_density") || !contains(result.Ignored, "search_pref_accent_color") || !contains(result.Ignored, "search_pref_weather_units") {
 		t.Fatalf("invalid visual values were not rejected: %#v", result)

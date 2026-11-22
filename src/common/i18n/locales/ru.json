@@ -342,7 +342,19 @@
     "density_compact": "Компактная",
     "density_comfortable": "Удобная",
     "density_spacious": "Просторная",
-    "accent_color": "Акцентный цвет"
+    "accent_color": "Акцентный цвет",
+    "appearance_heading": "Внешний вид и язык",
+    "application_heading": "Настройки поиска",
+    "erase_everything": "Удалить всё",
+    "more_title": "Другие настройки",
+    "reset_everything_warning": "Будут удалены тема, язык, настройки поиска, согласия, отказ CCPA и данные, сохранённые этим сайтом. Вход в систему останется активным.",
+    "sync_description": "Перенесите настройки на другое устройство.",
+    "sync_export_heading": "Экспорт настроек",
+    "sync_import_button": "Импортировать",
+    "sync_import_heading": "Импорт настроек",
+    "sync_title": "Синхронизация настроек",
+    "tools_page_title": "Инструменты поиска",
+    "tools_page_description": "Управляйте собственными bang-командами, фильтрами, CSS и OpenSearch."
   },
   "nav": {
     "home": "Главная",
@@ -352,7 +364,9 @@
     "help": "Помощь",
     "settings": "Настройки",
     "admin": "Админ",
-    "profile": "Профиль"
+    "profile": "Профиль",
+    "search": "Поиск",
+    "toggle_theme": "Сменить тему"
   },
   "footer": {
     "privacy_policy": "Политика конфиденциальности",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Закрыть диалог",
     "input_value": "Значение ввода",
     "copy_to_clipboard": "Копировать в буфер обмена",
-    "skip_to_main_content": "Перейти к основному содержимому"
+    "skip_to_main_content": "Перейти к основному содержимому",
+    "breadcrumb": "Навигационная цепочка"
   },
   "header": {
     "theme_label_dark": "Светлый режим",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Перейти к статье в Википедии",
       "ex_gh_desc": "Поиск в GitHub",
       "ex_npm_desc": "Поиск пакета npm",
-      "full_list_link": "Посмотреть полный список bang'ов (JSON)"
+      "full_list_link": "Посмотреть полный список bang'ов (JSON)",
+      "all_caption": "Встроенные быстрые команды, доступные в этом экземпляре поиска.",
+      "all_heading": "Все доступные команды",
+      "th_description": "Описание",
+      "th_name": "Название",
+      "th_shortcut": "Команда"
     },
     "direct": {
       "heading": "Мгновенные и прямые ответы",
@@ -1925,11 +1945,13 @@
         "ip": "Ваш текущий IP-адрес",
         "color": "Предпросмотр и преобразование цвета"
       }
-    }
+    },
+    "more_title": "Дополнительная помощь"
   },
   "form": {
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "reset": "Сбросить"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

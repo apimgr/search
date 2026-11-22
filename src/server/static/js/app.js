@@ -1421,8 +1421,9 @@
             hideDropdown();
             input.focus();
 
-            // If not a bang, submit the form
-            if (item.type !== 'bang') {
+            // Feature prefixes end in a space so visitors can finish the term.
+            // They are input assistance, not complete searches to submit.
+            if (item.type !== 'bang' && !/[:\s]$/.test(item.text)) {
                 var form = input.closest('form');
                 if (form) {
                     form.submit();
@@ -3502,62 +3503,6 @@
             if (e.target.id === 'import-prefs') {
                 var importFile = document.getElementById('import-file');
                 if (importFile) importFile.click();
-                return;
-            }
-
-            // Copy preferences (cross-device theme/lang sync per AI.md
-            // "Cross-device preference sync") - fetches the stateless
-            // server-side export endpoint, copies the full import URL, and
-            // points the QR code link at the same URL.
-            if (e.target.id === 'copy-sync-prefs') {
-                fetch('/server/preferences/export', { headers: { 'Accept': 'application/json' } })
-                    .then(function(res) { return res.json(); })
-                    .then(function(json) {
-                        var data = json && json.data ? json.data : {};
-                        if (!data.url) {
-                            showPrefStatus(t('preferences.sync_export_failed', 'Could not copy preferences'), true);
-                            return;
-                        }
-                        var urlField = document.getElementById('sync-url');
-                        var codeField = document.getElementById('sync-code');
-                        var qrLink = document.getElementById('qr-sync-prefs');
-                        if (urlField) urlField.value = data.url;
-                        if (codeField) codeField.value = data.code || '';
-                        if (qrLink) qrLink.href = '/direct/qr/' + encodeURIComponent(data.url);
-                        // Populating the fields above is the source of truth for success.
-                        // Some browsers (notably Safari) drop the user-activation state
-                        // the async Clipboard API needs by the time this fetch resolves,
-                        // so a clipboard failure must never be reported as the whole
-                        // action failing when the fields were already filled in.
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(data.url).then(function() {
-                                showPrefStatus(t('preferences.sync_copied', 'Preferences copied!'));
-                            }).catch(function() {
-                                if (urlField) urlField.select();
-                                showPrefStatus(t('preferences.sync_copy_manual', 'Sync link ready - copy it manually below'));
-                            });
-                        } else {
-                            if (urlField) urlField.select();
-                            showPrefStatus(t('preferences.sync_copy_manual', 'Sync link ready - copy it manually below'));
-                        }
-                    })
-                    .catch(function() {
-                        showPrefStatus(t('preferences.sync_export_failed', 'Could not copy preferences'), true);
-                    });
-                return;
-            }
-
-            // Apply a pasted sync URL or short code by navigating to the
-            // stateless import route, which validates, sets cookies, and
-            // redirects back here.
-            if (e.target.id === 'apply-sync-prefs') {
-                var pasteField = document.getElementById('sync-paste');
-                var pasted = pasteField ? pasteField.value.trim() : '';
-                if (!pasted) {
-                    showPrefStatus(t('preferences.sync_invalid', 'Enter a preferences code or URL first'), true);
-                    return;
-                }
-                window.location.href = '/server/preferences/import?code=' + encodeURIComponent(pasted) + '&redirect=' + encodeURIComponent(window.location.pathname);
                 return;
             }
 

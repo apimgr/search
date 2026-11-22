@@ -184,8 +184,8 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
 | `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list (404 when MCP is disabled) |
 | `/api/v1/server/preferences` | GET, POST | Read or update guest preferences |
-| `/api/v1/server/preferences/export` | GET | Export guest preferences as a URL and short code |
-| `/api/v1/server/preferences/import` | GET | Validate and apply guest preferences from query values or a code |
+| `/api/v1/server/preferences/sync` | GET | Export guest preferences as a URL and short code |
+| `/api/v1/server/preferences/sync/import` | GET | Validate and apply guest preferences from query values or a code |
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
 | `/api/v1/server/about` | GET | Server about page (JSON) |
 | `/api/v1/server/privacy` | GET | Privacy policy (JSON) |
@@ -426,8 +426,8 @@ Preferences are guest browser cookies and require no account. `GET
 {"ok":true,"data":{"theme":"dark","lang":"en","prefs":{"units":"metric"}}}
 ```
 
-`GET /api/v1/server/preferences/export` returns that state plus `url` and
-`code`. `GET /api/v1/server/preferences/import` accepts direct query values,
+`GET /api/v1/server/preferences/sync` returns that state plus `url` and
+`code`. `GET /api/v1/server/preferences/sync/import` accepts direct query values,
 a pasted full URL, a plain query string, or a padded or unpadded base64url
 `code`; valid values are applied additively and invalid values are listed in
 `ignored`. Direct query values override `code` values by key. Codes are

@@ -1155,7 +1155,7 @@ func TestOpenAPIRouteMethodsMatchRESTHandlers(t *testing.T) {
 	if _, ok := contact.Post.Responses["201"]; ok {
 		t.Error("contact POST must not document an unreturned 201 status")
 	}
-	preferenceImport := paths["/api/v1/server/preferences/import"]
+	preferenceImport := paths["/api/v1/server/preferences/sync/import"]
 	if preferenceImport.Get == nil || preferenceImport.Post != nil {
 		t.Fatal("preference import must document the REST GET operation only")
 	}

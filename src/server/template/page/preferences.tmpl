@@ -1,14 +1,17 @@
 {{define "content"}}
-<div class="static-page preferences-page">
+<div class="container container-sm preferences-page">
     <header class="page-header">
-        <h1>{{t "preferences.title"}}</h1>
-        <p class="subtitle">{{t "preferences.subtitle"}}</p>
+        <h1 class="page-title">{{t "preferences.title"}}</h1>
+        <p class="page-lead">{{t "preferences.subtitle"}}</p>
     </header>
 
-    <section class="preferences-section" data-preference-tab="privacy" aria-labelledby="cookie-preferences-heading">
+    <form action="/server/preferences" method="POST" id="general-settings" class="preferences-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <section class="section-card preferences-section" data-preference-tab="privacy" aria-labelledby="cookie-preferences-heading">
         <h2 id="cookie-preferences-heading">{{t "privacy.cookies_heading"}}</h2>
         <p>{{t "privacy.cookies_intro"}}</p>
-            <input type="hidden" name="consent_form" value="1" form="general-settings">
+            <input type="hidden" name="consent_form" value="1">
             <div class="form-group toggle-group">
                 <label class="toggle">
                     <input type="checkbox" checked disabled aria-label="{{t "privacy.session_cookie_label"}}">
@@ -35,7 +38,7 @@
             </div>
     </section>
 
-    <section class="preferences-section ccpa-section" data-preference-tab="privacy" aria-labelledby="ccpa-preferences-heading">
+    <section class="section-card preferences-section ccpa-section" data-preference-tab="privacy" aria-labelledby="ccpa-preferences-heading">
         <h2 id="ccpa-preferences-heading">{{t "privacy.ccpa_opt_out_heading"}}</h2>
         {{if .DataSold}}
         <p>{{t "privacy.ccpa_opt_out_description"}}</p>
@@ -46,10 +49,8 @@
         {{end}}
     </section>
 
-    <div class="preferences-section" id="preferences-settings-section">
-        <h2 id="preferences-general-heading">{{t "preferences.general_settings"}}</h2>
-        <form action="/server/preferences" method="POST" id="general-settings" class="preferences-form">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <section class="section-card preferences-section" id="preferences-settings-section" aria-labelledby="appearance-heading">
+        <h2 id="appearance-heading">{{t "preferences.appearance_heading"}}</h2>
             <div class="form-group">
                 <label for="theme">{{t "preferences.theme"}}</label>
                 <select id="theme" name="theme">
@@ -58,6 +59,18 @@
                     <option value="auto" {{if eq .Prefs.Theme "auto"}}selected{{end}}>{{t "preferences.theme_auto"}}</option>
                 </select>
             </div>
+
+            <div id="language" class="form-group">
+                <label for="lang">{{t "preferences.language"}}</label>
+                <select id="lang" name="lang">
+                    <option value="" {{if not .LangPinned}}selected{{end}}>{{tf "preferences.language_automatic" "language" .LangName}}</option>
+                    {{range .AvailableLanguages}}<option value="{{.Code}}" lang="{{.Code}}" {{if and $.LangPinned (eq $.Lang .Code)}}selected{{end}}>{{.NativeName}}</option>{{end}}
+                </select>
+            </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="application-preferences-heading">
+        <h2 id="application-preferences-heading">{{t "preferences.application_heading"}}</h2>
 
             <div class="form-group">
                 <label for="font-size">{{t "preferences.font_size"}}</label>
@@ -80,13 +93,6 @@
             <div class="form-group">
                 <label for="accent-color">{{t "preferences.accent_color"}}</label>
                 <input type="color" id="accent-color" name="search_pref_accent_color" value="{{if .Prefs.AccentColor}}{{.Prefs.AccentColor}}{{else}}#8250df{{end}}">
-            </div>
-
-            <div class="form-group">
-                <label for="lang">{{t "preferences.language"}}</label>
-                <select id="lang" name="lang">
-                    {{range .AvailableLanguages}}<option value="{{.Code}}" {{if eq $.Lang .Code}}selected{{end}}>{{.NativeName}}</option>{{end}}
-                </select>
             </div>
 
             <div class="form-group">
@@ -192,30 +198,9 @@
                     <span class="toggle-label">{{t "preferences.video_previews"}}</span>
                 </label>
             </div>
-            <div class="form-group">
-            </div>
-            <section class="preferences-section" aria-labelledby="preference-sync-heading">
-                <h2 id="preference-sync-heading">{{t "preferences.data_management_heading"}}</h2>
-                <p>{{t "preferences.data_management_help"}}</p>
-                <div class="form-group">
-                    <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
-                    <a id="sync-url" class="preference-export-value" href="{{index .Data "syncURL"}}">{{index .Data "syncURL"}}</a>
-                    <button type="button" class="btn btn-secondary" data-copy-target="sync-url">{{t "preferences.copy_preferences"}}</button>
-                </div>
-                <div class="form-group">
-                    <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
-                    <code id="sync-code" class="preference-export-value" tabindex="0">{{index .Data "syncCode"}}</code>
-                    <button type="button" class="btn btn-secondary" data-copy-target="sync-code">{{t "preferences.copy_preferences"}}</button>
-                </div>
-                <div class="form-group">
-                    <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
-                    <textarea id="sync-paste" name="code" form="general-settings" maxlength="2048" placeholder="{{t "preferences.sync_paste_placeholder"}}"></textarea>
-                </div>
-            </section>
-        </form>
-    </div>
+    </section>
 
-    <section class="preferences-section" data-preference-tab="engines" aria-labelledby="engine-preferences-heading">
+    <section class="section-card preferences-section" data-preference-tab="engines" aria-labelledby="engine-preferences-heading">
         <h2 id="engine-preferences-heading">{{t "preferences.engines_tab"}}</h2>
         <p class="help-text">{{t "preferences.engines_help"}}</p>
         <input type="hidden" name="search_pref_engines_present" value="1" form="general-settings">
@@ -240,13 +225,8 @@
         </div>
     </section>
 
-    {{if index .Data "hasOwnerTokens"}}
-    <p><a href="/server/preferences/tokens">{{t "preferences.owner_tokens.heading"}}</a></p>
-    {{end}}
-    <p><a href="/server/preferences/tools">{{t "preferences.interface"}}</a></p>
-
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.homepage_widgets_heading"}}</h2>
+    <section class="section-card preferences-section" data-preference-tab="interface" aria-labelledby="homepage-widgets-heading">
+        <h2 id="homepage-widgets-heading">{{t "preferences.homepage_widgets_heading"}}</h2>
         <p class="help-text">{{t "preferences.homepage_widgets_help"}}</p>
 
         {{/* Widget toggles are associated with the general-settings form via
@@ -339,20 +319,30 @@
         <p class="help-text mt-1">
             {{t "preferences.homepage_widgets_tip"}}
         </p>
-    </div>
+    </section>
 
     <div class="preferences-actions">
         <a id="cancel-preferences" class="btn btn-secondary" href="{{index .Data "cancelURL"}}">{{t "common.cancel"}}</a>
-        <button type="button" id="reset-prefs" class="btn btn-danger" popovertarget="reset-preferences">{{t "preferences.reset_all_preferences"}}</button>
-        <button type="submit" form="general-settings" id="save-preferences" class="btn btn-primary">{{t "preferences.save_return"}}</button>
+        <button type="button" id="reset-prefs" class="btn btn-danger" popovertarget="reset-preferences">{{t "form.reset"}}</button>
+        <button type="submit" id="save-preferences" class="btn btn-primary">{{t "form.save"}}</button>
         <span id="save-status" class="save-status"></span>
     </div>
     <div id="reset-preferences" class="preferences-reset-popover" popover>
         <p>{{t "preferences.reset_confirm_title"}}</p>
-        <p>{{t "preferences.reset_confirm_message"}}</p>
-        <button type="button" popovertarget="reset-preferences" popovertargetaction="hide">{{t "common.cancel"}}</button>
-        <button type="submit" form="general-settings" name="action" value="reset">{{t "preferences.reset_all_preferences"}}</button>
+        <p>{{t "preferences.reset_everything_warning"}}</p>
+        <button type="button" popovertarget="reset-preferences" popovertargetaction="hide">{{t "form.cancel"}}</button>
+        <button type="submit" name="action" value="reset">{{t "preferences.erase_everything"}}</button>
     </div>
+    </form>
+
+    <section class="section-card preferences-hub" aria-labelledby="more-preferences-heading">
+        <h2 id="more-preferences-heading">{{t "preferences.more_title"}}</h2>
+        <ul class="hub-list">
+            {{range index .Data "preferencesPages"}}
+            <li class="hub-item"><a class="hub-link" href="{{.Path}}"><span class="hub-title">{{t .TitleKey}}</span><span class="hub-desc">{{t .DescriptionKey}}</span></a></li>
+            {{end}}
+        </ul>
+    </section>
 </div>
 {{/* Per AI.md PART 16: NO inline CSS/JS - all styles in main.css, scripts in app.js */}}
 {{end}}

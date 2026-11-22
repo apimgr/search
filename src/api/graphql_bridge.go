@@ -253,7 +253,7 @@ func (h *Handler) FaviconForGraphQL(ctx context.Context, request *http.Request, 
 
 // PreferencesExportForGraphQL uses the REST export handler so cookie fallback and URL encoding stay identical.
 func (h *Handler) PreferencesExportForGraphQL(ctx context.Context, request *http.Request) (interface{}, error) {
-	response, err := h.runGraphQLRoute(ctx, request, APIPrefix+"/server/preferences/export", http.MethodGet, nil, h.handleServerPreferencesExport)
+	response, err := h.runGraphQLRoute(ctx, request, APIPrefix+"/server/preferences/sync", http.MethodGet, nil, h.handleServerPreferencesExport)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (h *Handler) PreferencesImportForGraphQL(ctx context.Context, request *http
 	clone.Method = http.MethodGet
 	clone.URL = new(url.URL)
 	*clone.URL = *request.URL
-	clone.URL.Path = APIPrefix + "/server/preferences/import"
+	clone.URL.Path = APIPrefix + "/server/preferences/sync/import"
 	clone.URL.RawQuery = values.Encode()
 	response := httptest.NewRecorder()
 	h.handleServerPreferencesImport(response, clone)

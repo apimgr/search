@@ -342,7 +342,19 @@
     "density_compact": "Kompakt",
     "density_comfortable": "Komfortabel",
     "density_spacious": "Geräumig",
-    "accent_color": "Akzentfarbe"
+    "accent_color": "Akzentfarbe",
+    "appearance_heading": "Darstellung und Sprache",
+    "application_heading": "Sucheinstellungen",
+    "erase_everything": "Alles löschen",
+    "more_title": "Weitere Einstellungen",
+    "reset_everything_warning": "Dadurch werden Darstellung, Sprache, Sucheinstellungen, Einwilligungen, CCPA-Widerspruch und lokal gespeicherte Websitedaten gelöscht. Die Anmeldung bleibt bestehen.",
+    "sync_description": "Übertrage deine Einstellungen auf ein anderes Gerät.",
+    "sync_export_heading": "Einstellungen exportieren",
+    "sync_import_button": "Importieren",
+    "sync_import_heading": "Einstellungen importieren",
+    "sync_title": "Einstellungen synchronisieren",
+    "tools_page_title": "Suchwerkzeuge",
+    "tools_page_description": "Verwalte eigene Bangs, Filter, eigenes CSS und OpenSearch."
   },
   "nav": {
     "home": "Startseite",
@@ -352,7 +364,9 @@
     "help": "Hilfe",
     "settings": "Einstellungen",
     "admin": "Admin",
-    "profile": "Profil"
+    "profile": "Profil",
+    "search": "Suche",
+    "toggle_theme": "Darstellung wechseln"
   },
   "footer": {
     "privacy_policy": "Datenschutzrichtlinie",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Dialog schliessen",
     "input_value": "Eingabewert",
     "copy_to_clipboard": "In Zwischenablage kopieren",
-    "skip_to_main_content": "Zum Hauptinhalt springen"
+    "skip_to_main_content": "Zum Hauptinhalt springen",
+    "breadcrumb": "Brotkrümelnavigation"
   },
   "header": {
     "theme_label_dark": "Heller Modus",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Zum Wikipedia-Artikel gehen",
       "ex_gh_desc": "GitHub durchsuchen",
       "ex_npm_desc": "npm-Paket nachschlagen",
-      "full_list_link": "Vollständige Bang-Liste anzeigen (JSON)"
+      "full_list_link": "Vollständige Bang-Liste anzeigen (JSON)",
+      "all_caption": "In dieser Suchinstanz verfügbare integrierte Bang-Kürzel.",
+      "all_heading": "Alle verfügbaren Kürzel",
+      "th_description": "Beschreibung",
+      "th_name": "Name",
+      "th_shortcut": "Kürzel"
     },
     "direct": {
       "heading": "Sofort- und Direktantworten",
@@ -1925,11 +1945,13 @@
         "ip": "Ihre aktuelle IP-Adresse",
         "color": "Farb-Vorschau und -Konvertierung"
       }
-    }
+    },
+    "more_title": "Weitere Hilfe"
   },
   "form": {
     "save": "Speichern",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "reset": "Zurücksetzen"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

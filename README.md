@@ -354,7 +354,7 @@ server:
 
 - No third-party tracking by default
 - No ads; clean result links with tracking params stripped
-- Preferences stored in client-side cookies; supported theme, language, and search settings transfer through `/server/preferences/import` links or codes
+- Preferences stored in client-side cookies; supported theme, language, and search settings transfer through `/server/preferences/sync/import` links or codes
 - Optional image proxy
 - Full Tor support with per-engine routing and stream isolation
 

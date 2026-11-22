@@ -146,8 +146,8 @@ The following inventory records the API surface implemented by this project, inc
 | GET | `/api/v1/server/security/thanks` | None | Researcher acknowledgements | No body; returns public acknowledgement entries |
 | GET | `/api/v1/server/auth/check` | Bearer token | Check token validity | No body; returns token kind, never the token |
 | GET, POST | `/api/v1/server/preferences` | None | Read or update client preferences | Preference values; returns normalized preferences |
-| GET | `/api/v1/server/preferences/export` | None | Export preferences | No body; returns export data |
-| GET | `/api/v1/server/preferences/import` | None | Describe preference import | No body; returns import instructions |
+| GET | `/api/v1/server/preferences/sync` | None | Export preferences | No body; returns export data |
+| GET | `/api/v1/server/preferences/sync/import` | None | Import preferences | Query values or a preference code; returns applied values |
 | POST | `/api/v1/server/mcp`, `/api/mcp`, `/mcp` | Bearer token when using private tools | MCP Streamable HTTP endpoint and aliases | MCP protocol JSON; returns protocol response |
 | GET | `/api/v1/server/swagger` | None | OpenAPI document | No body; returns generated OpenAPI JSON |
 | GET | `/api/swagger` | None | OpenAPI document alias | No body; returns the same OpenAPI JSON |
@@ -218,9 +218,11 @@ The following inventory records the API surface implemented by this project, inc
 
 #### User Preferences
 
-Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, and search preference values with a sync URL or code. Custom CSS, bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import.
+Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, and search preference values on the separate `/server/preferences/sync` page using a sync URL or code. Custom CSS, bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import. The preferences page links to the tools, sync, and (when owner tokens are enabled) token pages from its More preferences card.
 
-The language selector is enabled by default for all fifteen embedded locales: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Arabic, Persian, Hebrew, and Urdu. Language choice is stored in a browser cookie and can be included in a portable preference sync URL or code.
+`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, custom CSS, and OpenSearch.” It edits browser-local search tools and settings; those values are not included in preference sync.
+
+The language selector is on `/server/preferences` and lists the supported embedded locales by native name. Automatic language detection is the first option; an explicit language choice is stored in a browser cookie and can be included in a portable preference sync URL or code. The footer shows the active language and links to the preferences language section.
 
 Per AI.md PART 16, `theme`, `lang`, and the validated search preferences below can be transferred through a sync URL or code. The allowed keys and values are:
 
@@ -238,12 +240,12 @@ Per AI.md PART 16, `theme`, `lang`, and the validated search preferences below c
 | `accent_color` | six-digit hexadecimal color (`#RRGGBB`) |
 
 **Use Cases:**
-- **Sync URL**: `https://search.example.com/server/preferences/import?theme=dark&lang=fr`
+- **Sync URL**: `https://search.example.com/server/preferences/sync/import?theme=dark&lang=fr`
 - **Sync Code**: base64url form of the same query string, for copying to another device
 
 **Workflow:**
-1. Open the Data Management section on `/server/preferences` to view the generated sync URL and code.
-2. Copy the URL or code to another device. Paste it into the same section and submit the preferences form to import it.
+1. Open `/server/preferences/sync` to view the generated sync URL and code.
+2. Copy the URL or code to another device. Paste it into the sync page's import form and submit it.
 3. Import validates each value against its allowlist, sets the matching cookies, and redirects — no account or server-side preference row is created.
 
 **Note:** The broader `?prefs=` URL parameter is not the cross-device preference sync format. Sync uses only the allowlisted cookie preferences described above.

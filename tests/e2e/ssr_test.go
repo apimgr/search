@@ -434,7 +434,7 @@ func TestSSRAutocompleteSuggestions(t *testing.T) {
 func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 	s := newSession(t)
 	grantSessionPreferenceConsent(t, s)
-	response, body := s.get("/server/preferences/export", func(request *http.Request) {
+	response, body := s.get("/server/preferences/sync", func(request *http.Request) {
 		request.Header.Set("Accept", "application/json")
 		for _, cookie := range []*http.Cookie{
 			{Name: "theme", Value: "light"},
@@ -464,10 +464,10 @@ func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 	if envelope.Data.Theme != "light" || envelope.Data.Lang != "de" || envelope.Data.Prefs["category"] != "images" || envelope.Data.Prefs["infinite_scroll"] != "0" || envelope.Data.Prefs["font_size"] != "large" || envelope.Data.Prefs["results_density"] != "compact" || envelope.Data.Prefs["accent_color"] != "#123abc" {
 		t.Fatalf("preference export omitted allowed values: %#v", envelope.Data)
 	}
-	if !strings.Contains(envelope.Data.URL, "/server/preferences/import?") || envelope.Data.Code == "" {
+	if !strings.Contains(envelope.Data.URL, "/server/preferences/sync/import?") || envelope.Data.Code == "" {
 		t.Fatalf("preference export did not provide a URL and short code: %#v", envelope.Data)
 	}
-	response, _ = s.withoutRedirects().get("/server/preferences/import?code=" + url.QueryEscape(envelope.Data.Code) + "&redirect=%2Fserver%2Fpreferences")
+	response, _ = s.withoutRedirects().get("/server/preferences/sync/import?code=" + url.QueryEscape(envelope.Data.Code) + "&redirect=%2Fserver%2Fpreferences")
 	requireRedirect(t, response, http.StatusSeeOther, "/")
 	pageResponse, preferences := s.get("/server/preferences")
 	requireStatus(t, pageResponse, http.StatusOK)

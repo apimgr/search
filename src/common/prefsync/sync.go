@@ -80,7 +80,7 @@ func Export(r *http.Request, projectName, defaultLang string, supported []string
 	}
 	query := values.Encode()
 	code := base64.RawURLEncoding.EncodeToString([]byte(query))
-	base, err := url.Parse(httputil.BuildURL(r, "/server/preferences/import"))
+	base, err := url.Parse(httputil.BuildURL(r, "/server/preferences/sync/import"))
 	if err != nil {
 		return state, "", code
 	}
@@ -93,7 +93,6 @@ func Import(r *http.Request, projectName, defaultLang string, supported []string
 	query := r.URL.Query()
 	decoded := url.Values{}
 	code := strings.TrimSpace(query.Get("code"))
-	codeTooLong := len(code) > 2048
 	if len(code) <= 2048 && code != "" {
 		if index := strings.Index(code, "?"); index >= 0 {
 			code = code[index+1:]
@@ -139,9 +138,6 @@ func Import(r *http.Request, projectName, defaultLang string, supported []string
 	}
 	sort.Strings(allKeys)
 	result := ImportResult{State: state, Applied: []string{}, Ignored: []string{}}
-	if codeTooLong {
-		result.Ignored = append(result.Ignored, "code")
-	}
 	for i, name := range allKeys {
 		if i >= 32 {
 			result.Ignored = append(result.Ignored, name)

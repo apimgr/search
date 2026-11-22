@@ -32,7 +32,7 @@ Malformed expressions, such as a trailing `AND` or an unmatched parenthesis, are
 
 ## Suggestions
 
-Search autocomplete uses DuckDuckGo suggestions. The related-search API combines DuckDuckGo and Google suggestions with local query variations. Successful autocomplete and related-search responses are cached for one hour, with bounded response sizes and cache entry counts; provider redirects and failed responses are ignored. Queries sent to these suggestion providers are visible to those providers.
+Search autocomplete offers local bang shortcuts and direct-answer prefixes, plus Instant Answer prefixes, before DuckDuckGo query suggestions. Bang selections remain editable in the search field; feature-prefix selections leave the cursor ready for a term. Related-search combines DuckDuckGo and Google suggestions with local query variations. Successful provider responses are cached for one hour, with bounded response sizes and cache entry counts; provider redirects and failed responses are ignored. Queries sent to suggestion providers are visible to those providers.
 
 ## Instant answers
 

@@ -342,7 +342,19 @@
     "density_compact": "Kompaktowy",
     "density_comfortable": "Wygodny",
     "density_spacious": "Przestronny",
-    "accent_color": "Kolor akcentu"
+    "accent_color": "Kolor akcentu",
+    "appearance_heading": "Wygląd i język",
+    "application_heading": "Preferencje wyszukiwania",
+    "erase_everything": "Usuń wszystko",
+    "more_title": "Więcej preferencji",
+    "reset_everything_warning": "Spowoduje to usunięcie motywu, języka, preferencji wyszukiwania, zgód, rezygnacji CCPA i danych zapisanych przez tę witrynę. Logowanie pozostanie aktywne.",
+    "sync_description": "Przenieś preferencje na inne urządzenie.",
+    "sync_export_heading": "Eksportuj preferencje",
+    "sync_import_button": "Importuj",
+    "sync_import_heading": "Importuj preferencje",
+    "sync_title": "Synchronizuj preferencje",
+    "tools_page_title": "Narzędzia wyszukiwania",
+    "tools_page_description": "Zarządzaj własnymi bangami, filtrami, własnym CSS i OpenSearch."
   },
   "nav": {
     "home": "Strona główna",
@@ -352,7 +364,9 @@
     "help": "Pomoc",
     "settings": "Ustawienia",
     "admin": "Admin",
-    "profile": "Profil"
+    "profile": "Profil",
+    "search": "Szukaj",
+    "toggle_theme": "Zmień motyw"
   },
   "footer": {
     "privacy_policy": "Polityka prywatności",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Zamknij okno dialogowe",
     "input_value": "Wartosc wejsciowa",
     "copy_to_clipboard": "Kopiuj do schowka",
-    "skip_to_main_content": "Przejdz do glownej tresci"
+    "skip_to_main_content": "Przejdz do glownej tresci",
+    "breadcrumb": "Okruszki nawigacyjne"
   },
   "header": {
     "theme_label_dark": "Tryb jasny",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Przejdź do artykułu na Wikipedii",
       "ex_gh_desc": "Wyszukaj na GitHub",
       "ex_npm_desc": "Sprawdź pakiet npm",
-      "full_list_link": "Zobacz pełną listę bangów (JSON)"
+      "full_list_link": "Zobacz pełną listę bangów (JSON)",
+      "all_caption": "Wbudowane skróty obsługiwane przez tę instancję wyszukiwarki.",
+      "all_heading": "Wszystkie dostępne skróty",
+      "th_description": "Opis",
+      "th_name": "Nazwa",
+      "th_shortcut": "Skrót"
     },
     "direct": {
       "heading": "Odpowiedzi natychmiastowe i bezpośrednie",
@@ -1925,11 +1945,13 @@
         "ip": "Twój aktualny adres IP",
         "color": "Podgląd i konwersja koloru"
       }
-    }
+    },
+    "more_title": "Więcej pomocy"
   },
   "form": {
     "save": "Zapisz",
-    "cancel": "Anuluj"
+    "cancel": "Anuluj",
+    "reset": "Resetuj"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

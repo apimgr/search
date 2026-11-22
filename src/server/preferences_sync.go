@@ -9,24 +9,6 @@ import (
 	"github.com/apimgr/search/src/common/prefsync"
 )
 
-func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request) {
-	mgr := s.getI18nManager()
-	state, fullURL, code := prefsync.Export(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
-	w.Header().Set("Cache-Control", "no-store")
-	data := map[string]interface{}{"theme": state.Theme, "lang": state.Lang, "prefs": state.Prefs, "url": fullURL, "code": code}
-	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "text/plain") {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("URL: " + fullURL + "\nCode: " + code + "\n"))
-		return
-	}
-	if strings.Contains(accept, "application/json") {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
-		return
-	}
-	s.renderPreferences(w, r, nil)
-}
-
 func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request) {
 	mgr := s.getI18nManager()
 	result := prefsync.Import(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
@@ -36,6 +18,60 @@ func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Location", preferenceRedirect(r))
 	w.WriteHeader(http.StatusSeeOther)
+}
+
+func (s *Server) handleLegacyPreferencesSync(w http.ResponseWriter, r *http.Request) {
+	target := "/server/preferences/sync"
+	if strings.HasSuffix(r.URL.Path, "/import") {
+		target += "/import"
+	}
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, target, http.StatusPermanentRedirect)
+}
+
+func (s *Server) handlePreferencesSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		_ = r.ParseForm()
+		clone := r.Clone(r.Context())
+		urlCopy := *r.URL
+		urlCopy.RawQuery = r.Form.Encode()
+		clone.URL = &urlCopy
+		mgr := s.getI18nManager()
+		result := prefsync.Import(clone, "search", mgr.DetectLanguage(r), mgr.SupportedLanguageCodes())
+		if CanSetPreferenceCookie(r) {
+			prefsync.Apply(w, r, "search", result)
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Location", preferenceRedirect(r))
+		w.WriteHeader(http.StatusSeeOther)
+		return
+	}
+	if r.URL.Path != "/server/preferences/sync" {
+		http.NotFound(w, r)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "text/plain") {
+		mgr := s.getI18nManager()
+		_, fullURL, code := prefsync.Export(r, "search", mgr.DetectLanguage(r), mgr.SupportedLanguageCodes())
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("URL: " + fullURL + "\nCode: " + code + "\n"))
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		mgr := s.getI18nManager()
+		state, fullURL, code := prefsync.Export(r, "search", mgr.DetectLanguage(r), mgr.SupportedLanguageCodes())
+		w.Header().Set("Cache-Control", "no-store")
+		respondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]interface{}{"theme": state.Theme, "lang": state.Lang, "prefs": state.Prefs, "url": fullURL, "code": code}})
+		return
+	}
+	mgr := s.getI18nManager()
+	_, fullURL, code := prefsync.Export(r, "search", mgr.DetectLanguage(r), mgr.SupportedLanguageCodes())
+	w.Header().Set("Cache-Control", "no-store")
+	s.renderPreferencesSync(w, r, map[string]interface{}{"syncURL": fullURL, "syncCode": code})
 }
 
 func preferenceRedirect(r *http.Request) string {
@@ -56,6 +92,9 @@ func preferenceRedirect(r *http.Request) string {
 			}
 		}
 	}
+	if r.URL.Path == "/server/preferences/sync" {
+		return "/server/preferences/sync"
+	}
 	return "/"
 }
 
@@ -69,7 +108,7 @@ func validPreferenceRedirect(target string) bool {
 
 func preferenceRedirectLoop(target string) bool {
 	path := strings.SplitN(target, "?", 2)[0]
-	return strings.HasPrefix(path, "/server/preferences/import") || strings.HasPrefix(path, "/server/preferences/export") || path == "/server/preferences"
+	return strings.HasPrefix(path, "/server/preferences/sync/import") || path == "/server/preferences" || path == "/server/preferences/sync"
 }
 
 func samePreferenceOrigin(a, b *url.URL) bool {

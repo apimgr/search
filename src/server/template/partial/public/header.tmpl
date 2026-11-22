@@ -1,113 +1,35 @@
 {{define "public/header"}}
-{{/* The checkbox and drawer are body-level siblings so fixed positioning stays viewport-relative. */}}
-<input type="checkbox" id="nav-toggle" class="nav-checkbox" aria-controls="nav-panel" aria-label="{{t "accessibility.toggle_navigation"}}">
+<input type="checkbox" id="nav-toggle" class="nav-checkbox" aria-controls="nav-panel">
 <header class="header">
-
     <a href="/" class="site-brand">
         {{if .Config.Server.Branding.Logo}}
-        <img src="{{.Config.Server.Branding.Logo}}" alt="{{.Config.Server.Title}}" class="logo-img">
+        <img src="{{.Config.Server.Branding.Logo}}" alt="{{default (t "home.brand_fallback") .Config.Server.Branding.Title}}" class="logo-img">
         {{else}}
-        <span class="logo-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 6 6"></path></svg></span>
+        {{default (t "home.brand_fallback") .Config.Server.Branding.Title}}
         {{end}}
-        {{default (t "common.search") .Config.Server.Branding.Title}}
     </a>
 
     <nav class="nav-links" id="navigation" aria-label="{{t "accessibility.keyboard_navigation_heading"}}">
-        <a href="/"{{if eq .Page "home"}} aria-current="page"{{end}}>{{t "nav.home"}}</a>
-        <a href="/server/about"{{if eq .Page "about"}} aria-current="page"{{end}}>{{t "nav.about"}}</a>
-        <a href="/server/help"{{if eq .Page "help"}} aria-current="page"{{end}}>{{t "nav.help"}}</a>
+        <a href="/"{{if eq .Page "home"}} aria-current="page" class="active"{{end}}>{{t "nav.home"}}</a>
     </nav>
 
-    {{operatorHTML "header" .}}
+    <label for="nav-toggle" class="nav-toggle" aria-label="{{t "accessibility.toggle_navigation"}}">☰</label>
 
-    {{/* Desktop action icons: language selector + theme toggle + preferences */}}
     <div class="header-actions">
-        {{if .AvailableLanguages}}
-        <label class="header-language" for="header-language-select">
-            <span class="sr-only">{{t "preferences.language"}}</span>
-            <select id="header-language-select" class="language-selector" aria-label="{{t "accessibility.select_language"}}" data-language-selector>
-                {{range .AvailableLanguages}}
-                <option value="{{.Code}}"{{if eq .Code $.Lang}} selected{{end}}>{{.NativeName}}</option>
-                {{end}}
-            </select>
-        </label>
-        {{end}}
-        <button class="theme-toggle header-icon-btn" aria-label="{{t "accessibility.toggle_theme"}}">
-            <svg class="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="5"></circle>
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
-            </svg>
-            <svg class="theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-            </svg>
-            <svg class="theme-icon-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <path d="M8 21h8M12 17v4"></path>
-            </svg>
-        </button>
-        <button type="button" class="header-icon-btn pwa-install-button" data-pwa-install hidden aria-label="{{t "pwa.install"}}" title="{{t "pwa.install"}}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
-        </button>
-        {{/* No-JS fallback: the button above is JS-driven and inert without JavaScript.
-             Per AI.md PART 16, theme switching must still work with JS disabled. */}}
-        <noscript>
-            <form action="/theme" method="POST" class="header-theme-form">
-                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <input type="hidden" name="redirect" value="{{.RequestPath}}">
-                <label class="sr-only" for="header-theme-select">{{t "accessibility.toggle_theme"}}</label>
-                <select id="header-theme-select" name="theme" class="header-theme-select">
-                    <option value="dark"{{if eq .ThemeMode "dark"}} selected{{end}}>{{t "header.theme_label_dark"}}</option>
-                    <option value="light"{{if eq .ThemeMode "light"}} selected{{end}}>{{t "header.theme_label_light"}}</option>
-                    <option value="auto"{{if eq .ThemeMode "auto"}} selected{{end}}>{{t "header.theme_label_auto"}}</option>
-                </select>
-                <button type="submit" class="header-theme-submit">{{t "common.apply"}}</button>
-            </form>
-        </noscript>
         <a href="/server/preferences" class="header-icon-btn" aria-label="{{t "preferences.title"}}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
         </a>
-    </div>
-
-    {{/* Mobile hamburger */}}
-    <div class="header-mobile">
-        <label for="nav-toggle" class="nav-toggle" tabindex="0" role="button" aria-expanded="false" aria-label="{{t "accessibility.toggle_navigation"}}">
-            <span></span>
-            <span></span>
-            <span></span>
-        </label>
-        <a href="/server/preferences" class="header-icon-btn mobile-preferences-trigger" data-mobile-preferences-trigger aria-label="{{t "preferences.title"}}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33H15a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.09a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-        </a>
-        <button type="button" class="header-icon-btn pwa-install-button" data-pwa-install hidden aria-label="{{t "pwa.install"}}" title="{{t "pwa.install"}}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
-        </button>
-    </div>
-
-    <dialog class="mobile-preferences-dialog" id="mobile-preferences-dialog" aria-labelledby="mobile-preferences-title">
-        <header class="mobile-preferences-header">
-            <h2 id="mobile-preferences-title">{{t "preferences.title"}}</h2>
-            <form method="dialog"><button type="submit" class="btn-secondary" aria-label="{{t "preferences.title"}}">×</button></form>
-        </header>
-        <form action="/theme" method="POST" class="mobile-preferences-theme-form">
+        <form action="/theme" method="POST" class="header-theme-form">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="redirect" value="{{.RequestPath}}">
-            <label for="mobile-preferences-theme">{{t "preferences.theme"}}</label>
-            <select id="mobile-preferences-theme" name="theme">
-                <option value="dark"{{if eq .ThemeMode "dark"}} selected{{end}}>{{t "preferences.theme_dark"}}</option>
-                <option value="light"{{if eq .ThemeMode "light"}} selected{{end}}>{{t "preferences.theme_light"}}</option>
-                <option value="auto"{{if eq .ThemeMode "auto"}} selected{{end}}>{{t "preferences.theme_auto"}}</option>
-            </select>
-            <button type="submit" class="btn-primary">{{t "common.ok"}}</button>
+            <input type="hidden" name="theme" value="{{.NextTheme}}">
+            <button type="submit" class="header-icon-btn theme-toggle" aria-label="{{t "nav.toggle_theme"}}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
         </form>
-        <iframe class="mobile-preferences-full" title="{{t "preferences.title"}}" data-mobile-preferences-frame loading="lazy"></iframe>
-        <a class="mobile-preferences-all" href="/server/preferences">{{t "preferences.title"}}</a>
-    </dialog>
-
+    </div>
 </header>
 {{end}}

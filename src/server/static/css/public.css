@@ -408,7 +408,7 @@
 
 /* Header actions - theme toggle + settings icons, grouped on the right */
 .header-actions {
-    display: none;
+    display: flex;
     align-items: center;
     gap: 0.25rem;
     flex-shrink: 0;
@@ -554,7 +554,7 @@ html[data-theme-mode="auto"] .theme-icon-light { display: none; }
 /* Hamburger toggle (label) - visible on mobile, hidden on desktop */
 .nav-toggle {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     justify-content: center;
     gap: 5px;
     background: none;
@@ -564,6 +564,8 @@ html[data-theme-mode="auto"] .theme-icon-light { display: none; }
     width: 44px;
     height: 44px;
     border-radius: 8px;
+    color: var(--color-text);
+    font-size: 1.25rem;
     transition: background-color 0.2s;
 }
 
@@ -581,16 +583,8 @@ html[data-theme-mode="auto"] .theme-icon-light { display: none; }
 }
 
 /* Hamburger animation when open - works with checkbox at header level */
-.nav-checkbox:checked ~ .header-mobile .nav-toggle span:nth-child(1) {
-    transform: rotate(45deg) translate(5px, 5px);
-}
-
-.nav-checkbox:checked ~ .header-mobile .nav-toggle span:nth-child(2) {
-    opacity: 0;
-}
-
-.nav-checkbox:checked ~ .header-mobile .nav-toggle span:nth-child(3) {
-    transform: rotate(-45deg) translate(5px, -5px);
+.nav-checkbox:checked ~ .header .nav-toggle {
+    background-color: var(--color-bg-active);
 }
 
 /* Desktop navigation links share the drawer's link order. */

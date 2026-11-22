@@ -584,7 +584,10 @@ type PageData struct {
 	Page               string
 	Theme              string
 	ThemeMode          string
+	NextTheme          string
 	Lang               string
+	LangName           string
+	LangPinned         bool
 	Dir                string
 	AvailableLanguages []i18n.Language
 	Config             *config.Config

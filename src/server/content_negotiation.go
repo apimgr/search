@@ -97,7 +97,9 @@ func frontendAPIPath(path string) (string, bool) {
 		return api.APIPrefix + "/info", true
 	case "/search":
 		return api.APIPrefix + "/search", true
-	case "/server/about", "/server/privacy", "/server/dpo", "/server/help", "/server/help/mcp", "/server/terms", "/server/contact", "/server/preferences", "/server/security", "/server/security/policy", "/server/security/thanks", "/server/healthz", "/server/preferences/tokens", "/server/preferences/export", "/server/preferences/import":
+	case "/server/preferences/sync/import":
+		return api.APIPrefix + "/server/preferences/sync/import", true
+	case "/server/about", "/server/privacy", "/server/dpo", "/server/help", "/server/help/mcp", "/server/terms", "/server/contact", "/server/preferences", "/server/security", "/server/security/policy", "/server/security/thanks", "/server/healthz", "/server/preferences/tokens", "/server/preferences/tools", "/server/preferences/sync":
 		return api.APIPrefix + path, true
 	default:
 		if strings.HasPrefix(path, "/direct/") {

@@ -342,7 +342,19 @@
     "density_compact": "Compacto",
     "density_comfortable": "Cómodo",
     "density_spacious": "Espacioso",
-    "accent_color": "Color de acento"
+    "accent_color": "Color de acento",
+    "appearance_heading": "Apariencia e idioma",
+    "application_heading": "Preferencias de búsqueda",
+    "erase_everything": "Borrar todo",
+    "more_title": "Más preferencias",
+    "reset_everything_warning": "Esto borra el tema, el idioma, las preferencias de búsqueda, el consentimiento, la exclusión de CCPA y los datos guardados por este sitio. La sesión seguirá activa.",
+    "sync_description": "Lleva tus preferencias a otro dispositivo.",
+    "sync_export_heading": "Exportar preferencias",
+    "sync_import_button": "Importar",
+    "sync_import_heading": "Importar preferencias",
+    "sync_title": "Sincronizar preferencias",
+    "tools_page_title": "Herramientas de búsqueda",
+    "tools_page_description": "Administra bangs personalizados, filtros, CSS personalizado y OpenSearch."
   },
   "nav": {
     "home": "Inicio",
@@ -352,7 +364,9 @@
     "help": "Ayuda",
     "settings": "Configuración",
     "admin": "Admin",
-    "profile": "Perfil"
+    "profile": "Perfil",
+    "search": "Buscar",
+    "toggle_theme": "Cambiar tema"
   },
   "footer": {
     "privacy_policy": "Política de privacidad",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Cerrar dialogo",
     "input_value": "Valor de entrada",
     "copy_to_clipboard": "Copiar al portapapeles",
-    "skip_to_main_content": "Saltar al contenido principal"
+    "skip_to_main_content": "Saltar al contenido principal",
+    "breadcrumb": "Ruta de navegación"
   },
   "header": {
     "theme_label_dark": "Modo claro",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Ir al artículo de Wikipedia",
       "ex_gh_desc": "Buscar en GitHub",
       "ex_npm_desc": "Consultar el paquete npm",
-      "full_list_link": "Ver lista completa de bangs (JSON)"
+      "full_list_link": "Ver lista completa de bangs (JSON)",
+      "all_caption": "Atajos integrados disponibles en esta instancia de búsqueda.",
+      "all_heading": "Todos los atajos disponibles",
+      "th_description": "Descripción",
+      "th_name": "Nombre",
+      "th_shortcut": "Atajo"
     },
     "direct": {
       "heading": "Respuestas instantáneas y directas",
@@ -1925,11 +1945,13 @@
         "ip": "Su dirección IP actual",
         "color": "Vista previa y conversión de color"
       }
-    }
+    },
+    "more_title": "Más ayuda"
   },
   "form": {
     "save": "Guardar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "reset": "Restablecer"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

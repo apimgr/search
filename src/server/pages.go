@@ -1129,6 +1129,7 @@ func (s *Server) sendSecurityResearcherAck(r *http.Request, researcherEmail, res
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "help")
 	data.Title = s.getI18nManager().T(data.Lang, "help.page_title")
+	data.Data = map[string]interface{}{"helpPages": s.helpPages(r), "bangs": s.bangManager.GetAll()}
 
 	if err := s.renderer.Render(w, "help", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
@@ -1152,6 +1153,10 @@ func (s *Server) handleMCPHelp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info := s.apiHandler.MCPHelpInfo(r)
+	if !info.Enabled {
+		http.NotFound(w, r)
+		return
+	}
 	baseData := s.newPageData(w, r, "", "help_mcp")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "mcp_help.title")
 	data := &MCPHelpPageData{

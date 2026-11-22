@@ -342,7 +342,19 @@
     "density_compact": "فشرده",
     "density_comfortable": "راحت",
     "density_spacious": "باز",
-    "accent_color": "رنگ تاکیدی"
+    "accent_color": "رنگ تاکیدی",
+    "appearance_heading": "ظاهر و زبان",
+    "application_heading": "تنظیمات جستجو",
+    "erase_everything": "پاک کردن همه",
+    "more_title": "تنظیمات بیشتر",
+    "reset_everything_warning": "پوسته، زبان، تنظیمات جستجو، انتخاب‌های رضایت، انصراف CCPA و داده‌های ذخیره‌شده توسط این سایت پاک می‌شوند. ورود شما باقی می‌ماند.",
+    "sync_description": "تنظیمات را به دستگاه دیگری منتقل کنید.",
+    "sync_export_heading": "برون‌بری تنظیمات",
+    "sync_import_button": "درون‌ریزی",
+    "sync_import_heading": "درون‌ریزی تنظیمات",
+    "sync_title": "همگام‌سازی تنظیمات",
+    "tools_page_title": "ابزارهای جستجو",
+    "tools_page_description": "bangهای سفارشی، فیلترها، CSS سفارشی و OpenSearch را مدیریت کنید."
   },
   "nav": {
     "home": "خانه",
@@ -352,7 +364,9 @@
     "help": "راهنما",
     "settings": "تنظیمات",
     "admin": "مدیریت",
-    "profile": "پروفایل"
+    "profile": "پروفایل",
+    "search": "جستجو",
+    "toggle_theme": "تغییر پوسته"
   },
   "footer": {
     "privacy_policy": "سیاست حفظ حریم خصوصی",
@@ -1127,7 +1141,8 @@
     "close_dialog": "بستن گفت وگو",
     "input_value": "مقدار ورودي",
     "copy_to_clipboard": "کپی در کليپ بورد",
-    "skip_to_main_content": "رفتن به محتواي اصلي"
+    "skip_to_main_content": "رفتن به محتواي اصلي",
+    "breadcrumb": "مسیر راهنما"
   },
   "header": {
     "theme_label_dark": "حالت روشن",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Go to Wikipedia article",
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
-      "full_list_link": "View full bang list (JSON)"
+      "full_list_link": "View full bang list (JSON)",
+      "all_caption": "میانبرهای جستجوی داخلی پشتیبانی‌شده در این نمونه.",
+      "all_heading": "همه میانبرهای موجود",
+      "th_description": "توضیحات",
+      "th_name": "نام",
+      "th_shortcut": "میانبر"
     },
     "direct": {
       "heading": "Instant & Direct Answers",
@@ -1925,11 +1945,13 @@
         "ip": "Your current IP address",
         "color": "Color preview and conversion"
       }
-    }
+    },
+    "more_title": "راهنمای بیشتر"
   },
   "form": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "reset": "بازنشانی"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

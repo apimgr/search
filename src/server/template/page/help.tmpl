@@ -1,8 +1,8 @@
 {{define "content"}}
-<div class="static-page help-page">
-    <header class="page-header help-header">
-        <h1>{{t "help.title"}}</h1>
-        <p class="subtitle">{{tf "help.subtitle" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+<div class="container container-lg">
+    <header class="page-header">
+        <h1 class="page-title">{{t "help.title"}}</h1>
+        <p class="page-lead">{{tf "help.subtitle" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
     </header>
 
     {{if .Config.Server.Pages.Help.Content}}
@@ -12,8 +12,8 @@
     {{else}}
     <div class="page-content">
         {{/* Table of Contents */}}
-        <nav class="help-toc">
-            <h2>{{t "help.toc.heading"}}</h2>
+        <nav class="section-card" aria-labelledby="help-toc-heading">
+            <h2 id="help-toc-heading">{{t "help.toc.heading"}}</h2>
             <ul>
                 <li><a href="#getting-started">{{t "help.toc.getting_started"}}</a></li>
                 <li><a href="#search-categories">{{t "help.toc.search_categories"}}</a></li>
@@ -29,15 +29,15 @@
         </nav>
 
         {{/* Getting Started */}}
-        <section id="getting-started" class="help-section">
-            <h2>{{t "help.getting_started.heading"}}</h2>
+        <section id="getting-started" class="section-card" aria-labelledby="getting-started-heading">
+            <h2 id="getting-started-heading">{{t "help.getting_started.heading"}}</h2>
             <p>{{tf "help.getting_started.intro_prefix" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}} <kbd>Enter</kbd> {{t "help.getting_started.intro_suffix"}}</p>
             <p>{{t "help.getting_started.no_tracking"}}</p>
         </section>
 
         {{/* Search Categories */}}
-        <section id="search-categories" class="help-section">
-            <h2>{{t "help.categories.heading"}}</h2>
+        <section id="search-categories" class="section-card" aria-labelledby="search-categories-heading">
+            <h2 id="search-categories-heading">{{t "help.categories.heading"}}</h2>
             <p>{{t "help.categories.intro"}}</p>
             <div class="category-grid">
                 <div class="category-item">
@@ -94,8 +94,8 @@
         </section>
 
         {{/* Bang Commands */}}
-        <section id="bang-commands" class="help-section">
-            <h2>{{t "help.bangs.heading"}}</h2>
+        <section id="bang-commands" class="section-card" aria-labelledby="bang-commands-heading">
+            <h2 id="bang-commands-heading">{{t "help.bangs.heading"}}</h2>
             <p>{{t "help.bangs.intro_prefix"}} <code>!shortcut terms</code> {{t "help.bangs.intro_or"}} <code>terms !shortcut</code>{{t "help.bangs.intro_suffix"}}</p>
 
             <h3>{{t "help.bangs.popular_heading"}}</h3>
@@ -126,8 +126,9 @@
             </div>
 
             <h3>{{t "help.bangs.by_category_heading"}}</h3>
-            <table class="operators-table bang-category-table">
-                <thead><tr><th>{{t "help.bangs.th_category"}}</th><th>{{t "help.bangs.th_examples"}}</th></tr></thead>
+            <div class="table-wrapper">
+            <table class="data-table">
+                <thead><tr><th scope="col">{{t "help.bangs.th_category"}}</th><th scope="col">{{t "help.bangs.th_examples"}}</th></tr></thead>
                 <tbody>
                     <tr><td>{{t "help.bangs.cat_search"}}</td><td><code>!g</code> <code>!b</code> <code>!ddg</code> <code>!br</code> <code>!sp</code> <code>!q</code> <code>!kagi</code> <code>!perplexity</code></td></tr>
                     <tr><td>{{t "help.bangs.cat_images"}}</td><td><code>!gi</code> <code>!bi</code> <code>!fl</code> <code>!pexels</code> <code>!pixabay</code> <code>!pinterest</code> <code>!tineye</code></td></tr>
@@ -142,6 +143,7 @@
                     <tr><td>{{t "help.bangs.cat_files"}}</td><td><code>!archive</code></td></tr>
                 </tbody>
             </table>
+            </div>
 
             <h3>{{t "help.bangs.examples_heading"}}</h3>
             <ul class="example-list">
@@ -151,12 +153,19 @@
                 <li><code>!gh octocat</code> — {{t "help.bangs.ex_gh_desc"}}</li>
                 <li><code>!npm express</code> — {{t "help.bangs.ex_npm_desc"}}</li>
             </ul>
-            <p><a href="/api/v1/bangs">{{t "help.bangs.full_list_link"}}</a></p>
+            <h3>{{t "help.bangs.all_heading"}}</h3>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <caption>{{t "help.bangs.all_caption"}}</caption>
+                    <thead><tr><th scope="col">{{t "help.bangs.th_shortcut"}}</th><th scope="col">{{t "help.bangs.th_name"}}</th><th scope="col">{{t "help.bangs.th_category"}}</th><th scope="col">{{t "help.bangs.th_description"}}</th></tr></thead>
+                    <tbody>{{range index .Data "bangs"}}<tr><td><code>!{{.Shortcut}}</code></td><td>{{.Name}}</td><td>{{.Category}}</td><td>{{.Description}}</td></tr>{{end}}</tbody>
+                </table>
+            </div>
         </section>
 
         {{/* Direct Answers */}}
-        <section id="direct-answers" class="help-section">
-            <h2>{{t "help.direct.heading"}}</h2>
+        <section id="direct-answers" class="section-card" aria-labelledby="direct-answers-heading">
+            <h2 id="direct-answers-heading">{{t "help.direct.heading"}}</h2>
             <p><strong>{{t "help.direct.intro_da_label"}}</strong> {{t "help.direct.intro_da_text_prefix"}} <code>type:term</code> {{t "help.direct.intro_da_text_suffix"}} <strong>{{t "help.direct.intro_ia_label"}}</strong> {{t "help.direct.intro_ia_text"}}</p>
 
             <h3>{{t "help.direct.full_page_heading"}} (<code>type:term</code>)</h3>
@@ -258,12 +267,13 @@
         </section>
 
         {{/* Search Operators */}}
-        <section id="search-operators" class="help-section">
-            <h2>{{t "help.operators.heading"}}</h2>
+        <section id="search-operators" class="section-card" aria-labelledby="search-operators-heading">
+            <h2 id="search-operators-heading">{{t "help.operators.heading"}}</h2>
             <p>{{t "help.operators.intro"}}</p>
-            <table class="operators-table search-operators-table">
+            <div class="table-wrapper">
+            <table class="data-table">
                 <thead>
-                    <tr><th>{{t "help.operators.th_operator"}}</th><th>{{t "help.operators.th_example"}}</th><th>{{t "help.operators.th_description"}}</th></tr>
+                    <tr><th scope="col">{{t "help.operators.th_operator"}}</th><th scope="col">{{t "help.operators.th_example"}}</th><th scope="col">{{t "help.operators.th_description"}}</th></tr>
                 </thead>
                 <tbody>
                     <tr><td><code>"..."</code></td><td><code>"exact phrase"</code></td><td>{{t "help.operators.exact_phrase"}}</td></tr>
@@ -292,15 +302,17 @@
                     <tr><td><code>source:</code></td><td><code>source:reuters ai</code></td><td>{{t "help.operators.source"}}</td></tr>
                 </tbody>
             </table>
+            </div>
         </section>
 
         {{/* Keyboard Shortcuts */}}
-        <section id="keyboard-shortcuts" class="help-section">
-            <h2>{{t "help.shortcuts.heading"}}</h2>
+        <section id="keyboard-shortcuts" class="section-card" aria-labelledby="keyboard-shortcuts-heading">
+            <h2 id="keyboard-shortcuts-heading">{{t "help.shortcuts.heading"}}</h2>
             <p>{{t "help.shortcuts.intro"}}</p>
-            <table class="shortcuts-table shortcuts-help-table">
+            <div class="table-wrapper">
+            <table class="data-table">
                 <thead>
-                    <tr><th>{{t "help.shortcuts.th_shortcut"}}</th><th>{{t "help.shortcuts.th_action"}}</th></tr>
+                    <tr><th scope="col">{{t "help.shortcuts.th_shortcut"}}</th><th scope="col">{{t "help.shortcuts.th_action"}}</th></tr>
                 </thead>
                 <tbody>
                     <tr><td><kbd>/</kbd></td><td>{{t "help.shortcuts.focus_search"}}</td></tr>
@@ -316,11 +328,12 @@
                     <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>{{t "help.shortcuts.open_n"}}</td></tr>
                 </tbody>
             </table>
+            </div>
         </section>
 
         {{/* API Documentation */}}
-        <section id="api-docs" class="help-section api-docs">
-            <h2>{{t "help.api.heading"}}</h2>
+        <section id="api-docs" class="section-card" aria-labelledby="api-docs-heading">
+            <h2 id="api-docs-heading">{{t "help.api.heading"}}</h2>
             <p>{{t "help.api.intro"}}</p>
             <div class="api-links">
                 <a href="/server/docs/swagger" class="api-link-card">
@@ -340,9 +353,10 @@
             </div>
 
             <h3>{{t "help.api.endpoints_heading"}}</h3>
-            <table class="operators-table api-endpoints-table">
+            <div class="table-wrapper">
+            <table class="data-table">
                 <thead>
-                    <tr><th>{{t "help.api.th_method"}}</th><th>{{t "help.api.th_endpoint"}}</th><th>{{t "help.api.th_description"}}</th></tr>
+                    <tr><th scope="col">{{t "help.api.th_method"}}</th><th scope="col">{{t "help.api.th_endpoint"}}</th><th scope="col">{{t "help.api.th_description"}}</th></tr>
                 </thead>
                 <tbody>
                     <tr><td><code>GET</code></td><td><code>/api/v1/search</code></td><td>{{t "help.api.ep_search"}}</td></tr>
@@ -352,7 +366,6 @@
                     <tr><td><code>GET</code></td><td><code>/api/v1/direct/{type}/{term}</code></td><td>{{t "help.api.ep_direct_prefix"}} <code>type:term</code> {{t "help.api.ep_direct_suffix"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/api/v1/engines</code></td><td>{{t "help.api.ep_engines"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/api/v1/categories</code></td><td>{{t "help.api.ep_categories"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/bangs</code></td><td>{{t "help.api.ep_bangs"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/api/v1/server/help</code></td><td>{{t "help.api.ep_help_json"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/server/docs/swagger</code></td><td>{{t "help.api.openapi_heading"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/api/v1/server/swagger</code> / <code>/api/swagger</code></td><td>{{t "help.api.ep_openapi"}}</td></tr>
@@ -363,6 +376,7 @@
                     {{end}}
                 </tbody>
             </table>
+            </div>
 
             <h3>{{t "help.api.example_search"}}</h3>
             <pre class="code-block"><code># Search for "golang tutorial"
@@ -393,8 +407,8 @@ curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
         </section>
 
         {{/* Privacy Features */}}
-        <section id="privacy" class="help-section">
-            <h2>{{t "help.privacy.heading"}}</h2>
+        <section id="privacy" class="section-card" aria-labelledby="privacy-heading">
+            <h2 id="privacy-heading">{{t "help.privacy.heading"}}</h2>
             <ul class="privacy-list">
                 <li><strong>{{t "help.privacy.no_tracking_label"}}</strong> {{t "help.privacy.no_tracking_text"}}</li>
                 <li><strong>{{t "help.privacy.no_history_label"}}</strong> {{t "help.privacy.no_history_text"}}</li>
@@ -408,8 +422,8 @@ curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
 
         {{/* Tor Access - only shown if Tor is enabled */}}
         {{if .Config.Server.Tor.Enabled}}
-        <section id="tor-access" class="help-section">
-            <h2>{{t "help.tor.heading"}}</h2>
+        <section id="tor-access" class="section-card" aria-labelledby="tor-access-heading">
+            <h2 id="tor-access-heading">{{t "help.tor.heading"}}</h2>
             <p>{{t "help.tor.intro"}}</p>
 
             {{if .OnionAddress}}
@@ -440,8 +454,8 @@ curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
         {{end}}
 
         {{/* FAQ */}}
-        <section id="faq" class="help-section">
-            <h2>{{t "help.faq.heading"}}</h2>
+        <section id="faq" class="section-card" aria-labelledby="faq-heading">
+            <h2 id="faq-heading">{{t "help.faq.heading"}}</h2>
             <div class="faq-list">
                 <details>
                     <summary>{{t "help.faq.q_results_diff"}}</summary>
@@ -467,11 +481,19 @@ curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
         </section>
 
         {{/* Need Help */}}
-        <section class="help-section">
-            <h2>{{t "help.need_more.heading"}}</h2>
+        <section class="section-card" aria-labelledby="need-more-heading">
+            <h2 id="need-more-heading">{{t "help.need_more.heading"}}</h2>
             <p>{{t "help.need_more.text_prefix"}} <a href="/server/security">{{t "help.need_more.link"}}</a>{{t "help.need_more.text_suffix"}}</p>
         </section>
     </div>
     {{end}}
+    <section class="section-card" aria-labelledby="more-help-heading">
+        <h2 id="more-help-heading">{{t "help.more_title"}}</h2>
+        <ul class="hub-list">
+            {{range index .Data "helpPages"}}
+            <li class="hub-item"><a class="hub-link" href="{{.Path}}"><span class="hub-title">{{t .TitleKey}}</span><span class="hub-desc">{{t .DescriptionKey}}</span></a></li>
+            {{end}}
+        </ul>
+    </section>
 </div>
 {{end}}

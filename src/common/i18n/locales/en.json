@@ -342,7 +342,19 @@
     "density_compact": "Compact",
     "density_comfortable": "Comfortable",
     "density_spacious": "Spacious",
-    "accent_color": "Accent Color"
+    "accent_color": "Accent Color",
+    "appearance_heading": "Appearance and language",
+    "application_heading": "Search preferences",
+    "erase_everything": "Erase everything",
+    "more_title": "More preferences",
+    "reset_everything_warning": "This erases your theme, language, search preferences, consent choices, CCPA opt-out and data stored by this site. Your sign-in remains.",
+    "sync_description": "Move your preferences to another device.",
+    "sync_export_heading": "Export preferences",
+    "sync_import_button": "Import",
+    "sync_import_heading": "Import preferences",
+    "sync_title": "Sync preferences",
+    "tools_page_title": "Search tools",
+    "tools_page_description": "Manage custom bangs, filters, custom CSS, and OpenSearch."
   },
   "nav": {
     "home": "Home",
@@ -352,7 +364,9 @@
     "help": "Help",
     "settings": "Settings",
     "admin": "Admin",
-    "profile": "Profile"
+    "profile": "Profile",
+    "search": "Search",
+    "toggle_theme": "Toggle theme"
   },
   "footer": {
     "privacy_policy": "Privacy Policy",
@@ -1127,7 +1141,8 @@
     "close_dialog": "Close dialog",
     "input_value": "Input value",
     "copy_to_clipboard": "Copy to clipboard",
-    "skip_to_main_content": "Skip to main content"
+    "skip_to_main_content": "Skip to main content",
+    "breadcrumb": "Breadcrumb"
   },
   "header": {
     "theme_label_dark": "Light Mode",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Go to Wikipedia article",
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
-      "full_list_link": "View full bang list (JSON)"
+      "full_list_link": "View full bang list (JSON)",
+      "all_caption": "Built-in bang shortcuts supported by this search instance.",
+      "all_heading": "All available shortcuts",
+      "th_description": "Description",
+      "th_name": "Name",
+      "th_shortcut": "Shortcut"
     },
     "direct": {
       "heading": "Instant & Direct Answers",
@@ -1925,11 +1945,13 @@
         "ip": "Your current IP address",
         "color": "Color preview and conversion"
       }
-    }
+    },
+    "more_title": "More help"
   },
   "form": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "reset": "Reset"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

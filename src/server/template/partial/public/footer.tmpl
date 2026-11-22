@@ -15,14 +15,16 @@
         <span>•</span>
         <a href="/server/privacy">{{t "nav.privacy"}}</a>
         <span>•</span>
-        <span>•</span>
         <a href="/server/help">{{t "nav.help"}}</a>
         <span>•</span>
         <a href="/server/preferences">{{t "preferences.title"}}</a>
+        <span>•</span>
+        <a href="/server/preferences#language" lang="{{.Lang}}">{{.LangName}}</a>
     </p>
 
     {{/* Application branding - per AI.md PART 16 "Default Application Footer" */}}
     <p>
+        <button type="button" class="btn btn-secondary pwa-install-button" data-pwa-install hidden>{{t "pwa.install"}}</button>
         {{if operatorHTMLExists "footer" .}}{{operatorHTML "footer" .}}{{else}}
         {{if .Config.Server.Branding.SourceCodeURL}}<a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">{{t "footer.made_with"}}</a>{{else}}{{t "footer.made_with"}}{{end}} ❤️
         {{end}}

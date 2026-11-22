@@ -713,7 +713,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths[version.APIPrefix+"/server/preferences/export"] = PathItem{
+	paths[version.APIPrefix+"/server/preferences/sync"] = PathItem{
 		Get: &Operation{
 			Summary:     "Export preferences",
 			Description: "Return the current preferences as a portable document",
@@ -724,7 +724,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths[version.APIPrefix+"/server/preferences/import"] = PathItem{
+	paths[version.APIPrefix+"/server/preferences/sync/import"] = PathItem{
 		Get: &Operation{
 			Summary:     "Import preferences",
 			Description: "Apply validated preferences from query values or a portable short code",

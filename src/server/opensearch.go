@@ -250,8 +250,6 @@ func (s *Server) handlePreferencesTools(w http.ResponseWriter, r *http.Request) 
 func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra map[string]interface{}) {
 	data := s.newPageData(w, r, "Preferences", "preferences")
 	data.Prefs = resolveGeneralPrefs(r)
-	mgr := s.getI18nManager()
-	_, syncURL, syncCode := prefsync.Export(r, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
 
 	// Populate enabled widgets from the server-side cookie.
 	enabled := parseWidgetCookie(r)
@@ -272,10 +270,8 @@ func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra
 		"builtins":          s.bangManager.GetBuiltins(),
 		"preferenceEngines": s.enginePreferenceRows(r),
 		"engineOrder":       engineOrderValue(s.registry, r),
-		"syncURL":           syncURL,
-		"syncCode":          syncCode,
 		"cancelURL":         preferenceRedirect(r),
-		"hasOwnerTokens":    s.ownerManager != nil,
+		"preferencesPages":  s.preferencesPages(),
 	}
 	pageValues := data.Data.(map[string]interface{})
 	for key, value := range extra {
@@ -283,6 +279,17 @@ func (s *Server) renderPreferences(w http.ResponseWriter, r *http.Request, extra
 	}
 
 	if err := s.renderer.Render(w, "preferences", data); err != nil {
+		s.handleInternalError(w, r, "template render", err)
+	}
+}
+
+func (s *Server) renderPreferencesSync(w http.ResponseWriter, r *http.Request, values map[string]interface{}) {
+	data := s.newPageData(w, r, "Sync preferences", "preferences_sync")
+	data.Data = map[string]interface{}{"syncURL": "", "syncCode": "", "cancelURL": "/server/preferences"}
+	for key, value := range values {
+		data.Data.(map[string]interface{})[key] = value
+	}
+	if err := s.renderer.Render(w, "preferences_sync", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
 	}
 }
@@ -448,6 +455,10 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		}
 	}
 	if canSetPreferences {
+		if values.Has("lang") && values.Get("lang") == "" {
+			http.SetCookie(w, &http.Cookie{Name: "lang", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
+			values.Del("lang")
+		}
 		weatherUnits := values.Get("search_pref_weather_units")
 		if weatherUnits != "auto" && weatherUnits != "metric" && weatherUnits != "imperial" {
 			weatherUnits = "auto"
@@ -489,34 +500,12 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 			values.Set(engineOrderPreferenceCookie, encodeEngineOrder(s.registry, strings.Split(values.Get(engineOrderPreferenceCookie), ",")))
 			values.Del("search_pref_engine_order_present")
 		}
-		if code := strings.TrimSpace(values.Get("code")); code != "" {
-			codeRequest := r.Clone(r.Context())
-			codeURL := *r.URL
-			codeURL.RawQuery = url.Values{"code": {code}}.Encode()
-			codeRequest.URL = &codeURL
-			mgr := s.getI18nManager()
-			codeResult := prefsync.Import(codeRequest, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
-			for _, name := range codeResult.Applied {
-				switch name {
-				case "theme":
-					values.Set(name, codeResult.State.Theme)
-				case "lang":
-					values.Set(name, codeResult.State.Lang)
-				default:
-					prefix := "search_pref_"
-					if strings.HasPrefix(name, prefix) {
-						key := strings.TrimPrefix(name, prefix)
-						values.Set(name, codeResult.State.Prefs[key])
-					}
-				}
-			}
-		}
 		clone := r.Clone(r.Context())
 		urlCopy := *r.URL
 		urlCopy.RawQuery = values.Encode()
 		clone.URL = &urlCopy
 		mgr := s.getI18nManager()
-		result := prefsync.Import(clone, "search", mgr.DefaultLanguage(), mgr.SupportedLanguageCodes())
+		result := prefsync.Import(clone, "search", mgr.DetectLanguage(r), mgr.SupportedLanguageCodes())
 		prefsync.Apply(w, r, "search", result)
 
 		// Widget checkboxes use form="general-settings" so they submit in this

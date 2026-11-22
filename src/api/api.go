@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/hubpages"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/common/prefsync"
 	"github.com/apimgr/search/src/config"
@@ -347,8 +349,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get(APIPrefix+"/server/auth/check", h.handleAuthCheck)
 	r.Get(APIPrefix+"/server/preferences", h.handlePreferences)
 	r.Post(APIPrefix+"/server/preferences", h.handlePreferences)
-	r.Get(APIPrefix+"/server/preferences/export", h.handleServerPreferencesExport)
-	r.Get(APIPrefix+"/server/preferences/import", h.handleServerPreferencesImport)
+	r.Get(APIPrefix+"/server/preferences/sync", h.handleServerPreferencesExport)
+	r.Get(APIPrefix+"/server/preferences/sync/import", h.handleServerPreferencesImport)
 	r.Post(APIPrefix+"/server/mcp", h.handleMCP)
 	r.Post("/api/mcp", h.handleMCP)
 	r.Post("/mcp", h.handleMCP)
@@ -1237,14 +1239,62 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch suggestions from DuckDuckGo's autocomplete API
-	suggestions := h.fetchAutocompleteSuggestions(r.Context(), query)
+	// Offer local search features before forwarding a query to the suggestion provider.
+	suggestions := h.localAutocompleteSuggestions(query)
+	if len(suggestions) < maximumAutocompleteSuggestions {
+		for _, suggestion := range h.fetchAutocompleteSuggestions(r.Context(), query) {
+			if !containsString(suggestions, suggestion) {
+				suggestions = append(suggestions, suggestion)
+			}
+			if len(suggestions) == maximumAutocompleteSuggestions {
+				break
+			}
+		}
+	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK:   true,
 		Data: suggestions,
 		Meta: &APIMeta{Version: APIVersion},
 	})
+}
+
+func (h *Handler) localAutocompleteSuggestions(query string) []string {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" || strings.HasPrefix(query, "!") {
+		return nil
+	}
+	features := []string{
+		"define: ", "synonym: ", "antonym: ", "calculate: ",
+		"weather ", "time ", "currency ", "what is ",
+	}
+	if h != nil && h.directManager != nil {
+		for _, answerType := range h.directManager.GetHandlerTypes() {
+			features = append(features, string(answerType)+": ")
+		}
+	}
+	sort.Strings(features)
+	result := make([]string, 0, maximumAutocompleteSuggestions)
+	seen := make(map[string]bool)
+	for _, feature := range features {
+		if strings.HasPrefix(strings.ToLower(feature), query) && !seen[feature] {
+			result = append(result, feature)
+			seen[feature] = true
+			if len(result) == maximumAutocompleteSuggestions {
+				break
+			}
+		}
+	}
+	return result
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // fetchAutocompleteSuggestions fetches search suggestions from DuckDuckGo
@@ -2098,6 +2148,21 @@ type ServerPageResponse struct {
 	Content     string            `json:"content,omitempty"`
 	Sections    []PageSection     `json:"sections,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+	Pages       []HelpPageLink    `json:"pages,omitempty"`
+}
+
+type HelpPageLink struct {
+	Title string `json:"title"`
+	Path  string `json:"path"`
+}
+
+func helpPageLinks() []HelpPageLink {
+	pages := hubpages.Help(true)
+	links := make([]HelpPageLink, 0, len(pages))
+	for _, page := range pages {
+		links = append(links, HelpPageLink{Title: page.Title, Path: page.Path})
+	}
+	return links
 }
 
 type ServerDPOResponse struct {
@@ -2313,6 +2378,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 			Description: "Help and documentation for " + appName,
 			Content:     h.config.Server.Pages.Help.Content,
 			Sections:    sections,
+			Pages:       helpPageLinks(),
 		},
 		Meta: &APIMeta{Version: APIVersion},
 	})
@@ -3132,7 +3198,7 @@ func (h *Handler) SavePreferences() map[string]string {
 func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		manager := h.syncI18nManager()
-		state := prefsync.Current(r, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+		state := prefsync.Current(r, "search", manager.DetectLanguage(r), manager.SupportedLanguageCodes())
 		h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: state, Meta: &APIMeta{Version: APIVersion}})
 		return
 	}
@@ -3168,7 +3234,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		urlCopy.RawQuery = values.Encode()
 		clone.URL = &urlCopy
 		manager := h.syncI18nManager()
-		result := prefsync.Import(clone, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+		result := prefsync.Import(clone, "search", manager.DetectLanguage(r), manager.SupportedLanguageCodes())
 		if len(result.Applied) == 0 {
 			h.errorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "no valid preferences were supplied")
 			return
@@ -3194,7 +3260,7 @@ func (h *Handler) syncI18nManager() *i18n.Manager {
 	return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
 }
 
-// handleServerPreferencesExport handles GET /api/v1/server/preferences/export
+// handleServerPreferencesExport handles GET /api/v1/server/preferences/sync
 // per AI.md "Cross-device preference sync": reads the current theme/lang
 // cookies and returns the full import URL plus a base64url short code for
 // the same state. Stateless - nothing is written or looked up server-side.
@@ -3205,7 +3271,7 @@ func (h *Handler) handleServerPreferencesExport(w http.ResponseWriter, r *http.R
 	}
 
 	manager := h.syncI18nManager()
-	state, fullURL, shortCode := prefsync.Export(r, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+	state, fullURL, shortCode := prefsync.Export(r, "search", manager.DetectLanguage(r), manager.SupportedLanguageCodes())
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK:   true,
@@ -3214,7 +3280,7 @@ func (h *Handler) handleServerPreferencesExport(w http.ResponseWriter, r *http.R
 	})
 }
 
-// handleServerPreferencesImport handles GET /api/v1/server/preferences/import
+// handleServerPreferencesImport handles GET /api/v1/server/preferences/sync/import
 // per AI.md "Cross-device preference sync": accepts theme/lang as a plain
 // query string, or a pasted base64url short code (in the "code" param,
 // optionally still carrying a "https://.../import?" prefix which is
@@ -3230,7 +3296,7 @@ func (h *Handler) handleServerPreferencesImport(w http.ResponseWriter, r *http.R
 	}
 
 	manager := h.syncI18nManager()
-	result := prefsync.Import(r, "search", manager.DefaultLanguage(), manager.SupportedLanguageCodes())
+	result := prefsync.Import(r, "search", manager.DetectLanguage(r), manager.SupportedLanguageCodes())
 	prefsync.Apply(w, r, "search", result)
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"theme": result.State.Theme, "lang": result.State.Lang, "prefs": result.State.Prefs, "applied": result.Applied, "ignored": result.Ignored}, Meta: &APIMeta{Version: APIVersion}})
 }

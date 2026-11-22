@@ -342,7 +342,19 @@
     "density_compact": "コンパクト",
     "density_comfortable": "標準",
     "density_spacious": "ゆったり",
-    "accent_color": "アクセントカラー"
+    "accent_color": "アクセントカラー",
+    "appearance_heading": "外観と言語",
+    "application_heading": "検索設定",
+    "erase_everything": "すべて消去",
+    "more_title": "その他の設定",
+    "reset_everything_warning": "テーマ、言語、検索設定、同意設定、CCPAオプトアウト、およびこのサイトが保存したデータを消去します。サインイン状態は維持されます。",
+    "sync_description": "設定を別の端末に移します。",
+    "sync_export_heading": "設定をエクスポート",
+    "sync_import_button": "インポート",
+    "sync_import_heading": "設定をインポート",
+    "sync_title": "設定を同期",
+    "tools_page_title": "検索ツール",
+    "tools_page_description": "カスタム bang、フィルター、カスタム CSS、OpenSearch を管理します。"
   },
   "nav": {
     "home": "ホーム",
@@ -352,7 +364,9 @@
     "help": "ヘルプ",
     "settings": "設定",
     "admin": "管理",
-    "profile": "プロフィール"
+    "profile": "プロフィール",
+    "search": "検索",
+    "toggle_theme": "テーマを切り替え"
   },
   "footer": {
     "privacy_policy": "プライバシーポリシー",
@@ -1127,7 +1141,8 @@
     "close_dialog": "ダイアログを閉じる",
     "input_value": "入力値",
     "copy_to_clipboard": "クリップボードにコピー",
-    "skip_to_main_content": "メインコンテンツへスキップ"
+    "skip_to_main_content": "メインコンテンツへスキップ",
+    "breadcrumb": "パンくずリスト"
   },
   "header": {
     "theme_label_dark": "ライトモード",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Go to Wikipedia article",
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
-      "full_list_link": "View full bang list (JSON)"
+      "full_list_link": "View full bang list (JSON)",
+      "all_caption": "この検索サービスで利用できる組み込みショートカットです。",
+      "all_heading": "利用可能なショートカット",
+      "th_description": "説明",
+      "th_name": "名前",
+      "th_shortcut": "ショートカット"
     },
     "direct": {
       "heading": "Instant & Direct Answers",
@@ -1925,11 +1945,13 @@
         "ip": "Your current IP address",
         "color": "Color preview and conversion"
       }
-    }
+    },
+    "more_title": "その他のヘルプ"
   },
   "form": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "reset": "リセット"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

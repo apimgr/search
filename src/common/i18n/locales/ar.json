@@ -342,7 +342,19 @@
     "density_compact": "مضغوط",
     "density_comfortable": "مريح",
     "density_spacious": "واسع",
-    "accent_color": "لون التمييز"
+    "accent_color": "لون التمييز",
+    "appearance_heading": "المظهر واللغة",
+    "application_heading": "تفضيلات البحث",
+    "erase_everything": "محو الكل",
+    "more_title": "مزيد من التفضيلات",
+    "reset_everything_warning": "سيؤدي ذلك إلى محو السمة واللغة وتفضيلات البحث وخيارات الموافقة وإلغاء الاشتراك وفق CCPA والبيانات التي يخزنها هذا الموقع. سيظل تسجيل الدخول نشطًا.",
+    "sync_description": "انقل تفضيلاتك إلى جهاز آخر.",
+    "sync_export_heading": "تصدير التفضيلات",
+    "sync_import_button": "استيراد",
+    "sync_import_heading": "استيراد التفضيلات",
+    "sync_title": "مزامنة التفضيلات",
+    "tools_page_title": "أدوات البحث",
+    "tools_page_description": "أدِر اختصارات bang المخصصة والفلاتر وCSS المخصص وOpenSearch."
   },
   "nav": {
     "home": "الرئيسية",
@@ -352,7 +364,9 @@
     "help": "مساعدة",
     "settings": "الإعدادات",
     "admin": "الإدارة",
-    "profile": "الملف الشخصي"
+    "profile": "الملف الشخصي",
+    "search": "بحث",
+    "toggle_theme": "تبديل السمة"
   },
   "footer": {
     "privacy_policy": "سياسة الخصوصية",
@@ -1127,7 +1141,8 @@
     "close_dialog": "اغلاق مربع الحوار",
     "input_value": "قيمة الادخال",
     "copy_to_clipboard": "نسخ الى الحافظة",
-    "skip_to_main_content": "تخطي الى المحتوى الرئيسي"
+    "skip_to_main_content": "تخطي الى المحتوى الرئيسي",
+    "breadcrumb": "مسار التنقل"
   },
   "header": {
     "theme_label_dark": "الوضع الفاتح",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Go to Wikipedia article",
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
-      "full_list_link": "View full bang list (JSON)"
+      "full_list_link": "View full bang list (JSON)",
+      "all_caption": "اختصارات البحث المضمنة التي يدعمها هذا الخادم.",
+      "all_heading": "كل الاختصارات المتاحة",
+      "th_description": "الوصف",
+      "th_name": "الاسم",
+      "th_shortcut": "الاختصار"
     },
     "direct": {
       "heading": "Instant & Direct Answers",
@@ -1925,11 +1945,13 @@
         "ip": "Your current IP address",
         "color": "Color preview and conversion"
       }
-    }
+    },
+    "more_title": "مزيد من المساعدة"
   },
   "form": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "reset": "إعادة تعيين"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",

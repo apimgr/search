@@ -4612,9 +4612,9 @@
         }
       }
     },
-    "/api/v1/server/preferences/export": {
+    "/api/v1/server/preferences/sync": {
       "get": {
-        "operationId": "getApiV1ServerPreferencesExport",
+        "operationId": "getApiV1ServerPreferencesSync",
         "summary": "Export preferences",
         "description": "Return the current preferences as a portable document",
         "tags": [
@@ -4648,9 +4648,9 @@
         }
       }
     },
-    "/api/v1/server/preferences/import": {
+    "/api/v1/server/preferences/sync/import": {
       "get": {
-        "operationId": "getApiV1ServerPreferencesImport",
+        "operationId": "getApiV1ServerPreferencesSyncImport",
         "summary": "Import preferences",
         "description": "Apply validated preferences from query values or a portable short code",
         "tags": [

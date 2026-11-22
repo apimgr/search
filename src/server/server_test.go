@@ -3269,7 +3269,7 @@ func TestPreferencesExposeCookieAndCCPAControls(t *testing.T) {
 		t.Fatalf("preferences status = %d, want %d", response.Code, http.StatusOK)
 	}
 	for _, marker := range []string{
-		`name="consent_form" value="1" form="general-settings"`,
+		`name="consent_form" value="1"`,
 		`id="consent-preferences"`,
 		`id="consent-analytics"`,
 		`name="consent_preferences"`,
@@ -3278,6 +3278,27 @@ func TestPreferencesExposeCookieAndCCPAControls(t *testing.T) {
 	} {
 		if !strings.Contains(response.Body.String(), marker) {
 			t.Errorf("preferences page is missing consent control %q", marker)
+		}
+	}
+}
+
+func TestLegacyPreferencesSyncRoutesRedirectPermanently(t *testing.T) {
+	server := &Server{}
+	for _, test := range []struct {
+		path string
+		want string
+	}{
+		{path: "/server/preferences/export?theme=dark", want: "/server/preferences/sync?theme=dark"},
+		{path: "/server/preferences/import?code=abc", want: "/server/preferences/sync/import?code=abc"},
+	} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, test.path, nil)
+		server.handleLegacyPreferencesSync(response, request)
+		if response.Code != http.StatusPermanentRedirect {
+			t.Errorf("%s status = %d, want %d", test.path, response.Code, http.StatusPermanentRedirect)
+		}
+		if location := response.Header().Get("Location"); location != test.want {
+			t.Errorf("%s Location = %q, want %q", test.path, location, test.want)
 		}
 	}
 }
@@ -3297,8 +3318,7 @@ func TestPreferencesPageKeepsSingleFormActionsAndMovesTools(t *testing.T) {
 		`id="reset-prefs"`,
 		`id="reset-preferences"`,
 		`href="/server/preferences/tools"`,
-		`data-copy-target="sync-url"`,
-		`data-copy-target="sync-code"`,
+		`href="/server/preferences/sync"`,
 	} {
 		if !strings.Contains(page, marker) {
 			t.Errorf("preferences page is missing %q", marker)
@@ -3318,6 +3338,17 @@ func TestPreferencesPageKeepsSingleFormActionsAndMovesTools(t *testing.T) {
 	for _, marker := range []string{`id="custom-css"`, `id="add-custom-bang"`, `id="copy-opensearch"`} {
 		if !strings.Contains(toolsResponse.Body.String(), marker) {
 			t.Errorf("preference tools page is missing %q", marker)
+		}
+	}
+
+	syncResponse := httptest.NewRecorder()
+	server.handlePreferencesSync(syncResponse, httptest.NewRequest(http.MethodGet, "/server/preferences/sync", nil))
+	if syncResponse.Code != http.StatusOK {
+		t.Fatalf("preference sync status = %d, want %d", syncResponse.Code, http.StatusOK)
+	}
+	for _, marker := range []string{`id="sync-url"`, `id="sync-code"`, `name="code"`} {
+		if !strings.Contains(syncResponse.Body.String(), marker) {
+			t.Errorf("preference sync page is missing %q", marker)
 		}
 	}
 }
@@ -3387,7 +3418,7 @@ func TestHandleGeneralPreferencesSaveMalformedFormRedirects(t *testing.T) {
 	}
 }
 
-func TestHandleGeneralPreferencesSaveSyncCodeOverridesForm(t *testing.T) {
+func TestHandleGeneralPreferencesSaveDoesNotApplySyncCode(t *testing.T) {
 	server := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en", "fr"})}
 	request := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("theme=light&lang=en&consent_form=1&consent_preferences=on&code=theme%3Ddark%26lang%3Dfr"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -3402,8 +3433,8 @@ func TestHandleGeneralPreferencesSaveSyncCodeOverridesForm(t *testing.T) {
 		cookies[cookie.Name] = cookie.Value
 	}
 	consent, _ := url.PathUnescape(cookies["cookie_consent"])
-	if cookies["theme"] != "dark" || cookies["lang"] != "fr" || !strings.Contains(consent, `"preferences":true`) {
-		t.Errorf("sync code did not override form values: cookies=%v", cookies)
+	if cookies["theme"] != "light" || cookies["lang"] != "en" || !strings.Contains(consent, `"preferences":true`) {
+		t.Errorf("general preferences form applied a sync code: cookies=%v", cookies)
 	}
 }
 

@@ -2832,6 +2832,30 @@ func DefaultConfig() *Config {
 				Timeout:    10,
 				Weight:     0.7,
 			},
+			"yandex": {
+				Enabled: true, Priority: 70, Categories: []string{"general", "images", "news", "videos"}, Timeout: 10, Weight: 1,
+			},
+			"baidu": {
+				Enabled: true, Priority: 60, Categories: []string{"general", "images", "news", "videos"}, Timeout: 10, Weight: 1,
+			},
+			"pubmed": {
+				Enabled: true, Priority: 60, Categories: []string{"science"}, Timeout: 10, Weight: 1,
+			},
+			"arxiv": {
+				Enabled: true, Priority: 60, Categories: []string{"science", "general"}, Timeout: 10, Weight: 1,
+			},
+			"openstreetmap": {
+				Enabled: true, Priority: 80, Categories: []string{"maps"}, Timeout: 10, Weight: 1,
+			},
+			"hackernews": {
+				Enabled: true, Priority: 48, Categories: []string{"general", "news"}, Timeout: 10, Weight: 1,
+			},
+			"youtube": {
+				Enabled: true, Priority: 65, Categories: []string{"videos", "music"}, Timeout: 10, Weight: 1,
+			},
+			"peertube": {
+				Enabled: true, Priority: 45, Categories: []string{"videos"}, Timeout: 10, Weight: 1,
+			},
 		},
 	}
 }
@@ -3140,27 +3164,6 @@ func enforceOwnerOnlyFile(path string) error {
 		}
 	}
 	return nil
-}
-
-func containsSensitiveConfigKey(node *yaml.Node) bool {
-	if node.Kind != yaml.MappingNode {
-		for _, child := range node.Content {
-			if containsSensitiveConfigKey(child) {
-				return true
-			}
-		}
-		return false
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		key := strings.ToLower(strings.ReplaceAll(node.Content[i].Value, "-", "_"))
-		if strings.Contains(key, "password") || strings.Contains(key, "secret") || strings.Contains(key, "token") || strings.Contains(key, "private_key") || strings.Contains(key, "api_key") || strings.Contains(key, "encryption_key") || strings.Contains(key, "credential") {
-			return true
-		}
-		if containsSensitiveConfigKey(node.Content[i+1]) {
-			return true
-		}
-	}
-	return false
 }
 
 func validateConfigNode(node *yaml.Node, file, path string) error {
@@ -4741,7 +4744,9 @@ func validSEOName(value string) bool {
 		return false
 	}
 	for _, char := range value {
-		if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || strings.ContainsRune(":_.-", char)) {
+		switch {
+		case char >= 'a' && char <= 'z', char >= '0' && char <= '9', strings.ContainsRune(":_.-", char):
+		default:
 			return false
 		}
 	}

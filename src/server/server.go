@@ -1112,6 +1112,15 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	data.MCPEnabled = true
 	i18nManager := s.getI18nManager()
 	data.Lang = i18nManager.ResolveLanguage(w, r)
+	if langCookie, err := r.Cookie("lang"); err == nil {
+		data.LangPinned = i18nManager.ResolveSupportedLanguage(langCookie.Value) != ""
+	}
+	if i18nManager.ResolveSupportedLanguage(r.URL.Query().Get("lang")) != "" {
+		data.LangPinned = true
+	}
+	if language, ok := i18n.GetLanguage(data.Lang); ok {
+		data.LangName = language.NativeName
+	}
 	if i18nManager.IsRTL(data.Lang) {
 		data.Dir = "rtl"
 	} else {
@@ -1132,6 +1141,14 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	}
 	data.ThemeMode = themeMode
 	data.Theme = themeMode
+	switch themeMode {
+	case ThemeDark:
+		data.NextTheme = ThemeLight
+	case ThemeLight:
+		data.NextTheme = ThemeAuto
+	default:
+		data.NextTheme = ThemeDark
+	}
 	data.Prefs = resolveGeneralPrefs(r)
 	data.PrefsQuery = prefsQuery
 	// CSRF token needed by the no-JS theme-switch form in the header partial, which
@@ -1490,8 +1507,11 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Post("/server/preferences/tokens/{id}/update", s.csrfProtect(s.handleOwnerLinkedUpdate))
 	r.Post("/server/preferences/tokens/{id}/revoke", s.csrfProtect(s.handleOwnerLinkedRevoke))
 	// Cross-device preference sync (stateless export/import, no CSRF needed - GET only)
-	r.Get("/server/preferences/export", s.handlePreferencesExport)
-	r.Get("/server/preferences/import", s.handlePreferencesImport)
+	r.Get("/server/preferences/sync", s.handlePreferencesSync)
+	r.Post("/server/preferences/sync", s.csrfProtect(s.handlePreferencesSync))
+	r.Get("/server/preferences/sync/import", s.handlePreferencesImport)
+	r.Get("/server/preferences/export", s.handleLegacyPreferencesSync)
+	r.Get("/server/preferences/import", s.handleLegacyPreferencesSync)
 
 	// No-JS theme switch (header partial fallback per AI.md PART 16)
 	r.Post("/theme", s.csrfProtect(s.handleThemeSet))
@@ -1645,7 +1665,6 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/privacy", "0.3", "monthly"},
 		{"/server/dpo", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
-		{"/server/help/mcp", "0.5", "monthly"},
 		{"/server/terms", "0.3", "monthly"},
 		{"/server/docs/swagger", "0.4", "weekly"},
 		{"/server/docs/graphql", "0.4", "weekly"},
@@ -1653,9 +1672,19 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/security/policy", "0.4", "monthly"},
 		{"/server/security/thanks", "0.3", "yearly"},
 	}
+	for _, page := range s.helpPages(r) {
+		entries = append(entries, sitemapEntry{page.Path, "0.5", "monthly"})
+	}
+	preferencePages := make(map[string]struct{})
+	for _, page := range s.preferencesPages() {
+		preferencePages[page.Path] = struct{}{}
+	}
 
 	// The sitemap only includes anonymous HTML pages allowed by robots.txt.
 	for _, entry := range entries {
+		if _, excluded := preferencePages[entry.loc]; excluded {
+			continue
+		}
 		if !sitemapRobotsAllows(entry.loc, s.config.Server.Web.Robots.Allow, s.config.Server.Web.Robots.Deny) {
 			continue
 		}

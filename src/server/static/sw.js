@@ -130,17 +130,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigations (page loads): network-first, then cache, then the cached
-  // offline page, then a GUARANTEED synthesized offline page
+  // Navigations (page loads): return every HTTP response, including redirects
+  // and error pages. Only a network failure or timeout enters the offline
+  // fallback path; search bangs intentionally redirect off-site.
   if (request.mode === 'navigate') {
     event.respondWith(
       withTimeout(fetch(request), NAV_TIMEOUT_MS)
         .then((response) => {
-          if (!response.ok || response.redirected) {
-            throw new Error('navigation returned an error or redirect');
+          if (response.ok && !response.redirected && response.type !== 'opaqueredirect') {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
           }
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
           return response;
         })
         .catch(async () =>

@@ -2091,6 +2091,14 @@ func TestHandleSitemap(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "http://example.com/openapi") {
 		t.Error("sitemap includes a removed OpenAPI route")
 	}
+	for _, page := range s.preferencesPages() {
+		if strings.Contains(rec.Body.String(), "http://example.com"+page.Path) {
+			t.Errorf("sitemap includes preferences page %s", page.Path)
+		}
+	}
+	if (s.apiHandler != nil) != strings.Contains(rec.Body.String(), "http://example.com/server/help/mcp") {
+		t.Error("sitemap MCP entry does not match the enabled help-page registry")
+	}
 }
 
 // ---------- opensearch.go: handleOpenSearch ----------

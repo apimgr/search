@@ -342,7 +342,19 @@
     "density_compact": "קומפקטית",
     "density_comfortable": "נוחה",
     "density_spacious": "מרווחת",
-    "accent_color": "צבע הדגשה"
+    "accent_color": "צבע הדגשה",
+    "appearance_heading": "מראה ושפה",
+    "application_heading": "העדפות חיפוש",
+    "erase_everything": "מחיקת הכול",
+    "more_title": "העדפות נוספות",
+    "reset_everything_warning": "פעולה זו תמחק את ערכת הנושא, השפה, העדפות החיפוש, בחירות ההסכמה, ביטול ההסכמה לפי CCPA ונתונים שנשמרו באתר. ההתחברות תישאר פעילה.",
+    "sync_description": "העברת ההעדפות למכשיר אחר.",
+    "sync_export_heading": "ייצוא העדפות",
+    "sync_import_button": "ייבוא",
+    "sync_import_heading": "ייבוא העדפות",
+    "sync_title": "סנכרון העדפות",
+    "tools_page_title": "כלי חיפוש",
+    "tools_page_description": "ניהול bang מותאמים אישית, מסננים, CSS מותאם אישית ו-OpenSearch."
   },
   "nav": {
     "home": "דף הבית",
@@ -352,7 +364,9 @@
     "help": "עזרה",
     "settings": "הגדרות",
     "admin": "ניהול",
-    "profile": "פרופיל"
+    "profile": "פרופיל",
+    "search": "חיפוש",
+    "toggle_theme": "החלפת ערכת נושא"
   },
   "footer": {
     "privacy_policy": "מדיניות פרטיות",
@@ -1127,7 +1141,8 @@
     "close_dialog": "סגור דו-שיח",
     "input_value": "ערך קלט",
     "copy_to_clipboard": "העתק ללוח",
-    "skip_to_main_content": "דלג לתוכן הראשי"
+    "skip_to_main_content": "דלג לתוכן הראשי",
+    "breadcrumb": "פירורי לחם"
   },
   "header": {
     "theme_label_dark": "מצב בהיר",
@@ -1829,7 +1844,12 @@
       "ex_w_desc": "Go to Wikipedia article",
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
-      "full_list_link": "View full bang list (JSON)"
+      "full_list_link": "View full bang list (JSON)",
+      "all_caption": "קיצורי חיפוש מובנים הנתמכים במופע זה.",
+      "all_heading": "כל הקיצורים הזמינים",
+      "th_description": "תיאור",
+      "th_name": "שם",
+      "th_shortcut": "קיצור"
     },
     "direct": {
       "heading": "Instant & Direct Answers",
@@ -1925,11 +1945,13 @@
         "ip": "Your current IP address",
         "color": "Color preview and conversion"
       }
-    }
+    },
+    "more_title": "עזרה נוספת"
   },
   "form": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "reset": "איפוס"
   },
   "opensearch": {
     "missing_url": "Missing URL parameter",
