@@ -159,6 +159,28 @@ Successful health checks are omitted unless `log_health_checks` is enabled.
 Debug-only request-body and SQL logging can expose sensitive data; enable debug
 logging only in a controlled environment.
 
+### Compliance standards
+
+Each supported standard is independently disabled by default. Enabling any
+standard requires encrypted backups and makes the compliance report show its
+effective retention controls.
+
+```yaml
+server:
+  compliance:
+    gdpr: false
+    ccpa: false
+    hipaa: false
+    soc2: false
+    pci_dss: false
+    iso27001: false
+    fedramp: false
+    lgpd: false
+    pipeda: false
+    appi: false
+    pdpa: false
+```
+
 ### Tor Hidden Service
 
 ```yaml
@@ -547,7 +569,17 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.cache.type` | `memory` |
 | `server.cache.url` | `` |
 | `server.cache.username` | `` |
-| `server.compliance.enabled` | `false` |
+| `server.compliance.appi` | `false` |
+| `server.compliance.ccpa` | `false` |
+| `server.compliance.fedramp` | `false` |
+| `server.compliance.gdpr` | `false` |
+| `server.compliance.hipaa` | `false` |
+| `server.compliance.iso27001` | `false` |
+| `server.compliance.lgpd` | `false` |
+| `server.compliance.pci_dss` | `false` |
+| `server.compliance.pdpa` | `false` |
+| `server.compliance.pipeda` | `false` |
+| `server.compliance.soc2` | `false` |
 | `server.compression.brotli` | `false` |
 | `server.compression.disable_proxy` | `false` |
 | `server.compression.enabled` | `true` |

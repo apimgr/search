@@ -142,6 +142,10 @@ disclosure and health monitoring:
 | `/server/healthz` | Public health check |
 | `/api/v1/server/healthz` | Public health check (JSON) |
 
+The health response includes the NVD vulnerability dataset when its feature is
+enabled. It reports `degraded` when the last successful update is more than
+48 hours old; the scheduler attempts an update daily.
+
 The contact form includes a honeypot and requires a single-use CAPTCHA on every
 submission. The default `simple` challenge is self-hosted and works without
 JavaScript, including over Tor. Operators may configure reCAPTCHA or hCaptcha

@@ -51,11 +51,12 @@ Full schemas are documented under `### Data Models` below. Sensitivity classific
 | Data | Sensitivity | Storage | Retention |
 |------|------------|---------|-----------|
 | Search queries (per request) | High (potentially identifying) | Memory only — never logged | Discarded after response |
-| User preferences | Low | Client-side (localStorage / URL param) | User-controlled |
+| User preferences | Low | Browser cookies; search history stays in localStorage | User-controlled |
 | Search alerts (email + query + tokens) | Medium (PII: email, signed tokens) | Server DB | Until user deletes; opt-in only |
 | Alert deduplication state (URL hashes) | Low | Server DB | Lifetime of alert |
 | Engine health metrics (response times, error rates) | None | Server DB / Prometheus | Per metrics retention |
 | Cached search results | None (no user attribution) | Server cache | 5 minutes default, configurable |
+| NVD vulnerability data | Public | Embedded cache under the data directory | Refreshed daily; health reports degraded after 48 hours without a successful update |
 | Operator bearer token (`server.token`) | High | `server.yml` (restricted permissions, never logged) | Until operator rotates |
 | Per-resource owner tokens | High | Server DB (hashed before storage, never stored plaintext) | Until owner revokes |
 
@@ -220,7 +221,7 @@ The following inventory records the API surface implemented by this project, inc
 
 Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, search preference values, and Custom CSS on the separate `/server/preferences/sync` page using a sync URL or code. Custom CSS is stored in a browser cookie and is limited to 64 characters to match the sync contract. Bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import. The preferences page links to the tools, sync, and (when owner tokens are enabled) token pages from its More preferences card.
 
-`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, custom CSS, and OpenSearch.” Custom CSS is saved as `search_pref_custom_css`, included in preference sync, and rendered by the server. Bangs, filters, and OpenSearch settings remain browser-local and are not included in preference sync.
+`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, and OpenSearch.” Custom CSS is saved as `search_pref_custom_css`, included in preference sync, and rendered by the server from the main Preferences form. Bangs, filters, and OpenSearch settings remain browser-local and are not included in preference sync.
 
 The language selector is on `/server/preferences` and lists the supported embedded locales by native name. Automatic language detection is the first option; an explicit language choice is stored in a browser cookie and can be included in a portable preference sync URL or code. The footer shows the active language and links to the preferences language section.
 
