@@ -21,7 +21,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
 - Portable Preferences: Save supported theme, language, search preferences, and custom CSS locally, then export/import them with a sync URL or code
 - Search Engine Preferences: Select engines per search category and drag to set their priority
-- Server-rendered Preferences: Manage guest settings in a single form; use separate tools for custom CSS, bangs, filters, and OpenSearch
+- Server-rendered Preferences: Manage guest settings, including custom CSS, in one form; use separate tools for bangs, filters, and OpenSearch
 - Search Alerts: Accountless alerts that activate at creation, with private RSS and webhook delivery
 - Embeddable Search Bar: Native HTML form snippet that works without JavaScript or third-party embeds ([integration guide](docs/integrations.md#search-bar-widget))
 - Browser Search: OpenSearch description and a copyable, customizable browser search URL

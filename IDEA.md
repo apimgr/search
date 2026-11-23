@@ -30,7 +30,7 @@ Reddit search uses its OAuth API and requires a registered Reddit application, i
 **Non-goals:**
 - No proxying through other metasearch engines — we hit primary sources directly.
 - Not included as sources: Ecosia (Bing-powered), SearXNG (metasearch).
-- No user accounts on the public surface; preferences are client-side only (localStorage / portable preference strings).
+- No user accounts on the public surface; synced preferences live in browser cookies and portable preference strings, while search history and browser-only tools stay local to the browser.
 - No server-side query or IP logging for end users.
 - No paid tiers, license keys, or feature gating (per AI.md PART 1 — all features free).
 - No SPA / client-rendered core UX — server-side rendered, progressive enhancement, mobile-first (per AI.md PART 16).
@@ -2006,7 +2006,7 @@ Click → opens video in embedded player or source site
 
 #### Preferences Page
 
-The preferences page is one server-rendered form. Save submits all preference and consent controls together; Cancel returns without saving, and Reset opens a native confirmation before clearing preferences and local browser storage. Custom CSS, available/custom bangs, filters, and OpenSearch configuration are managed on the separate tools page; Custom CSS saves to a cookie and syncs with the other supported preferences. Owner-token management is on `/server/preferences/tokens`.
+The preferences page is one server-rendered form. Save submits all preference and consent controls together; Cancel returns without saving, and Reset opens a native confirmation before clearing preferences and local browser storage. Custom CSS is edited on this page, saved to a cookie, and synced with the other supported preferences. Available/custom bangs, filters, and OpenSearch configuration are managed on the separate tools page. Owner-token management is on `/server/preferences/tokens`.
 
 The Data Management section shows the generated sync URL and code, plus a field for pasting a URL or code. Submitting the form saves the visible settings and imports the pasted sync values. Export includes only `theme`, `lang`, and allowlisted `search_pref_*` cookies, including Custom CSS; localStorage data is excluded.
 

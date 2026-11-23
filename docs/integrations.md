@@ -160,12 +160,13 @@ metrics settings.
 ## GraphQL
 
 Search exposes a GraphQL API. The interactive GraphiQL explorer is served at
-`GET /server/docs/graphql`, and queries are accepted at `POST /api/graphql`
-(unversioned alias) or `POST /api/v1/server/graphql` (versioned canonical).
+`GET /server/docs/graphql`, and queries are accepted at the canonical
+`POST /api/v1/server/graphql` endpoint. `POST /api/graphql` remains a direct
+compatibility alias.
 Core search, autocomplete, instant-answer, direct-answer, and health fields use the same services as REST; inspect the live GraphiQL schema for current query arguments and response fields. REST-only operations remain documented in the REST API reference.
 
 ```bash
-curl -q -LSsf -X POST https://scour.li/api/graphql \
+curl -q -LSsf -X POST https://scour.li/api/v1/server/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "{ search(q: \"golang\") { results { title url } } }"}'
 ```

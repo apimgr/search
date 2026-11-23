@@ -40,7 +40,11 @@ namespaces:
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI 3 specification |
 | `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
-| `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/graphql`) |
+| `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/v1/server/graphql`) |
+
+The documentation pages self-host Swagger UI 5.36.0 and GraphiQL 6.0.1,
+including their CSS and fonts. They do not load third-party browser assets from
+external hosts. Upstream license texts are included beside the bundled assets.
 
 ### Unversioned aliases
 
@@ -504,8 +508,8 @@ the response is limited to 4 MiB. Use a GraphQL mutation for this field,
 including when invoking a REST GET.
 
 - **GraphiQL UI** — `GET /server/docs/graphql`
-- **Queries** — `POST /api/graphql` (unversioned alias) or
-  `POST /api/v1/server/graphql` (versioned canonical)
+- **Queries** — `POST /api/v1/server/graphql` (versioned canonical); the
+  `/api/graphql` compatibility alias is also available.
 - Requests are limited to 64 KiB, 12 nested field levels, and 100 selected
   fields after fragment expansion. Requests exceeding these limits receive
   HTTP 400; bodies larger than 64 KiB receive HTTP 413.

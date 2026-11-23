@@ -165,6 +165,12 @@ Each supported standard is independently disabled by default. Enabling any
 standard requires encrypted backups and makes the compliance report show its
 effective retention controls.
 
+Audit log retention uses `server.logs.audit.keep` (or the shared log default
+when unset). Enabling GDPR, CCPA, SOC 2, or PCI DSS raises retention to at
+least one year; HIPAA raises it to six years; ISO 27001 raises it to three
+years. The longest minimum among enabled standards applies, even when the
+configured keep value is shorter. `forever` remains in effect.
+
 ```yaml
 server:
   compliance:
@@ -670,7 +676,7 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.logs.audit.filename` | `audit.log` |
 | `server.logs.audit.format` | `json` |
 | `server.logs.audit.keep` | `none` |
-| `server.logs.audit.rotate` | `weekly,50MB` |
+| `server.logs.audit.rotate` | `daily` |
 | `server.logs.debug.custom` | `` |
 | `server.logs.debug.enabled` | `false` |
 | `server.logs.debug.filename` | `debug.log` |
