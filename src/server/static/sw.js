@@ -87,8 +87,10 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// A navigation never waits on the network forever.
+// A navigation never waits on the network forever. Search requests can take
+// longer than ordinary pages because the server aggregates remote engines.
 const NAV_TIMEOUT_MS = 8000;
+const SEARCH_NAV_TIMEOUT_MS = 30000;
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout')), ms);
@@ -170,8 +172,11 @@ self.addEventListener('fetch', (event) => {
   // failures. Search bangs bypass interception above and follow their direct
   // redirects in the browser.
   if (request.mode === 'navigate') {
+    const navigationTimeout = url.pathname === '/search'
+      ? SEARCH_NAV_TIMEOUT_MS
+      : NAV_TIMEOUT_MS;
     event.respondWith(
-      withTimeout(fetch(request), NAV_TIMEOUT_MS)
+      withTimeout(fetch(request), navigationTimeout)
         .then((response) => {
           if (response.redirected || response.type === 'opaqueredirect') {
             throw new Error('redirected navigation response');
