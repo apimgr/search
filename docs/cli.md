@@ -100,9 +100,11 @@ search --maintenance secret rotate installation_secret
 search --maintenance token list
 search --maintenance token revoke <prefix>
 
-# Export or delete a data subject's personal data
-search --maintenance data export <subject>
-search --maintenance data delete <subject>
+# Export one owner's data (TOKEN_PREFIX comes from `--maintenance token list`)
+search --maintenance data export --owner TOKEN_PREFIX [--output FILE]
+
+# Delete one owner and all their resources
+search --maintenance data delete --owner TOKEN_PREFIX [--yes]
 
 # Print compliance status
 search --maintenance compliance report
@@ -110,6 +112,13 @@ search --maintenance compliance report
 # Show maintenance help
 search --maintenance --help
 ```
+
+Owner data export and deletion require the operator token or root. Export writes
+a mode `0600` JSON file in the current directory by default; use `--output -`
+for JSON on stdout or name a file explicitly. Exports contain owner and token
+metadata and owned resources, never token values, hashes, or audit/security
+logs. Deletion removes the owner, tokens, and owned resources in one transaction
+after you confirm the owner ID; `--yes` skips the prompt for automation.
 
 Backups include `server.db` as a consistent SQLite snapshot, including committed
 WAL data. Restores replace the database together with the archived configuration

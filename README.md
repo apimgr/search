@@ -19,7 +19,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 
 - Privacy First: No third-party analytics by default, consent-aware preferences, self-hosted data control
 - Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
-- Portable Preferences: Save supported theme, language, and search preferences locally, then export/import them with a sync URL or code
+- Portable Preferences: Save supported theme, language, search preferences, and custom CSS locally, then export/import them with a sync URL or code
 - Search Engine Preferences: Select engines per search category and drag to set their priority
 - Server-rendered Preferences: Manage guest settings in a single form; use separate tools for custom CSS, bangs, filters, and OpenSearch
 - Search Alerts: Accountless alerts that activate at creation, with private RSS and webhook delivery
@@ -33,7 +33,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Mobile Friendly: Responsive design that works on all devices
 - Installable PWA: Add Search to your home screen with offline fallback support and desktop/mobile install previews
 - Dark, Light, and Auto Themes: Choose the theme, font size, results density, and accent color in Preferences
-- Custom CSS: Save a browser-local stylesheet override, excluded from preference exports/imports
+- Custom CSS: Save a server-rendered stylesheet override in a browser cookie, included in preference sync, limited to 64 characters
 - File-only Configuration: Hot-reloaded `server.yml` and `yaml.d/` area files, with credentials isolated in `secrets.yml`
 - Multi-Category Search: Web, images, videos, news, maps, files, music, science, IT, and social
 - Built-in SSL: Let's Encrypt integration for automatic HTTPS

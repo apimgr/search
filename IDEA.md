@@ -218,9 +218,9 @@ The following inventory records the API surface implemented by this project, inc
 
 #### User Preferences
 
-Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, and search preference values on the separate `/server/preferences/sync` page using a sync URL or code. Custom CSS, bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import. The preferences page links to the tools, sync, and (when owner tokens are enabled) token pages from its More preferences card.
+Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, search preference values, and Custom CSS on the separate `/server/preferences/sync` page using a sync URL or code. Custom CSS is stored in a browser cookie and is limited to 64 characters to match the sync contract. Bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import. The preferences page links to the tools, sync, and (when owner tokens are enabled) token pages from its More preferences card.
 
-`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, custom CSS, and OpenSearch.” It edits browser-local search tools and settings; those values are not included in preference sync.
+`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, custom CSS, and OpenSearch.” Custom CSS is saved as `search_pref_custom_css`, included in preference sync, and rendered by the server. Bangs, filters, and OpenSearch settings remain browser-local and are not included in preference sync.
 
 The language selector is on `/server/preferences` and lists the supported embedded locales by native name. Automatic language detection is the first option; an explicit language choice is stored in a browser cookie and can be included in a portable preference sync URL or code. The footer shows the active language and links to the preferences language section.
 
@@ -238,6 +238,7 @@ Per AI.md PART 16, `theme`, `lang`, and the validated search preferences below c
 | `font_size` | `small`, `medium`, `large` |
 | `results_density` | `compact`, `comfortable`, `spacious` |
 | `accent_color` | six-digit hexadecimal color (`#RRGGBB`) |
+| `custom_css` | Up to 64 characters of CSS using letters, digits, spaces, and the supported punctuation; URL references and at-rules are rejected |
 
 **Use Cases:**
 - **Sync URL**: `https://search.example.com/server/preferences/sync/import?theme=dark&lang=fr`
@@ -1836,7 +1837,7 @@ s         → Open settings
 #### Theming & Customization
 
 - **Built-in Themes**: Dark (Dracula), Light, Auto (system preference)
-- **Custom CSS**: User-provided stylesheet override stored in this browser's local storage; limited to 4,096 characters and excluded from preference export/import
+- **Custom CSS**: User-provided stylesheet override stored in the `search_pref_custom_css` cookie; limited to 64 characters and included in preference export/import
 - **Font Size**: Small, medium, large
 - **Results Density**: Compact, comfortable, spacious
 - **Accent Color**: Customizable highlight color
@@ -2004,9 +2005,9 @@ Click → opens video in embedded player or source site
 
 #### Preferences Page
 
-The preferences page is one server-rendered form. Save submits all preference and consent controls together; Cancel returns without saving, and Reset opens a native confirmation before clearing preferences and local browser storage. Custom CSS, available/custom bangs, filters, and OpenSearch configuration are separate tools. Owner-token management is on `/server/preferences/tokens`.
+The preferences page is one server-rendered form. Save submits all preference and consent controls together; Cancel returns without saving, and Reset opens a native confirmation before clearing preferences and local browser storage. Custom CSS, available/custom bangs, filters, and OpenSearch configuration are managed on the separate tools page; Custom CSS saves to a cookie and syncs with the other supported preferences. Owner-token management is on `/server/preferences/tokens`.
 
-The Data Management section shows the generated sync URL and code, plus a field for pasting a URL or code. Submitting the form saves the visible settings and imports the pasted sync values. Export includes only `theme`, `lang`, and allowlisted `search_pref_*` cookies; localStorage data is excluded.
+The Data Management section shows the generated sync URL and code, plus a field for pasting a URL or code. Submitting the form saves the visible settings and imports the pasted sync values. Export includes only `theme`, `lang`, and allowlisted `search_pref_*` cookies, including Custom CSS; localStorage data is excluded.
 
 #### Mobile Responsive
 
