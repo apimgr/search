@@ -34,6 +34,9 @@ The native configuration roots are `server`, `search`, `engines`, `data`,
 requirements; the server validates all configuration on load and reports
 invalid values without exposing secrets.
 
+Credentials and key material are stored in the owner-only `secrets.yml` next
+to `server.yml`, not in the ordinary configuration files.
+
 MCP is always enabled and has no configuration switch.
 
 ### Branding and operator-authored page content
@@ -454,10 +457,17 @@ These values are used only to seed a new `server.yml`:
 
 ### Backup password
 
-`BACKUP_PASSWORD` supplies a backup-encryption password to non-interactive
-CLI and scheduled-backup workflows. It is never written to `server.yml`.
-Interactive CLI operations prompt for the password when no environment value
-is set.
+`server.backup.encryption_password` is stored in `secrets.yml` and supplies
+the key for CLI and scheduled backup creation. Backup creation never prompts.
+Restoring an encrypted archive prompts for its password; the configured
+backup password is not used for restore.
+
+```yaml
+# secrets.yml
+server:
+  backup:
+    encryption_password: "{strong_password}"
+```
 
 ### Terminal variables
 
@@ -819,6 +829,10 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.notifications.email.smtp.port` | `587` |
 | `server.notifications.email.smtp.tls` | `auto` |
 | `server.notifications.email.smtp.username` | `` |
+| `server.notifications.database_error.check_interval` | `1m` |
+| `server.notifications.database_error.enabled` | `true` |
+| `server.notifications.database_error.failures` | `3` |
+| `server.notifications.database_error.repeat` | `24h` |
 | `server.notifications.disk_low.check_interval` | `5m` |
 | `server.notifications.disk_low.enabled` | `true` |
 | `server.notifications.disk_low.repeat` | `24h` |
@@ -947,6 +961,8 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.scheduler.tasks.blocklist_update.schedule` | `0 4 * * *` |
 | `server.scheduler.tasks.cve_update.enabled` | `true` |
 | `server.scheduler.tasks.cve_update.schedule` | `0 5 * * *` |
+| `server.scheduler.tasks.database_check.enabled` | `true` |
+| `server.scheduler.tasks.database_check.schedule` | `@every 1m` |
 | `server.scheduler.tasks.disk_check.enabled` | `true` |
 | `server.scheduler.tasks.disk_check.schedule` | `@every 5m` |
 | `server.scheduler.tasks.geoip_update.enabled` | `true` |

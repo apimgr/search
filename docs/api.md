@@ -498,6 +498,9 @@ guidance, token scope, and enable/disable behavior.
 
 GraphQL uses the same live services and authorization checks as the corresponding REST API. Alert creation, management, private RSS feeds, and operator inventory are available alongside search and server information. GeoIP preset and scheduler task operations are available to authenticated operators through GraphQL, using the same persisted configuration, task manager, and authorization checks as REST.
 
+GraphQL type and field descriptions are translated for the request language,
+including introspection results.
+
 `apiRequest(method:, path:, input:)` routes any non-GraphQL REST endpoint
 through the registered API router, preserving its HTTP method, bearer token,
 validation, and response status. Paths must be relative `/api/...` routes;

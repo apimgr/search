@@ -93,6 +93,12 @@ and data.
 # Create backup
 search --maintenance backup
 
+# Verify the newest backup without restoring it
+search --maintenance backup test
+
+# Verify a specific backup
+search --maintenance backup test /path/to/backup.tar.gz.enc
+
 # Restore from backup
 search --maintenance restore /path/to/backup.tar.gz
 
@@ -132,6 +138,10 @@ search --maintenance scheduler history backup_daily
 # Show maintenance help
 search --maintenance --help
 ```
+
+Backup creation uses `server.backup.encryption_password` from `secrets.yml`
+without prompting. Testing or restoring an encrypted archive prompts for that
+archive's password.
 
 Owner data export and deletion require the operator token or root. Export writes
 a mode `0600` JSON file in the current directory by default; use `--output -`

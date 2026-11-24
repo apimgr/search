@@ -175,6 +175,8 @@ Search exposes a GraphQL API. The interactive GraphiQL explorer is served at
 `POST /api/v1/server/graphql` endpoint. `POST /api/graphql` remains a direct
 compatibility alias.
 Core search, autocomplete, instant-answer, direct-answer, and health fields use the same services as REST; inspect the live GraphiQL schema for current query arguments and response fields. REST-only operations remain documented in the REST API reference.
+Schema type and field descriptions follow the request language, including in
+GraphQL introspection responses.
 
 ```bash
 curl -q -LSsf -X POST https://scour.li/api/v1/server/graphql \
