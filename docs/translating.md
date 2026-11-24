@@ -50,7 +50,10 @@ source text; keep the keys unchanged and translate the corresponding values.
 The `email.templates` section contains the default email subject and body for
 each event. Preserve all `{variable}` placeholders exactly. The `client.cli`
 section contains client help text and table headers; command names, flags,
-protocol values, and other literal syntax remain unchanged.
+protocol values, and other literal syntax remain unchanged. The `offline`
+section supplies the service worker's translated offline title, heading, and
+message; each page stores these strings with its resolved language and text
+direction for use when a later navigation cannot reach the server.
 
 ## Translation rules
 

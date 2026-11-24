@@ -2006,7 +2006,7 @@ Click → opens video in embedded player or source site
 
 The preferences page is one server-rendered form. Save submits all preference and consent controls together; Cancel returns without saving, and Reset opens a native confirmation before clearing preferences and local browser storage. Custom CSS is edited on this page, saved to a cookie, and synced with the other supported preferences. Available/custom bangs, filters, and OpenSearch configuration are managed on the separate tools page. Owner-token management is on `/server/preferences/tokens`.
 
-The Data Management section shows the generated sync URL and code, plus a field for pasting a URL or code. Submitting the form saves the visible settings and imports the pasted sync values. Export includes only `theme`, `lang`, and allowlisted `search_pref_*` cookies, including Custom CSS; localStorage data is excluded.
+Cross-device preference export and import live on the separate `/server/preferences/sync` page. The page always shows the generated URL and short code and has an always-visible field for importing a pasted URL or code. Its form imports only; it does not save the main preferences form. Export includes only `theme`, `lang`, and allowlisted `search_pref_*` cookies, including Custom CSS. Consent and local browser storage are not exported.
 
 #### Mobile Responsive
 
