@@ -51,8 +51,8 @@ search --daemon
 
 ### Service Management
 
-These commands control the host's installed service. Run them yourself on the
-deployment host; do not have an AI agent execute them.
+These commands control the service installed on the machine. Run them yourself
+on the deployment machine; do not have an AI agent execute them.
 
 ```bash
 # Install as system service
@@ -398,5 +398,6 @@ search-cli "!ddg privacy"
 | `SEARCH_SERVER_TIMEOUT` | Request timeout in seconds |
 | `SEARCH_OUTPUT_FORMAT` | Default output format (e.g. `table`, `json`) |
 | `SEARCH_LANG` | Output language code (e.g. `en`, `es`, `zh`) |
+| `SEARCH_COLOR` | Color output mode (`auto`, `yes`, or `no`) |
 | `SEARCH_DEBUG` | Enable debug output unless `--debug` explicitly overrides it |
 | `NO_COLOR` | Disable ANSI colors and emojis when set to any non-empty value |

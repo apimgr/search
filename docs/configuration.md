@@ -24,7 +24,7 @@ Default location:
 The file is auto-generated with defaults on first run. There is no admin web UI — all configuration is file-only.
 
 The native configuration roots are `server`, `search`, `engines`, `data`,
-`web`, `tor`, and `cli`. Server settings are grouped under `server`: `tokens`, `mcp`,
+`web`, `tor`, and `cli`. Server settings are grouped under `server`: `tokens`,
 `branding`, `rate_limit`,
 `logs`, `ssl`, `tor`, `i2p`, `notifications`, `security`, `auth`, `pages`,
 `privacy`, `scheduler`, `cache`, `geoip`, `metrics`, `image_proxy`, `contact`,
@@ -33,6 +33,39 @@ The native configuration roots are `server`, `search`, `engines`, `data`,
 `debug`. The sections below document settings with additional operational
 requirements; the server validates all configuration on load and reports
 invalid values without exposing secrets.
+
+MCP is always enabled and has no configuration switch.
+
+### Branding and operator-authored page content
+
+Place branding settings in `{config_dir}/yaml.d/branding.yml`. The optional
+`server.branding.content` entries extend or override built-in page content;
+they never replace the built-in About or Privacy text. Content is sanitized
+before rendering, and `header` and `footer` accept HTML only.
+
+```yaml
+server:
+  branding:
+    content:
+      header:
+        format: html
+        body: '<p>Service notice</p>'
+      about:
+        format: md
+        body:
+          default: |
+            Operated by the Example team.
+          fr: |
+            Géré par l'équipe Example.
+```
+
+Supported entries are `header`, `about`, `privacy`, `footer`, and `terms`.
+`header`, `about`, and `privacy` extend their built-in page content; `footer`
+replaces the custom branding block while preserving the default application
+footer; `terms` replaces the built-in terms page. Formats are `md`, `html`, or
+`txt` for About, Privacy, and Terms; Header and Footer require `html`. A body
+may be a single string or a language map with an optional `default` fallback.
+Each body is limited to 256 KiB.
 
 ### CLI Binary Distribution
 
@@ -365,7 +398,7 @@ server:
     timeout: 30
 ```
 
-Search and Wikipedia thumbnails use signed same-origin `/image-proxy` URLs when enabled, so the endpoint cannot be used as an open relay. It accepts public HTTPS sources on port 443, rejects redirects and private or reserved IP addresses, and only serves validated PNG, JPEG, GIF, or WebP images. The response limit is capped at 10 MiB and the request timeout at 30 seconds; the browser referrer is never forwarded to the image host.
+Search and Wikipedia thumbnails use signed same-origin `/image-proxy` URLs when enabled, so the endpoint cannot be used as an open relay. It accepts public HTTPS sources on port 443, rejects redirects and private or reserved IP addresses, and only serves validated PNG, JPEG, GIF, or WebP images. The response limit is capped at 10 MiB and the request timeout at 30 seconds; the browser referrer is never forwarded to the image source.
 
 ## Environment Variables
 
@@ -603,12 +636,8 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.baseurl` | `` |
 | `server.branding.description` | `A privacy-respecting metasearch engine` |
 | `server.branding.favicon` | `` |
-| `server.branding.footer_text` | `` |
 | `server.branding.logo` | `` |
-| `server.branding.primary_color` | `#bd93f9` |
-| `server.branding.source_code_url` | `` |
 | `server.branding.tagline` | `Privacy-respecting metasearch` |
-| `server.branding.theme` | `dark` |
 | `server.branding.title` | `Search` |
 | `server.cache.db` | `0` |
 | `server.cache.host` | `localhost` |

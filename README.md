@@ -17,7 +17,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 
 ## Features
 
-- Privacy First: No third-party analytics by default, consent-aware preferences, self-hosted data control
+- Privacy First: No third-party analytics by default, consent-aware preferences, data control on your own machine
 - Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
 - Portable Preferences: Save supported theme, language, search preferences, and custom CSS locally, then export/import them with a sync URL or code
 - Search Engine Preferences: Select engines per search category and drag to set their priority
@@ -55,8 +55,8 @@ Direct answers start with a prefix. For example, `directory:linux iso type:docum
 
 ## Production
 
-Host-level installation, service, and Docker commands below are for the
-operator to run on the deployment host; do not have an AI agent execute them.
+Machine-level installation, service, and Docker commands below are for the
+operator to run on the deployment machine; do not have an AI agent execute them.
 
 ### Binary
 
@@ -396,7 +396,7 @@ Import a key directory with `search --maintenance tor import-keys <path>`.
 ### I2P Integration
 
 The I2P eepsite is enabled by default in application containers and disabled
-by default on hosts, virtual machines, and system containers. Set
+by default on machines, virtual machines, and system containers. Set
 `server.i2p.enabled` in `yaml.d/i2p.yml` or use `I2P_ENABLED=true|false` to
 override the default. The `--i2p` flag explicitly enables it for one run.
 Its `.b32.i2p` address is omitted from `/api/autodiscover` unless
@@ -468,7 +468,7 @@ Development instructions are for contributors only.
 
 ### Prerequisites
 
-- Docker (for builds and tests — Go is NOT installed on host)
+- Docker (for builds and tests — Go is NOT installed on the local machine)
 - Make
 - Git
 
@@ -501,9 +501,10 @@ make docker
 The production and development images both include `bash`, `curl`, `tor`,
 `i2pd`, `tini`, `tzdata`, and CA certificates. `make docker` and each CI image
 pipeline run `tests/docker-image-check.sh`, which verifies required commands
-and Tor health. Without outbound network, the health wait is reported as a skip
-unless `REQUIRE_OVERLAY=1`. The development image sets `MODE=development`; the
-production image uses the binary's production default.
+and probes `/api/v1/server/healthz` for JSON through a loopback-published port
+using temporary runtime mounts. Without outbound network, the Tor health wait is reported as a
+skip unless `REQUIRE_OVERLAY=1`. The development image sets
+`MODE=development`; the production image uses the binary's production default.
 CI workflows are maintained for GitHub Actions, GitLab CI, Gitea Actions,
 Forgejo Actions, and Jenkins.
 

@@ -4,9 +4,9 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 
 ## Features
 
-- **Privacy-First**: No third-party analytics by default, consent-aware preferences, no hosted user profiling
+- **Privacy-First**: No third-party analytics by default, consent-aware preferences, no remote user profiling
 - **Multiple Engines**: Aggregates results from DuckDuckGo, Google, Bing, Brave, and more
-- **Self-Hosted**: Run your own search engine instance
+- **Self-Managed**: Run your own search engine instance
 - **Themes**: Dark, light, and automatic themes with configurable typography and result density
 - **Mobile-Friendly**: Responsive design works on all devices
 - **API Access**: Full REST API and GraphQL support
@@ -55,7 +55,7 @@ For Docker, open [http://172.17.0.1:64580](http://172.17.0.1:64580). The binary 
 ## Supported Platforms
 
 Releases are available for Linux, macOS, Windows, and FreeBSD on AMD64 and
-ARM64. Docker images are available for supported container hosts. See
+ARM64. Docker images are available for supported container platforms. See
 [Installation](installation.md) for release assets and setup steps.
 
 ## License

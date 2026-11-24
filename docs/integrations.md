@@ -45,7 +45,7 @@ updates and enforce `cli_min_version`.
 ## Search Bar Widget
 
 Add a native HTML form to another site to send searches to a Search instance.
-The example targets the public service. For a self-hosted instance, replace
+The example targets the public service. For a locally deployed instance, replace
 the origin with that instance's public base URL. Change the input ID if the
 page already uses `search-query`:
 

@@ -3,7 +3,7 @@
 Search can be installed in several ways depending on your environment and preferences.
 
 Commands that install binaries, change system services, or manage Docker on a
-host are for the operator to run on the deployment host; do not have an AI
+machine are for the operator to run on the deployment machine; do not have an AI
 agent execute them.
 
 ## Docker (Recommended)

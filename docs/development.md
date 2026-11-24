@@ -173,9 +173,13 @@ directly.
 
 Both final images include `bash`, `curl`, `tor`, `i2pd`, `tini`, `tzdata`, and
 CA certificates. `make docker` and CI run `tests/docker-image-check.sh` for each
-production and development image. The check verifies required commands and
-waits up to `TOR_WAIT` seconds (180 by default) for Tor health; without outbound
-network it reports a skip unless `REQUIRE_OVERLAY=1`. `Dockerfile.dev` sets
+production and development image. The check creates temporary config, data,
+and database mounts, verifies required commands, then probes
+`/api/v1/server/healthz` for JSON through a loopback-published port. It waits
+up to `HEALTH_WAIT` seconds (30 by default) for the health endpoint and up to
+`TOR_WAIT` seconds (180 by default)
+for Tor health; without outbound network it reports a skip unless
+`REQUIRE_OVERLAY=1`. `Dockerfile.dev` sets
 `MODE=development`; the production image leaves `MODE` unset and uses the
 server's production default.
 

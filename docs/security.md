@@ -103,7 +103,7 @@ server:
         enabled: true
 ```
 
-Supported feed types are `ip`, `cidr`, and `domain`. Domain feeds accept one domain per line or hosts-file entries. A blocked domain applies to that exact host and its subdomains. Feed URLs must use HTTPS; invalid entries are ignored and logged without exposing their URL. Each download is limited to 64 MiB and persisted only after parsing succeeds with at least one usable rule. If any configured feed fails, the updater keeps the last known rules, merges newly downloaded entries conservatively, and reports an incomplete update for scheduler visibility. Changing or disabling feeds reloads only currently configured and enabled feed files, so removed rules do not remain active from stale files.
+Supported feed types are `ip`, `cidr`, and `domain`. Domain feeds accept one domain per line or entries in the standard IP-address mapping format. A blocked domain applies to that domain and its subdomains. Feed URLs must use HTTPS; invalid entries are ignored and logged without exposing their URL. Each download is limited to 64 MiB and persisted only after parsing succeeds with at least one usable rule. If any configured feed fails, the updater keeps the last known rules, merges newly downloaded entries conservatively, and reports an incomplete update for scheduler visibility. Changing or disabling feeds reloads only currently configured and enabled feed files, so removed rules do not remain active from stale files.
 
 ### Regular Updates
 
@@ -117,7 +117,7 @@ search --update yes
 
 Metrics are internal operational endpoints. Do not proxy `/server/metrics`,
 `/api/metrics`, `/api/v1/server/metrics`, or their `/metrics` aliases to the
-public internet. Restrict them at the reverse proxy or host firewall to the
+public internet. Restrict them at the reverse proxy or machine firewall to the
 monitoring network. Each service also requires its own bearer token; token
 authentication is defense in depth and does not replace network restrictions.
 
@@ -147,7 +147,7 @@ enabled. It reports `degraded` when the last successful update is more than
 48 hours old; the scheduler attempts an update daily.
 
 The contact form includes a honeypot and requires a single-use CAPTCHA on every
-submission. The default `simple` challenge is self-hosted and works without
+submission. The default `simple` challenge is served locally and works without
 JavaScript, including over Tor. Operators may configure reCAPTCHA or hCaptcha
 with their site and secret keys; secret keys stay server-side. Tor requests use
 the built-in challenge even when an external provider is configured.
@@ -192,10 +192,10 @@ environment.
 
 For enhanced privacy, Search automatically starts and manages an isolated Tor
 process for its hidden service when a Tor binary is found on `PATH` or configured
-in `server.tor.binary`. It does not attach to or manage the host's system Tor
-daemon. Install the Tor binary on the deployment host yourself:
+in `server.tor.binary`. It does not attach to or manage the machine's system Tor
+daemon. Install the Tor binary on the deployment machine yourself:
 
-Install Tor on the deployment host yourself; do not have an AI agent execute
+Install Tor on the deployment machine yourself; do not have an AI agent execute
 the package-manager command below.
 
 ```bash

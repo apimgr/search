@@ -2,7 +2,7 @@
 
 Search provides both REST and GraphQL APIs for programmatic access.
 
-Examples use the public service at `https://scour.li`. For a self-hosted
+Examples use the public service at `https://scour.li`. For a locally deployed
 instance, replace that origin with the public base URL configured for your
 server.
 
@@ -42,12 +42,12 @@ namespaces:
 | `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
 | `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/v1/server/graphql`) |
 
-The documentation pages self-host Swagger UI 5.36.0 and GraphiQL 6.0.1,
-including their CSS and fonts. GraphiQL's Monaco integration uses self-hosted
+The documentation pages serve bundled Swagger UI 5.36.0 and GraphiQL 6.0.1,
+including their CSS and fonts. GraphiQL's Monaco integration uses bundled
 editor and JSON workers from Monaco Editor 0.57.0 and the GraphQL worker from
 monaco-graphql 2.0.1. The GraphiQL page bootstrap configures these workers from
 same-origin static assets; the pages do not load third-party browser assets
-from external hosts. Upstream license texts are included beside the bundled
+from external origins. Upstream license texts are included beside the bundled
 assets.
 
 ### Unversioned aliases
@@ -131,11 +131,11 @@ Image-category results also return `image_url`, `image_width`, `image_height`,
 `image_format`, and `file_size` when the upstream engine provides those values.
 With the image proxy enabled (the default), both `thumbnail` and `image_url`
 are signed same-origin `/image-proxy` URLs; clients should render those values
-directly instead of loading the upstream image hosts.
+directly instead of loading images from upstream services.
 
 Video results also include `duration` (seconds), `view_count`, and `author`.
 YouTube supplies privacy-enhanced `embed_url` metadata. PeerTube supplies a
-same-origin `preview_url` for public MP4/WebM files hosted on PeerTube.TV; the
+same-origin `preview_url` for public MP4/WebM files served by PeerTube.TV; the
 server fetches file metadata only for local videos and proxies bounded byte
 ranges so the browser never contacts the provider directly. Clients must reject
 external preview URLs and retain the static thumbnail when no eligible clip is
