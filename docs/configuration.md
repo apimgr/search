@@ -34,6 +34,12 @@ The native configuration roots are `server`, `search`, `engines`, `data`,
 requirements; the server validates all configuration on load and reports
 invalid values without exposing secrets.
 
+`server.trusted_proxies.additional` accepts IP addresses, CIDR ranges, and DNS
+names for upstream proxies. DNS names are resolved during startup and refreshed
+after five minutes. Forwarded host, protocol, port, path, and client-IP headers
+are honored only when the immediate TCP peer matches one of these trusted
+proxies or an always-trusted private network.
+
 Credentials and key material are stored in the owner-only `secrets.yml` next
 to `server.yml`, not in the ordinary configuration files.
 
@@ -978,8 +984,7 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.security.csrf.header_name` | `X-CSRF-Token` |
 | `server.security.csrf.secure` | `auto` |
 | `server.security.csrf.token_length` | `32` |
-| `server.security.encryption_key_previous_expires` | `` |
-| `server.security.encryption_key_previous` | `` |
+| `server.security.encryption_key_version` | `1` |
 | `server.security.encryption_key` | `<redacted>` |
 | `server.security.headers.clear_site_data.execution_contexts` | `false` |
 | `server.security.headers.clear_site_data.on_consent_withdrawal` | `true` |

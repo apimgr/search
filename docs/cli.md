@@ -104,6 +104,7 @@ search --maintenance restore /path/to/backup.tar.gz
 
 # Rotate a server secret
 search --maintenance secret rotate installation_secret
+search --maintenance secret rotate encryption_key
 
 # Manage API tokens
 search --maintenance token list
@@ -150,6 +151,12 @@ search --maintenance scheduler history backup_daily
 # Show maintenance help
 search --maintenance --help
 ```
+
+Encryption-key rotation re-encrypts owner and linked API token copies,
+AES-encrypted security reports and contacts, QR short-link destinations, and
+DNS provider credentials. The previous key is stored wrapped in the database
+for a 30-day grace period; interrupted migrations resume at server startup.
+Another rotation is refused while that grace period is active.
 
 Backup creation uses `server.backup.encryption_password` from `secrets.yml`
 without prompting. Testing or restoring an encrypted archive prompts for that

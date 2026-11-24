@@ -267,7 +267,13 @@ authorization. Enabling or disabling a task updates its `enabled` setting in
 
 ```bash
 search --maintenance secret rotate installation_secret
+search --maintenance secret rotate encryption_key
 ```
+
+Encryption-key rotation re-encrypts owner and linked API token copies,
+AES-encrypted security reports and contacts, QR short-link destinations, and
+DNS provider credentials. The previous key is stored wrapped in the database
+for a 30-day grace period; interrupted migrations resume at server startup.
 
 ## API
 

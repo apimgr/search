@@ -365,8 +365,8 @@ enabled with `server.healthz.root.enabled`.
   "mode": "production",
   "timestamp": "2026-01-04T14:22:00Z",
   "features": {
-    "tor": {"enabled": false, "running": false, "status": "disabled", "hostname": ""},
-    "i2p": {"enabled": false, "running": false, "status": "disabled", "state": "disabled", "hostname": "", "provider": ""},
+    "tor": {"enabled": false, "running": false, "state": "disabled", "status": "disabled", "hostname": ""},
+    "i2p": {"enabled": false, "running": false, "status": "disabled", "state": "disabled", "hostname": "", "provider": "none"},
     "geoip": true
   },
   "checks": {
@@ -384,8 +384,8 @@ The health probe itself contributes to `active_connections`, so that value is
 at least `1` while this response is built. Health probes and `/server/metrics`
 scrapes do not increment request totals. Component and project-stat keys are
 registered dynamically and follow the fixed core fields in registration order;
-disabled components are omitted. Tor/I2P details use only the documented
-four-state status values, and I2P also includes its lifecycle `state`.
+disabled component checks are omitted. Tor and I2P include their lifecycle
+`state`; their public `status` uses only the documented four-state values.
 
 ### Scheduler
 
