@@ -196,6 +196,23 @@ server:
     use_network: false
 ```
 
+### I2P Eepsite
+
+I2P is enabled by default in application containers and disabled by default on
+bare metal, virtual machines, and system containers. An explicit
+`server.i2p.enabled` setting or `I2P_ENABLED` environment variable overrides
+that default. The server manages its own `i2pd` process when the binary is
+available.
+
+```yaml
+server:
+  i2p:
+    enabled: false
+    binary: ""
+    sam_address: 127.0.0.1:7656
+    virtual_port: 80
+```
+
 ### Contact Form CAPTCHA
 
 The contact form uses the built-in challenge by default. To use reCAPTCHA or
@@ -342,6 +359,7 @@ CLI flags override environment values where both exist.
 | `SMTP_FROM_NAME` | Sender name | application title |
 | `SMTP_FROM_EMAIL` | Sender email | `no-reply@{fqdn}` |
 | `SMTP_TLS` | `auto`, `starttls`, `tls`, or `none` | `auto` |
+| `I2P_ENABLED` | Explicitly enable or disable the I2P eepsite | `true` in application containers; otherwise `false` |
 
 `DEBUG` controls diagnostics independently of `MODE`. `MODE=debug` enables
 debug mode by default; an explicit `DEBUG=false` disables debug endpoints.
@@ -652,7 +670,7 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.i18n.available_languages[14]` | `zh` |
 | `server.i18n.translations_dir` | `/data/translations` |
 | `server.i2p.binary` | `` |
-| `server.i2p.enabled` | `false` |
+| `server.i2p.enabled` | `false` (effective default: `true` in application containers) |
 | `server.i2p.inbound_length` | `3` |
 | `server.i2p.inbound_quantity` | `5` |
 | `server.i2p.outbound_length` | `3` |

@@ -42,6 +42,9 @@ search --data /var/lib/search
 # Start in development mode
 search --mode development
 
+# Enable the I2P eepsite for this run
+search --i2p
+
 # Start as daemon
 search --daemon
 ```

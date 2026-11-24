@@ -217,6 +217,7 @@ DATA_DIR="/var/lib/apimgr/search"
 LOG_DIR="/var/log/apimgr/search"
 DATABASE_DIR="/var/lib/apimgr/search/db"
 BACKUP_DIR="/var/backups/apimgr/search"
+I2P_ENABLED=false
 ```
 
 ### Operator Access
@@ -349,6 +350,13 @@ server:
     # Hidden service virtual port
     virtual_port: 80
 ```
+
+### I2P Integration
+
+The I2P eepsite is enabled by default in application containers and disabled
+by default on hosts, virtual machines, and system containers. Set
+`server.i2p.enabled` in `yaml.d/i2p.yml` or use `I2P_ENABLED=true|false` to
+override the default. The `--i2p` flag explicitly enables it for one run.
 
 ### Privacy
 
