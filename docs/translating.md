@@ -44,6 +44,14 @@ two-space indentation, no trailing commas, and no comments. Keep every key and
 its nesting unchanged; translate values only. Every locale must have the same
 key set as English and must not contain empty values.
 
+The `graphql.descriptions` and `swagger.text` sections localize schema and
+OpenAPI descriptions. Their key suffixes are generated from the English
+source text; keep the keys unchanged and translate the corresponding values.
+The `email.templates` section contains the default email subject and body for
+each event. Preserve all `{variable}` placeholders exactly. The `client.cli`
+section contains client help text and table headers; command names, flags,
+protocol values, and other literal syntax remain unchanged.
+
 ## Translation rules
 
 - Preserve every interpolation placeholder exactly, including its name and
