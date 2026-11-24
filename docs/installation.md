@@ -125,6 +125,16 @@ For the Docker command above, access the web interface at `http://172.17.0.1:645
 
 On first run, Search auto-generates `server.yml` with defaults and stores the random operator token in the private `secrets.yml` file. The startup banner shows the server URL and where to find the token. No setup wizard or admin account is required.
 
+## Installable Browser App
+
+Search can be installed from a supported browser's install or add-to-home-screen
+control. Service workers require HTTPS, except on browser-recognized local
+development origins. The worker caches static assets and eligible public pages;
+it does not promise that every search or private page works offline. After a
+page loads, it stores the current language's offline title and message so a
+later network failure can show a translated fallback. The worker synthesizes
+that fallback; Search does not publish a static `/offline.html` page.
+
 ## Upgrading
 
 ### Docker

@@ -31,7 +31,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - Bang Shortcuts: Quick redirects like `!g`, `!w`, `!gh` for fast searching
 - Keyboard Navigation: Vim-style shortcuts for power users (j/k, /, Enter)
 - Mobile Friendly: Responsive design that works on all devices
-- Installable PWA: Add Search to your home screen with offline fallback support and desktop/mobile install previews
+- Installable PWA: Add Search to your home screen; the service worker stores the current language's offline message and can show it when a page is unavailable
 - Dark, Light, and Auto Themes: Choose the theme, font size, results density, and accent color in Preferences
 - Custom CSS: Save a server-rendered stylesheet override in a browser cookie, included in preference sync, limited to 64 characters
 - File-only Configuration: Hot-reloaded `server.yml` and `yaml.d/` area files, with credentials isolated in `secrets.yml`
