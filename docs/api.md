@@ -324,7 +324,7 @@ Return the private RSS feed for an alert.
 
 ## Server Management API
 
-Most server management endpoints require the operator token (`server.token` in `server.yml`). Health checks are public and do not require a token.
+Most server management endpoints require the operator token (`server.token` in `secrets.yml`). Health checks are public and do not require a token.
 
 ### Authentication
 

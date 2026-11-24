@@ -123,7 +123,7 @@ sudo search --service --install
 
 For the Docker command above, access the web interface at `http://172.17.0.1:64580`. A binary installation prints its selected URL when it starts.
 
-On first run, Search auto-generates `server.yml` with defaults including a random operator token. The startup banner shows the server URL and the token location. No setup wizard or admin account is required.
+On first run, Search auto-generates `server.yml` with defaults and stores the random operator token in the private `secrets.yml` file. The startup banner shows the server URL and where to find the token. No setup wizard or admin account is required.
 
 ## Upgrading
 

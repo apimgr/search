@@ -6,7 +6,7 @@ Search is designed with security and privacy as primary concerns. This document 
 
 ### Authentication
 
-- **Operator token** (`server.token` in `server.yml`) — auto-generated on first run; gates operator management endpoints
+- **Operator token** (`server.token` in `secrets.yml`) — auto-generated on first run; gates operator management endpoints
 - **Per-resource tokens** — for search alerts and webhooks; stored as SHA-256 hashes
 - **Owner and linked tokens** — owner-scoped credentials for a person's resources and their automation clients
 - **Bearer token authentication** for all protected API access
@@ -63,10 +63,10 @@ server:
 
 ### Operator Token
 
-The operator token is auto-generated on first run and stored in `server.yml`. Keep the config file permissions restrictive:
+The operator token is auto-generated on first run and stored in `secrets.yml` with mode `0600`. Keep the secrets file private:
 
 ```bash
-chmod 600 /etc/apimgr/search/server.yml
+chmod 600 /etc/apimgr/search/secrets.yml
 ```
 
 ### Rate Limiting
