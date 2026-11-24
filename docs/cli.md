@@ -168,10 +168,21 @@ search tor status
 search tor validate
 search tor restart
 search tor regenerate
-search tor vanity start <prefix>
+search tor vanity start <prefix> [--workers <count>]
 search tor vanity apply
 search tor import-keys <path>
 ```
+
+Regenerating the address, applying a vanity candidate, and importing keys ask
+for an explicit `yes` confirmation; pass `--yes` for scripted operation. Key
+imports take an absolute path to a Tor key directory readable by the server.
+The loopback request sends the path and confirmation only; private key bytes
+remain on disk.
+
+Vanity search defaults to one fewer worker than the number of logical CPUs
+(minimum one); `--workers` accepts an explicit count from 1 through the
+logical CPU count. A running search can be cancelled, and candidates already
+found remain available to apply.
 
 Email testing requires configured SMTP. The recipient defaults to
 `server.notifications.email.reply_to`; `--to ADDRESS` overrides it. The
@@ -179,8 +190,9 @@ Email testing requires configured SMTP. The recipient defaults to
 template without connecting to SMTP.
 
 Scheduler status and task execution require a running server and the operator
-token from `server.yml`. Enabling or disabling a task updates its `enabled`
-setting in `server.yml`; required tasks cannot be disabled.
+token from `secrets.yml`. Enabling or disabling a task updates its `enabled`
+setting under `server.scheduler` in `yaml.d/maintenance.yml`; required tasks
+cannot be disabled.
 
 ## CLI Client
 
@@ -188,14 +200,31 @@ The CLI client (`search-cli`) provides a terminal-based search experience.
 
 ### Installation
 
-The CLI client is included with the main distribution:
+Download the matching client binary from [the latest release](https://github.com/apimgr/search/releases/latest):
+
+| Platform | Binary |
+|----------|--------|
+| Linux amd64 | `search-cli-linux-amd64` |
+| Linux arm64 | `search-cli-linux-arm64` |
+| macOS amd64 | `search-cli-darwin-amd64` |
+| macOS arm64 | `search-cli-darwin-arm64` |
+| Windows amd64 | `search-cli-windows-amd64.exe` |
+| Windows arm64 | `search-cli-windows-arm64.exe` |
+| FreeBSD amd64 | `search-cli-freebsd-amd64` |
+| FreeBSD arm64 | `search-cli-freebsd-arm64` |
+
+On Unix-like systems, make the downloaded file executable and place it on your
+`PATH`:
 
 ```bash
-# Download
+# Example: Linux amd64
 curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
 chmod +x search-cli-linux-amd64
 sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 ```
+
+On macOS, remove the quarantine attribute after installing with
+`xattr -d com.apple.quarantine /usr/local/bin/search-cli`.
 
 ### Configuration
 
@@ -361,9 +390,10 @@ search-cli "!ddg privacy"
 
 | Variable | Description |
 |----------|-------------|
-| `SEARCH_SERVER` | Server URL (overrides `--server` flag when no flag given) |
+| `SEARCH_SERVER_PRIMARY` | Default server URL when `--server` is omitted |
 | `SEARCH_TOKEN` | API token |
-| `SEARCH_FORMAT` | Output format |
-| `SEARCH_COLOR` | Color output: `auto`, `yes`, `no` |
+| `SEARCH_SERVER_TIMEOUT` | Request timeout in seconds |
+| `SEARCH_OUTPUT_FORMAT` | Default output format (e.g. `table`, `json`) |
 | `SEARCH_LANG` | Output language code (e.g. `en`, `es`, `zh`) |
+| `SEARCH_DEBUG` | Enable debug output unless `--debug` explicitly overrides it |
 | `NO_COLOR` | Disable ANSI colors and emojis when set to any non-empty value |

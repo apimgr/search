@@ -23,11 +23,14 @@ cd search
 # Quick current-platform development build (writes to the OS temp directory)
 make dev
 
-# Build local and all eight release platforms
-make build
-
 # Build a versioned local binary for production testing
 make local
+
+# Build the local binaries plus all eight release platforms
+make build
+
+# Prepare and publish a stable release (requires X.Y.Z)
+make release
 
 # Build Docker image
 make docker
@@ -167,6 +170,30 @@ the maintained Go toolchain image; they do not require a local Go installation.
 For the production and development image workflows, follow the repository's
 Makefile targets and Docker documentation rather than invoking `docker build`
 directly.
+
+Both final images include `bash`, `curl`, `tor`, `i2pd`, `tini`, `tzdata`, and
+CA certificates. `make docker` verifies the required commands after publishing
+the production image. CI performs the same command check for each production
+and development image build. `Dockerfile.dev` sets `MODE=development`; the
+production image leaves `MODE` unset and uses the server's production default.
+
+For local builds, `site.txt` takes precedence as the explicit source for the
+embedded official site URL; otherwise set `OFFICIAL_SITE` in the environment.
+If neither is provided, the URL remains empty and the CLI requires `--server`.
+Set `REGISTRY` to publish `make docker` output outside the default GHCR path.
+
+| Make variable | Purpose | Default |
+|---------------|---------|---------|
+| `VERSION` | Local binary version; explicit environment value, then non-empty `release.txt`, then the short Git commit ID | Derived |
+| `OFFICIAL_SITE` | Explicit embedded site URL when `site.txt` is absent | Empty |
+| `REGISTRY` | Container image destination used by `make docker` | `ghcr.io/apimgr/search` |
+| `BINDIR` | Local and cross-platform build output directory | `binaries/` |
+
+CI/CD definitions are kept for GitHub Actions (`.github/workflows/`), GitLab
+(`.gitlab-ci.yml`), Gitea (`.gitea/workflows/`), Forgejo
+(`.forgejo/workflows/`), and Jenkins (`Jenkinsfile`). Each provider builds the
+supported server and CLI platforms, runs the project checks, and publishes its
+corresponding release or container artifacts.
 
 ## Documentation
 

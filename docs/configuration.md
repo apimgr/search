@@ -39,7 +39,8 @@ invalid values without exposing secrets.
 The server can distribute operator-provisioned CLI release binaries. The
 default directory is `{data_dir}/cli`; it must contain platform binaries plus
 `version.txt` and `sha256.txt` from the same release. The server verifies each
-binary's checksum before publishing metadata or serving it.
+binary's checksum before publishing metadata or serving it. Store the top-level
+`cli` settings and `server.update` settings in `yaml.d/maintenance.yml`.
 
 ```yaml
 cli:
@@ -210,11 +211,15 @@ server:
 
 ### Tor Hidden Service
 
+Tor settings are stored in `yaml.d/tor.yml`.
+
 ```yaml
 server:
   tor:
     # Auto-enabled when tor binary is found on PATH
     use_network: false
+    # Publish the .onion address in /api/autodiscover only when enabled
+    expose: false
 ```
 
 ### I2P Eepsite
@@ -224,11 +229,14 @@ bare metal, virtual machines, and system containers. An explicit
 `server.i2p.enabled` setting or `I2P_ENABLED` environment variable overrides
 that default. The server manages its own `i2pd` process when the binary is
 available.
+I2P settings are stored in `yaml.d/i2p.yml`; its address is omitted from
+`/api/autodiscover` unless `server.i2p.expose` is true.
 
 ```yaml
 server:
   i2p:
     enabled: false
+    expose: false
     binary: ""
     sam_address: 127.0.0.1:7656
     virtual_port: 80
@@ -468,8 +476,10 @@ Options:
 
 The table below lists every YAML path emitted by the current `config.DefaultConfig()` implementation and its default value. Sequence items use `[index]` suffixes. Empty credentials and generated secrets are shown as empty or `<redacted>`; replace them only through the documented configuration or secret-management workflow. This index complements the operational explanations above and is refreshed whenever configuration defaults change.
 
-| `server.yml` path | Default value |
+| Merged YAML path | Default value |
 |---|---|
+| `cli.binary_download.dir` | `{data_dir}/cli` |
+| `cli.binary_download.require_auth` | `false` |
 | `data.cve.filter_by_cpe` | `false` |
 | `data.cve.source` | `https://services.nvd.nist.gov/rest/json/cves/2.0` |
 | `data.security_dir` | `/data/search/security` |
@@ -692,6 +702,7 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.i18n.translations_dir` | `/data/translations` |
 | `server.i2p.binary` | `` |
 | `server.i2p.enabled` | `false` (effective default: `true` in application containers) |
+| `server.i2p.expose` | `false` |
 | `server.i2p.inbound_length` | `3` |
 | `server.i2p.inbound_quantity` | `5` |
 | `server.i2p.outbound_length` | `3` |
@@ -996,6 +1007,7 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.tor.circuit_timeout` | `60` |
 | `server.tor.close_circuit_on_stream_limit` | `true` |
 | `server.tor.contact_email` | `` |
+| `server.tor.expose` | `false` |
 | `server.tor.max_circuits` | `32` |
 | `server.tor.max_monthly_bandwidth` | `100 GB` |
 | `server.tor.max_streams_per_circuit` | `100` |

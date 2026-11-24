@@ -33,10 +33,11 @@ To let a server distribute CLI updates, provision the release artifacts in
 `{data_dir}/cli/`: `search-cli-{os}-{arch}[.exe]`, `version.txt`, and
 `sha256.txt`. The server recomputes each binary's SHA-256 before publishing it
 or serving `GET https://scour.li/cli/binaries/search-cli-{os}-{arch}`. Set
-`cli.binary_download.dir` to override the directory, or set
-`cli.binary_download.require_auth: true` to require the operator Bearer token.
-`update.cli_min_version` optionally rejects older clients; it defaults to
-empty, which enforces no minimum.
+`cli.binary_download.dir` in `yaml.d/maintenance.yml` to override the directory,
+or set `cli.binary_download.require_auth: true` there to require the operator
+Bearer token. Downloads are public by default. `update.cli_min_version` in the
+same area file optionally rejects older clients; it defaults to empty, which
+enforces no minimum.
 
 The CLI client (`search-cli`) reads this endpoint on every startup to check for
 updates and enforce `cli_min_version`.

@@ -360,7 +360,6 @@ enabled with `server.healthz.root.enabled`.
   "uptime": "3d 14h 22m",
   "mode": "production",
   "timestamp": "2026-01-04T14:22:00Z",
-  "cluster": {"enabled": false},
   "features": {
     "tor": {"enabled": false, "running": false, "status": "disabled", "hostname": ""},
     "i2p": {"enabled": false, "running": false, "status": "disabled", "state": "disabled", "hostname": "", "provider": ""},

@@ -42,7 +42,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - GeoIP: Country detection and blocking capabilities
 - Email Notifications: Alerts for important events
 
-## Search Syntax
+### Search Syntax
 
 Boolean search terms are case-insensitive. Adjacent terms mean AND, `NOT` excludes a term or phrase, and `AND` binds more tightly than `OR`. Use parentheses to group expressions and quotes for exact phrases:
 
@@ -128,16 +128,28 @@ The client can check for a compatible update from its configured server with
 
 ### Install
 
+Download the release binary matching your operating system and architecture:
+
+| Platform | Binary |
+|----------|--------|
+| Linux amd64 | `search-cli-linux-amd64` |
+| Linux arm64 | `search-cli-linux-arm64` |
+| macOS amd64 | `search-cli-darwin-amd64` |
+| macOS arm64 | `search-cli-darwin-arm64` |
+| Windows amd64 | `search-cli-windows-amd64.exe` |
+| Windows arm64 | `search-cli-windows-arm64.exe` |
+| FreeBSD amd64 | `search-cli-freebsd-amd64` |
+| FreeBSD arm64 | `search-cli-freebsd-arm64` |
+
+All client binaries are available from [the latest release](https://github.com/apimgr/search/releases/latest).
+On macOS, remove the quarantine attribute after installing with
+`xattr -d com.apple.quarantine /usr/local/bin/search-cli`.
+
 ```bash
-# Linux
+# Example: install on Linux amd64
 curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
 chmod +x search-cli-linux-amd64
 sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
-
-# macOS
-curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-cli-darwin-arm64
-chmod +x search-cli-darwin-arm64
-sudo mv search-cli-darwin-arm64 /usr/local/bin/search-cli
 ```
 
 ### Configure
@@ -229,7 +241,8 @@ file watcher (no signal required). The operator bearer token is stored at
 `server.metrics.auth.tokens` in the same file.
 The operator token uses the `adm_` prefix, metrics tokens use `mtr_`, and new
 owner tokens use `own_`; previously issued `tok_` owner tokens remain valid.
-Scheduled task settings under `server.scheduler.tasks` support per-task
+Scheduled task settings under `server.scheduler.tasks` in
+`yaml.d/maintenance.yml` support per-task
 `schedule`, `retry_on_fail`, and `retry_delay` values.
 
 ```bash
@@ -250,7 +263,7 @@ search --maintenance scheduler history backup_daily
 
 Scheduler status and task execution require a running server and operator
 authorization. Enabling or disabling a task updates its `enabled` setting in
-`server.yml`; required tasks cannot be disabled.
+`yaml.d/maintenance.yml`; required tasks cannot be disabled.
 
 ```bash
 search --maintenance secret rotate installation_secret
@@ -356,13 +369,17 @@ Quick redirects with `!` prefix: `!g` Google, `!w` Wikipedia, `!gh` GitHub, `!yt
 
 When the Tor binary is available, Search starts and manages its own isolated Tor
 process for the hidden service; it does not use a system Tor daemon. The binary
-is discovered from `server.tor.binary` or `PATH`. Configuration in `server.yml`:
+is discovered from `server.tor.binary` or `PATH`. Configuration in the merged
+server config (`yaml.d/tor.yml`):
 
 ```yaml
 server:
   tor:
     # Empty means discover the Tor binary on PATH
     binary: ""
+
+    # Publish the .onion address in /api/autodiscover only when explicitly enabled
+    expose: false
 
     # Route outgoing engine requests through Tor
     use_network: false
@@ -377,6 +394,15 @@ The I2P eepsite is enabled by default in application containers and disabled
 by default on hosts, virtual machines, and system containers. Set
 `server.i2p.enabled` in `yaml.d/i2p.yml` or use `I2P_ENABLED=true|false` to
 override the default. The `--i2p` flag explicitly enables it for one run.
+Its `.b32.i2p` address is omitted from `/api/autodiscover` unless
+`server.i2p.expose: true` is set in `yaml.d/i2p.yml`.
+
+```yaml
+server:
+  i2p:
+    enabled: false
+    expose: false
+```
 
 ### Privacy
 
@@ -448,11 +474,17 @@ Development instructions are for contributors only.
 git clone https://github.com/apimgr/search.git
 cd search
 
-# Quick dev build (Docker, outputs to /tmp/apimgr/)
+# Quick current-platform build (Docker, outputs to /tmp/apimgr/search-XXXXXX/)
 make dev
 
-# Full cross-platform build (8 platforms)
+# Versioned local build for production testing
+make local
+
+# Local plus all 8 release platforms
 make build
+
+# Manual stable release only (requires a stable X.Y.Z version)
+make release
 
 # Run tests (Docker)
 make test
@@ -460,6 +492,18 @@ make test
 # Build and push Docker image
 make docker
 ```
+
+The production and development images both include `bash`, `curl`, `tor`,
+`i2pd`, `tini`, `tzdata`, and CA certificates. `make docker` and each CI image
+pipeline verify those commands in the pushed image. The development image sets
+`MODE=development`; the production image uses the binary's production default.
+CI workflows are maintained for GitHub Actions, GitLab CI, Gitea Actions,
+Forgejo Actions, and Jenkins.
+
+For local builds, `site.txt` sets the embedded official site URL when present;
+otherwise `OFFICIAL_SITE` may be set explicitly. If neither is set, the URL
+remains empty and `search-cli` requires `--server`. Set `REGISTRY` when using
+`make docker` to publish to a registry other than the default GHCR path.
 
 ### Project Structure
 
