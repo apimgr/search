@@ -500,8 +500,10 @@ make docker
 
 The production and development images both include `bash`, `curl`, `tor`,
 `i2pd`, `tini`, `tzdata`, and CA certificates. `make docker` and each CI image
-pipeline verify those commands in the pushed image. The development image sets
-`MODE=development`; the production image uses the binary's production default.
+pipeline run `tests/docker-image-check.sh`, which verifies required commands
+and Tor health. Without outbound network, the health wait is reported as a skip
+unless `REQUIRE_OVERLAY=1`. The development image sets `MODE=development`; the
+production image uses the binary's production default.
 CI workflows are maintained for GitHub Actions, GitLab CI, Gitea Actions,
 Forgejo Actions, and Jenkins.
 

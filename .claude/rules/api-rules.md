@@ -1,4 +1,5 @@
 # API Rules (PART 13, 14, 15)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -24,6 +25,7 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 - Determine frontend response type in order: explicit `Accept` (`application/json`, `text/html`, `text/plain`), companion CLI, text browser, known HTTP tool, then browser HTML
 - Treat HTTP tool detection as a User-Agent denylist; empty User-Agent and unrecognized clients follow the documented defaults
 - Keep API negotiation separate: `.txt`, explicit JSON/plain-text, HTTP tool, then JSON default
+- Use one route definition for router registration, OpenAPI, llms.txt, and text serialization; serialize response structs in declared field order and maps by sorted key
 - Support Let's Encrypt HTTP-01 and TLS-ALPN-01 (DNS-01 optional) plus manual certificates
 - Support DNS-01 with provider credentials encrypted at rest; validate them at startup and before certificate requests
 - Resolve request hosts only through the documented trusted proxy policy; static FQDN uses DOMAIN, hostname, public IPs, then localhost

@@ -760,7 +760,6 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.maintenance.self_healing.max_attempts` | `0` |
 | `server.maintenance.self_healing.retry_interval` | `30s` |
 | `server.maintenance_mode` | `false` |
-| `server.mcp.enabled` | `true` |
 | `server.metrics.auth.allow_unauthenticated` | `false` |
 | `server.metrics.auth.tokens.grafana` | `<redacted>` |
 | `server.metrics.auth.tokens.loki` | `<redacted>` |

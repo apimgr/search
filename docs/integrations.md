@@ -187,8 +187,8 @@ curl -q -LSsf -X POST https://scour.li/api/v1/server/graphql \
 Search exposes an MCP Streamable HTTP endpoint backed by the REST API. It uses
 JSON-RPC over `POST`; there is no stdio mode or separate MCP service. The
 canonical endpoint is `/api/v1/server/mcp`, with direct aliases at `/api/mcp`
-and `/mcp`. The endpoint is enabled by default and can be disabled with
-`server.mcp.enabled` in `server.yml`.
+and `/mcp`. MCP is always enabled; there is no configuration, environment, or
+CLI switch for disabling it.
 
 MCP uses the same bearer credentials and authorization as the REST API. Public
 tools work anonymously; operator-only tools require the operator token. For a
@@ -199,7 +199,7 @@ Tool availability follows the caller's permissions, and token-management
 operations are not exposed as tools.
 
 The server renders connection instructions and the current tool list at
-`/server/help/mcp`; the page is available only while MCP is enabled. The
+`/server/help/mcp`. The
 supported protocol revisions and request rules follow the [MCP
 specification](https://modelcontextprotocol.io/specification).
 

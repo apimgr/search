@@ -1,4 +1,5 @@
 # Config Rules (PART 5, 6, 12)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -27,6 +28,7 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 - Normalize paths and validate all configured values before they are used; persisted port selection is 64000–64999 when the server chooses a first-run port
 - Trust forwarded host/proto/IP headers only from configured trusted proxies; arbitrary clients cannot supply trusted proxy identity
 - Never upgrade or redirect Tor hidden-service HTTP requests to HTTPS, and do not expose clearnet identity in Tor responses
+- Treat `maintenance.self_healing.max_attempts: 0` as unlimited; after a positive limit, report exhaustion and require the documented operator restart to leave maintenance mode
 - Keep cache backend selection in `server.yml`; configure memory by default and prevent setting both URL and host/port for Valkey/Redis
 
 ## KEY DECISIONS (pre-answered)

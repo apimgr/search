@@ -25,9 +25,9 @@ over client detection.
 | `/server/docs/graphql` | GET | GraphiQL interactive explorer |
 | `/api/graphql` | POST | GraphQL queries (unversioned alias) |
 | `/api/v1/server/graphql` | POST | GraphQL queries (versioned canonical) |
-| `/server/help/mcp` | GET | MCP client help page (only while MCP is enabled) |
-| `/api/mcp`, `/mcp` | POST | MCP direct aliases (only while MCP is enabled) |
-| `/api/v1/server/mcp` | POST | Versioned MCP endpoint (only while MCP is enabled) |
+| `/server/help/mcp` | GET | MCP client help page |
+| `/api/mcp`, `/mcp` | POST | MCP direct aliases |
+| `/api/v1/server/mcp` | POST | Versioned MCP endpoint |
 | `/server/metrics[/{service}]` | GET | Internal metrics services (per-service bearer token required) |
 
 ### Public docs routes
@@ -191,7 +191,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/bangs` | GET | Bang shortcut definitions (filter with `category`); bang entries associated with local engines reflect their enabled/cooldown state |
 | `/api/v1/widgets` | GET | Available instant-answer widgets (filter with `category`) |
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
-| `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list (404 when MCP is disabled) |
+| `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list |
 | `/api/v1/server/preferences` | GET, POST | Read or update guest preferences |
 | `/api/v1/server/preferences/sync` | GET | Export guest preferences as a URL and short code |
 | `/api/v1/server/preferences/sync/import` | GET | Validate and apply guest preferences from query values or a code |

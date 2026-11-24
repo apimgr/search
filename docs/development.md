@@ -172,10 +172,12 @@ Makefile targets and Docker documentation rather than invoking `docker build`
 directly.
 
 Both final images include `bash`, `curl`, `tor`, `i2pd`, `tini`, `tzdata`, and
-CA certificates. `make docker` verifies the required commands after publishing
-the production image. CI performs the same command check for each production
-and development image build. `Dockerfile.dev` sets `MODE=development`; the
-production image leaves `MODE` unset and uses the server's production default.
+CA certificates. `make docker` and CI run `tests/docker-image-check.sh` for each
+production and development image. The check verifies required commands and
+waits up to `TOR_WAIT` seconds (180 by default) for Tor health; without outbound
+network it reports a skip unless `REQUIRE_OVERLAY=1`. `Dockerfile.dev` sets
+`MODE=development`; the production image leaves `MODE` unset and uses the
+server's production default.
 
 For local builds, `site.txt` takes precedence as the explicit source for the
 embedded official site URL; otherwise set `OFFICIAL_SITE` in the environment.

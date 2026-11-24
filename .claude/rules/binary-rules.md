@@ -1,4 +1,5 @@
 # Binary Rules (PART 7, 8, 32)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -16,6 +17,7 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 ## CRITICAL - ALWAYS DO
 - Build two binaries: `search` (server) and `search-cli` (client), from `src/server` and `src/client`
 - Let the binary handle ALL initialization: create directories on first run, set permissions from run context, work as root or user
+- Under `TERM=dumb`, emit no ANSI sequences unless `--color=yes` is explicit; that override enables colors only, never cursor control, clearing, emoji, spinners, or TUI
 - Implement the PART 8 flags exactly, including shared `--shell` commands, `--color`, and `--lang`, plus path/listener/mode/status/service/maintenance/update flags
 - Keep email and scheduler operations under `--maintenance`; email supports `test [--to ADDRESS] [--dry-run]`, and scheduler supports list/show/run/enable/disable/history
 - Return exit 0 (healthy) / 1 (unhealthy) from `--status`

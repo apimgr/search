@@ -1,4 +1,5 @@
 # Project Rules (PART 2, 3, 4)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -18,6 +19,7 @@ Read: `AI.md` PART 2 (License & Attribution), PART 3 (Project Structure), PART 4
 ## CRITICAL - ALWAYS DO
 - Keep the license MIT and `LICENSE.md` in the repo root
 - List every embedded library license (compact table is fine for 10+ deps)
+- Generate dependency license reports only in a project-scoped OS temporary directory; never put reports in the repository root
 - Keep `src/` laid out per PART 3: `src/config/config.go`, `src/mode/mode.go`, `src/ssl/ssl.go`, `src/scheduler/scheduler.go`, `src/service/service.go`, `src/server/` with subdirs
 - Keep `docker/` for Docker config, `docs/` for MkDocs only, `tests/` for test files and scripts
 - Resolve config/data/cache/log/backup dirs per the PART 4 matrix for Linux, macOS, BSD, and Windows

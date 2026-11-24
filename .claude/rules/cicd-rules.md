@@ -1,4 +1,5 @@
 # CI/CD Rules (PART 27)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -19,6 +20,7 @@ Read: `AI.md` PART 27 (CI/CD Workflows), and `~/.claude/memory/cicd_conventions.
 - Build all 8 platforms and upload the release artifacts
 - Run the automated test suite in CI
 - Include SHA-pinned action enforcement, `govulncheck`, and container image scanning; coverage output goes under a temporary directory outside the repository
+- Run TruffleHog with the shared exclude file and `--fail`; scan changed ranges for push/PR events, and scan verified-only full history for schedules and new branches
 - Push Docker images to the registry
 - Verify a staged workflow with `act --list -W {file}` before committing it
 - Check the triggered run after every push and fix a red build immediately

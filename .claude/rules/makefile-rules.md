@@ -1,4 +1,5 @@
 # Makefile Rules (PART 25)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -24,6 +25,7 @@ Read: `AI.md` PART 25 (Makefile — local dev only, NOT CI/CD).
 - Prefix a numeric semver with `v` on the release tag
 - Use `$(PWD)` in Makefile docker `-v` flags
 - Keep build output out of the repo tree
+- Keep generated dependency-license reports and other command-produced working files in the project-scoped OS temp directory
 - Build the server and required CLI for linux, darwin, windows, and freebsd on amd64 and arm64
 - Embed version, commit ID, build epoch, and official site only from their defined explicit sources
 

@@ -1,4 +1,5 @@
 # Feature Rules (PART 17-22)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -17,8 +18,8 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 - Configure SMTP in `server.yml` and environment overrides; never mutate server configuration through an API
 - Queue email with retry logic and log every success and failure; keep templates customizable
 - Provide `--maintenance email test [--to ADDRESS]` and `--maintenance email test --dry-run`; default recipient is `server.notifications.email.reply_to`, previews validate every template, and invalid overrides fall back to embedded defaults
-- Run the built-in scheduler always: backup 02:00 daily, SSL renewal 03:00 daily, GeoIP update 03:00 Sunday, token cleanup and keyserver retry every 15 minutes — all schedules in `server.yml`
-- Provide `--maintenance scheduler list|show|run|enable|disable|history`; enabled state and schedule are stored in `server.yml`, and only the CLI changes them
+- Run the built-in scheduler always: backup 02:00 daily, SSL renewal 03:00 daily, GeoIP update 03:00 Sunday, token cleanup and keyserver retry every 15 minutes — scheduler settings live in the merged config under `server.scheduler` and are stored in `yaml.d/maintenance.yml`
+- Provide `--maintenance scheduler list|show|run|enable|disable|history`; only the CLI changes task enabled state
 - Isolate every scheduled task invocation with panic recovery so a single task cannot crash the scheduler or server
 - Treat GeoIP as a risk signal only; fail open for lookup/database errors and never bypass auth because of an allowed country
 - Support only the canonical ip-location-db source per GeoIP category, with visible attribution and operator-defined presets that never auto-apply
@@ -27,6 +28,7 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 - Track request count, latency, errors, system metrics (memory, goroutines), and custom business metrics
 - Verify every backup after creation (checksum, decrypt, extract, DB integrity); back up database, config, and uploads
 - Honor retention settings: `max_backups` (default 1), `keep_weekly`/`keep_monthly`/`keep_yearly` (default 0)
+- Disk-pressure cleanup honors `server.backup.retention`; never replace the configured policy with a fixed number of retained backups
 - Implement `--maintenance backup` and `--maintenance restore {file}` (prompting for the password when encrypted)
 - Implement `--update check`, `--update yes`, `--update branch {name}` across the stable, beta, and devel channels; accept legacy channel names only as aliases and normalize them to devel
 - Keep scheduled update installation off by default; `defer_days` gates scheduled stable/beta updates only, while manual checks always see the newest eligible channel release

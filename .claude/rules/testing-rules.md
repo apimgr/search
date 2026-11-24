@@ -1,4 +1,5 @@
 # Testing & Docs Rules (PART 28, 29, 30)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -25,6 +26,7 @@ Read: `AI.md` PART 28 (Testing & Development), PART 29 (ReadTheDocs Documentatio
 - Keep the required pages: `docs/index.md`, `installation.md`, `configuration.md`, `api.md`, `security.md`, `integrations.md`, `development.md`
 - Keep I18N strings in `src/common/i18n`, support RTL where applicable, and test accessibility
 - Require key parity across every locale; test RTL layout, theme variants, keyboard use, skip links, labels, focus, and non-JavaScript behavior
+- Render every registered page and themed HTTP error status in the page-conformance suite; include all required statuses from 400 through 503
 - Keep docs aligned with every shipped browser, CLI, API, configuration, discovery, and public integration surface
 
 ## KEY DECISIONS (pre-answered)

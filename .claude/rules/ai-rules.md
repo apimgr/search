@@ -1,4 +1,5 @@
 # AI Rules (PART 0, 1)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 Read: `AI.md` PART 0 (AI Assistant Rules), PART 1 (Critical Rules).
 

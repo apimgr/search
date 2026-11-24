@@ -1,4 +1,5 @@
 # Frontend Rules (PART 16)
+<!-- Synchronized with AI.md revision 59c37d25e582. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -22,6 +23,8 @@ Read: `AI.md` PART 16 (Web Frontend).
 - Treat JavaScript as progressive enhancement only
 - Justify every `<script>` in a diff with a capability impossible in HTML5 + CSS
 - Support PWA installation and offline behavior, with service worker and manifest responses using `no-cache` and a build-stamp ETag
+- Name service-worker caches with the full asset stamp `{project_version}-{short_commit}`; check page layout without relying on an `overflow-x` backstop
+- Use the shared `.container` width modifiers and standard page shell, cards, and controls; never add page-specific wrappers or classes
 - Add `Access-Control-Allow-Origin: *` to API endpoints and implement the PART 16 CORS policy for browser requests
 - Normalize URLs before routing: remove trailing slashes (except `/`) with a 301 while preserving the query string; keep explicit file paths intact
 - Build absolute links with the request-resolved FQDN through `BuildURL(r, path)`; do not read `server.fqdn` as a URL source
