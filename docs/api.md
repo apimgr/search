@@ -480,10 +480,11 @@ without rotating the primary token. These routes are never exposed as MCP tools.
 `POST /api/v1/server/config/contact/webhooks` configures an operator contact
 notification webhook and requires the operator bearer token. The request
 selects a notification role (`admin`, `security`, `abuse`, or `general`), a
-supported transport, and an HTTPS destination. A newly generated signing
-secret is returned once; save it in the receiving service. Later updates do
-not reveal the secret again. See [Configuration](configuration.md) for the
-supported transports and retry schedule.
+supported transport, and an HTTPS destination. The server stores the signing
+secret in `secrets.yml`; it is never returned by an API. Read it from that file
+and configure it in the receiving service. See
+[Configuration](configuration.md) for the supported transports and retry
+schedule.
 
 ### MCP
 
@@ -534,7 +535,7 @@ including when invoking a REST GET.
 - `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide operator-only scheduler reads. `runSchedulerTask(task:)` triggers an operator-authorized manual run and writes the same audit event as REST. Task enabled state is changed only through the server's local maintenance CLI.
 - `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists. `saveGeoIPPreset(input:)` and `deleteGeoIPPreset(name:)` persist preset changes to `server.yml`; saving or deleting a preset never changes the active allow/deny lists.
 - `apiRequest(method:, path:, input:)` exposes REST endpoints not otherwise represented by a dedicated GraphQL field through the same registered handler and authorization chain.
-- `saveContactWebhook(input:)` configures an operator contact webhook; a newly generated signing secret is returned once and the GraphQL response is marked `no-store`.
+- `saveContactWebhook(input:)` configures an operator contact webhook. The signing secret is stored in `secrets.yml` and never returned by the GraphQL or REST API.
 
 Search results expose `title`, `url`, `content`, `engine`, `score`, `category`,
 `thumbnail`, `imageUrl`, `imageWidth`, `imageHeight`, `imageFormat`, `fileSize`,

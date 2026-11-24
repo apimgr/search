@@ -295,9 +295,14 @@ the TUI. Set `display.mode: gui` or `display.mode: tui` in `cli.yml` to choose a
 mode explicitly. BSD builds use the TUI because the native GUI backend is not
 available there.
 
-Both interfaces support search, result browsing, and pagination. The GUI uses
-the operating system's light or dark theme. The TUI adapts to terminal size and
-provides keyboard help with `?`.
+The GUI and TUI each provide a screen or view for every server-facing CLI leaf
+command, in the same order as `search-cli --help`. Select a command, fill its
+structured fields, and run it; the interface displays the command output or
+validation error. This includes search, health, configuration, preferences,
+alerts, scheduler, and the other API-backed commands. The GUI uses the
+operating system's light or dark theme. The TUI adapts to terminal size and
+provides keyboard help with `?`; use `j`/`k` to choose a command, Enter to open
+it, and Tab to move between its fields and the Run action.
 
 ### Scheduler Management
 
