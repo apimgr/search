@@ -43,8 +43,12 @@ namespaces:
 | `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/v1/server/graphql`) |
 
 The documentation pages self-host Swagger UI 5.36.0 and GraphiQL 6.0.1,
-including their CSS and fonts. They do not load third-party browser assets from
-external hosts. Upstream license texts are included beside the bundled assets.
+including their CSS and fonts. GraphiQL's Monaco integration uses self-hosted
+editor and JSON workers from Monaco Editor 0.57.0 and the GraphQL worker from
+monaco-graphql 2.0.1. The GraphiQL page bootstrap configures these workers from
+same-origin static assets; the pages do not load third-party browser assets
+from external hosts. Upstream license texts are included beside the bundled
+assets.
 
 ### Unversioned aliases
 
