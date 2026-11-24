@@ -212,6 +212,13 @@ Email testing requires configured SMTP. The recipient defaults to
 `--dry-run` option previews and validates every built-in and configured email
 template without connecting to SMTP.
 
+Security report commands require the operator token or root. `show` omits the
+encrypted report body. `export` writes the stored encrypted message to a mode
+`0600` file (default `TRACKING_ID.asc`); `--output -` writes it to stdout.
+Updating a report can move its status forward, set a researcher-visible
+comment, expected disclosure date, or severity. Disclosing a report writes its
+acknowledgment row in the same database transaction.
+
 Scheduler status and task execution require a running server and the operator
 token from `secrets.yml`. Enabling or disabling a task updates its `enabled`
 setting under `server.scheduler` in `yaml.d/maintenance.yml`; required tasks
