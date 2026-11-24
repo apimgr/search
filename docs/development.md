@@ -117,9 +117,9 @@ make test
 Environment-specific runners are available in `tests/`:
 
 ```bash
-tests/run_tests.sh   # auto-detect environment
+tests/run_tests.sh   # Docker integration suite
 tests/docker.sh      # Docker
-tests/incus.sh       # Incus
+tests/incus.sh       # explicit Incus systemd integration suite
 tests/e2e.sh         # browser end-to-end, on demand
 ```
 
