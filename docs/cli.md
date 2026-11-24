@@ -112,6 +112,23 @@ search --maintenance data delete --owner TOKEN_PREFIX [--yes]
 # Print compliance status
 search --maintenance compliance report
 
+# Preview and validate every email template without sending
+search --maintenance email test --dry-run
+
+# Send a test email to the configured reply-to address
+search --maintenance email test
+
+# Send to a specific address
+search --maintenance email test --to operator@example.com
+
+# Inspect and operate the built-in scheduler
+search --maintenance scheduler list
+search --maintenance scheduler show backup_daily
+search --maintenance scheduler run backup_daily
+search --maintenance scheduler enable backup_hourly
+search --maintenance scheduler disable backup_hourly
+search --maintenance scheduler history backup_daily
+
 # Show maintenance help
 search --maintenance --help
 ```
@@ -156,13 +173,14 @@ search tor vanity apply
 search tor import-keys <path>
 ```
 
-### Email Testing
+Email testing requires configured SMTP. The recipient defaults to
+`server.notifications.email.reply_to`; `--to ADDRESS` overrides it. The
+`--dry-run` option previews and validates every built-in and configured email
+template without connecting to SMTP.
 
-Send a test message using the SMTP configuration in `server.yml`:
-
-```bash
-search email test <address>
-```
+Scheduler status and task execution require a running server and the operator
+token from `server.yml`. Enabling or disabling a task updates its `enabled`
+setting in `server.yml`; required tasks cannot be disabled.
 
 ## CLI Client
 

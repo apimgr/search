@@ -27,6 +27,8 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 - Support Let's Encrypt HTTP-01 and TLS-ALPN-01 (DNS-01 optional) plus manual certificates
 - Support DNS-01 with provider credentials encrypted at rest; validate them at startup and before certificate requests
 - Resolve request hosts only through the documented trusted proxy policy; static FQDN uses DOMAIN, hostname, public IPs, then localhost
+- Build embedded absolute URLs from request context with `BuildURL(r, path)`; never derive public URLs from `server.fqdn` or hardcode a host
+- Keep `/api/autodiscover` as the non-versioned discovery document with the exact fields `name`, `version`, `api`, `urls`, optional exposed `onion`/`i2p`, `cli_versions`, and `cli_min_version`
 - Auto-renew certificates via the scheduler, monitor expiry, and send HSTS headers when SSL is enabled
 
 ## KEY DECISIONS (pre-answered)

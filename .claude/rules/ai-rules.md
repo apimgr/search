@@ -25,6 +25,7 @@ Read: `AI.md` PART 0 (AI Assistant Rules), PART 1 (Critical Rules).
 - Implement features 100% complete - no stubs, no TODOs, no "future"
 - Return after cross-references - a "See PART X" jump never replaces the rest of the PART/section you were reading; read it, then continue
 - Treat security as the first requirement: validate input type, length, format, and range on the server; reject unknown fields/keys; sanitize for the output context; never weaken security to make a feature work
+- Preserve an existing mixed-case `internal_name` during migration; lowercase applies only to newly chosen values, because changing a frozen name moves persisted paths and service identities
 - Keep secrets and internal details out of client errors and ordinary logs; use the audience-appropriate error detail required by PART 1
 - Keep README content in the PART 1 order, use `https://scour.li` for public URLs, and use `curl -q -LSsf` in documented curl examples
 - Do not add AI attribution, generated-by text, or co-author trailers

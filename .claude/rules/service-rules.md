@@ -21,6 +21,7 @@ Read: `AI.md` PART 23 (Privilege Escalation & Service), PART 24 (Service Support
 - Detect and support systemd, OpenRC, SysVinit, runit, and s6 on Linux; launchd on macOS; Windows Service Control Manager; and rc.d on BSD
 - Use the default scope and path rules from PART 23-24 when choosing between system-wide and user-scoped installation
 - Create the platform-appropriate dedicated service account, home, and owned runtime directories before dropping privileges
+- Cache privilege/path mode at process start; later privilege changes must not silently switch the process between system and user directory trees
 - Keep service start/stop/restart/reload operations aligned with the host manager and return command failures to the operator
 
 ## KEY DECISIONS (pre-answered)

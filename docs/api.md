@@ -57,6 +57,7 @@ Convenience aliases that map to the canonical versioned handlers:
 | `/api/graphql` | `/api/v1/server/graphql` | GraphQL query endpoint |
 | `/api/mcp`, `/mcp` | `/api/v1/server/mcp` | MCP Streamable HTTP endpoint |
 | `/api/autodiscover` | — | Machine-readable server metadata (see [Integrations](integrations.md)) |
+| `/cli/binaries/{filename}` | GET | Verified, operator-provisioned CLI binary; optional operator Bearer auth |
 
 ## REST API
 

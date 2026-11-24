@@ -8,7 +8,7 @@ Read: `AI.md` PART 27 (CI/CD Workflows), and `~/.claude/memory/cicd_conventions.
 - Pin a third-party Action to a tag or branch — full commit SHA only
 - Call the Makefile from a workflow — CI/CD uses explicit commands (PART 25)
 - Let `.github/workflows/` and `.gitea/workflows/` drift out of parity
-- Do not create a separate security-only workflow; keep the required security checks in `ci.yml`
+- Keep security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) in `ci.yml`; they also run on the weekly schedule while build/test jobs skip scheduled runs
 - Skip a platform in a release build — all 8 are required
 - Publish a release without running the test suite
 
@@ -18,6 +18,7 @@ Read: `AI.md` PART 27 (CI/CD Workflows), and `~/.claude/memory/cicd_conventions.
 - Maintain a `Jenkinsfile` in addition to the GitHub/Gitea workflows
 - Build all 8 platforms and upload the release artifacts
 - Run the automated test suite in CI
+- Include SHA-pinned action enforcement, `govulncheck`, and container image scanning; coverage output goes under a temporary directory outside the repository
 - Push Docker images to the registry
 - Verify a staged workflow with `act --list -W {file}` before committing it
 - Check the triggered run after every push and fix a red build immediately

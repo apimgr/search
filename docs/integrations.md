@@ -17,19 +17,29 @@ curl -q -LSsf https://scour.li/api/autodiscover
 
 | Field | Description |
 |-------|-------------|
-| `server.name` | Project name (`search`) |
-| `server.version` | Running version |
-| `server.min_version` | Minimum compatible client version |
-| `server.url` | Canonical base URL |
-| `server.onion` | Tor `.onion` address (if Tor enabled) |
-| `api.version` | Current API version (`v1`) |
-| `cli_versions` | Available client binary downloads per platform |
-| `cli_min_version` | Minimum supported `search-cli` version |
-| `features` | Enabled features flag map |
-| `auth` | Auth method (`bearer`) and token scope |
+| `name` | Project name |
+| `version` | Running server version |
+| `api.current_version` | Current API version prefix (`v1`) |
+| `urls` | Public origin resolved for the request |
+| `onion`, `i2p` | Hidden-service addresses, only when explicitly exposed |
+| `cli_versions` | Verified CLI binaries by platform, each with `version` and `sha256` |
+| `cli_min_version` | Minimum supported `search-cli` version; empty means no minimum |
+
+The response uses the standard `{ "ok": true, "data": { ... } }` envelope.
+The server does not publish settings, a configuration schema, or a feature
+list. The CLI carries its own configuration.
+
+To let a server distribute CLI updates, provision the release artifacts in
+`{data_dir}/cli/`: `search-cli-{os}-{arch}[.exe]`, `version.txt`, and
+`sha256.txt`. The server recomputes each binary's SHA-256 before publishing it
+or serving `GET https://scour.li/cli/binaries/search-cli-{os}-{arch}`. Set
+`cli.binary_download.dir` to override the directory, or set
+`cli.binary_download.require_auth: true` to require the operator Bearer token.
+`update.cli_min_version` optionally rejects older clients; it defaults to
+empty, which enforces no minimum.
 
 The CLI client (`search-cli`) reads this endpoint on every startup to check for
-updates and verify API compatibility.
+updates and enforce `cli_min_version`.
 
 ## Search Bar Widget
 

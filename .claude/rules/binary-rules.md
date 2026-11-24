@@ -17,6 +17,7 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 - Build two binaries: `search` (server) and `search-cli` (client), from `src/server` and `src/client`
 - Let the binary handle ALL initialization: create directories on first run, set permissions from run context, work as root or user
 - Implement the PART 8 flags exactly, including shared `--shell` commands, `--color`, and `--lang`, plus path/listener/mode/status/service/maintenance/update flags
+- Keep email and scheduler operations under `--maintenance`; email supports `test [--to ADDRESS] [--dry-run]`, and scheduler supports list/show/run/enable/disable/history
 - Return exit 0 (healthy) / 1 (unhealthy) from `--status`
 - Keep the client version identical to the server version
 - Ship client CLI mode, TUI mode, and config mode, plus shell completions for bash, zsh, fish, and powershell

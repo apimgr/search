@@ -24,6 +24,7 @@ Read: `AI.md` PART 16 (Web Frontend).
 - Support PWA installation and offline behavior, with service worker and manifest responses using `no-cache` and a build-stamp ETag
 - Add `Access-Control-Allow-Origin: *` to API endpoints and implement the PART 16 CORS policy for browser requests
 - Normalize URLs before routing: remove trailing slashes (except `/`) with a 301 while preserving the query string; keep explicit file paths intact
+- Build absolute links with the request-resolved FQDN through `BuildURL(r, path)`; do not read `server.fqdn` as a URL source
 - Keep the specified middleware order, beginning with URL normalization, request ID, path security, and security headers
 
 ## KEY DECISIONS (pre-answered)

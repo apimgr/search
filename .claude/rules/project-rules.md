@@ -21,6 +21,7 @@ Read: `AI.md` PART 2 (License & Attribution), PART 3 (Project Structure), PART 4
 - Keep `src/` laid out per PART 3: `src/config/config.go`, `src/mode/mode.go`, `src/ssl/ssl.go`, `src/scheduler/scheduler.go`, `src/service/service.go`, `src/server/` with subdirs
 - Keep `docker/` for Docker config, `docs/` for MkDocs only, `tests/` for test files and scripts
 - Resolve config/data/cache/log/backup dirs per the PART 4 matrix for Linux, macOS, BSD, and Windows
+- Preserve a migrated frozen `internal_name` exactly as shipped, even when mixed case; never normalize it in a filesystem path or service name
 - Detect privileged vs non-privileged at runtime and pick the matching path set
 - Support the Docker path layout: `/config/`, `/data/`, `/data/log/`, `/data/db/sqlite/`, `/data/backups/`
 - Set the Go module path to `github.com/{project_org}/{internal_name}`; use the current latest stable Go toolchain

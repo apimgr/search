@@ -233,6 +233,26 @@ Scheduled task settings under `server.scheduler.tasks` support per-task
 `schedule`, `retry_on_fail`, and `retry_delay` values.
 
 ```bash
+# Preview and validate all email templates without sending
+search --maintenance email test --dry-run
+
+# Send a test email (defaults to server.notifications.email.reply_to)
+search --maintenance email test [--to ADDRESS]
+
+# Inspect or operate scheduled tasks
+search --maintenance scheduler list
+search --maintenance scheduler show backup_daily
+search --maintenance scheduler run backup_daily
+search --maintenance scheduler enable backup_hourly
+search --maintenance scheduler disable backup_hourly
+search --maintenance scheduler history backup_daily
+```
+
+Scheduler status and task execution require a running server and operator
+authorization. Enabling or disabling a task updates its `enabled` setting in
+`server.yml`; required tasks cannot be disabled.
+
+```bash
 search --maintenance secret rotate installation_secret
 ```
 

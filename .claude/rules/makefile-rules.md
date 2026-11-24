@@ -16,6 +16,7 @@ Read: `AI.md` PART 25 (Makefile — local dev only, NOT CI/CD).
 
 ## CRITICAL - ALWAYS DO
 - Provide exactly six targets: `dev`, `local`, `build`, `test`, `release`, `docker`
+- Make `test` delegate to the Docker-only test runner; build/test commands must not invoke Go on the host
 - Provide cross-compilation targets covering all 8 platforms
 - Inject the version at build time
 - Set `CGO_ENABLED=0` and use the maintained `casjaysdev/go:latest` toolchain image for every Go command

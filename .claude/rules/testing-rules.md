@@ -17,7 +17,7 @@ Read: `AI.md` PART 28 (Testing & Development), PART 29 (ReadTheDocs Documentatio
 ## CRITICAL - ALWAYS DO
 - Keep tests in `tests/` and alongside packages as `_test.go`
 - Provide `tests/run_tests.sh` (auto-detects environment), `tests/docker.sh`, `tests/incus.sh`, and `tests/e2e.sh` (browser E2E, on demand)
-- Run unit and integration tests in the supported Docker/Incus container environment and put generated data in a temp directory that is cleaned up
+- Keep `tests/run_tests.sh` Docker-only and delegating to `tests/docker.sh`; build available binaries in one Docker phase into its task-scoped temp mount, not the repository `binaries/` tree; use `tests/incus.sh` for Incus coverage
 - Cover both unit and integration tests, including API testing, and measure coverage
 - Document the beta testing procedures
 - Build docs with `mkdocs.yml` and `.readthedocs.yaml` in the project root, with `docs/requirements.txt` for dependencies

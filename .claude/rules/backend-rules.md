@@ -14,7 +14,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Log sensitive data (tokens, credentials, internal paths, secrets)
 - Execute or serve untrusted user content as active content on the app origin
 - Use the system Tor daemon — the app runs its own dedicated tor process
-- Enable I2P by default — it is opt-in only
+- Disable I2P by default on bare metal or VMs; enable it by default inside application containers
 
 ## CRITICAL - ALWAYS DO
 - Return one consistent JSON error format with stable, documented error codes
@@ -28,7 +28,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Keep private file responses `private, no-store`; serve user-controlled active content only as an attachment with exact content type and `nosniff`
 - Write audit events to `audit.log` and security events to `security.log` in JSON, with rotation and `debug/info/warn/error` levels
 - Auto-enable and supervise the dedicated Tor hidden-service process when its binary is available; config at `{config_dir}/tor/torrc`, data at `{data_dir}/tor/`; never use a system Tor daemon
-- Keep I2P opt-in; support the in-app i2pd model or the documented external SAM router model, using a dedicated loopback backend port
+- Resolve I2P default from runtime: enabled in application containers, opt-in outside containers; support the in-app i2pd model or external SAM router model, using a dedicated loopback backend port
 - Report `features.tor.*` and `features.i2p.*` in the healthz API
 
 ## KEY DECISIONS (pre-answered)
@@ -40,7 +40,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 | Remote database? | libsql / Turso | PART 10 |
 | Migrations? | Automatic on startup | PART 10 |
 | Tor? | Auto-enabled when the binary is found | PART 31.1 |
-| I2P? | OPTIONAL, opt-in, disabled by default | PART 31.2 |
+| I2P? | Container default on; bare metal/VM default off unless opted in | PART 31.2 |
 | Auth comparisons? | Constant-time; authentication failures have generic message/status and padded timing | PART 11 |
 
 ## TERMINOLOGY

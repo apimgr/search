@@ -23,6 +23,7 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 - Document clearly which settings require a restart
 - Default to production mode; normalize `prod`/`production` and `dev`/`development`
 - Keep every server setting in `server.yml` (PART 12), including Valkey/Redis when used
+- Use the canonical contact recipient keys only; Tor responses use `server.tor.contact_email`, and test-email recipient defaults to `server.notifications.email.reply_to`
 - Normalize paths and validate all configured values before they are used; persisted port selection is 64000–64999 when the server chooses a first-run port
 - Trust forwarded host/proto/IP headers only from configured trusted proxies; arbitrary clients cannot supply trusted proxy identity
 - Never upgrade or redirect Tor hidden-service HTTP requests to HTTPS, and do not expose clearnet identity in Tor responses

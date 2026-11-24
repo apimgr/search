@@ -16,8 +16,10 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 ## CRITICAL - ALWAYS DO
 - Configure SMTP in `server.yml` and environment overrides; never mutate server configuration through an API
 - Queue email with retry logic and log every success and failure; keep templates customizable
-- Run the built-in scheduler always: backup 02:00 daily, SSL renewal 03:00 daily, GeoIP update 03:00 Sunday, session cleanup hourly — all configurable
-- Expose scheduler status via CLI and a `server.token`-protected status endpoint, plus manual task triggering from the CLI
+- Provide `--maintenance email test [--to ADDRESS]` and `--maintenance email test --dry-run`; default recipient is `server.notifications.email.reply_to`, previews validate every template, and invalid overrides fall back to embedded defaults
+- Run the built-in scheduler always: backup 02:00 daily, SSL renewal 03:00 daily, GeoIP update 03:00 Sunday, token cleanup and keyserver retry every 15 minutes — all schedules in `server.yml`
+- Provide `--maintenance scheduler list|show|run|enable|disable|history`; enabled state and schedule are stored in `server.yml`, and only the CLI changes them
+- Isolate every scheduled task invocation with panic recovery so a single task cannot crash the scheduler or server
 - Treat GeoIP as a risk signal only; fail open for lookup/database errors and never bypass auth because of an allowed country
 - Support only the canonical ip-location-db source per GeoIP category, with visible attribution and operator-defined presets that never auto-apply
 - Serve Prometheus metrics at `/server/metrics` (root `/metrics` gated on `server.metrics.root.enabled`) plus `/server/metrics/prometheus`, `/server/metrics/grafana`, `/server/metrics/loki`

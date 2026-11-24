@@ -24,7 +24,7 @@ Default location:
 The file is auto-generated with defaults on first run. There is no admin web UI — all configuration is file-only.
 
 The native configuration roots are `server`, `search`, `engines`, `data`,
-`web`, and `tor`. Server settings are grouped under `server`: `tokens`, `mcp`,
+`web`, `tor`, and `cli`. Server settings are grouped under `server`: `tokens`, `mcp`,
 `branding`, `rate_limit`,
 `logs`, `ssl`, `tor`, `i2p`, `notifications`, `security`, `auth`, `pages`,
 `privacy`, `scheduler`, `cache`, `geoip`, `metrics`, `image_proxy`, `contact`,
@@ -33,6 +33,27 @@ The native configuration roots are `server`, `search`, `engines`, `data`,
 `debug`. The sections below document settings with additional operational
 requirements; the server validates all configuration on load and reports
 invalid values without exposing secrets.
+
+### CLI Binary Distribution
+
+The server can distribute operator-provisioned CLI release binaries. The
+default directory is `{data_dir}/cli`; it must contain platform binaries plus
+`version.txt` and `sha256.txt` from the same release. The server verifies each
+binary's checksum before publishing metadata or serving it.
+
+```yaml
+cli:
+  binary_download:
+    dir: "{data_dir}/cli"
+    require_auth: false
+
+server:
+  update:
+    cli_min_version: ""
+```
+
+Set `require_auth: true` to require the operator Bearer token for downloads.
+Leave `cli_min_version` empty to allow older clients to keep using the API.
 
 Directory variables are checked at every startup, with CLI flags taking
 precedence. Only the unprefixed names documented below are accepted by the

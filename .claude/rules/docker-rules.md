@@ -22,6 +22,7 @@ Read: `AI.md` PART 26 (Docker).
 - Apply the standard OCI labels and the PART 26 binary naming conventions exactly
 - Apply both per-image OCI labels and multi-architecture manifest annotations in release workflows
 - Declare a `HEALTHCHECK` in the Dockerfile
+- After `make docker` and in CI, verify every shipped image contains `bash`, `curl`, `tor`, `i2pd`, and `tini`, then check Tor health with the documented bootstrap/network skip behavior
 - Mount volumes for config and data; listen on internal port 80
 - Use the container path layout: `/config/{project_name}/`, `/data/{project_name}/`, `/data/log/{project_name}/`, `/data/db/sqlite/`, `/data/backups/{project_name}/`
 - Keep runtime volumes outside the source overlay, use map-style environment variables with sane defaults, and attach the shared logging anchor to every Compose service
