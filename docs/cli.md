@@ -118,6 +118,18 @@ search --maintenance data delete --owner TOKEN_PREFIX [--yes]
 # Print compliance status
 search --maintenance compliance report
 
+# List coordinated-disclosure reports without exposing report content
+search --maintenance security list [--status received|triaged|confirmed|patching|disclosed|wont_fix]
+
+# View report metadata and researcher-visible comment
+search --maintenance security show sec_0123456789abcdef
+
+# Export the already-encrypted report message
+search --maintenance security export sec_0123456789abcdef [--output FILE]
+
+# Update report triage and researcher-visible fields
+search --maintenance security update sec_0123456789abcdef --status triaged --comment "Under review"
+
 # Preview and validate every email template without sending
 search --maintenance email test --dry-run
 
