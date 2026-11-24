@@ -388,6 +388,11 @@ server:
     virtual_port: 80
 ```
 
+Manage Tor through the server's loopback control channel with
+`search --maintenance tor status|validate|restart|regenerate`, or use
+`search --maintenance tor vanity start|stop|apply` for vanity addresses.
+Import a key directory with `search --maintenance tor import-keys <path>`.
+
 ### I2P Integration
 
 The I2P eepsite is enabled by default in application containers and disabled

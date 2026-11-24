@@ -164,13 +164,14 @@ search --update branch devel
 Tor is managed by the server over its loopback-only control endpoint:
 
 ```bash
-search tor status
-search tor validate
-search tor restart
-search tor regenerate
-search tor vanity start <prefix> [--workers <count>]
-search tor vanity apply
-search tor import-keys <path>
+search --maintenance tor status
+search --maintenance tor validate
+search --maintenance tor restart
+search --maintenance tor regenerate
+search --maintenance tor vanity start <prefix> [--workers <count>]
+search --maintenance tor vanity stop
+search --maintenance tor vanity apply
+search --maintenance tor import-keys <path>
 ```
 
 Regenerating the address, applying a vanity candidate, and importing keys ask
@@ -298,9 +299,11 @@ search-cli scheduler list
 search-cli scheduler show token_cleanup
 search-cli scheduler history token_cleanup
 search-cli scheduler run backup_daily
-search-cli scheduler disable backup_hourly
-search-cli scheduler enable backup_hourly
 ```
+
+The client can inspect tasks and trigger a run. Change a task's enabled state
+with the server's local `search --maintenance scheduler enable|disable` command,
+which writes `server.scheduler.tasks.<id>.enabled` in the configuration.
 
 Results support `table`, `json`, `yaml`, `plain`, and `csv` output through `--output`.
 

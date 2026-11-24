@@ -177,8 +177,6 @@ The following inventory records the API surface implemented by this project, inc
 | GET | `/api/v1/server/scheduler/tasks/{task}` | Operator bearer token | Read a scheduled task | Task ID; returns task state |
 | GET | `/api/v1/server/scheduler/tasks/{task}/history` | Operator bearer token | Read task run history | Task ID; returns recent run history |
 | POST | `/api/v1/server/scheduler/tasks/{task}/run` | Operator bearer token | Trigger a scheduled task | Task ID; returns trigger status |
-| POST | `/api/v1/server/scheduler/tasks/{task}/enable` | Operator bearer token | Enable a scheduled task | Task ID; returns updated task state |
-| POST | `/api/v1/server/scheduler/tasks/{task}/disable` | Operator bearer token | Disable a scheduled task | Task ID; returns updated task state |
 
 ---
 

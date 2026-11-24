@@ -401,15 +401,9 @@ Return the 20 most recent persisted runs for one task.
 
 Trigger a scheduled task to run immediately.
 
-#### `POST /api/v1/server/scheduler/tasks/{task}/enable`
-
-Enable a skippable task. Required tasks cannot be toggled.
-
-#### `POST /api/v1/server/scheduler/tasks/{task}/disable`
-
-Disable a skippable task. Required tasks cannot be toggled.
-
-All scheduler endpoints require the operator bearer token.
+All scheduler endpoints require the operator bearer token. Task enabled state is
+configuration and can only be changed through the server's
+`--maintenance scheduler enable|disable` commands.
 
 ### GeoIP
 
@@ -530,7 +524,7 @@ including when invoking a REST GET.
 - `serverStatus` and `serverConfig` use the same operator bearer-token authorization and redacted payloads as their REST endpoints.
 - `alerts` lists alerts for operators only. `alert(manageToken:)` and `alertFeed(rssToken:)` require the corresponding private token.
 - `createAlert(input:)`, `updateAlert(manageToken:, input:)`, `pauseAlert(manageToken:, paused:)`, and `deleteAlert(manageToken:)` use the same alert manager and lifecycle rules as REST. Supply `input` as a JSON variable object. `alertFeed(rssToken:)` returns only feed items and the feed URL.
-- `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide operator-only scheduler reads. `runSchedulerTask(task:)`, `enableSchedulerTask(task:)`, and `disableSchedulerTask(task:)` provide the REST scheduler controls; manual runs write the same audit event.
+- `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide operator-only scheduler reads. `runSchedulerTask(task:)` triggers an operator-authorized manual run and writes the same audit event as REST. Task enabled state is changed only through the server's local maintenance CLI.
 - `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists. `saveGeoIPPreset(input:)` and `deleteGeoIPPreset(name:)` persist preset changes to `server.yml`; saving or deleting a preset never changes the active allow/deny lists.
 - `apiRequest(method:, path:, input:)` exposes REST endpoints not otherwise represented by a dedicated GraphQL field through the same registered handler and authorization chain.
 - `saveContactWebhook(input:)` configures an operator contact webhook; a newly generated signing secret is returned once and the GraphQL response is marked `no-store`.
