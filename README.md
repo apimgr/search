@@ -500,8 +500,13 @@ make release
 # Run tests (Docker)
 make test
 
-# Regenerate the embedded OpenAPI JSON from source annotations
-go generate ./src/swagger/...
+# Regenerate the embedded OpenAPI JSON from source annotations (inside Docker)
+docker run --rm --no-healthcheck \
+  -v "$PWD:/app" \
+  -w /app \
+  -e CGO_ENABLED=0 \
+  -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go generate ./src/swagger/...
 
 # Build and push Docker image
 make docker
