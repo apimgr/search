@@ -403,10 +403,15 @@ Import a key directory with `search --maintenance tor import-keys <path>`.
 
 The I2P eepsite is enabled by default in application containers and disabled
 by default on machines, virtual machines, and system containers. Set
-`server.i2p.enabled` in `yaml.d/i2p.yml` or use `I2P_ENABLED=true|false` to
+`server.i2p.enabled` in `server.yml` or use `I2P_ENABLED=true|false` to
 override the default. The `--i2p` flag explicitly enables it for one run.
 Its `.b32.i2p` address is omitted from `/api/autodiscover` unless
-`server.i2p.expose: true` is set in `yaml.d/i2p.yml`.
+`server.i2p.expose: true` is set in `server.yml`.
+
+When `i2pd` is available, the server starts a private instance with only its
+loopback SAM bridge enabled. The server owns the SAM session and stream-forward
+connections; it never adds an i2pd server tunnel. The destination key is stored
+under the data directory and reused across restarts.
 
 ```yaml
 server:

@@ -285,9 +285,13 @@ server:
 I2P is enabled by default in application containers and disabled by default on
 bare metal, virtual machines, and system containers. An explicit
 `server.i2p.enabled` setting or `I2P_ENABLED` environment variable overrides
-that default. The server manages its own `i2pd` process when the binary is
-available.
-I2P settings are stored in `yaml.d/i2p.yml`; its address is omitted from
+that default. The server manages its own dedicated `i2pd` process when the
+binary is available. That process has only a private loopback SAM bridge
+enabled; the server creates the SAM session and stream-forward connection on
+separate sockets. It does not configure an i2pd server tunnel. The destination
+key is stored as one SAM private-key base64 line under the data directory,
+reused across restarts, and created with owner-only file permissions.
+I2P settings are stored in `server.yml` under `server.i2p`; its address is omitted from
 `/api/autodiscover` unless `server.i2p.expose` is true.
 
 ```yaml
@@ -298,6 +302,12 @@ server:
     binary: ""
     sam_address: 127.0.0.1:7656
     virtual_port: 80
+    inbound_length: 3
+    outbound_length: 3
+    inbound_quantity: 5
+    outbound_quantity: 5
+    signature_type: 7
+    bootstrap_timeout: 300
 ```
 
 ### Contact Form CAPTCHA
@@ -773,7 +783,9 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.i2p.outbound_length` | `3` |
 | `server.i2p.outbound_quantity` | `5` |
 | `server.i2p.sam_address` | `127.0.0.1:7656` |
+| `server.i2p.signature_type` | `7` |
 | `server.i2p.virtual_port` | `80` |
+| `server.i2p.bootstrap_timeout` | `300` (30–600 seconds) |
 | `server.image_proxy.enabled` | `true` |
 | `server.image_proxy.max_size` | `10485760` |
 | `server.image_proxy.timeout` | `30` |
