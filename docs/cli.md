@@ -93,6 +93,9 @@ and data.
 # Create backup
 search --maintenance backup
 
+# Include optional SSL files and data files
+search --maintenance backup --include-ssl --include-data
+
 # Verify the newest backup without restoring it
 search --maintenance backup test
 
@@ -170,8 +173,10 @@ logs. Deletion removes the owner, tokens, and owned resources in one transaction
 after you confirm the owner ID; `--yes` skips the prompt for automation.
 
 Backups include `server.db` as a consistent SQLite snapshot, including committed
-WAL data. Restores replace the database together with the archived configuration
-and data.
+WAL data. Data files and the optional `{config_dir}/ssl/` tree are omitted unless
+`--include-data` and `--include-ssl` are supplied. Referenced cache TLS files
+and external manually configured server certificates are included automatically.
+Restores replace the database together with the archived configuration and data.
 
 ### Update Management
 

@@ -500,6 +500,9 @@ make release
 # Run tests (Docker)
 make test
 
+# Regenerate the embedded OpenAPI JSON from source annotations
+go generate ./src/swagger/...
+
 # Build and push Docker image
 make docker
 ```
@@ -548,12 +551,17 @@ binaries/      # Built binaries (gitignored)
 ### Debug Mode
 
 ```bash
-# Enable debug endpoints (/debug/pprof, /debug/config, /debug/routes, etc.)
+# Enable root debug endpoints (/debug/pprof, /debug/config, /debug/routes, etc.)
 search --debug
 
 # Or via environment
 DEBUG=true search
 ```
+
+Every `/debug/*` request also requires the operator Bearer token configured as
+`server.token`. `/debug/error500` renders the standard localized server error
+page for UI verification. Debug routes are root diagnostics and are not part
+of the versioned REST API.
 
 ## Disclaimer
 

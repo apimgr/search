@@ -192,18 +192,22 @@ canonical endpoint is `/api/v1/server/mcp`, with direct aliases at `/api/mcp`
 and `/mcp`. MCP is always enabled; there is no configuration, environment, or
 CLI switch for disabling it.
 
-MCP uses the same bearer credentials and authorization as the REST API. Public
-tools work anonymously; operator-only tools require the operator token. For a
-client that needs owner-scoped access, create a separate linked token at
+Every MCP request requires a valid bearer token. Use an owner or linked token
+for owner-scoped access; operator-only tools require the operator token. For a
+client, create a separate linked token at
 `/server/preferences/tokens` and send it in the `Authorization: Bearer ...`
 header. Do not use the operator token for an MCP client. Cookies are ignored.
 Tool availability follows the caller's permissions, and token-management
 operations are not exposed as tools.
 
 The server renders connection instructions and the current tool list at
-`/server/help/mcp`. The
-supported protocol revisions and request rules follow the [MCP
-specification](https://modelcontextprotocol.io/specification).
+`/server/help/mcp`. It accepts only revision `2026-07-28`. Each POST must include
+`MCP-Protocol-Version: 2026-07-28`, a matching `Mcp-Method` header, and the
+same protocol version under `params._meta["io.modelcontextprotocol/protocolVersion"]`.
+Calls to `tools/call`, `resources/read`, and `prompts/get` also require a
+matching `Mcp-Name` header. Legacy `initialize` handshakes and other protocol
+revisions receive `UnsupportedProtocolVersionError`; MCP has no session ID.
+See the [MCP specification](https://modelcontextprotocol.io/specification).
 
 ## Discovery and web standards
 

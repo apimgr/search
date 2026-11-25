@@ -471,9 +471,34 @@ they can write only the caller's guest preference cookies.
 Owner token management is available through the `/api/v1/server/preferences/tokens`
 routes and requires the primary owner bearer token. The routes list masked
 tokens, create linked tokens, reveal or rotate the primary or a linked token,
-update a linked token's name or expiry, and revoke linked tokens. Linked tokens
+update a linked token's name or expiry, and revoke linked tokens. List responses
+use `data.primary`, `data.linked`, and `data.max_linked`; each token object has
+`id`, `name`, `kind`, `token_masked`, `created_at`, `last_used_at`, `expires_at`,
+and `status`. Create, reveal, rotate, and update return that same token object;
+create/reveal/rotate additionally return the raw value in `linked_token`.
+Revoke returns `{ "id": "<uuid>", "status": "revoked" }`. List and update
+responses never contain raw token values, hashes, or encrypted values. Linked tokens
 are intended for individual CLI, automation, or MCP clients and can be revoked
 without rotating the primary token. These routes are never exposed as MCP tools.
+`POST /api/v1/server/preferences/tokens/primary` issues a new owner credential
+without authentication and returns it as `data.owner_token`; a request presenting
+any already-valid owner token receives `409`. `DELETE
+/api/v1/server/preferences/tokens/primary` requires the primary bearer token and
+`{"confirm":"<last four characters>"}`. It atomically deletes the owner, tokens,
+and resources, returning deleted `tokens` and `resources` counts. A missing or
+incorrect confirmation returns `400` and changes nothing. Sensitive issue,
+reveal, rotate, and primary revoke requests use `server.rate_limit.strict`.
+Primary reveal and rotate responses also return their raw credential as
+`data.owner_token` and set `Cache-Control: no-store`.
+Creating a linked token returns the new raw credential once in
+`data.linked_token`; store it securely because list responses contain masked
+values only. Presenting a valid owner or linked token to an operator-only API
+route returns `403`; missing or invalid credentials return `401`.
+Linked-token creation accepts `expires` (`never`, `7d`, `30d`, `90d`, or
+`1y`) or a UTC `expires_on` date (`YYYY-MM-DD`), and rejects requests that
+provide both; the legacy `expires_at` request field is rejected. Omitting both creates a token that never expires. Updates accept
+any of `name`, `expires`, or `expires_on`; omitted fields keep their current
+values.
 
 ### Contact notification webhooks
 
@@ -489,11 +514,12 @@ schedule.
 ### MCP
 
 The versioned MCP endpoint is `POST /api/v1/server/mcp`; `/api/mcp` and `/mcp`
-are direct aliases. It uses Streamable HTTP and the same bearer authentication,
-authorization, and rate limits as the corresponding REST operations. Anonymous
-clients can call public tools; operator-only tools require the operator token.
-See [Integrations](integrations.md#model-context-protocol-mcp) for connection
-guidance, token scope, and enable/disable behavior.
+are direct aliases. Every request requires a valid bearer token, and tool
+authorization follows the corresponding REST operation. The server accepts
+only protocol revision `2026-07-28`; requests must provide matching protocol
+version metadata, method headers, and (for named calls) `Mcp-Name`. Legacy
+`initialize` handshakes are rejected. See
+[Integrations](integrations.md#model-context-protocol-mcp) for request details.
 
 ## GraphQL API
 

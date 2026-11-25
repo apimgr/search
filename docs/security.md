@@ -91,7 +91,7 @@ server:
 
 ### IP and Domain Blocklists
 
-Missing enabled blocklist and CVE data is queued for a first-run refresh after the HTTP listener is ready; the refresh does not delay startup. GeoIP databases are loaded or downloaded during initialization. The built-in scheduler keeps the data updated daily. The default blocklist feeds cover IP addresses and CIDR ranges. Add operator-managed feeds under `server.security.blocklists` in `server.yml`:
+Missing enabled blocklist and CVE data is queued for a first-run refresh after the HTTP listener is ready; the refresh does not delay startup. GeoIP databases are loaded or downloaded during initialization and refreshed weekly by the built-in scheduler; blocklists refresh daily. The default blocklist feeds cover IP addresses and CIDR ranges. Add operator-managed feeds under `server.security.blocklists` in `server.yml`:
 
 ```yaml
 server:

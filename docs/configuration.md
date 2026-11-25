@@ -40,6 +40,16 @@ after five minutes. Forwarded host, protocol, port, path, and client-IP headers
 are honored only when the immediate TCP peer matches one of these trusted
 proxies or an always-trusted private network.
 
+Cache connections accept `redis://`, `rediss://`, `valkey://`, and
+`valkeys://` URLs. The URL scheme or its `tls=true|false` query option
+determines TLS when a URL is set; otherwise `server.cache.tls` controls it.
+TLS defaults to accepting an unverified certificate. Set
+`server.cache.tls_skip_verify: false` or configure `tls_ca` to verify the
+certificate chain and host. `tls_cert` and `tls_key` configure a client
+certificate; relative TLS file paths resolve inside `{config_dir}/ssl/`.
+The CA, client certificate, and client key files are included in backups when
+referenced, even if `--include-ssl` is omitted.
+
 Credentials and key material are stored in the owner-only `secrets.yml` next
 to `server.yml`, not in the ordinary configuration files.
 
@@ -189,6 +199,12 @@ server:
     health:
       requests: 120
       window: 60
+    strict:
+      requests: 10
+      window: 900
+    auth_failures:
+      requests: 5
+      window: 900
     global_burst: 240
 ```
 
@@ -664,8 +680,11 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.cache.port` | `6379` |
 | `server.cache.prefix` | `search:` |
 | `server.cache.timeout` | `5s` |
-| `server.cache.tls_skip_verify` | `false` |
+| `server.cache.tls_skip_verify` | `true` when cache TLS is enabled |
 | `server.cache.tls` | `false` |
+| `server.cache.tls_ca` | `` |
+| `server.cache.tls_cert` | `` |
+| `server.cache.tls_key` | `` |
 | `server.cache.ttl` | `3600` |
 | `server.cache.type` | `memory` |
 | `server.cache.url` | `` |
@@ -828,6 +847,7 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.notifications.email.events.ssl_renewed` | `false` |
 | `server.notifications.email.events.startup` | `false` |
 | `server.notifications.email.events.update_available` | `false` |
+| `server.notifications.email.events.update_failed` | `false` |
 | `server.notifications.email.events.update_installed` | `true` |
 | `server.notifications.email.from.email` | `` |
 | `server.notifications.email.from.name` | `` |
@@ -955,6 +975,10 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.rate_limit.global_burst` | `240` |
 | `server.rate_limit.health.requests` | `120` |
 | `server.rate_limit.health.window` | `60` |
+| `server.rate_limit.strict.requests` | `10` |
+| `server.rate_limit.strict.window` | `900` |
+| `server.rate_limit.auth_failures.requests` | `5` |
+| `server.rate_limit.auth_failures.window` | `900` |
 | `server.rate_limit.read.requests` | `120` |
 | `server.rate_limit.read.window` | `60` |
 | `server.rate_limit.write.requests` | `10` |

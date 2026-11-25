@@ -32,9 +32,22 @@ make build
 # Prepare and publish a stable release (requires X.Y.Z)
 make release
 
+# Regenerate the embedded OpenAPI JSON from src/swagger/annotations.go
+docker run --rm --no-healthcheck \
+  -v "$PWD:/app" \
+  -w /app \
+  -e CGO_ENABLED=0 \
+  -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go generate ./src/swagger/...
+
 # Build Docker image
 make docker
 ```
+
+OpenAPI and GraphQL artifacts are generated from their source annotations or
+schema during build steps. Do not edit `src/swagger/openapi.json` by hand; run
+`go generate ./src/swagger/...` after changing the Swagger annotations. CI runs the
+same Go generator explicitly before tests, linting, and binary builds.
 
 ### Run in Development Mode
 
