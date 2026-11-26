@@ -146,6 +146,8 @@ checks Tor and I2P bootstrap;
 when outbound network access is unavailable, those checks are skipped unless
 `REQUIRE_OVERLAY=1` is set. `TOR_WAIT` and `I2P_WAIT` set the bootstrap wait
 limits in seconds (defaults: 300 and 600).
+`tests/incus.sh` uses the same temp-output default and a private Incus bridge;
+it removes the temporary build directory, bridge, and test instances on exit.
 
 ## Pull Request Process
 
