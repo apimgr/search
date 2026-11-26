@@ -40,7 +40,7 @@ namespaces:
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI 3 specification |
 | `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
-| `/server/docs/graphql` | GET | GraphiQL explorer (GET queries; POST mutations) |
+| `/server/docs/graphql` | GET | GraphiQL explorer (submits queries and mutations with POST) |
 
 The documentation pages serve bundled Swagger UI 5.36.0 and GraphiQL 6.0.1,
 including their CSS and fonts. GraphiQL's Monaco integration uses bundled
