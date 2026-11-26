@@ -91,19 +91,22 @@ server:
 
 ### IP and Domain Blocklists
 
-Missing enabled blocklist and CVE data is queued for a first-run refresh after the HTTP listener is ready; the refresh does not delay startup. GeoIP databases are loaded or downloaded during initialization and refreshed weekly by the built-in scheduler; blocklists refresh daily. The default blocklist feeds cover IP addresses and CIDR ranges. Add operator-managed feeds under `server.security.blocklists` in `server.yml`:
+Missing enabled blocklist and CVE data is queued for a first-run refresh after the HTTP listener is ready; the refresh does not delay startup. GeoIP databases are loaded or downloaded during initialization and refreshed weekly by the built-in scheduler; blocklists refresh daily. The built-in `firehol_level1` source always filters IP addresses and CIDR ranges. Add operator-managed feeds under `server.security.blocklists.extra_sources` in `server.yml`:
 
 ```yaml
 server:
   security:
     blocklists:
-      - name: phishing_domains
-        url: https://feeds.example.net/domains.txt
-        type: domain
-        enabled: true
+      enabled: true
+      auto_update: true
+      extra_sources:
+        - id: phishing_domains
+          type: domain
+          url: https://feeds.example.net/domains.txt
+          enabled: true
 ```
 
-Supported feed types are `ip`, `cidr`, and `domain`. Domain feeds accept one domain per line or entries in the standard IP-address mapping format. A blocked domain applies to that domain and its subdomains. Feed URLs must use HTTPS; invalid entries are ignored and logged without exposing their URL. Each download is limited to 64 MiB and persisted only after parsing succeeds with at least one usable rule. If any configured feed fails, the updater keeps the last known rules, merges newly downloaded entries conservatively, and reports an incomplete update for scheduler visibility. Changing or disabling feeds reloads only currently configured and enabled feed files, so removed rules do not remain active from stale files.
+The built-in `firehol_level1` source is always active and cannot be disabled or removed. Additional sources use `id`, `type`, `url`, and `enabled`: `id` is a unique lowercase identifier; `type` is `ip` (an IPv4 or IPv6 address or CIDR per line) or `domain` (a lowercase hostname per line); and `url` must use HTTPS. Domain entries may use a leading `*.` to match subdomains. Invalid lines are skipped and counted, but an update with no valid entries is rejected and leaves the previous file in use. Each source has its own last-success timestamp and health check; sources older than the fixed 72-hour freshness limit report `degraded`, while sources that have never loaded report `error`.
 
 ### Regular Updates
 
@@ -144,7 +147,7 @@ disclosure and health monitoring:
 
 The health response includes the NVD vulnerability dataset when its feature is
 enabled. It reports `degraded` when the last successful update is more than
-48 hours old; the scheduler attempts an update daily.
+72 hours old; the scheduler attempts an update daily.
 
 The contact form includes a honeypot and requires a single-use CAPTCHA on every
 submission. The default `simple` challenge is served locally and works without
