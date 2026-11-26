@@ -142,6 +142,7 @@ disclosure and health monitoring:
 | `/api/v1/server/security` | Security contact order, expiry, PGP metadata, and policy/thanks links (JSON) |
 | `/api/v1/server/security/policy` | Configured disclosure policy Markdown (JSON) |
 | `/api/v1/server/security/thanks` | Opt-in credits for disclosed reports (JSON) |
+| `/api/v1/server/reports/{name}` | Public, per-IP rate-limited browser security reports (CSP, NEL, and Reporting API) |
 | `/server/contact` | Contact form (supports `security_id` deep links) |
 | `/server/healthz` | Public health check |
 | `/api/v1/server/healthz` | Public health check (JSON) |
@@ -174,6 +175,13 @@ If you discover a security vulnerability, please report it responsibly:
 5. Include steps to reproduce and allow time for a fix before disclosure
 
 The full disclosure policy is published at `/server/security/policy`.
+
+Browser security reports are sent with `POST` to `/api/v1/server/reports/csp`,
+`/api/v1/server/reports/nel`, or `/api/v1/server/reports/default`. The generic
+`/api/v1/server/reports/{name}` route accepts other Reporting API groups. The
+handler accepts legacy `application/csp-report` and modern
+`application/reports+json` bodies, returns `204 No Content`, and never echoes
+report fields in its response.
 
 The default security.txt contact is the project's GitHub private
 vulnerability-reporting page. Operators can set `server.web.security.report_url`

@@ -22,7 +22,7 @@ over client detection.
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI specification (JSON) |
 | `/api/swagger` | GET | OpenAPI specification for the current API version (JSON) |
-| `/server/docs/graphql` | GET | GraphiQL interactive explorer |
+| `/server/docs/graphql` | GET, POST | GraphiQL interactive explorer (queries and mutations submit with POST) |
 | `/api/graphql` | GET, POST | Read-only GraphQL queries (GET); queries or mutations (POST), unversioned alias |
 | `/api/v1/server/graphql` | GET, POST | Read-only GraphQL queries (GET); queries or mutations (POST), versioned canonical |
 | `/server/help/mcp` | GET | MCP client help page |
@@ -40,7 +40,7 @@ namespaces:
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI 3 specification |
 | `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
-| `/server/docs/graphql` | GET | GraphiQL explorer (submits queries and mutations with POST) |
+| `/server/docs/graphql` | GET, POST | GraphiQL explorer (submits queries and mutations with POST) |
 
 The documentation pages serve bundled Swagger UI 5.36.0 and GraphiQL 6.0.1,
 including their CSS and fonts. GraphiQL's Monaco integration uses bundled
@@ -197,15 +197,41 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/server/preferences/sync` | GET | Export guest preferences as a URL and short code |
 | `/api/v1/server/preferences/sync/import` | GET | Validate and apply guest preferences from query values or a code |
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
-| `/api/v1/server/about` | GET | Server about page (JSON) |
-| `/api/v1/server/privacy` | GET | Privacy policy (JSON) |
+| `/api/v1/server/about` | GET | About page source (`title`, localized `content`, `format`: `markdown`, `html`, or `text`) |
+| `/api/v1/server/privacy` | GET | Structured privacy data: summary, cookie categories, sharing, tracking, retention, third parties, CCPA state, and dynamic content |
 | `/api/v1/server/dpo` | GET | Data Protection Officer contact (`name`, `email`, `privacy_url`) |
-| `/api/v1/server/terms` | GET | Terms of service (JSON) |
+| `/api/v1/server/terms` | GET | Terms source (`title`, localized `content`, `format`: `markdown`, `html`, or `text`) |
 | `/api/v1/server/help` | GET | Help content (JSON) |
 | `/api/v1/server/contact` | GET, POST | Contact information and message submission (JSON) |
 | `/api/v1/server/security` | GET | Security contacts in preference order, expiry, PGP metadata, and public page links |
 | `/api/v1/server/security/policy` | GET | Configured disclosure policy Markdown |
 | `/api/v1/server/security/thanks` | GET | Opt-in acknowledgments for disclosed reports |
+| `/api/v1/server/reports/{name}` | POST | Public, rate-limited browser CSP, NEL, and Reporting API reports; returns 204 |
+
+The public About and Terms endpoints return operator-authored source from
+`server.branding.content.about` and `server.branding.content.terms` when
+configured. Language maps use the resolved request language, then their
+`default` entry. Supported formats are returned as `markdown`, `html`, or
+`text`; the source is never returned as rendered HTML. Without an entry, the
+handlers return the built-in Markdown derived from the project identity and
+terms defaults. Supported content placeholders are expanded before the source
+is returned.
+
+The Privacy endpoint mirrors the dynamic policy configuration rather than
+returning rendered page HTML; its API object follows the structured schema
+defined by AI.md PART 12. The HTML page's `server.branding.content.privacy`
+extension is rendered by the server page renderer, not substituted for this
+structured API object. Its `data` object always contains `summary`
+(`data_stored_on_server`, `data_sold`, `user_control`), `cookies` (`essential`,
+`preferences`, `analytics`, each with `enabled` and `description`), `data`
+(`sold`, `stored_on_server`, `sharing`), `tracking` (`enabled`, `type`,
+`type_name`), `retention` (`period`, `export_available`, `deletion_available`),
+`third_party.services`, `ccpa` (`applicable`, `opt_out_url`, `user_opted_out`),
+and `content` (`consent_message`, `data_usage`). The analytics description,
+consent message, data usage and CCPA values reflect the current configuration
+and request cookie. `retention.period` uses the resolved request language when
+the configured value is a language map, then `default`; an empty value uses the
+localized built-in retention text.
 
 `GET /api/v1/server/contact` reports whether the form is enabled, its public
 abuse email (never the admin address), the security-policy URL, and the active

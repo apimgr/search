@@ -110,8 +110,8 @@ Leave `cli_min_version` empty to allow older clients to keep using the API.
 
 Directory variables are checked at every startup, with CLI flags taking
 precedence. Only the unprefixed names documented below are accepted by the
-server. `PORT`, `LISTEN`, `APPLICATION_NAME`, and `APPLICATION_TAGLINE` seed
-the configuration on first run and are ignored after `server.yml` exists.
+server. `PORT` and `LISTEN` are also checked at every startup; only
+`APPLICATION_NAME` and `APPLICATION_TAGLINE` seed configuration on first run.
 
 ### Reddit Search
 
@@ -160,6 +160,18 @@ server:
 
   # Operator token (auto-generated on first run)
   token: ""
+```
+
+### Cross-Origin Resource Sharing (CORS)
+
+`server.cors.allowed_origins` is the canonical allow-list. The default `["*"]` allows every origin; credentials are not emitted with a wildcard origin even though `allow_credentials` defaults to `true`. Add explicit origins to allow credentialed browser requests. A single empty-string entry disables CORS headers. `server.web.cors` is retained as a legacy fallback when the canonical list is empty; `DOMAIN`, trusted reverse-proxy hosts, and the `*` fallback are then incorporated as specified in AI.md PART 16.
+
+```yaml
+server:
+  cors:
+    allowed_origins: ["*"]
+    allow_credentials: true
+    max_age: 86400
 ```
 
 ### SSL/TLS Settings
@@ -447,6 +459,8 @@ file on first run. CLI flags override environment values where both exist.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DOMAIN` | FQDN override | detected |
+| `PORT` | Listen port; `--port` takes precedence, then this value, then the saved configuration | configured port (random `64000-64999` on first run) |
+| `LISTEN` | Listen address; `--address` takes precedence, then this value, then the saved configuration | `[::]` |
 | `MODE` | `production`, `development`, or explicit `debug` mode | `production` |
 | `DEBUG` | Enable debug features; accepts the truthy/falsy values in AI.md PART 5/6 | `false` |
 | `SMTP_HOST` | SMTP server hostname; when set, skips autodetect | unset |
@@ -456,6 +470,8 @@ file on first run. CLI flags override environment values where both exist.
 | `SMTP_FROM_EMAIL` | Sender email | `no-reply@{fqdn}` |
 | `SMTP_TLS` | `auto`, `starttls`, `tls`, or `none` | `auto` |
 | `I2P_ENABLED` | Explicitly enable or disable the I2P eepsite | `true` in application containers; otherwise `false` |
+| `CACHE_DIR` | Cache directory; checked at each startup | platform default |
+| `PID_FILE` | Server PID file path; `--pid` takes precedence and the saved `server.pidfile: false` setting disables it when no path override is supplied | platform default |
 
 When `server.notifications.email.smtp.host` is empty on first run, Search probes
 local SMTP servers on ports 25, 465, and 587. It tries loopback, the Docker
@@ -471,6 +487,10 @@ With `SMTP_TLS=auto` (the default), port 465 uses implicit TLS. Other ports
 connect in plaintext first and use STARTTLS if the server offers it. SMTP
 credentials are sent only after TLS has been established. Explicit `tls`,
 `starttls`, and `none` modes retain their configured behavior.
+
+`PID_FILE` is read on each startup. Containers never create or check a server
+PID file, and `server.pidfile: false` disables PID-file handling outside
+containers. The `--pid` flag takes precedence over `PID_FILE`.
 
 ### Init-only connection variables
 
@@ -492,6 +512,11 @@ password or token are stored in `secrets.yml`; credential-free URLs stay in
 Database connection pools are configured under `server.database.pool` with
 defaults of 25 open connections, 5 idle connections, a 5 minute maximum
 lifetime, and a 1 minute maximum idle time.
+
+SQLite opens separate read and write handles for each database file. The write
+handle is limited to one connection; the read handle is query-only, and
+`server.database.pool.max_open` sets its open-connection limit. Remote libSQL
+uses one pool for its connection.
 
 For a remote database, keep the URL and token in the secret configuration:
 
@@ -542,8 +567,6 @@ These values are used only to seed a new `server.yml`:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Listen port | random `64000-64999` |
-| `LISTEN` | Listen address | all interfaces |
 | `APPLICATION_NAME` | Application title | `Search` |
 | `APPLICATION_TAGLINE` | Application description | project default |
 
@@ -589,9 +612,13 @@ Options:
   --version              Show version
   --mode MODE            Application mode (production|development)
   --debug                Enable debug mode
+  --daemon               Daemonize (detach from terminal)
+  --i2p                  Enable the I2P eepsite
   --config DIR           Config directory
   --data DIR             Data directory
+  --cache DIR            Cache directory
   --log DIR              Log directory
+  --backup DIR           Backup directory
   --address ADDR         Listen address
   --port PORT            Listen port
   --baseurl URL          Public base URL override
@@ -602,6 +629,9 @@ Options:
   --service CMD          Service management
   --maintenance CMD      Maintenance commands
   --update CMD           Update management
+  --shell CMD            Shell integration (completions|init)
+  --include-ssl          Include optional SSL files in a maintenance backup
+  --include-data         Include optional data files in a maintenance backup
 ```
 
 `search --help` is the authoritative and complete flag reference.
@@ -617,7 +647,7 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `cli.binary_download.require_auth` | `false` |
 | `data.cve.filter_by_cpe` | `false` |
 | `data.cve.source` | `https://services.nvd.nist.gov/rest/json/cves/2.0` |
-| `data.security_dir` | `/data/search/security` |
+| `data.security_dir` | `{data_dir}/security` (platform-specific data directory) |
 | `data.trivy.enabled` | `false` |
 | `data.trivy.source` | `ghcr.io/aquasecurity/trivy-db:2` |
 | `engines.bing.categories[0]` | `general` |
@@ -782,6 +812,9 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.compression.types[4]` | `application/json` |
 | `server.compression.types[5]` | `application/xml` |
 | `server.compression.types[6]` | `text/xml` |
+| `server.cors.allowed_origins[0]` | `*` |
+| `server.cors.allow_credentials` | `true` |
+| `server.cors.max_age` | `86400` |
 | `server.contact.abuse.email` | `` |
 | `server.contact.admin.email` | `` |
 | `server.contact.dpo.email` | `` |
@@ -790,6 +823,10 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.contact.security.email` | `` |
 | `server.daemonize` | `false` |
 | `server.database.driver` | `sqlite` |
+| `server.database.pool.max_idle` | `5` |
+| `server.database.pool.max_idle_time` | `1m` |
+| `server.database.pool.max_lifetime` | `5m` |
+| `server.database.pool.max_open` | `25` |
 | `server.database.url` | `` |
 | `server.debug.block_profile_rate` | `1` |
 | `server.debug.log_bodies` | `false` |
@@ -910,6 +947,7 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.mode` | `production` |
 | `server.notifications.email.events.backup_complete` | `false` |
 | `server.notifications.email.events.backup_failed` | `true` |
+| `server.notifications.email.events.database_error` | `true` |
 | `server.notifications.email.events.scheduler_error` | `true` |
 | `server.notifications.email.events.security_alert` | `true` |
 | `server.notifications.email.events.shutdown` | `false` |
@@ -1042,7 +1080,7 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.privacy.data.stored_on_server` | `true` |
 | `server.privacy.retention.deletion_available` | `true` |
 | `server.privacy.retention.export_available` | `true` |
-| `server.privacy.retention.period` | `Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months.` |
+| `server.privacy.retention.period` | `""` (translated built-in text; may be a scalar or per-language map) |
 | `server.rate_limit.enabled` | `true` |
 | `server.rate_limit.global_burst` | `240` |
 | `server.rate_limit.health.requests` | `120` |
@@ -1055,6 +1093,11 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.rate_limit.read.window` | `60` |
 | `server.rate_limit.write.requests` | `10` |
 | `server.rate_limit.write.window` | `60` |
+| `server.restore.max_archive_size` | `1G` |
+| `server.restore.max_expanded_size` | `4G` |
+| `server.restore.max_file_size` | `512M` |
+| `server.restore.max_files` | `10000` |
+| `server.restore.max_ratio` | `100` |
 | `server.scheduler.catch_up_window` | `1h` |
 | `server.scheduler.tasks.backup_daily.enabled` | `true` |
 | `server.scheduler.tasks.backup_daily.schedule` | `0 2 * * *` |
@@ -1176,9 +1219,9 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.web.robots.allow[0]` | `/` |
 | `server.web.robots.allow[1]` | `/api` |
 | `server.web.security.contact` | `` |
-| `server.web.security.expires` | `2027-11-07T12:09:08Z` |
+| `server.web.security.expires` | one year after initialization (UTC; generated dynamically) |
 | `server.web.security.keyservers[0]` | `https://keys.openpgp.org` |
-| `server.web.security.publish_pgp_key` | `<redacted>` |
+| `server.web.security.publish_pgp_key` | `true` |
 | `server.web.security.report_url` | `https://github.com/apimgr/search/security/advisories/new` |
 | `tor.contact_email` | `` |
 | `tor.onion_address` | `` |

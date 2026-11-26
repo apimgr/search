@@ -216,12 +216,19 @@ See the [MCP specification](https://modelcontextprotocol.io/specification).
 |-------|---------|
 | `/api/autodiscover` | Machine-readable server, API, and CLI compatibility metadata |
 | `/opensearch.xml` | OpenSearch description, when OpenSearch is enabled |
+| `/feed.xml` | Atom 1.0 feed of recent public searches (`GET` and `HEAD`) |
+| `/rss.xml` | RSS 2.0 feed of the same recent public searches (`GET` and `HEAD`) |
 | `/.well-known/llms.txt` and `/llms.txt` | Machine-readable API and capability summary |
 | `/.well-known/security.txt` | RFC 9116 security contact and disclosure details |
 | `/.well-known/pgp-key.asc` | Published security-report encryption key, when configured |
 | `/.well-known/change-password` | `404` because this project has no user passwords or account system |
 | `/robots.txt` | Crawler guidance |
 | `/sitemap.xml` | Public-page sitemap |
+
+The Atom and RSS feeds list the same recent queries and timestamps, never
+results, client addresses, users, or sessions. Queries matching sensitive
+patterns are dropped before they enter the feed. Both feeds are always served;
+`server.seo.feed.max_items` controls their entry limit.
 
 Search does not enable WebFinger, OpenID Provider Metadata, Android App Links,
 or Apple app-site-association endpoints. Unknown `/.well-known/*` paths return

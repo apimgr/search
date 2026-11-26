@@ -229,8 +229,13 @@ DATA_DIR="/var/lib/apimgr/search"
 LOG_DIR="/var/log/apimgr/search"
 DATABASE_DIR="/var/lib/apimgr/search/db"
 BACKUP_DIR="/var/backups/apimgr/search"
+CACHE_DIR="/var/cache/apimgr/search"
+PID_FILE="/var/run/apimgr/search/search.pid"
 I2P_ENABLED=false
 ```
+
+`CACHE_DIR` and `PID_FILE` are read on every startup. The `--cache` and `--pid`
+flags take precedence over their corresponding environment variables.
 
 ### Operator Access
 
