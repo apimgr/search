@@ -16,6 +16,7 @@ owner_token:      search_owner_token_xJ5yCXLv
 maintainer_name:  casjay
 maintainer_email: casjay@yahoo.com
 official_site:    https://scour.li
+resource_label_plural: alerts
 
 ---
 
