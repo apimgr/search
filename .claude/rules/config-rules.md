@@ -30,6 +30,8 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 - Never upgrade or redirect Tor hidden-service HTTP requests to HTTPS, and do not expose clearnet identity in Tor responses
 - Treat `maintenance.self_healing.max_attempts: 0` as unlimited; after a positive limit, report exhaustion and require the documented operator restart to leave maintenance mode
 - Keep cache backend selection in `server.yml`; configure memory by default and prevent setting both URL and host/port for Valkey/Redis
+- Treat `DATABASE_DRIVER`, `DATABASE_URL`, and `CACHE_URL` as first-run-only seed values: save credentials in `secrets.yml`, other settings in `server.yml`, and ignore those variables after initialization
+- Resolve database drivers from the URL scheme when a URL is present; SQLite driver selection is the only case that needs `DATABASE_DRIVER` without a URL
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -43,6 +45,7 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 | Invalid config values? | Fail startup/reload validation with a useful operator error | PART 5, 12 |
 | Proxy headers? | Honor only behind configured trusted proxies | PART 12 |
 | Tor HTTP? | Keep Tor traffic HTTP; never HTTPS-upgrade it | PART 12 |
+| Database environment variables? | `DATABASE_DRIVER`, `DATABASE_URL`, and `CACHE_URL` seed first-run config only | PART 5 |
 
 ## TERMINOLOGY
 | Term | Meaning |

@@ -18,6 +18,8 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 
 ## Quick Start
 
+Run these deployment commands on the host yourself — not by AI.
+
 === "Docker"
 
     ```bash

@@ -139,6 +139,10 @@ tests/incus.sh       # explicit Incus systemd integration suite
 tests/e2e.sh         # browser end-to-end, on demand
 ```
 
+Set `PWA_SCREENSHOT_DIR=1` when invoking `tests/e2e.sh` to capture the PWA
+install-dialog screenshots. The script writes them under its project-scoped
+temporary output directory and removes them when it exits.
+
 `tests/docker.sh` creates a project-scoped temporary directory for its config,
 data, and build output, plus an isolated Docker network, then removes them on
 exit. Set `BINDIR` to retain build output in a caller-selected directory. It

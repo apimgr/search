@@ -24,7 +24,38 @@ terminal support. A non-empty `NO_COLOR` disables colors unless explicitly
 overridden with `--color=yes`. The shared `--lang` option selects a supported
 language, and `--shell` prints shell integration instructions.
 
+### Shell Completions
+
+Both binaries include their completion generators. `--shell completions`
+prints a script to standard output, and `--shell init` prints the command to
+load that script in the current shell. Omitting the shell name detects it from
+`$SHELL`.
+
+Supported shells are Bash, Zsh, Fish, POSIX `sh`, `dash`, `ksh`, PowerShell,
+and PowerShell Core (`pwsh`). POSIX shells receive basic completion
+candidates; the other shells use their native completion interfaces.
+
+```bash
+# Evaluate the detected shell's init command in the current shell
+eval "$(search --shell init)"
+eval "$(search-cli --shell init)"
+
+# Generate a script explicitly
+search --shell completions bash
+search-cli --shell completions zsh
+```
+
+For persistent completion, add the corresponding init command to the shell's
+startup file. Fish uses its native pipeline form:
+
+```fish
+search --shell init fish | source
+search-cli --shell init fish | source
+```
+
 ### Running the Server
+
+Run these server commands on the host yourself — not by AI.
 
 ```bash
 # Start server with defaults

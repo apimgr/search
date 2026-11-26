@@ -23,6 +23,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Set correct `Cache-Control` and `ETag` headers per resource type; serve `/sw.js` and `/manifest.json` `no-cache` with a build-stamp ETag
 - Purge on version change: build-stamp cookie plus `Clear-Site-Data: "cache", "storage"` on mismatch
 - Default to SQLite locally and libsql/Turso remotely, using `CREATE TABLE IF NOT EXISTS` and connection pooling
+- Honor the configured database driver, URL, optional remote auth token, and pool limits; never silently fall back to SQLite when an explicitly configured remote URL is invalid
 - Set all security headers (CSP, X-Frame-Options, …) and enable HSTS whenever SSL is active
 - Enable configurable rate limiting; auto-revoke tokens after the specified number of consecutive authentication failures
 - Compare tokens, password hashes, HMACs, signatures, and credentials in constant time; return identical generic authentication failures and pad response timing

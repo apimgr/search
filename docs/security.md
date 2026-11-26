@@ -198,8 +198,8 @@ process for its hidden service when a Tor binary is found on `PATH` or configure
 in `server.tor.binary`. It does not attach to or manage the machine's system Tor
 daemon. Install the Tor binary on the deployment machine yourself:
 
-Install Tor on the deployment machine yourself; do not have an AI agent execute
-the package-manager command below.
+Run the package-manager command on the host yourself — not by AI. Install Tor
+on the deployment machine.
 
 ```bash
 # Install Tor
@@ -225,6 +225,8 @@ server:
 ```
 
 ## Container Security
+
+Run the following Docker command on the host yourself — not by AI.
 
 When running in Docker:
 

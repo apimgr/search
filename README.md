@@ -55,8 +55,8 @@ Direct answers start with a prefix. For example, `directory:linux iso type:docum
 
 ## Production
 
-Machine-level installation, service, and Docker commands below are for the
-operator to run on the deployment machine; do not have an AI agent execute them.
+Run these deployment commands on the host yourself — not by AI. Machine-level
+installation, service, and Docker commands belong on the deployment machine.
 
 ### Binary
 

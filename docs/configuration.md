@@ -439,8 +439,8 @@ Search and Wikipedia thumbnails use signed same-origin `/image-proxy` URLs when 
 ## Environment Variables
 
 Runtime settings are checked at each startup. Directory overrides are also
-checked at every startup. Init-only values seed `server.yml` on first run.
-CLI flags override environment values where both exist.
+checked at every startup. Init-only values seed their owning configuration
+file on first run. CLI flags override environment values where both exist.
 
 ### Runtime variables
 
@@ -449,8 +449,6 @@ CLI flags override environment values where both exist.
 | `DOMAIN` | FQDN override | detected |
 | `MODE` | `production`, `development`, or explicit `debug` mode | `production` |
 | `DEBUG` | Enable debug features; accepts the truthy/falsy values in AI.md PART 5/6 | `false` |
-| `DATABASE_DRIVER` | `sqlite`, `sqlite2`, `sqlite3`, `libsql`, or `turso` | `sqlite` |
-| `DATABASE_URL` | Database connection string | local file |
 | `SMTP_HOST` | SMTP server hostname; when set, skips autodetect | unset |
 | `SMTP_PORT` | SMTP server port | `587` |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP authentication | unset |
@@ -458,6 +456,52 @@ CLI flags override environment values where both exist.
 | `SMTP_FROM_EMAIL` | Sender email | `no-reply@{fqdn}` |
 | `SMTP_TLS` | `auto`, `starttls`, `tls`, or `none` | `auto` |
 | `I2P_ENABLED` | Explicitly enable or disable the I2P eepsite | `true` in application containers; otherwise `false` |
+
+### Init-only connection variables
+
+These variables are read only when the installation first creates its
+configuration. The saved connection in `server.yml` or `secrets.yml` takes
+precedence on later starts; changing a connection afterward means editing the
+saved configuration.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_DRIVER` | SQLite (`sqlite`, `sqlite2`, `sqlite3`) or libSQL/Turso (`libsql`, `turso`); used when `DATABASE_URL` is absent | `sqlite` |
+| `DATABASE_URL` | SQLite file path or `file:` URL, or a libSQL `libsql://` / `https://` URL; the URL scheme selects the driver | `{data_dir}/db/server.db` |
+| `CACHE_URL` | Valkey (`valkey://`, `valkeys://`) or Redis (`redis://`, `rediss://`) connection URL | unset (in-memory cache) |
+
+The URL scheme wins if `DATABASE_DRIVER` disagrees with `DATABASE_URL`; the
+server logs one warning without printing either value. URLs containing a
+password or token are stored in `secrets.yml`; credential-free URLs stay in
+`server.yml`. Connection URLs are never written to logs or returned by APIs.
+Database connection pools are configured under `server.database.pool` with
+defaults of 25 open connections, 5 idle connections, a 5 minute maximum
+lifetime, and a 1 minute maximum idle time.
+
+For a remote database, keep the URL and token in the secret configuration:
+
+```yaml
+# server.yml
+server:
+  database:
+    driver: libsql
+    url: https://database.example.com
+    pool:
+      max_open: 25
+      max_idle: 5
+      max_lifetime: 5m
+      max_idle_time: 1m
+```
+
+```yaml
+# secrets.yml
+server:
+  database:
+    token: ${TURSO_AUTH_TOKEN}
+```
+
+The token can also be carried as `authToken` in a `libsql://` URL. In either
+form the full credential-bearing URL or token belongs in `secrets.yml`.
 
 `DEBUG` controls diagnostics independently of `MODE`. `MODE=debug` enables
 debug mode by default; an explicit `DEBUG=false` disables debug endpoints.

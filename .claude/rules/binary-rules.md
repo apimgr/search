@@ -22,7 +22,7 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 - Keep email and scheduler operations under `--maintenance`; email supports `test [--to ADDRESS] [--dry-run]`, and scheduler supports list/show/run/enable/disable/history
 - Return exit 0 (healthy) / 1 (unhealthy) from `--status`
 - Keep the client version identical to the server version
-- Ship client CLI mode, TUI mode, and config mode, plus shell completions for bash, zsh, fish, and powershell
+- Ship client CLI mode, TUI mode, and config mode, plus built-in shell completions for bash, zsh, fish, sh, dash, ksh, powershell, and pwsh; sh/dash/ksh use basic POSIX completion
 - Expose every server API operation through the client
 - Store client config at `~/.config/{internal_org}/{internal_name}/cli.yml`, dark theme by default
 - Create client configuration with mode 0600; open API access may use an optional owner token, while server token model and precedence follow PART 8

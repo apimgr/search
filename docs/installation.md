@@ -2,9 +2,9 @@
 
 Search can be installed in several ways depending on your environment and preferences.
 
-Commands that install binaries, change system services, or manage Docker on a
-machine are for the operator to run on the deployment machine; do not have an AI
-agent execute them.
+Run these deployment commands on the host yourself — not by AI. Commands that
+install binaries, change system services, or manage Docker belong on the
+deployment machine.
 
 ## Docker (Recommended)
 
