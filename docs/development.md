@@ -140,8 +140,9 @@ tests/e2e.sh         # browser end-to-end, on demand
 ```
 
 `tests/docker.sh` creates a project-scoped temporary directory for its config,
-data, and build output, then removes it on exit. Set `BINDIR` to retain build
-output in a caller-selected directory. It checks Tor and I2P bootstrap;
+data, and build output, plus an isolated Docker network, then removes them on
+exit. Set `BINDIR` to retain build output in a caller-selected directory. It
+checks Tor and I2P bootstrap;
 when outbound network access is unavailable, those checks are skipped unless
 `REQUIRE_OVERLAY=1` is set. `TOR_WAIT` and `I2P_WAIT` set the bootstrap wait
 limits in seconds (defaults: 300 and 600).
