@@ -40,7 +40,7 @@ Reddit search uses its OAuth API and requires a registered Reddit application, i
 | Role | Authentication | Permissions |
 |------|---------------|-------------|
 | Anonymous public user | None | Search, view results, set client-side preferences, create/manage accountless search alerts via signed manage links |
-| Operator | Possession of `server.token` (operator bearer token from `server.yml`) | Operator-only API endpoints (engine state queries, alert moderation, maintenance). Configuration is file-only — all server settings are set in `server.yml` and managed via CLI / config-reload. |
+| Operator | Possession of `server.token` (operator bearer token from `secrets.yml`) | Operator-only API endpoints (engine state queries, alert moderation, maintenance). Configuration is file-only — settings are managed through `server.yml`, `yaml.d/`, and `secrets.yml` as specified in AI.md. |
 
 There is **no admin web UI** and **no end-user account system**. The operator manages the service entirely via `server.yml` plus the `search-cli` client. The spec (AI.md) has no regular-user accounts, organization tiers, or custom-domain features — these are simply not in scope.
 
@@ -57,7 +57,7 @@ Full schemas are documented under `### Data Models` below. Sensitivity classific
 | Engine health metrics (response times, error rates) | None | Server DB / Prometheus | Per metrics retention |
 | Cached search results | None (no user attribution) | Server cache | 5 minutes default, configurable |
 | NVD vulnerability data | Public | Embedded cache under the data directory | Refreshed daily; health reports degraded after 48 hours without a successful update |
-| Operator bearer token (`server.token`) | High | `server.yml` (restricted permissions, never logged) | Until operator rotates |
+| Operator bearer token (`server.token`) | High | `secrets.yml` (restricted permissions, never logged) | Until operator rotates |
 | Per-resource owner tokens | High | Server DB (hashed before storage, never stored plaintext) | Until owner revokes |
 
 ### Trust boundaries & external services

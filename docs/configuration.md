@@ -903,8 +903,9 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.notifications.email.events.ssl_renewed` | `false` |
 | `server.notifications.email.events.startup` | `false` |
 | `server.notifications.email.events.update_available` | `false` |
-| `server.notifications.email.events.update_failed` | `false` |
+| `server.notifications.email.events.update_failed` | `true` |
 | `server.notifications.email.events.update_installed` | `true` |
+| `server.notifications.email.events.update_staged` | `true` |
 | `server.notifications.email.from.email` | `` |
 | `server.notifications.email.from.name` | `` |
 | `server.notifications.email.smtp.host` | `` |

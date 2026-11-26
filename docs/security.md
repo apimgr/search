@@ -41,6 +41,7 @@ Search sets the following security headers on every response:
 - **Security and audit logs** — selected abuse and authentication events include a client IP and may include a user agent for operator investigation
 - **Debug logging** — request-body and SQL logging can expose sensitive data and should only be enabled in a controlled environment
 - **No user tracking** — no analytics, no fingerprinting
+- **Consent controls** — visitors can change preference and analytics consent from the privacy page; the granular dialog also submits as a normal form when JavaScript is unavailable
 - **Image proxy** to prevent third-party tracking of search results
 - **Encrypted backups** (AES-256-GCM, Argon2id KDF)
 

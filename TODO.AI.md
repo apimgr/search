@@ -8,4 +8,5 @@
 
 ## Priority 2 — Full AI.md alignment
 - [ ] Finish reconciling all server pages and documentation against AI.md and the implemented behavior.
+- [ ] Reconcile all `.claude/rules/` summaries with the current AI.md revision; AI.md is newer than the rule files, and only the binary/config/backend summaries have been refreshed so far.
 - [ ] Run the required primary-session tests, build, lint, and CI verification after all changes are integrated.
