@@ -23,8 +23,8 @@ over client detection.
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI specification (JSON) |
 | `/api/swagger` | GET | OpenAPI specification for the current API version (JSON) |
 | `/server/docs/graphql` | GET | GraphiQL interactive explorer |
-| `/api/graphql` | POST | GraphQL queries (unversioned alias) |
-| `/api/v1/server/graphql` | POST | GraphQL queries (versioned canonical) |
+| `/api/graphql` | GET, POST | Read-only GraphQL queries (GET); queries or mutations (POST), unversioned alias |
+| `/api/v1/server/graphql` | GET, POST | Read-only GraphQL queries (GET); queries or mutations (POST), versioned canonical |
 | `/server/help/mcp` | GET | MCP client help page |
 | `/api/mcp`, `/mcp` | POST | MCP direct aliases |
 | `/api/v1/server/mcp` | POST | Versioned MCP endpoint |
@@ -40,7 +40,7 @@ namespaces:
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI 3 specification |
 | `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
-| `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/v1/server/graphql`) |
+| `/server/docs/graphql` | GET | GraphiQL explorer (GET queries; POST mutations) |
 
 The documentation pages serve bundled Swagger UI 5.36.0 and GraphiQL 6.0.1,
 including their CSS and fonts. GraphiQL's Monaco integration uses bundled
@@ -536,8 +536,10 @@ the response is limited to 4 MiB. Use a GraphQL mutation for this field,
 including when invoking a REST GET.
 
 - **GraphiQL UI** — `GET /server/docs/graphql`
-- **Queries** — `POST /api/v1/server/graphql` (versioned canonical); the
-  `/api/graphql` compatibility alias is also available.
+- **Queries** — `GET` for read-only queries or `POST` for queries and mutations
+  at `/api/v1/server/graphql` (versioned canonical); the `/api/graphql`
+  compatibility alias is also available. GET uses `query` and optional JSON
+  `variables` and `operationName` URL parameters; GET mutations are rejected.
 - Requests are limited to 64 KiB, 12 nested field levels, and 100 selected
   fields after fragment expansion. Requests exceeding these limits receive
   HTTP 400; bodies larger than 64 KiB receive HTTP 413.
