@@ -1,17 +1,3 @@
-Subject: SSL Certificate Renewed - {app_name}
+Subject: {subject}
 ---
-SSL CERTIFICATE RENEWED
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Your SSL certificate for {domain} has been successfully renewed.
-
-Domain:      {domain}
-Valid until: {valid_until}
-
-Your secure connections will continue without interruption.
-
---
-{app_name}
-{app_url}
+{body}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,7 @@ type queryCaptureEngine struct {
 
 func TestAPIRoutesMatchAIAndIDEAContract(t *testing.T) {
 	server := newTestServer(t)
+	server.config.SetDebug(true)
 	server.Handler()
 	if server.router == nil {
 		t.Fatal("API route drift: server router was not initialized")
@@ -43,21 +45,53 @@ func TestAPIRoutesMatchAIAndIDEAContract(t *testing.T) {
 	for operation := range template {
 		want[operation] = true
 	}
+	debugTemplate := readAITemplateDebugInventory(t)
+	for operation := range debugTemplate {
+		want[operation] = true
+	}
 	registered := make(map[string]bool)
-	for _, route := range server.router.Routes() {
-		path := normalizeRoutePath(route.Pattern)
-		if !strings.HasPrefix(path, "/api/") && path != "/mcp" {
-			continue
-		}
-		for method := range route.Handlers {
-			registered[method+" "+path] = true
+	var collectRoutes func(chi.Routes, string)
+	collectRoutes = func(routes chi.Routes, prefix string) {
+		for _, route := range routes.Routes() {
+			fullPath := strings.ReplaceAll(prefix+route.Pattern, "/*/", "/")
+			if route.SubRoutes != nil {
+				collectRoutes(route.SubRoutes, prefix+route.Pattern)
+				continue
+			}
+			path := normalizeRoutePath(fullPath)
+			if !strings.HasPrefix(path, "/api/") && path != "/mcp" && !strings.HasPrefix(path, "/debug/") {
+				continue
+			}
+			for method := range route.Handlers {
+				if method == "*" {
+					if strings.HasPrefix(path, "/debug/") {
+						registered[http.MethodGet+" "+path] = true
+					} else if path == "/mcp" || path == "/api/mcp" || path == "/api/v1/server/mcp" {
+						// The route dispatches every method to the MCP handler so
+						// unsupported verbs receive its JSON 405 response. Its API
+						// contract still exposes POST only.
+						registered[http.MethodPost+" "+path] = true
+					}
+					continue
+				}
+				registered[method+" "+path] = true
+			}
 		}
 	}
+	collectRoutes(server.router, "")
 	spec := swagger.GenerateSpec(server.config, "https://search.example.test")
 	documented := make(map[string]bool)
 	for path, item := range spec.Paths {
-		if !strings.HasPrefix(path, "/api/") && path != "/mcp" {
+		if !strings.HasPrefix(path, "/api/") && path != "/mcp" && !strings.HasPrefix(path, "/debug/") {
 			continue
+		}
+		if strings.HasPrefix(path, "/debug/") {
+			if item.XMountedWhen != "--debug || DEBUG=true || MODE=debug" {
+				t.Errorf("OpenAPI debug path %s x-mounted-when = %q, want debug enable conditions", path, item.XMountedWhen)
+			}
+			if item.Get == nil || len(item.Get.Security) == 0 || item.Get.Security[0]["operatorToken"] == nil {
+				t.Errorf("OpenAPI debug path %s is missing operator bearer security", path)
+			}
 		}
 		for method, present := range map[string]bool{
 			"GET": item.Get != nil, "POST": item.Post != nil, "PUT": item.Put != nil,
@@ -94,35 +128,47 @@ func TestAPIRoutesMatchAIAndIDEAContract(t *testing.T) {
 	}
 }
 
-func TestOfflinePageUsesSharedShellAndRequestPreferences(t *testing.T) {
+func TestReportDatabaseStatusRequiresConsecutiveFailuresAndResets(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Notifications.DatabaseError.Enabled = true
+	cfg.Server.Notifications.DatabaseError.Failures = 3
+	s := &Server{config: cfg}
+	probeErr := errors.New("database unavailable")
+
+	s.reportDatabaseStatus(probeErr)
+	s.reportDatabaseStatus(probeErr)
+	if s.databaseFailureCount != 2 || !s.databaseFailureNotified.IsZero() {
+		t.Fatalf("before threshold: failures=%d notified=%v", s.databaseFailureCount, s.databaseFailureNotified)
+	}
+	s.reportDatabaseStatus(probeErr)
+	if s.databaseFailureCount != 3 || s.databaseFailureNotified.IsZero() {
+		t.Fatalf("at threshold: failures=%d notified=%v", s.databaseFailureCount, s.databaseFailureNotified)
+	}
+	s.reportDatabaseStatus(nil)
+	if s.databaseFailureCount != 0 || !s.databaseFailureNotified.IsZero() || !s.databaseFailureSince.IsZero() {
+		t.Fatalf("after recovery: failures=%d since=%v notified=%v", s.databaseFailureCount, s.databaseFailureSince, s.databaseFailureNotified)
+	}
+}
+
+func TestDatabaseCheckScheduleUsesConfiguredInterval(t *testing.T) {
+	if got := databaseCheckSchedule("30s"); got != "@every 30s" {
+		t.Errorf("databaseCheckSchedule(30s) = %q", got)
+	}
+	if got := databaseCheckSchedule(""); got != "@every 1m" {
+		t.Errorf("databaseCheckSchedule(empty) = %q", got)
+	}
+	if got := databaseCheckSchedule("invalid"); got != "@every 1m" {
+		t.Errorf("databaseCheckSchedule(invalid) = %q", got)
+	}
+}
+
+func TestStaticOfflinePageRouteIsRemoved(t *testing.T) {
 	server := newTestServer(t)
 	request := httptest.NewRequest(http.MethodGet, "/offline.html", nil)
-	request.AddCookie(&http.Cookie{Name: "theme", Value: "light"})
-	request.AddCookie(&http.Cookie{Name: "lang", Value: "de"})
 	response := httptest.NewRecorder()
-
-	server.handleOfflinePage(response, request)
-
-	body := response.Body.String()
-	for _, marker := range []string{
-		`<html lang="de"`,
-		`class="theme-light`,
-		`class="skip-link"`,
-		`<header class="header">`,
-		`<main id="main-content"`,
-		`<footer class="footer">`,
-		`Offline`,
-		`href="/" class="btn btn-primary"`,
-	} {
-		if !strings.Contains(body, marker) {
-			t.Errorf("offline page missing shared-shell marker %q", marker)
-		}
-	}
-	if response.Code != http.StatusOK {
-		t.Errorf("offline page status = %d, want %d", response.Code, http.StatusOK)
-	}
-	if got := response.Header().Get("Cache-Control"); got != "private, no-store" {
-		t.Errorf("offline page Cache-Control = %q, want private, no-store", got)
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("GET /offline.html status = %d, want 404", response.Code)
 	}
 }
 
@@ -196,7 +242,7 @@ func TestFrontendHealthTextGoldenSectionOrder(t *testing.T) {
 	w := httptest.NewRecorder()
 	s.respondHealthText(w, response)
 	body := w.Body.String()
-	assertTextOrder(t, body, "Status:", "Version:", "Checked:", "Cluster: Disabled", "Features", "Component Status", "GeoIP Country", "Server Statistics", "Engines total")
+	assertTextOrder(t, body, "Status:", "Version:", "Checked:", "Features", "Component Status", "GeoIP Country", "Server Statistics", "Engines total")
 }
 
 func assertTextOrder(t *testing.T, body string, markers ...string) {
@@ -284,24 +330,28 @@ func TestHealthBuildDateIsRFC3339UTCWholeSecond(t *testing.T) {
 	}
 }
 
-func TestServiceWorkerOfflineLastResortUsesThemeAndSharedShell(t *testing.T) {
+func TestServiceWorkerOfflineFallbackUsesStoredTranslations(t *testing.T) {
 	worker, err := GetStaticFile("sw.js")
 	if err != nil {
 		t.Fatalf("GetStaticFile(sw.js): %v", err)
 	}
 	workerText := string(worker)
 	for _, marker := range []string{
-		"offlineFallbackResponse(request)",
-		"requestCookie(request, 'theme')",
-		`class="theme-' + theme`,
-		`class="skip-link"`,
-		`id="main-content"`,
-		`class="section-card"`,
+		"const STRINGS_CACHE = 'search-offline-strings'",
+		"lang: 'en', dir: 'ltr'",
+		"offline-strings.json",
+		"Object.assign({}, DEFAULT_STRINGS",
+		"offlineFallbackResponse()",
 		"if (response.redirected || response.type === 'opaqueredirect')",
+		"response.headers.get('X-Offline-Cache') === 'public'",
+		"cache.delete(request)",
 	} {
 		if !strings.Contains(workerText, marker) {
 			t.Errorf("service worker offline fallback missing shared-shell marker %q", marker)
 		}
+	}
+	if strings.Contains(workerText, "'/offline.html'") {
+		t.Error("service worker precaches a static offline page")
 	}
 }
 
@@ -323,6 +373,51 @@ func readIDEAAPIInventory(t *testing.T) map[string]bool {
 		t.Fatal("API route drift: IDEA.md is missing the ### API routes inventory")
 	}
 	return parseRouteTable(lines[start:], 1, 2)
+}
+
+func readAITemplateDebugInventory(t *testing.T) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile("../../AI.md")
+	if err != nil {
+		t.Fatalf("read AI.md debug route inventory: %v", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	operations := make(map[string]bool)
+	sections := []struct {
+		start string
+		end   string
+	}{
+		{"### pprof Endpoints", "**Credentials and pprof.**"},
+		{"### Debug API Endpoints", "### Debug Implementation"},
+	}
+	for _, section := range sections {
+		start, end := -1, -1
+		for index, line := range lines {
+			if strings.TrimSpace(line) == section.start {
+				start = index + 1
+				continue
+			}
+			if start >= 0 && strings.HasPrefix(strings.TrimSpace(line), section.end) {
+				end = index
+				break
+			}
+		}
+		if start < 0 || end < 0 {
+			t.Fatalf("AI.md debug inventory section %q is missing or incomplete", section.start)
+		}
+		for _, line := range lines[start:end] {
+			columns := strings.Split(strings.TrimSpace(line), "|")
+			if len(columns) < 2 {
+				continue
+			}
+			path := strings.TrimSpace(strings.Trim(strings.TrimSpace(columns[1]), "`"))
+			if !strings.HasPrefix(path, "/debug/") {
+				continue
+			}
+			operations[http.MethodGet+" "+path] = true
+		}
+	}
+	return operations
 }
 
 func readAITemplateAPIInventory(t *testing.T) map[string]bool {
@@ -349,6 +444,28 @@ func readAITemplateAPIInventory(t *testing.T) map[string]bool {
 		end = len(lines)
 	}
 	template := parseRouteTable(lines[start:end], 2, 1)
+	// PART 8 keeps token-management API mirrors in its own route table.
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "**Routes** (web forms are cookie-authenticated `POST`s with CSRF; the API mirror accepts the primary token's `Authorization` header only, except issuing a token, which needs none):" {
+			continue
+		}
+		for _, routeLine := range lines[i+1:] {
+			trimmed := strings.TrimSpace(routeLine)
+			if strings.HasPrefix(trimmed, "### ") || strings.HasPrefix(trimmed, "**") {
+				break
+			}
+			columns := strings.Split(trimmed, "|")
+			if len(columns) < 3 {
+				continue
+			}
+			fields := strings.Fields(strings.Trim(strings.TrimSpace(columns[2]), "`"))
+			if len(fields) < 2 || !strings.HasPrefix(fields[1], "/api/") {
+				continue
+			}
+			path := strings.ReplaceAll(fields[1], "/api/{api_version}", "/api/v1")
+			template[fields[0]+" "+normalizeRoutePath(path)] = true
+		}
+	}
 	aliasStart, aliasEnd := -1, len(lines)
 	for i, line := range lines {
 		if strings.TrimSpace(line) == "**Direct alias endpoints (same handler, no redirect):**" {
@@ -792,6 +909,37 @@ func TestMiddlewareCORSDisabled(t *testing.T) {
 	}
 }
 
+func TestMCPOriginAllowlistUsesResolvedOriginsWithoutWildcard(t *testing.T) {
+	t.Setenv("DOMAIN", "")
+	cfg := config.DefaultConfig()
+	cfg.Server.CORS.AllowedOrigins = []string{"https://allowed.example"}
+	middleware := NewMiddleware(cfg, nil)
+	middleware.learnedCORS["https://learned.example"] = struct{}{}
+
+	for _, test := range []struct {
+		origin string
+		want   bool
+	}{
+		{origin: "https://allowed.example", want: true},
+		{origin: "https://learned.example", want: true},
+		{origin: "https://other.example", want: false},
+	} {
+		parsed, err := url.Parse(test.origin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := middleware.mcpOriginAllowed(nil, parsed); got != test.want {
+			t.Errorf("mcpOriginAllowed(%q) = %t, want %t", test.origin, got, test.want)
+		}
+	}
+
+	cfg.Server.CORS.AllowedOrigins = []string{"*"}
+	parsed, _ := url.Parse("https://wildcard.example")
+	if middleware.mcpOriginAllowed(nil, parsed) {
+		t.Fatal("wildcard CORS origin must not authorize an MCP origin")
+	}
+}
+
 // Tests for RateLimiter
 
 func TestNewRateLimiter(t *testing.T) {
@@ -1089,6 +1237,27 @@ func TestMiddlewareRecovery(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("Status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestRecoveryHTMLUsesRequestLanguage(t *testing.T) {
+	cfg := &config.Config{Server: config.ServerConfig{Mode: "production"}}
+	mw := NewMiddleware(cfg, nil)
+	wrapped := mw.Recovery(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("localized recovery test")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/?lang=de", nil)
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{`<html lang="de" dir="ltr"`, "Interner Serverfehler", "Ein Fehler ist aufgetreten", "Zurück zur Suche"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("localized recovery response missing %q", want)
+		}
 	}
 }
 
@@ -1753,7 +1922,7 @@ func TestHandleLocaleRejectsInvalidPath(t *testing.T) {
 	}
 }
 
-func TestRenderDirectAnswerFallbackLocalizesLabels(t *testing.T) {
+func TestRenderDirectAnswerFallbackUsesLocalizedRecoveryResponse(t *testing.T) {
 	manager, err := i18n.DefaultManager()
 	if err != nil {
 		t.Fatalf("DefaultManager() error = %v", err)
@@ -1778,10 +1947,16 @@ func TestRenderDirectAnswerFallbackLocalizesLabels(t *testing.T) {
 	s.renderDirectAnswerFallback(rec, req, answer)
 
 	body := rec.Body.String()
-	for _, needle := range []string{"Quelle:", "Direkte Antwort"} {
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	for _, needle := range []string{`lang="de"`, "Ein Fehler ist aufgetreten"} {
 		if !strings.Contains(body, needle) {
-			t.Fatalf("fallback body missing %q: %s", needle, body)
+			t.Fatalf("recovery body missing %q: %s", needle, body)
 		}
+	}
+	if strings.Contains(body, "Example") || strings.Contains(body, answer.SourceURL) {
+		t.Fatalf("recovery body leaked direct-answer content: %s", body)
 	}
 }
 
@@ -2061,7 +2236,6 @@ func TestGetTLSConfigDisabled(t *testing.T) {
 
 	sm := NewSSLManager(cfg)
 	tlsConfig, err := sm.GetTLSConfig()
-
 	if err != nil {
 		t.Errorf("GetTLSConfig error = %v", err)
 	}
@@ -2076,7 +2250,6 @@ func TestGetTLSConfigEnabled(t *testing.T) {
 
 	sm := NewSSLManager(cfg)
 	tlsConfig, err := sm.GetTLSConfig()
-
 	if err != nil {
 		t.Errorf("GetTLSConfig error = %v", err)
 	}
@@ -2486,13 +2659,23 @@ func TestHealthFeatureTextStates(t *testing.T) {
 		host   string
 		want   string
 	}{
-		{"disabled", "", "disabled"},
-		{"starting", "", "starting"},
-		{"healthy", "site.onion", "healthy - site.onion"},
-		{"unavailable", "", "unavailable"},
+		{"disabled", "", "Disabled"},
+		{"starting", "", "Starting"},
+		{"healthy", "site.onion", "Healthy - site.onion"},
+		{"unavailable", "", "Unavailable"},
+	}
+	translate := func(key string) string {
+		values := map[string]string{
+			"common.disabled": "Disabled", "health.starting": "Starting",
+			"health.healthy": "Healthy", "health.unavailable": "Unavailable",
+		}
+		if value, ok := values[key]; ok {
+			return value
+		}
+		return key
 	}
 	for _, test := range tests {
-		if got := healthFeatureText(test.status, test.host); got != test.want {
+		if got := healthFeatureText(test.status, test.host, translate); got != test.want {
 			t.Errorf("healthFeatureText(%q, %q) = %q, want %q", test.status, test.host, got, test.want)
 		}
 	}
@@ -2762,9 +2945,6 @@ func TestBuildHealthInfoMinimal(t *testing.T) {
 	if health.Checks.Scheduler != "error" {
 		t.Errorf("buildHealthInfo() checks.scheduler = %q, want 'error' when required scheduler is absent", health.Checks.Scheduler)
 	}
-	if health.Cluster.Enabled {
-		t.Error("single-instance health response must report cluster.enabled=false")
-	}
 }
 
 func TestBuildHealthInfoMaintenanceMode(t *testing.T) {
@@ -3010,7 +3190,7 @@ func TestRequireOperatorPadsFailedAuthTiming(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Server.Token = "expected-token"
 	s := &Server{config: cfg}
-	req := httptest.NewRequest(http.MethodGet, "/server/status", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/status", nil)
 	recorder := httptest.NewRecorder()
 	started := time.Now()
 	s.RequireOperator(func(http.ResponseWriter, *http.Request) {})(recorder, req)
@@ -3233,6 +3413,46 @@ func TestRespondJSONCustomStatus(t *testing.T) {
 	}
 }
 
+func TestRespondJSONEncodeFailureWritesServerError(t *testing.T) {
+	w := httptest.NewRecorder()
+	respondJSON(w, http.StatusOK, map[string]any{"unencodable": func() {}})
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("respondJSON() status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("respondJSON() content type = %q, want application/json", got)
+	}
+	if !strings.Contains(w.Body.String(), `"error":"SERVER_ERROR"`) {
+		t.Fatalf("respondJSON() body = %q, want safe server error response", w.Body.String())
+	}
+}
+
+type errorResponseWriter struct {
+	header http.Header
+	status int
+}
+
+func (w *errorResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *errorResponseWriter) WriteHeader(status int) {
+	w.status = status
+}
+
+func (w *errorResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("client disconnected")
+}
+
+func TestRespondJSONHandlesWriteFailure(t *testing.T) {
+	w := &errorResponseWriter{header: make(http.Header)}
+	respondJSON(w, http.StatusCreated, map[string]string{"ok": "yes"})
+	if w.status != http.StatusCreated {
+		t.Fatalf("respondJSON() status = %d, want %d", w.status, http.StatusCreated)
+	}
+}
+
 func TestRespondError(t *testing.T) {
 	w := httptest.NewRecorder()
 	respondError(w, http.StatusBadRequest, "something went wrong")
@@ -3246,6 +3466,44 @@ func TestRespondError(t *testing.T) {
 	}
 	if !strings.Contains(body, "something went wrong") {
 		t.Errorf("respondError() body = %q, missing message", body)
+	}
+}
+
+func TestDebugCommandLineRedactsProcessArguments(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"/usr/local/bin/search", "--token", "sensitive-test-token"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	response := httptest.NewRecorder()
+	(&Server{}).handleDebugCommandLine(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/cmdline", nil))
+	if got, want := response.Body.String(), "search\n"; got != want {
+		t.Fatalf("cmdline body = %q, want only binary name %q", got, want)
+	}
+	if strings.Contains(response.Body.String(), "sensitive-test-token") {
+		t.Fatal("cmdline response exposed a process argument")
+	}
+}
+
+func TestDebugVarsRedactsProcessArguments(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"/usr/local/bin/search", "--token", "sensitive-test-token"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	response := httptest.NewRecorder()
+	(&Server{}).handleDebugVars(response, httptest.NewRequest(http.MethodGet, "/debug/vars", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("vars status = %d, want 200", response.Code)
+	}
+	var values map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &values); err != nil {
+		t.Fatalf("decode vars response: %v", err)
+	}
+	commandLine, ok := values["cmdline"].([]any)
+	if !ok || len(commandLine) != 1 || commandLine[0] != "search" {
+		t.Fatalf("vars cmdline = %#v, want only the executable name", values["cmdline"])
+	}
+	if strings.Contains(response.Body.String(), "sensitive-test-token") {
+		t.Fatal("vars response exposed a process argument")
 	}
 }
 
@@ -3556,27 +3814,6 @@ func TestPreferencesExposeCookieAndCCPAControls(t *testing.T) {
 	}
 }
 
-func TestLegacyPreferencesSyncRoutesRedirectPermanently(t *testing.T) {
-	server := &Server{}
-	for _, test := range []struct {
-		path string
-		want string
-	}{
-		{path: "/server/preferences/export?theme=dark", want: "/server/preferences/sync?theme=dark"},
-		{path: "/server/preferences/import?code=abc", want: "/server/preferences/sync/import?code=abc"},
-	} {
-		response := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, test.path, nil)
-		server.handleLegacyPreferencesSync(response, request)
-		if response.Code != http.StatusPermanentRedirect {
-			t.Errorf("%s status = %d, want %d", test.path, response.Code, http.StatusPermanentRedirect)
-		}
-		if location := response.Header().Get("Location"); location != test.want {
-			t.Errorf("%s Location = %q, want %q", test.path, location, test.want)
-		}
-	}
-}
-
 func TestPreferencesPageKeepsSingleFormActionsAndMovesTools(t *testing.T) {
 	server := newTestServer(t)
 	request := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
@@ -3591,6 +3828,7 @@ func TestPreferencesPageKeepsSingleFormActionsAndMovesTools(t *testing.T) {
 		`id="save-preferences"`,
 		`id="reset-prefs"`,
 		`id="reset-preferences"`,
+		`id="custom-css"`,
 		`href="/server/preferences/tools"`,
 		`href="/server/preferences/sync"`,
 	} {
@@ -3609,10 +3847,13 @@ func TestPreferencesPageKeepsSingleFormActionsAndMovesTools(t *testing.T) {
 	if toolsResponse.Code != http.StatusOK {
 		t.Fatalf("preference tools status = %d, want %d", toolsResponse.Code, http.StatusOK)
 	}
-	for _, marker := range []string{`id="custom-css"`, `id="add-custom-bang"`, `id="copy-opensearch"`} {
+	for _, marker := range []string{`id="add-custom-bang"`, `id="copy-opensearch"`} {
 		if !strings.Contains(toolsResponse.Body.String(), marker) {
 			t.Errorf("preference tools page is missing %q", marker)
 		}
+	}
+	if strings.Contains(toolsResponse.Body.String(), `id="custom-css"`) {
+		t.Error("custom CSS editor must remain on the main preferences page")
 	}
 
 	syncResponse := httptest.NewRecorder()
@@ -3668,7 +3909,7 @@ func TestHandleGeneralPreferencesSaveResetClearsSiteData(t *testing.T) {
 			cleared[cookie.Name] = true
 		}
 	}
-	for _, name := range []string{"theme", "lang", "cookie_consent", "ccpa_opt_out", "search_build", "dismissed_announcements", "contact_captcha_required"} {
+	for _, name := range []string{"theme", "lang", "cookie_consent", "ccpa_opt_out", "search_build", "dismissed_announcements", "contact_captcha_required", "search_pref_custom_css"} {
 		if !cleared[name] {
 			t.Errorf("reset did not clear %q", name)
 		}

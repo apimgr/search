@@ -786,7 +786,8 @@ func (m *Metrics) SetRequestStatsDB(ctx context.Context, db requestStatsStore) e
 }
 
 // PersistRequestStats batches request counts and refreshes the cached values
-// from shared storage so clustered nodes observe one another within a minute.
+// from shared storage so another process using the same database observes the
+// aggregate within a minute.
 func (m *Metrics) PersistRequestStats(ctx context.Context) error {
 	if m == nil {
 		return nil
@@ -931,7 +932,7 @@ func (m *Metrics) MetricsMiddleware(next http.Handler) http.Handler {
 
 func isHealthOrMetricsPath(path string) bool {
 	switch path {
-	case "/server/healthz", "/server/healthz.txt", "/healthz", "/healthz.txt", "/api/v1/server/healthz", "/api/v1/server/healthz.txt", "/api/healthz":
+	case "/server/healthz", "/server/healthz.txt", "/healthz", "/healthz.txt", version.APIPrefix + "/server/healthz", version.APIPrefix + "/server/healthz.txt", "/api/healthz":
 		return true
 	}
 	for _, base := range []string{"/server/metrics", version.APIPrefix + "/server/metrics", "/api/metrics", "/metrics"} {

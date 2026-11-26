@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,6 +40,33 @@ const PGPPublicKeyFilename = "pgp.pub.asc"
 // PGPEncryptedPrivateKeyFilename is the encrypted private key filename
 // inside PGPDirName.
 const PGPEncryptedPrivateKeyFilename = "pgp.priv.asc.enc"
+
+// PGPPublicKeyStagedFilename is the public key staging path used during atomic
+// key rotation.
+const PGPPublicKeyStagedFilename = "pgp.pub.asc.new"
+
+// PGPEncryptedPrivateKeyStagedFilename is the private key staging path used
+// during atomic key rotation.
+const PGPEncryptedPrivateKeyStagedFilename = "pgp.priv.asc.enc.new"
+
+// PGPRotationSignatureFilename stores the detached old-key signature for the
+// new public key.
+const PGPRotationSignatureFilename = "pgp.rotation.sig.asc"
+
+// PGPRotationSignatureStagedFilename stores the signature before the database
+// commit marker is written.
+const PGPRotationSignatureStagedFilename = "pgp.rotation.sig.asc.new"
+
+// PGPOldEncryptedPrivateKeyFilename stores the previous encrypted private key
+// during the in-flight notification grace period.
+const PGPOldEncryptedPrivateKeyFilename = "pgp.priv.old.asc.enc"
+
+// PGPOldKeyExpiryFilename records when the retired private key can be removed.
+const PGPOldKeyExpiryFilename = "pgp.old.expires"
+
+// PGPOldKeyExpiryStagedFilename stages the retired-key expiry alongside the
+// new key files.
+const PGPOldKeyExpiryStagedFilename = "pgp.old.expires.new"
 
 // PGPKeyserversStateFilename tracks per-keyserver publish state so a
 // restore does not double-submit, per AI.md PART 11 Backup Integration.
@@ -216,6 +245,80 @@ type KeyserverPublishResult struct {
 	Err       error
 }
 
+// KeyserverPublishError retains the HTTP status used by the durable retry
+// policy: only transport errors, 429 and 5xx responses are retryable.
+type KeyserverPublishError struct {
+	StatusCode int
+	Err error
+}
+
+type KeyserverRetryState struct {
+	Fingerprint string `json:"fingerprint"`
+	Servers map[string]KeyserverRetryEntry `json:"servers"`
+}
+
+type KeyserverRetryEntry struct {
+	Attempts int `json:"attempts"`
+	NextAttempt time.Time `json:"next_attempt,omitempty"`
+	PublishedAt time.Time `json:"published_at,omitempty"`
+	PermanentFailure bool `json:"permanent_failure,omitempty"`
+}
+
+// PublishKeyserversOnce skips hosts that succeeded, failed permanently, or
+// have a future durable retry time. Retryable failures use the PART11
+// one-minute exponential schedule, capped at six hours and eight attempts.
+func PublishKeyserversOnce(ctx context.Context, httpClient *http.Client, configDir, pubArmor string, keyservers []string, now time.Time) ([]KeyserverPublishResult, error) {
+	fingerprint, err := KeyFingerprint(pubArmor)
+	if err != nil { return nil, err }
+	path := filepath.Join(configDir, PGPDirName, PGPKeyserversStateFilename)
+	state := KeyserverRetryState{Fingerprint: fingerprint, Servers: make(map[string]KeyserverRetryEntry)}
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		var saved KeyserverRetryState
+		if json.Unmarshal(data, &saved) == nil && saved.Fingerprint == fingerprint && saved.Servers != nil { state = saved }
+	} else if !os.IsNotExist(readErr) { return nil, fmt.Errorf("read keyserver retry state: %w", readErr) }
+	var due []string
+	for _, host := range keyservers {
+		entry := state.Servers[host]
+		if !entry.PublishedAt.IsZero() || entry.PermanentFailure || (!entry.NextAttempt.IsZero() && now.Before(entry.NextAttempt)) || entry.Attempts >= 8 { continue }
+		due = append(due, host)
+	}
+	results := PublishToKeyservers(ctx, httpClient, pubArmor, due)
+	for _, result := range results {
+		entry := state.Servers[result.Keyserver]
+		if result.Published {
+			entry.PublishedAt = now.UTC()
+			entry.NextAttempt = time.Time{}
+		} else {
+			var publishErr *KeyserverPublishError
+			if errors.As(result.Err, &publishErr) && !publishErr.Retryable() {
+				entry.PermanentFailure = true
+				entry.NextAttempt = time.Time{}
+			} else {
+				entry.Attempts++
+				if entry.Attempts < 8 {
+					delay := time.Minute * time.Duration(1<<min(entry.Attempts-1, 8))
+					if delay > 6*time.Hour { delay = 6*time.Hour }
+					entry.NextAttempt = now.UTC().Add(delay)
+				} else { entry.NextAttempt = time.Time{} }
+			}
+		}
+		state.Servers[result.Keyserver] = entry
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { return results, fmt.Errorf("create keyserver state directory: %w", err) }
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil { return results, err }
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil { return results, fmt.Errorf("write keyserver retry state: %w", err) }
+	if err := os.Rename(tmp, path); err != nil { _ = os.Remove(tmp); return results, fmt.Errorf("replace keyserver retry state: %w", err) }
+	return results, nil
+}
+
+func (e *KeyserverPublishError) Error() string { return e.Err.Error() }
+func (e *KeyserverPublishError) Unwrap() error { return e.Err }
+func (e *KeyserverPublishError) Retryable() bool {
+	return e.StatusCode == 0 || e.StatusCode == http.StatusTooManyRequests || e.StatusCode >= 500
+}
+
 // PublishToKeyservers POSTs the armored public key to each keyserver's HTTP
 // Keyserver Protocol (HKP) VKS submission endpoint, per AI.md PART 11
 // "Publish to keyservers": https://keys.openpgp.org/vks/v1/upload style
@@ -242,28 +345,52 @@ func PublishToKeyservers(ctx context.Context, httpClient *http.Client, pubArmor 
 // keyserver's VKS upload endpoint (the protocol used by keys.openpgp.org and
 // compatible keyservers such as Ubuntu's SKS-successor infrastructure).
 func publishToOneKeyserver(ctx context.Context, httpClient *http.Client, keyserver, pubArmor string) error {
+	if !strings.Contains(keyserver, "://") {
+		keyserver = "https://" + keyserver
+	}
 	base, err := url.Parse(keyserver)
 	if err != nil {
-		return fmt.Errorf("pgp: invalid keyserver URL %q: %w", keyserver, err)
+		return &KeyserverPublishError{StatusCode: http.StatusBadRequest, Err: fmt.Errorf("pgp: invalid keyserver URL: %w", err)}
 	}
-	base.Path = "/vks/v1/upload"
-
-	form := url.Values{"keytext": {pubArmor}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base.String(), bytes.NewBufferString(form.Encode()))
+	if base.Hostname() == "" || (base.Scheme != "http" && base.Scheme != "https") {
+		return &KeyserverPublishError{StatusCode: http.StatusBadRequest, Err: fmt.Errorf("pgp: invalid keyserver URL")}
+	}
+	var body []byte
+	var contentType string
+	if strings.EqualFold(base.Hostname(), "keys.openpgp.org") {
+		base.Path = "/vks/v1/upload"
+		body, err = json.Marshal(map[string]string{"keytext": pubArmor})
+		contentType = "application/json"
+	} else {
+		base.Path = "/pks/add"
+		body = []byte(url.Values{"keytext": {pubArmor}}.Encode())
+		contentType = "application/x-www-form-urlencoded"
+	}
+	if err != nil { return fmt.Errorf("pgp: encode keyserver request: %w", err) }
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base.String(), bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("pgp: build request for %s: %w", keyserver, err)
+		return &KeyserverPublishError{StatusCode: http.StatusBadRequest, Err: fmt.Errorf("pgp: build request: %w", err)}
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("pgp: publish to %s: %w", keyserver, err)
+		return &KeyserverPublishError{Err: fmt.Errorf("pgp: publish to %s: %w", keyserver, err)}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("pgp: keyserver %s returned %d: %s", keyserver, resp.StatusCode, string(body))
+		return &KeyserverPublishError{StatusCode: resp.StatusCode, Err: fmt.Errorf("pgp: keyserver %s returned %d: %s", keyserver, resp.StatusCode, string(body))}
+	}
+	if strings.EqualFold(base.Hostname(), "keys.openpgp.org") {
+		var result struct { Fingerprint string `json:"key_fpr"`; Status string `json:"status"` }
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result); err != nil {
+			return fmt.Errorf("pgp: decode keys.openpgp.org response: %w", err)
+		}
+		if result.Fingerprint == "" || result.Status == "" {
+			return fmt.Errorf("pgp: keys.openpgp.org response is missing key_fpr or status")
+		}
 	}
 	return nil
 }

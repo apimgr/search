@@ -20,20 +20,20 @@ func (h *Handler) handleContactWebhookConfigSave(w http.ResponseWriter, r *http.
 	var input contactWebhookSaveRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+		h.writeError(w, r, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 	input.Role = strings.ToLower(strings.TrimSpace(input.Role))
 	input.Transport = strings.ToLower(strings.TrimSpace(input.Transport))
 	input.URL = strings.TrimSpace(input.URL)
 	if !validContactRole(input.Role) || !validWebhookTransport(input.Transport) {
-		h.writeError(w, "VALIDATION_FAILED", "Role or webhook transport is invalid", http.StatusBadRequest)
+		h.writeError(w, r, "VALIDATION_FAILED", "Role or webhook transport is invalid", http.StatusBadRequest)
 		return
 	}
 	if input.URL != "" {
 		parsed, err := url.ParseRequestURI(input.URL)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
-			h.writeError(w, "VALIDATION_FAILED", "Webhook URL must be a credential-free HTTPS URL", http.StatusBadRequest)
+			h.writeError(w, r, "VALIDATION_FAILED", "Webhook URL must be a credential-free HTTPS URL", http.StatusBadRequest)
 			return
 		}
 	}
@@ -42,7 +42,6 @@ func (h *Handler) handleContactWebhookConfigSave(w http.ResponseWriter, r *http.
 	previousURL := roleConfig.Webhooks[input.Transport]
 	previousSecret := roleConfig.Webhooks[input.Transport+"_secret"]
 	secret := previousSecret
-	newSecret := false
 	if input.URL == "" {
 		secret = ""
 	} else {
@@ -50,10 +49,9 @@ func (h *Handler) handleContactWebhookConfigSave(w http.ResponseWriter, r *http.
 			var err error
 			secret, err = notify.GenerateWebhookSecret()
 			if err != nil {
-				h.writeError(w, "INTERNAL_ERROR", "Webhook secret generation failed", http.StatusInternalServerError)
+				h.writeError(w, r, "INTERNAL_ERROR", "Webhook secret generation failed", http.StatusInternalServerError)
 				return
 			}
-			newSecret = true
 		}
 	}
 	h.config.Update(func(server *config.ServerConfig) {
@@ -86,14 +84,11 @@ func (h *Handler) handleContactWebhookConfigSave(w http.ResponseWriter, r *http.
 				role.Webhooks[input.Transport+"_secret"] = previousSecret
 			}
 		})
-		h.writeError(w, "INTERNAL_ERROR", "Webhook configuration persistence failed", http.StatusInternalServerError)
+		h.writeError(w, r, "INTERNAL_ERROR", "Webhook configuration persistence failed", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	response := map[string]interface{}{"role": input.Role, "transport": input.Transport, "configured": input.URL != ""}
-	if newSecret {
-		response["secret"] = secret
-	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: response})
 }
 

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // InitSchema creates all database tables idempotently on startup.
@@ -124,19 +126,23 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			type TEXT NOT NULL,
 			verified INTEGER NOT NULL DEFAULT 0
 		)`,
-		// API tokens (SHA-256 hashed)
+		// Owner and linked tokens. Existing installations are upgraded below
+		// without deleting legacy token IDs or credential data.
 		`CREATE TABLE IF NOT EXISTS {prefix}api_tokens (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			token_hash TEXT UNIQUE NOT NULL,
+			id TEXT PRIMARY KEY,
+			owner_id TEXT NOT NULL REFERENCES {prefix}owners(id) ON DELETE CASCADE,
+			kind TEXT NOT NULL CHECK (kind IN ('primary', 'linked')),
+			name TEXT,
+			token_hash TEXT NOT NULL UNIQUE,
 			token_prefix TEXT NOT NULL,
-			description TEXT,
-			permissions TEXT,
-			rate_limit INTEGER DEFAULT 100,
-			active INTEGER DEFAULT 1,
-			last_used DATETIME,
-			expires_at DATETIME,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			token_last4 TEXT NOT NULL,
+			token_enc TEXT NOT NULL,
+			created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			rotated_at INTEGER,
+			expires_at INTEGER,
+			last_used_at INTEGER,
+			revoked_at INTEGER,
+			revoked_reason TEXT
 		)`,
 		`CREATE INDEX IF NOT EXISTS {prefix}idx_api_tokens_hash ON {prefix}api_tokens(token_hash)`,
 		`CREATE INDEX IF NOT EXISTS {prefix}idx_api_tokens_prefix ON {prefix}api_tokens(token_prefix)`,
@@ -250,30 +256,33 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		// Security reports — coordinated disclosure pipeline per AI.md PART 11.
-		// Plaintext report content is never persisted: sensitive fields (steps to
-		// reproduce, impact, researcher contact, etc.) live only inside encrypted_body.
+		// Report bodies and researcher contact details are encrypted separately.
 		`CREATE TABLE IF NOT EXISTS {prefix}security_reports (
 			tracking_id TEXT PRIMARY KEY,
-			security_id_used TEXT,
-			affected_component TEXT,
-			affected_endpoint TEXT,
-			severity TEXT,
-			summary TEXT,
-			encrypted_body BLOB,
-			encryption_method TEXT,
-			credit_preference TEXT,
+			id_window BIGINT NOT NULL,
+			severity VARCHAR(16) NOT NULL,
+			component VARCHAR(255) NOT NULL,
+			status VARCHAR(16) NOT NULL DEFAULT 'received',
+			body_enc BLOB NOT NULL,
+			body_alg VARCHAR(16) NOT NULL,
+			contact_enc BLOB,
+			credit_pref VARCHAR(8) NOT NULL DEFAULT 'no',
 			credit_name TEXT,
-			disclosure_days INTEGER,
-			cve_requested INTEGER NOT NULL DEFAULT 0,
-			status TEXT NOT NULL DEFAULT 'received',
-			report_token_hash TEXT,
-			last_status_access_date TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			researcher_comment TEXT NOT NULL DEFAULT '',
+			disclosure_date DATE,
+			cve_requested BOOLEAN NOT NULL DEFAULT FALSE,
+			token_hash VARCHAR(64) NOT NULL,
+			token_last_used DATE,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			closed_at DATETIME
 		)`,
-		`CREATE INDEX IF NOT EXISTS {prefix}idx_security_reports_status ON {prefix}security_reports(status)`,
-		`CREATE INDEX IF NOT EXISTS {prefix}idx_security_reports_token ON {prefix}security_reports(report_token_hash)`,
+		`CREATE TABLE IF NOT EXISTS {prefix}security_thanks (
+			tracking_id VARCHAR(32) PRIMARY KEY,
+			credit VARCHAR(120) NOT NULL,
+			severity VARCHAR(16) NOT NULL,
+			disclosed_on DATE NOT NULL
+		)`,
 		// PGP keypair metadata — the keys themselves live on disk, never in the DB.
 		`CREATE TABLE IF NOT EXISTS {prefix}pgp_keypair (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -311,22 +320,29 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	if err := ensureColumn(ctx, db, prefix+"search_alerts", "owner_id", "TEXT REFERENCES "+prefix+"owners(id)"); err != nil {
 		return fmt.Errorf("add search alert owner column: %w", err)
 	}
-	if err := ensureColumn(ctx, db, prefix+"security_reports", "last_status_access_date", "TEXT"); err != nil {
-		return fmt.Errorf("add security report status access column: %w", err)
+	if err := ensureSecurityReportColumns(ctx, db, prefix); err != nil {
+		return err
 	}
-	if err := ensureColumn(ctx, db, prefix+"security_reports", "credit_handle", "TEXT"); err != nil {
-		return fmt.Errorf("add security report credit handle column: %w", err)
+	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_security_reports_status ON `+prefix+`security_reports(status, created_at)`); err != nil {
+		return fmt.Errorf("create security report status index: %w", err)
+	}
+	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_security_reports_token ON `+prefix+`security_reports(token_hash)`); err != nil {
+		return fmt.Errorf("create security report token index: %w", err)
 	}
 	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_search_alerts_owner ON `+prefix+`search_alerts(owner_id)`); err != nil {
 		return fmt.Errorf("create search alert owner index: %w", err)
 	}
 	apiTokens := prefix + "api_tokens"
+	if err := migrateOwnerTokenIdentifiers(ctx, db, apiTokens); err != nil {
+		return fmt.Errorf("migrate owner token identifiers: %w", err)
+	}
 	ownerTokenColumns := []struct {
 		name string
 		ddl  string
 	}{
 		{"owner_id", "TEXT REFERENCES " + prefix + "owners(id)"},
 		{"kind", "TEXT NOT NULL DEFAULT 'primary' CHECK (kind IN ('primary', 'linked'))"},
+		{"token_last4", "TEXT NOT NULL DEFAULT ''"},
 		{"token_enc", "TEXT NOT NULL DEFAULT ''"},
 		{"rotated_at", "INTEGER"},
 		{"last_used_at", "INTEGER"},
@@ -336,6 +352,13 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	for _, column := range ownerTokenColumns {
 		if err := ensureColumn(ctx, db, apiTokens, column.name, column.ddl); err != nil {
 			return fmt.Errorf("add owner token column %s: %w", column.name, err)
+		}
+	}
+	if active, err := hasColumn(ctx, db, apiTokens, "active"); err != nil {
+		return fmt.Errorf("inspect legacy owner token activity: %w", err)
+	} else if active {
+		if _, err := db.Exec(ctx, `UPDATE `+apiTokens+` SET revoked_at = COALESCE(revoked_at, strftime('%s', 'now')), revoked_reason = COALESCE(revoked_reason, 'legacy_inactive') WHERE active = 0`); err != nil {
+			return fmt.Errorf("preserve legacy inactive owner token state: %w", err)
 		}
 	}
 	for _, stmt := range []string{
@@ -351,10 +374,173 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	return nil
 }
 
-func ensureColumn(ctx context.Context, db *DB, table, column, definition string) error {
-	rows, err := db.Query(ctx, "PRAGMA table_info("+table+")")
+// migrateOwnerTokenIdentifiers moves legacy sequential token IDs out of the
+// public id column and backfills UUIDv7 identifiers without deleting rows.
+// The legacy integer primary key stays available for existing foreign keys.
+func migrateOwnerTokenIdentifiers(ctx context.Context, db *DB, table string) error {
+	columns, err := tableColumns(ctx, db, table)
 	if err != nil {
 		return err
+	}
+	idType, hasID := columns["id"]
+	if !hasID {
+		return fmt.Errorf("%s has no id column", table)
+	}
+	if strings.EqualFold(idType, "INTEGER") {
+		if _, hasLegacyID := columns["legacy_id"]; !hasLegacyID {
+			if _, err := db.Exec(ctx, `ALTER TABLE `+table+` RENAME COLUMN id TO legacy_id`); err != nil {
+				return fmt.Errorf("preserve legacy integer token IDs: %w", err)
+			}
+			delete(columns, "id")
+			columns["legacy_id"] = idType
+		}
+		if _, hasPublicID := columns["id"]; !hasPublicID {
+			if _, err := db.Exec(ctx, `ALTER TABLE `+table+` ADD COLUMN id TEXT`); err != nil {
+				return fmt.Errorf("add public UUID token ID: %w", err)
+			}
+			columns["id"] = "TEXT"
+		}
+	}
+	if err := ensureColumn(ctx, db, table, "token_last4", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	orderColumn := "id"
+	if _, hasLegacyID := columns["legacy_id"]; hasLegacyID {
+		orderColumn = "legacy_id"
+	}
+	rows, err := db.Query(ctx, `SELECT `+orderColumn+` FROM `+table+` WHERE id IS NULL OR id = '' ORDER BY `+orderColumn)
+	if err != nil {
+		return fmt.Errorf("read token rows needing UUID IDs: %w", err)
+	}
+	var legacyIDs []interface{}
+	for rows.Next() {
+		var legacyID interface{}
+		if err := rows.Scan(&legacyID); err != nil {
+			return errors.Join(err, rows.Close())
+		}
+		legacyIDs = append(legacyIDs, legacyID)
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Join(err, rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, legacyID := range legacyIDs {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate UUIDv7 token identifier: %w", err)
+		}
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET id = ? WHERE `+orderColumn+` = ? AND (id IS NULL OR id = '')`, id.String(), legacyID); err != nil {
+			return fmt.Errorf("backfill UUIDv7 token identifier: %w", err)
+		}
+	}
+	if _, err := db.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS `+table+`_public_id ON `+table+`(id)`); err != nil {
+		return fmt.Errorf("index public UUID token identifiers: %w", err)
+	}
+	return nil
+}
+
+func tableColumns(ctx context.Context, db *DB, table string) (map[string]string, error) {
+	rows, err := db.Query(ctx, `PRAGMA table_info(`+table+`)`)
+	if err != nil {
+		return nil, err
+	}
+	columns := make(map[string]string)
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue interface{}
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return nil, errors.Join(err, rows.Close())
+		}
+		columns[name] = columnType
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Join(err, rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return columns, nil
+}
+
+func ensureSecurityReportColumns(ctx context.Context, db *DB, prefix string) error {
+	table := prefix + "security_reports"
+	columns := []struct{ name, definition string }{
+		{"id_window", "BIGINT NOT NULL DEFAULT 0"},
+		{"severity", "VARCHAR(16) NOT NULL DEFAULT 'informational'"},
+		{"component", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"status", "VARCHAR(16) NOT NULL DEFAULT 'received'"},
+		{"body_enc", "BLOB"},
+		{"body_alg", "VARCHAR(16) NOT NULL DEFAULT 'aes-256-gcm'"},
+		{"contact_enc", "BLOB"},
+		{"credit_pref", "VARCHAR(8) NOT NULL DEFAULT 'no'"},
+		{"credit_name", "VARCHAR(120)"},
+		{"researcher_comment", "TEXT NOT NULL DEFAULT ''"},
+		{"disclosure_date", "DATE"},
+		{"cve_requested", "BOOLEAN NOT NULL DEFAULT FALSE"},
+		{"token_hash", "VARCHAR(64) NOT NULL DEFAULT ''"},
+		{"token_last_used", "DATE"},
+		{"created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"},
+		{"updated_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"},
+		{"closed_at", "TIMESTAMP"},
+	}
+	for _, column := range columns {
+		if err := ensureColumn(ctx, db, table, column.name, column.definition); err != nil {
+			return fmt.Errorf("add security report %s column: %w", column.name, err)
+		}
+	}
+	legacy := map[string]bool{}
+	for _, column := range []string{"security_id_used", "affected_component", "affected_endpoint", "summary", "encrypted_body", "encryption_method", "credit_preference", "report_token_hash", "last_status_access_date", "disclosure_days"} {
+		exists, err := hasColumn(ctx, db, table, column)
+		if err != nil {
+			return fmt.Errorf("inspect legacy security report %s column: %w", column, err)
+		}
+		legacy[column] = exists
+	}
+	if legacy["encrypted_body"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET body_enc = encrypted_body WHERE body_enc IS NULL AND encrypted_body IS NOT NULL`); err != nil {
+			return fmt.Errorf("copy legacy security report body: %w", err)
+		}
+	}
+	if legacy["encryption_method"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET body_alg = encryption_method WHERE encryption_method IS NOT NULL AND (body_enc = encrypted_body OR body_alg = 'aes-256-gcm')`); err != nil {
+			return fmt.Errorf("copy legacy security report body algorithm: %w", err)
+		}
+	}
+	if legacy["affected_component"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET component = affected_component WHERE component = '' AND affected_component IS NOT NULL`); err != nil {
+			return fmt.Errorf("copy legacy security report component: %w", err)
+		}
+	}
+	if legacy["report_token_hash"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET token_hash = report_token_hash WHERE token_hash = '' AND report_token_hash IS NOT NULL`); err != nil {
+			return fmt.Errorf("copy legacy security report token hash: %w", err)
+		}
+	}
+	if legacy["last_status_access_date"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET token_last_used = last_status_access_date WHERE token_last_used IS NULL`); err != nil {
+			return fmt.Errorf("copy legacy security report access date: %w", err)
+		}
+	}
+	if legacy["credit_preference"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET credit_pref = CASE credit_preference WHEN 'real_name' THEN 'name' WHEN 'anonymous' THEN 'anon' ELSE credit_preference END WHERE credit_preference IS NOT NULL`); err != nil {
+			return fmt.Errorf("copy legacy security report credit preference: %w", err)
+		}
+	}
+	if legacy["disclosure_days"] {
+		if _, err := db.Exec(ctx, `UPDATE `+table+` SET disclosure_date = date(created_at, '+' || disclosure_days || ' days') WHERE disclosure_date IS NULL AND disclosure_days > 0`); err != nil {
+			return fmt.Errorf("copy legacy security report disclosure date: %w", err)
+		}
+	}
+	return nil
+}
+
+func hasColumn(ctx context.Context, db *DB, table, column string) (bool, error) {
+	rows, err := db.Query(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return false, err
 	}
 	found := false
 	for rows.Next() {
@@ -362,16 +548,24 @@ func ensureColumn(ctx context.Context, db *DB, table, column, definition string)
 		var name, columnType string
 		var defaultValue interface{}
 		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return errors.Join(err, rows.Close())
+			return false, errors.Join(err, rows.Close())
 		}
 		if name == column {
 			found = true
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return errors.Join(err, rows.Close())
+		return false, errors.Join(err, rows.Close())
 	}
 	if err := rows.Close(); err != nil {
+		return false, err
+	}
+	return found, nil
+}
+
+func ensureColumn(ctx context.Context, db *DB, table, column, definition string) error {
+	found, err := hasColumn(ctx, db, table, column)
+	if err != nil {
 		return err
 	}
 	if found {

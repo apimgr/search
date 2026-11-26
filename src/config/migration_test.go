@@ -14,15 +14,15 @@ import (
 func TestMigrateConfigAreasMovesLegacyAndSecrets(t *testing.T) {
 	dir := t.TempDir()
 	dropInDir := filepath.Join(dir, "yaml.d")
-	if err := os.MkdirAll(dropInDir, 0700); err != nil {
+	if err := os.MkdirAll(dropInDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	serverPath := filepath.Join(dir, "server.yml")
 	contents := "server:\n  port: 8080\n  token: operator-token\n  title: Legacy title\n  web:\n    csp:\n      frame_src_extra: https://frame.example\n  metrics:\n    endpoint: /old-metrics\nsearch:\n  safe_search: true\n"
-	if err := os.WriteFile(serverPath, []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(serverPath, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dropInDir, "branding.yml"), []byte("server:\n  branding:\n    title: Existing title\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dropInDir, "branding.yml"), []byte("server:\n  branding:\n    title: Existing title\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	changed, err := migrateConfigAreas(serverPath)
@@ -40,7 +40,7 @@ func TestMigrateConfigAreasMovesLegacyAndSecrets(t *testing.T) {
 		t.Fatalf("moved keys remain in server.yml: %s", server)
 	}
 	backup, err := os.Stat(serverPath + ".bak")
-	if err != nil || backup.Mode().Perm() != 0600 {
+	if err != nil || backup.Mode().Perm() != 0o600 {
 		t.Fatalf("migration backup mode = %v, err = %v", backup, err)
 	}
 	branding, err := os.ReadFile(filepath.Join(dropInDir, "branding.yml"))
@@ -70,15 +70,134 @@ func TestMigrateConfigAreasMovesLegacyAndSecrets(t *testing.T) {
 	}
 }
 
+func TestMigrateRemovedGeoIPSettingsAndPreserveComplianceUnknownKeyInServerYML(t *testing.T) {
+	dir := t.TempDir()
+	serverPath := filepath.Join(dir, "server.yml")
+	contents := `server:
+  port: 64580
+  geoip:
+    enabled: true
+    dir: /old/geoip
+    databases:
+      country: true
+    deny_countries: [CN]
+  compliance:
+    enabled: true
+    gdpr: false
+`
+	if err := os.WriteFile(serverPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := migrateConfigAreas(serverPath)
+	if err != nil || !changed {
+		t.Fatalf("migrateConfigAreas() = %v, %v", changed, err)
+	}
+
+	security, err := os.ReadFile(filepath.Join(dir, "yaml.d", "security.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(security), "enabled: true") || !strings.Contains(string(security), "deny_countries") {
+		t.Fatalf("supported GeoIP settings were not preserved: %s", security)
+	}
+	if strings.Contains(string(security), "dir:") || strings.Contains(string(security), "databases:") {
+		t.Fatalf("removed GeoIP settings remained after migration: %s", security)
+	}
+	privacy, err := os.ReadFile(filepath.Join(dir, "yaml.d", "privacy.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(privacy), "enabled: true") || !strings.Contains(string(privacy), "gdpr: false") {
+		t.Fatalf("unmapped compliance key or standard was changed: %s", privacy)
+	}
+}
+
+func TestMigrateRemovedGeoIPSettingsFromDropIns(t *testing.T) {
+	dir := t.TempDir()
+	dropInDir := filepath.Join(dir, "yaml.d")
+	if err := os.MkdirAll(dropInDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	serverPath := filepath.Join(dir, "server.yml")
+	if err := os.WriteFile(serverPath, []byte("server:\n  port: 64580\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dropInDir, "security.yml"), []byte("server:\n  geoip:\n    enabled: true\n    dir: /old/geoip\n    databases:\n      country: true\n    allow_countries: [US]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dropInDir, "privacy.yml"), []byte("server:\n  compliance:\n    enabled: true\n    hipaa: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := migrateConfigAreas(serverPath)
+	if err != nil || !changed {
+		t.Fatalf("migrateConfigAreas() = %v, %v", changed, err)
+	}
+
+	security, err := os.ReadFile(filepath.Join(dropInDir, "security.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(security), "dir:") || strings.Contains(string(security), "databases:") {
+		t.Fatalf("removed GeoIP settings remained in drop-in: %s", security)
+	}
+	if !strings.Contains(string(security), "allow_countries") {
+		t.Fatalf("supported GeoIP settings were lost from drop-in: %s", security)
+	}
+	privacy, err := os.ReadFile(filepath.Join(dropInDir, "privacy.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(privacy), "enabled: true") || !strings.Contains(string(privacy), "hipaa: false") {
+		t.Fatalf("unmapped compliance key or standard changed in drop-in: %s", privacy)
+	}
+}
+
+func TestMigrateTopLevelCLIConfigToMaintenanceArea(t *testing.T) {
+	dir := t.TempDir()
+	dropInDir := filepath.Join(dir, "yaml.d")
+	if err := os.MkdirAll(dropInDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	serverPath := filepath.Join(dir, "server.yml")
+	if err := os.WriteFile(serverPath, []byte("server:\n  cluster:\n    enabled: true\ncli:\n  binary_download:\n    dir: /data/search/cli\n    require_auth: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := migrateConfigAreas(serverPath)
+	if err != nil || !changed {
+		t.Fatalf("migrateConfigAreas() = %v, %v", changed, err)
+	}
+	server, err := os.ReadFile(serverPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(server), "binary_download:") {
+		t.Fatalf("CLI settings remained in server.yml: %s", server)
+	}
+	if strings.Contains(string(server), "cluster:") {
+		t.Fatalf("unsupported cluster setting remained in server.yml: %s", server)
+	}
+	app, err := os.ReadFile(filepath.Join(dropInDir, "app.yml"))
+	if err == nil && strings.Contains(string(app), "cluster:") {
+		t.Fatalf("unsupported cluster setting was routed to app.yml: %s", app)
+	}
+	maintenance, err := os.ReadFile(filepath.Join(dropInDir, "maintenance.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(maintenance), "cli:") || !strings.Contains(string(maintenance), "binary_download:") || !strings.Contains(string(maintenance), "require_auth: true") {
+		t.Fatalf("CLI settings not migrated to maintenance.yml: %s", maintenance)
+	}
+}
+
 func TestImportLegacyAppSecretStoresBeforeRemovingConfigValue(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "server.yml")
 	const legacySecret = "legacy-installation-secret"
 	const legacyPreviousKey = "legacy-previous-encryption-key"
-	if err := os.WriteFile(configPath, []byte("server:\n  security:\n    installation_secret: "+legacySecret+"\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("server:\n  security:\n    installation_secret: "+legacySecret+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "secrets.yml"), []byte("server:\n  security:\n    encryption_key_previous: "+legacyPreviousKey+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "secrets.yml"), []byte("server:\n  security:\n    encryption_key_previous: "+legacyPreviousKey+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dbManager, err := database.NewDatabaseManager(&database.Config{

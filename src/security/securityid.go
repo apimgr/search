@@ -31,8 +31,15 @@ func GenerateSecurityID(installationSecret string, now int64) string {
 // both windows so a researcher who loads security.txt near a rotation boundary
 // still succeeds. Ids from two or more windows ago are rejected.
 func ValidateSecurityID(installationSecret, id string, now int64) bool {
+	_, ok := SecurityIDWindow(installationSecret, id, now)
+	return ok
+}
+
+// SecurityIDWindow returns the validated 48-hour window index encoded by id.
+// It checks both the current and previous windows in constant time.
+func SecurityIDWindow(installationSecret, id string, now int64) (int64, bool) {
 	if id == "" || installationSecret == "" {
-		return false
+		return 0, false
 	}
 
 	currentWindow := now / SecurityIDWindowSeconds
@@ -42,7 +49,13 @@ func ValidateSecurityID(installationSecret, id string, now int64) bool {
 	matchesCurrent := subtle.ConstantTimeCompare([]byte(id), []byte(current)) == 1
 	matchesPrevious := subtle.ConstantTimeCompare([]byte(id), []byte(previous)) == 1
 
-	return matchesCurrent || matchesPrevious
+	if matchesCurrent {
+		return currentWindow, true
+	}
+	if matchesPrevious {
+		return currentWindow - 1, true
+	}
+	return 0, false
 }
 
 // hashWindow computes the truncated hex HMAC digest for a given window index.

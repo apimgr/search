@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -60,7 +62,7 @@ func NewManager(logDir string) *Manager {
 	}
 
 	// Ensure log directory exists
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		log.Printf("create logging directory %s: %v", logDir, err)
 	}
 
@@ -290,11 +292,11 @@ func (l *AccessLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create access log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -713,11 +715,11 @@ func (l *ServerLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create server log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -977,11 +979,11 @@ func (l *AppLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create app log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -1149,11 +1151,11 @@ func (l *AuthLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create auth log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -1360,6 +1362,8 @@ const (
 	// only ever contain tracking_id/severity/sanitized component — never PII or
 	// vulnerability content.
 	SecurityEventReportReceived SecurityEvent = "security.report_received"
+	SecurityEventReportExported SecurityEvent = "security.report_exported"
+	SecurityEventReportUpdated SecurityEvent = "security.report_updated"
 	// SecurityEventCSPViolation is logged when a browser POSTs a CSP violation,
 	// NEL, or other Reporting-API report to /api/{api_version}/server/reports/*,
 	// per AI.md PART 11 "Reporting API" and "Content Security Policy → Reports
@@ -1525,11 +1529,11 @@ func (l *SecurityLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create security log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -1757,17 +1761,19 @@ const (
 	AuditActionTokenExpired AuditAction = "token.expired"
 
 	// Backup & System events (AI.md PART 11)
-	AuditActionBackupCreate       AuditAction = "backup.created"
-	AuditActionBackupRestore      AuditAction = "backup.restored"
-	AuditActionBackupDelete       AuditAction = "backup.deleted"
-	AuditActionBackupFailed       AuditAction = "backup.failed"
-	AuditActionServerStarted      AuditAction = "server.started"
-	AuditActionServerStopped      AuditAction = "server.stopped"
-	AuditActionMaintenanceEntered AuditAction = "server.maintenance_entered"
-	AuditActionMaintenanceExited  AuditAction = "server.maintenance_exited"
-	AuditActionServerUpdated      AuditAction = "server.updated"
-	AuditActionSchedulerTaskFail  AuditAction = "scheduler.task_failed"
-	AuditActionSchedulerTaskRun   AuditAction = "scheduler.task_manual_run"
+	AuditActionBackupCreate          AuditAction = "backup.created"
+	AuditActionBackupRestore         AuditAction = "backup.restored"
+	AuditActionBackupDelete          AuditAction = "backup.deleted"
+	AuditActionBackupFailed          AuditAction = "backup.failed"
+	AuditActionServerStarted         AuditAction = "server.started"
+	AuditActionServerStopped         AuditAction = "server.stopped"
+	AuditActionMaintenanceEntered    AuditAction = "server.maintenance_entered"
+	AuditActionMaintenanceExited     AuditAction = "server.maintenance_exited"
+	AuditActionServerUpdated         AuditAction = "server.updated"
+	AuditActionSchedulerTaskFail     AuditAction = "scheduler.task_failed"
+	AuditActionSchedulerTaskRun      AuditAction = "scheduler.task_manual_run"
+	AuditActionSchedulerTaskEnabled  AuditAction = "scheduler.task_enabled"
+	AuditActionSchedulerTaskDisabled AuditAction = "scheduler.task_disabled"
 
 	// PGP keypair events (AI.md PART 11 "GPG Keypair Management")
 	AuditActionPGPKeyGenerated     AuditAction = "security.pgp_key_generated"
@@ -1782,9 +1788,13 @@ const (
 	AuditActionEncryptionKeyRotated      AuditAction = "security.encryption_key_rotated"
 
 	// Compliance events (AI.md PART 12 "Compliance Audit Events")
+	AuditActionConsentUpdated        AuditAction = "compliance.consent_updated"
+	AuditActionDataExportRequested   AuditAction = "compliance.data_export_requested"
 	AuditActionDataExportCompleted   AuditAction = "compliance.data_export_completed"
+	AuditActionDataDeletionRequested AuditAction = "compliance.data_deletion_requested"
 	AuditActionDataDeletionCompleted AuditAction = "compliance.data_deletion_completed"
 	AuditActionComplianceReport      AuditAction = "compliance.report_generated"
+	AuditActionAuditChainBroken      AuditAction = "security.audit_chain_broken"
 )
 
 // AuditCategoryCompliance groups the compliance.* events emitted by
@@ -1825,14 +1835,14 @@ const (
 
 // AuditActor represents who performed the action per AI.md PART 11
 type AuditActor struct {
-	// Actor type: admin, user, system
-	Type string `json:"type,omitempty"`
+	// Actor type is owner, operator, visitor, anonymous, or system.
+	Type string `json:"type"`
 	// Actor's user ID
 	ID string `json:"id,omitempty"`
-	// Actor's username (for display)
-	Username string `json:"username,omitempty"`
+	// Username is retained for source compatibility but never written to audit logs.
+	Username string `json:"-"`
 	// IP address
-	IP string `json:"ip"`
+	IP string `json:"ip,omitempty"`
 	// User agent string
 	UserAgent string `json:"user_agent,omitempty"`
 }
@@ -1849,10 +1859,16 @@ type AuditTarget struct {
 
 // AuditLogger logs administrative actions
 type AuditLogger struct {
-	mu      sync.Mutex
-	file    *os.File
-	path    string
-	entropy io.Reader
+	mu                    sync.Mutex
+	file                  *os.File
+	path                  string
+	anchorPath            string
+	lastHash              string
+	entropy               io.Reader
+	retention             AuditRetentionPolicy
+	retentionConfigured   bool
+	pendingIntegrityIssue *AuditIntegrityIssue
+	integrityReported     bool
 }
 
 // AuditEntry represents an audit log entry per AI.md PART 11 lines 11947-11997
@@ -1876,19 +1892,52 @@ type AuditEntry struct {
 	Details map[string]interface{} `json:"details,omitempty"`
 	// "success" or "failure"
 	Result string `json:"result"`
+	// Hash of the previous exact JSONL line, or the anchor for a new file.
+	Prev string `json:"prev"`
 	// Node ID (hostname of the server that generated the event)
 	NodeID string `json:"node_id,omitempty"`
+	// Where the event originated: web, api, mcp, cli, or scheduler.
+	Source string `json:"source,omitempty"`
 	// Reason for action (if provided)
 	Reason string `json:"reason,omitempty"`
+}
+
+func (entry AuditEntry) MarshalJSON() ([]byte, error) {
+	type auditEntryJSON struct {
+		ID       string                 `json:"id"`
+		Time     string                 `json:"time"`
+		Event    AuditAction            `json:"event"`
+		Category AuditCategory          `json:"category"`
+		Severity AuditSeverity          `json:"severity"`
+		Actor    AuditActor             `json:"actor"`
+		Target   *AuditTarget           `json:"target,omitempty"`
+		Details  map[string]interface{} `json:"details,omitempty"`
+		Result   string                 `json:"result"`
+		NodeID   string                 `json:"node_id,omitempty"`
+		Source   string                 `json:"source,omitempty"`
+		Reason   string                 `json:"reason,omitempty"`
+		Prev     string                 `json:"prev"`
+	}
+	return json.Marshal(auditEntryJSON{
+		ID: entry.ID, Time: entry.Time.UTC().Format("2006-01-02T15:04:05.000Z"),
+		Event: entry.Event, Category: entry.Category, Severity: entry.Severity,
+		Actor: entry.Actor, Target: entry.Target, Details: entry.Details,
+		Result: entry.Result, NodeID: entry.NodeID, Source: entry.Source,
+		Reason: entry.Reason, Prev: entry.Prev,
+	})
 }
 
 // NewAuditLogger creates a new audit logger
 func NewAuditLogger(path string) *AuditLogger {
 	l := &AuditLogger{
-		path:    path,
-		entropy: rand.Reader,
+		path:       path,
+		anchorPath: filepath.Join(filepath.Dir(path), "audit.anchor"),
+		lastHash:   strings.Repeat("0", sha256.Size*2),
+		entropy:    rand.Reader,
+		retention:  DefaultAuditRetentionPolicy(),
 	}
 	reportLoggingError("open audit log", l.openFile())
+	l.reportPendingIntegrityIssue()
 	return l
 }
 
@@ -1898,7 +1947,7 @@ func (l *AuditLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create audit log directory: %w", err)
 	}
 
@@ -1906,19 +1955,27 @@ func (l *AuditLogger) openFile() error {
 	// the only log with a mandated mode because it records who did what and
 	// must not be world-readable. O_APPEND (never O_TRUNC) keeps it append-only
 	// per AI.md PART 11 lines 15360-15366.
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
 	if err != nil {
 		return err
 	}
 	// OpenFile only applies the mode when creating the file; an audit log that
 	// already exists with looser permissions is tightened here.
-	if err := os.Chmod(l.path, 0640); err != nil {
+	if err := os.Chmod(l.path, 0o640); err != nil {
 		if closeErr := file.Close(); closeErr != nil {
 			return errors.Join(err, fmt.Errorf("close audit log: %w", closeErr))
 		}
 		return err
 	}
 	l.file = file
+	tail, issue, err := verifyAuditFile(l.path, l.anchorPath)
+	if err != nil {
+		_ = file.Close()
+		l.file = nil
+		return err
+	}
+	l.lastHash = tail
+	l.pendingIntegrityIssue = issue
 	return nil
 }
 
@@ -1931,6 +1988,16 @@ func (l *AuditLogger) generateAuditID() string {
 
 // Log logs an audit event per AI.md PART 11
 func (l *AuditLogger) Log(entry AuditEntry) {
+	l.log(entry, true)
+}
+
+// LogQuiet writes an audit event to the audit file without contaminating
+// machine-readable stdout output.
+func (l *AuditLogger) LogQuiet(entry AuditEntry) {
+	l.log(entry, false)
+}
+
+func (l *AuditLogger) log(entry AuditEntry, printConsole bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -1939,17 +2006,33 @@ func (l *AuditLogger) Log(entry AuditEntry) {
 		entry.ID = l.generateAuditID()
 	}
 	if entry.Time.IsZero() {
-		entry.Time = time.Now().UTC()
+		entry.Time = time.Now().UTC().Truncate(time.Millisecond)
+	} else {
+		entry.Time = entry.Time.UTC().Truncate(time.Millisecond)
 	}
+	entry.Actor = normalizeAuditActor(entry.Actor)
+	entry.Prev = l.lastHash
 
 	// JSON format for audit logs (easy to parse and analyze)
-	data, _ := json.Marshal(entry)
-
-	if l.file != nil {
-		_, err := l.file.WriteString(string(data) + "\n")
-		reportLoggingError("write audit log", err)
+	data, marshalErr := json.Marshal(entry)
+	if marshalErr != nil {
+		reportLoggingError("marshal audit entry", marshalErr)
+		return
 	}
 
+	if l.file != nil {
+		line := append(data, '\n')
+		if _, err := l.file.Write(line); err != nil {
+			reportLoggingError("write audit log", err)
+		} else {
+			hash := sha256.Sum256(data)
+			l.lastHash = hex.EncodeToString(hash[:])
+		}
+	}
+
+	if !printConsole {
+		return
+	}
 	// Also print to stdout for visibility (pretty is OK for console per PART 11)
 	status := strings.ToUpper(entry.Result)
 	targetInfo := ""
@@ -1958,6 +2041,32 @@ func (l *AuditLogger) Log(entry AuditEntry) {
 	}
 	fmt.Printf("[AUDIT] %s [%s] %s actor=%s ip=%s%s\n",
 		entry.ID, entry.Category, status, entry.Actor.Username, entry.Actor.IP, targetInfo)
+}
+
+func normalizeAuditActor(actor AuditActor) AuditActor {
+	switch actor.Type {
+	case "admin":
+		actor.Type = "operator"
+	case "user":
+		actor.Type = "owner"
+	}
+	if actor.Type == "" {
+		if actor.Username != "" {
+			actor.Type = "operator"
+		} else if actor.IP != "" {
+			actor.Type = "visitor"
+		} else {
+			actor.Type = "system"
+		}
+	}
+	if actor.ID == "" && actor.Username != "" && actor.Type != "system" && actor.Type != "anonymous" {
+		actor.ID = actor.Username
+	}
+	if actor.Type == "system" || actor.Type == "anonymous" {
+		actor.ID = ""
+	}
+	actor.Username = ""
+	return actor
 }
 
 // resultFromBool converts bool to result string per AI.md PART 11
@@ -2036,13 +2145,26 @@ func (l *AuditLogger) LogBackupRestore(user, ip, filename string, success bool) 
 // Rotate rotates the audit log file
 func (l *AuditLogger) Rotate() error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	if l.file == nil {
+		l.mu.Unlock()
 		return nil
+	}
+	_, issue, verifyErr := verifyAuditFile(l.path, l.anchorPath)
+	if verifyErr != nil {
+		l.mu.Unlock()
+		return verifyErr
+	}
+	if issue != nil && l.pendingIntegrityIssue == nil {
+		l.pendingIntegrityIssue = issue
+	}
+	if err := writeAuditAnchor(l.anchorPath, l.lastHash); err != nil {
+		l.mu.Unlock()
+		return err
 	}
 
 	if err := l.file.Close(); err != nil {
+		l.mu.Unlock()
 		return fmt.Errorf("close audit log before rotation: %w", err)
 	}
 
@@ -2056,9 +2178,167 @@ func (l *AuditLogger) Rotate() error {
 	}
 
 	if err := os.Rename(l.path, rotatedPath); err != nil {
+		l.mu.Unlock()
 		return fmt.Errorf("rotate audit log: %w", err)
 	}
-	return l.openFile()
+	err := l.openFile()
+	retention := l.retention
+	l.mu.Unlock()
+	if err == nil && l.retentionConfigured {
+		_, err = l.CleanupAuditLogs(retention)
+	}
+	l.reportPendingIntegrityIssue()
+	return err
+}
+
+// AuditIntegrityIssue identifies a broken JSONL chain without exposing entry content.
+type AuditIntegrityIssue struct {
+	File   string
+	Line   int
+	Reason string
+}
+
+// VerifyAuditLog verifies the current audit file against its rotation anchor.
+func VerifyAuditLog(path string) (int, *AuditIntegrityIssue, error) {
+	_, issue, err := verifyAuditFile(path, filepath.Join(filepath.Dir(path), "audit.anchor"))
+	if err != nil {
+		return 0, nil, err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, issue, nil
+		}
+		return 0, nil, err
+	}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	entries := 0
+	for scanner.Scan() {
+		if scanner.Text() != "" {
+			entries++
+		}
+	}
+	scanErr := scanner.Err()
+	closeErr := file.Close()
+	if scanErr != nil {
+		return entries, issue, scanErr
+	}
+	if closeErr != nil {
+		return entries, issue, fmt.Errorf("close audit log after verification: %w", closeErr)
+	}
+	return entries, issue, nil
+}
+
+func (l *AuditLogger) reportPendingIntegrityIssue() {
+	l.mu.Lock()
+	issue := l.pendingIntegrityIssue
+	if issue == nil || l.integrityReported {
+		l.mu.Unlock()
+		return
+	}
+	l.integrityReported = true
+	l.pendingIntegrityIssue = nil
+	l.mu.Unlock()
+	details := map[string]interface{}{"file": filepath.Base(issue.File)}
+	if issue.Line > 0 {
+		details["line"] = issue.Line
+	} else {
+		details["reason"] = issue.Reason
+	}
+	l.LogEventQuiet(AuditActionAuditChainBroken, AuditCategorySecurity, AuditSeverityCritical,
+		AuditActor{Type: "system"}, &AuditTarget{Type: "audit_log", Name: filepath.Base(issue.File)},
+		"failure", details, "")
+}
+
+func verifyAuditFile(path, anchorPath string) (string, *AuditIntegrityIssue, error) {
+	zeroHash := strings.Repeat("0", sha256.Size*2)
+	anchor := zeroHash
+	anchorExists := false
+	if raw, err := os.ReadFile(anchorPath); err == nil {
+		anchor = strings.TrimSpace(string(raw))
+		anchorExists = true
+		if len(anchor) != sha256.Size*2 {
+			return zeroHash, &AuditIntegrityIssue{File: path, Reason: "anchor_mismatch"}, nil
+		}
+		if _, err := hex.DecodeString(anchor); err != nil || strings.ToLower(anchor) != anchor {
+			return zeroHash, &AuditIntegrityIssue{File: path, Reason: "anchor_mismatch"}, nil
+		}
+	} else if !os.IsNotExist(err) {
+		return zeroHash, nil, fmt.Errorf("read audit anchor: %w", err)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if anchorExists {
+				return anchor, nil, nil
+			}
+			return zeroHash, nil, nil
+		}
+		return zeroHash, nil, fmt.Errorf("open audit log for verification: %w", err)
+	}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	expected := anchor
+	lastHash := anchor
+	lineNumber := 0
+	var issue *AuditIntegrityIssue
+	for scanner.Scan() {
+		lineNumber++
+		line := scanner.Bytes()
+		var entry struct {
+			Prev string `json:"prev"`
+		}
+		if err := json.Unmarshal(line, &entry); err != nil {
+			if issue == nil {
+				issue = &AuditIntegrityIssue{File: path, Line: lineNumber}
+			}
+		} else if entry.Prev != expected && issue == nil {
+			reason := ""
+			if lineNumber == 1 && !anchorExists && entry.Prev != zeroHash {
+				reason = "anchor_missing"
+			} else if lineNumber == 1 {
+				reason = "anchor_mismatch"
+			}
+			issue = &AuditIntegrityIssue{File: path, Line: lineNumber, Reason: reason}
+		}
+		hash := sha256.Sum256(line)
+		lastHash = hex.EncodeToString(hash[:])
+		expected = lastHash
+	}
+	scanErr := scanner.Err()
+	closeErr := file.Close()
+	if scanErr != nil {
+		return lastHash, issue, fmt.Errorf("scan audit log for verification: %w", scanErr)
+	}
+	if closeErr != nil {
+		return lastHash, issue, fmt.Errorf("close audit log after verification: %w", closeErr)
+	}
+	return lastHash, issue, nil
+}
+
+func writeAuditAnchor(path, hash string) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("open audit anchor: %w", err)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("set audit anchor permissions: %w", err)
+	}
+	if _, err := io.WriteString(file, hash+"\n"); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write audit anchor: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("sync audit anchor: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close audit anchor: %w", err)
+	}
+	return nil
 }
 
 // Close closes the audit logger
@@ -2367,6 +2647,20 @@ func (s *LineScanner) Err() error {
 // LogEvent logs a generic audit event with full control over all fields
 func (l *AuditLogger) LogEvent(event AuditAction, category AuditCategory, severity AuditSeverity, actor AuditActor, target *AuditTarget, result string, details map[string]interface{}, reason string) {
 	l.Log(AuditEntry{
+		Event:    event,
+		Category: category,
+		Severity: severity,
+		Actor:    actor,
+		Target:   target,
+		Result:   result,
+		Details:  details,
+		Reason:   reason,
+	})
+}
+
+// LogEventQuiet logs an audit event without writing a console line.
+func (l *AuditLogger) LogEventQuiet(event AuditAction, category AuditCategory, severity AuditSeverity, actor AuditActor, target *AuditTarget, result string, details map[string]interface{}, reason string) {
+	l.LogQuiet(AuditEntry{
 		Event:    event,
 		Category: category,
 		Severity: severity,
@@ -2703,6 +2997,50 @@ func DefaultAuditRetentionPolicy() AuditRetentionPolicy {
 	return AuditRetentionPolicy{MaxAge: 0}
 }
 
+// AuditRetentionPolicyFromKeep parses the audit log keep value from server.yml.
+func AuditRetentionPolicyFromKeep(value string) (AuditRetentionPolicy, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "", "none":
+		return DefaultAuditRetentionPolicy(), nil
+	case "forever":
+		return AuditRetentionPolicy{MaxAge: -1}, nil
+	}
+	if len(value) < 2 {
+		return AuditRetentionPolicy{}, fmt.Errorf("invalid audit log retention %q", value)
+	}
+	amount, err := strconv.Atoi(value[:len(value)-1])
+	if err != nil || amount < 1 {
+		return AuditRetentionPolicy{}, fmt.Errorf("invalid audit log retention %q", value)
+	}
+	var unit time.Duration
+	switch value[len(value)-1] {
+	case 'd':
+		unit = 24 * time.Hour
+	case 'm':
+		unit = 30 * 24 * time.Hour
+		if amount == 12 {
+			unit = (365 * 24 * time.Hour) / 12
+		}
+	case 'y':
+		unit = 365 * 24 * time.Hour
+	default:
+		return AuditRetentionPolicy{}, fmt.Errorf("invalid audit log retention unit in %q", value)
+	}
+	return AuditRetentionPolicy{MaxAge: time.Duration(amount) * unit}, nil
+}
+
+// SetRetention installs the effective policy and immediately removes expired
+// rotated audit files.
+func (l *AuditLogger) SetRetention(policy AuditRetentionPolicy) error {
+	l.mu.Lock()
+	l.retention = policy
+	l.retentionConfigured = true
+	l.mu.Unlock()
+	_, err := l.CleanupAuditLogs(policy)
+	return err
+}
+
 // CleanupAuditLogs deletes rotated audit log files that have outlived the
 // retention policy and returns the number of files removed.
 // Per AI.md PART 11 lines 15360-15366 the live audit.log is append-only: it is
@@ -2872,11 +3210,11 @@ func (l *ErrorLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create error log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -3076,11 +3414,11 @@ func (l *DebugLogger) openFile() error {
 	}
 
 	dir := filepath.Dir(l.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create debug log directory: %w", err)
 	}
 
-	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}

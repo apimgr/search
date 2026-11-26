@@ -1,24 +1,12 @@
 {{define "content"}}
-<div class="static-page preferences-page">
+<div class="container container-md">
     <header class="page-header">
-        <h1>{{t "preferences.interface"}}</h1>
-        <p class="subtitle"><a href="/server/preferences">{{t "preferences.title"}}</a></p>
+        <nav class="breadcrumb" aria-label="{{t "accessibility.breadcrumb"}}"><a href="/server/preferences">← {{t "preferences.title"}}</a></nav>
+        <h1 class="page-title">{{t "preferences.tools_page_title"}}</h1>
+        <p class="page-lead">{{t "preferences.tools_page_description"}}</p>
     </header>
-    <section class="preferences-section" data-preference-tab="interface" aria-labelledby="custom-css-heading">
-        <h2 id="custom-css-heading">{{t "preferences.custom_css_heading"}}</h2>
-        <p class="help-text">{{t "preferences.custom_css_help"}}</p>
-        <label for="custom-css">{{t "preferences.custom_css_label"}}</label>
-        <textarea id="custom-css" rows="12" maxlength="4096" spellcheck="false" autocomplete="off" aria-describedby="custom-css-help"></textarea>
-        <small id="custom-css-help">{{t "preferences.custom_css_limit"}}</small>
-        <div class="data-actions">
-            <button type="button" class="btn btn-primary" id="save-custom-css">{{t "preferences.custom_css_save"}}</button>
-            <button type="button" class="btn btn-secondary" id="clear-custom-css">{{t "preferences.custom_css_clear"}}</button>
-        </div>
-        <p class="help-text" id="custom-css-status" role="status" aria-live="polite"></p>
-    </section>
-
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.search_bangs_heading"}}</h2>
+    <section class="section-card preferences-section" data-preference-tab="interface" aria-labelledby="search-bangs-heading">
+        <h2 id="search-bangs-heading">{{t "preferences.search_bangs_heading"}}</h2>
         <p class="help-text">
             {{t "preferences.search_bangs_help_prefix"}} <code>!g</code> {{t "preferences.search_bangs_help_google"}},
             <code>!w</code> {{t "preferences.search_bangs_help_wikipedia"}}, <code>!yt</code> {{t "preferences.search_bangs_help_youtube"}}.
@@ -45,10 +33,10 @@
                 {{end}}
             </div>
         </div>
-    </div>
+    </section>
 
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.custom_bangs_heading"}}</h2>
+    <section class="section-card preferences-section" data-preference-tab="interface" aria-labelledby="custom-bangs-heading">
+        <h2 id="custom-bangs-heading">{{t "preferences.custom_bangs_heading"}}</h2>
         <p class="help-text">{{t "preferences.custom_bangs_help"}}</p>
 
         <div id="custom-bangs-list" class="custom-bangs-list">
@@ -78,10 +66,10 @@
             </div>
             <button type="submit" class="btn btn-primary">{{t "preferences.add_bang"}}</button>
         </form>
-    </div>
+    </section>
 
-    <div class="preferences-section" data-preference-tab="interface">
-        <h2>{{t "preferences.add_to_browser_heading"}}</h2>
+    <section class="section-card preferences-section" data-preference-tab="interface" aria-labelledby="add-to-browser-heading">
+        <h2 id="add-to-browser-heading">{{t "preferences.add_to_browser_heading"}}</h2>
         <p class="help-text">{{t "preferences.add_to_browser_help"}}</p>
 
         <div class="browser-add">
@@ -98,6 +86,6 @@
                 <button type="button" id="copy-opensearch" class="btn btn-secondary">{{t "preferences.copy_opensearch_url"}}</button>
             </div>
         </div>
-    </div>
+    </section>
 </div>
 {{end}}

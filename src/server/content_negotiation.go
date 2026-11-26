@@ -7,11 +7,12 @@ import (
 
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 func (s *Server) contentNegotiationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/.well-known/") || strings.HasPrefix(r.URL.Path, "/static/") || strings.HasPrefix(r.URL.Path, "/locales/") || strings.HasSuffix(r.URL.Path, ".xml") || r.URL.Path == "/robots.txt" || r.URL.Path == "/llms.txt" {
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/.well-known/") || strings.HasPrefix(r.URL.Path, "/static/") || strings.HasPrefix(r.URL.Path, "/locales/") || strings.HasSuffix(r.URL.Path, ".xml") || r.URL.Path == "/robots.txt" || r.URL.Path == "/llms.txt" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -32,7 +33,7 @@ func (s *Server) contentNegotiationMiddleware(next http.Handler) http.Handler {
 		if format == "application/json" {
 			apiPath, ok := frontendAPIPath(r.URL.Path)
 			if !ok {
-				http.Error(w, "No JSON representation is available for this page", http.StatusNotAcceptable)
+				http.Error(w, i18n.RequestString(r, "errors.not_acceptable"), http.StatusNotAcceptable)
 				return
 			}
 			clone := r.Clone(r.Context())

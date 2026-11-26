@@ -16,12 +16,19 @@ import (
 	"github.com/apimgr/search/src/client/clicfg"
 	"github.com/apimgr/search/src/client/gui"
 	"github.com/apimgr/search/src/client/path"
+	"github.com/apimgr/search/src/client/surface"
 	"github.com/apimgr/search/src/common/display"
 )
 
 // ErrNoTerminal is returned when the wizard is required but the process has no
 // interactive terminal to prompt on (headless mode is an error per PART 32).
-var ErrNoTerminal = fmt.Errorf("setup required but no interactive terminal is available")
+var ErrNoTerminal error = noTerminalError{}
+
+type noTerminalError struct{}
+
+func (noTerminalError) Error() string {
+	return surface.Text("client.setup.no_terminal")
+}
 
 // Mode names the interface the wizard runs in.
 type Mode string
@@ -74,21 +81,21 @@ func RunSetupWizard() error {
 	override := strings.ToLower(strings.TrimSpace(clicfg.GetString("display.mode")))
 	if override == "gui" {
 		if !env.HasDisplay || env.IsSSH || env.IsMosh || !gui.Available() {
-			return fmt.Errorf("GUI setup requires a local display and a GUI-enabled build")
+			return fmt.Errorf("%s", surface.Text("client.setup.gui_requires_local_display"))
 		}
 		return gui.Configure()
 	}
 	if override == "tui" {
 		if !env.IsTerminal {
-			return fmt.Errorf("TUI setup requires an interactive terminal")
+			return fmt.Errorf("%s", surface.Text("client.setup.tui_requires_terminal"))
 		}
 		if !clicfg.GetBool("tui.enabled") {
-			return fmt.Errorf("TUI mode is disabled by tui.enabled in cli.yml")
+			return fmt.Errorf("%s", surface.Text("client.setup.tui_disabled"))
 		}
 		return runWizard(os.Stdin, os.Stdout)
 	}
 	if override != "" && override != "auto" && override != "tui" {
-		return fmt.Errorf("invalid display.mode %q; use auto, gui, or tui", override)
+		return fmt.Errorf("%s", surface.Text("client.setup.invalid_display_mode", override))
 	}
 	switch SelectSetupMode(env) {
 	case ModeGUI:
@@ -109,10 +116,10 @@ func RunSetupWizard() error {
 func runWizard(in io.Reader, out io.Writer) error {
 	reader := bufio.NewReader(in)
 
-	if _, err := fmt.Fprintln(out, "First-run setup"); err != nil {
+	if _, err := fmt.Fprintln(out, surface.Text("client.setup.wizard_title")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(out, "Answer a few questions to create cli.yml."); err != nil {
+	if _, err := fmt.Fprintln(out, surface.Text("client.setup.wizard_intro")); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(out); err != nil {
@@ -125,7 +132,7 @@ func runWizard(in io.Reader, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		tokenVal, err = prompt(reader, out, "API token (leave blank for anonymous access)", "")
+		tokenVal, err = prompt(reader, out, surface.Text("client.setup.token_prompt"), "")
 		if err != nil {
 			return err
 		}
@@ -134,33 +141,33 @@ func runWizard(in io.Reader, out io.Writer) error {
 			if tokenVal != "" {
 				kind, authErr := probe.CheckAuth()
 				if authErr != nil {
-					if _, writeErr := fmt.Fprintf(out, "Authentication failed: %v\n", authErr); writeErr != nil {
+					if _, writeErr := fmt.Fprintln(out, surface.Text("client.setup.auth_failed", authErr)); writeErr != nil {
 						return writeErr
 					}
-					retry, promptErr := promptChoice(reader, out, "Try another server or token", "yes", []string{"yes", "no"})
+					retry, promptErr := promptChoice(reader, out, surface.Text("client.setup.retry_server_token"), "yes", []string{"yes", "no"})
 					if promptErr != nil {
 						return promptErr
 					}
 					if retry == "no" {
-						return fmt.Errorf("setup canceled because the supplied token is invalid")
+						return fmt.Errorf("%s", surface.Text("client.setup.invalid_token_cancelled"))
 					}
 					continue
 				}
-				if _, writeErr := fmt.Fprintf(out, "Authentication valid (%s token).\n", kind); writeErr != nil {
+				if _, writeErr := fmt.Fprintln(out, surface.Text("client.setup.auth_valid", kind)); writeErr != nil {
 					return writeErr
 				}
 			}
 			break
 		} else {
-			if _, err := fmt.Fprintf(out, "Connection failed: %v\n", err); err != nil {
+			if _, err := fmt.Fprintln(out, surface.Text("client.setup.connection_failed", err)); err != nil {
 				return err
 			}
-			retry, promptErr := promptChoice(reader, out, "Try another server", "yes", []string{"yes", "no"})
+			retry, promptErr := promptChoice(reader, out, surface.Text("client.setup.retry_server"), "yes", []string{"yes", "no"})
 			if promptErr != nil {
 				return promptErr
 			}
 			if retry == "no" {
-				return fmt.Errorf("setup canceled because the server could not be reached")
+				return fmt.Errorf("%s", surface.Text("client.setup.server_unreachable_cancelled"))
 			}
 		}
 	}
@@ -169,47 +176,47 @@ func runWizard(in io.Reader, out io.Writer) error {
 		clicfg.Set("auth.token", tokenVal)
 	}
 
-	format, err := promptChoice(reader, out, "Default output format", "table",
+	format, err := promptChoice(reader, out, surface.Text("client.setup.output_format"), "table",
 		[]string{"table", "json", "yaml", "plain", "csv"})
 	if err != nil {
 		return err
 	}
 	clicfg.Set("output.format", format)
 
-	themeName, err := promptChoice(reader, out, "TUI theme", "dark", []string{"dark", "light"})
+	themeName, err := promptChoice(reader, out, surface.Text("client.setup.tui_theme"), "dark", []string{"dark", "light"})
 	if err != nil {
 		return err
 	}
 	clicfg.Set("tui.theme", themeName)
 
 	if err := path.EnsureDirs(); err != nil {
-		return fmt.Errorf("failed to create client directories: %w", err)
+		return fmt.Errorf("%s: %w", surface.Text("client.setup.create_directories_failed"), err)
 	}
 
 	configPath, err := path.ConfigFile()
 	if err != nil {
-		return fmt.Errorf("failed to resolve config path: %w", err)
+		return fmt.Errorf("%s: %w", surface.Text("client.setup.resolve_config_failed"), err)
 	}
 	if err := clicfg.WriteConfigAs(configPath); err != nil {
-		return fmt.Errorf("failed to write %s: %w", configPath, err)
+		return fmt.Errorf("%s: %w", surface.Text("client.setup.write_config_failed", configPath), err)
 	}
 	if err := os.Chmod(configPath, 0600); err != nil {
-		return fmt.Errorf("failed to set permissions on %s: %w", configPath, err)
+		return fmt.Errorf("%s: %w", surface.Text("client.setup.set_permissions_failed", configPath), err)
 	}
 
-	_, err = fmt.Fprintf(out, "\nConfiguration saved to %s\n", configPath)
+	_, err = fmt.Fprint(out, "\n"+surface.Text("client.setup.config_saved", configPath)+"\n")
 	return err
 }
 
 // promptServer asks for the server URL until a syntactically valid one is given.
 func promptServer(reader *bufio.Reader, out io.Writer) (string, error) {
 	for {
-		answer, err := prompt(reader, out, "Server URL (e.g. https://scour.li)", "")
+		answer, err := prompt(reader, out, surface.Text("client.setup.server_url_prompt"), "")
 		if err != nil {
 			return "", err
 		}
 		if answer == "" {
-			if _, err := fmt.Fprintln(out, "A server URL is required."); err != nil {
+			if _, err := fmt.Fprintln(out, surface.Text("client.setup.server_url_required")); err != nil {
 				return "", err
 			}
 			continue
@@ -219,7 +226,7 @@ func promptServer(reader *bufio.Reader, out io.Writer) (string, error) {
 		}
 		parsed, perr := url.Parse(answer)
 		if perr != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			if _, err := fmt.Fprintln(out, "That is not a valid URL; try again."); err != nil {
+			if _, err := fmt.Fprintln(out, surface.Text("client.setup.invalid_url_retry")); err != nil {
 				return "", err
 			}
 			continue
@@ -230,7 +237,7 @@ func promptServer(reader *bufio.Reader, out io.Writer) (string, error) {
 
 // promptChoice asks a question restricted to a set of allowed answers.
 func promptChoice(reader *bufio.Reader, out io.Writer, question, def string, allowed []string) (string, error) {
-	label := fmt.Sprintf("%s (%s)", question, strings.Join(allowed, "/"))
+	label := surface.Text("client.setup.choice_label", question, strings.Join(allowed, "/"))
 	for {
 		answer, err := prompt(reader, out, label, def)
 		if err != nil {
@@ -241,7 +248,7 @@ func promptChoice(reader *bufio.Reader, out io.Writer, question, def string, all
 				return answer, nil
 			}
 		}
-		if _, err := fmt.Fprintf(out, "Choose one of: %s\n", strings.Join(allowed, ", ")); err != nil {
+		if _, err := fmt.Fprintln(out, surface.Text("client.setup.choose_one", strings.Join(allowed, ", "))); err != nil {
 			return "", err
 		}
 	}
@@ -250,11 +257,11 @@ func promptChoice(reader *bufio.Reader, out io.Writer, question, def string, all
 // prompt reads one line, returning def when the answer is empty.
 func prompt(reader *bufio.Reader, out io.Writer, question, def string) (string, error) {
 	if def != "" {
-		if _, err := fmt.Fprintf(out, "%s [%s]: ", question, def); err != nil {
+		if _, err := fmt.Fprint(out, surface.Text("client.setup.prompt_default", question, def)); err != nil {
 			return "", err
 		}
 	} else {
-		if _, err := fmt.Fprintf(out, "%s: ", question); err != nil {
+		if _, err := fmt.Fprint(out, surface.Text("client.setup.prompt", question)); err != nil {
 			return "", err
 		}
 	}

@@ -179,6 +179,38 @@ func TestCreateStoresAlertFilterContext(t *testing.T) {
 	}
 }
 
+func TestListByOwnerReturnsOnlyAPIShapedOwnedAlerts(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	for _, ownerID := range []string{"owner-a", "owner-b"} {
+		_, err := manager.Create(context.Background(), CreateRequest{
+			OwnerID:    ownerID,
+			Query:      "privacy search",
+			Category:   "general",
+			Language:   "en",
+			Frequency:  FrequencyDaily,
+			Email:      "alerts@example.com",
+			DeliverRSS: true,
+			BaseURL:    "https://search.test",
+		})
+		if err != nil {
+			t.Fatalf("Create(%q) error = %v", ownerID, err)
+		}
+	}
+
+	alerts, err := manager.ListByOwner(context.Background(), "owner-a")
+	if err != nil {
+		t.Fatalf("ListByOwner() error = %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("ListByOwner() returned %d alerts, want 1", len(alerts))
+	}
+	if alerts[0].OwnerID != "owner-a" || alerts[0].Query != "privacy search" {
+		t.Errorf("ListByOwner() returned alert %+v for the wrong owner or query", alerts[0])
+	}
+}
+
 func TestCreateRejectsUnknownAlertEngine(t *testing.T) {
 	manager, db := newTestManager(t, newTestEngine("google", "general"))
 	defer db.Close()
@@ -1583,6 +1615,44 @@ func TestProcessDueEmailSendFailurePropagates(t *testing.T) {
 	}
 	if stored.LastError == "" {
 		t.Fatal("LastError should be recorded after a failed email delivery")
+	}
+}
+
+func TestRecordAlertFailureReturnsCauseAndPersistenceError(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+	cause := errors.New("search backend unavailable")
+	if _, err := db.Exec(`INSERT INTO search_alerts (id, email, query, category, frequency, manage_token_hash, rss_token_hash) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"alert-test", "test@example.com", "query", "general", "daily", "manage-hash", "rss-hash"); err != nil {
+		t.Fatalf("insert alert fixture: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TRIGGER reject_last_error BEFORE UPDATE OF last_error ON search_alerts BEGIN SELECT RAISE(ABORT, 'write rejected'); END`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	err := manager.recordAlertFailure(context.Background(), "alert-test", cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("recordAlertFailure() error = %v, want original search error", err)
+	}
+	if !strings.Contains(err.Error(), "record alert failure") || !strings.Contains(err.Error(), "write rejected") {
+		t.Fatalf("recordAlertFailure() error = %v, want original and persistence failures included", err)
+	}
+}
+
+func TestRecordAlertSentReturnsDatabaseError(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO search_alerts (id, email, query, category, frequency, manage_token_hash, rss_token_hash) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"alert-test", "test@example.com", "query", "general", "daily", "manage-hash", "rss-hash"); err != nil {
+		t.Fatalf("insert alert fixture: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TRIGGER reject_last_sent BEFORE UPDATE OF last_sent_at ON search_alerts BEGIN SELECT RAISE(ABORT, 'write rejected'); END`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	err := manager.recordAlertSent(context.Background(), "alert-test", time.Now().UTC())
+	if err == nil || !strings.Contains(err.Error(), "record alert delivery time") {
+		t.Fatalf("recordAlertSent() error = %v, want database write error", err)
 	}
 }
 

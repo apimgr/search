@@ -15,6 +15,9 @@ func getGraphiQLThemeCSS(mode string) string {
 	}
 }
 
+// ThemeCSS returns the self-hosted GraphiQL theme for the visitor's selected mode.
+func ThemeCSS(mode string) string { return getGraphiQLThemeCSS(mode) }
+
 var (
 	graphiqlDarkTheme  = theme.CSSPaletteVariables(":root", theme.ThemePaletteDark) + graphiqlThemeCSS
 	graphiqlLightTheme = theme.CSSPaletteVariables(":root", theme.ThemePaletteLight) + graphiqlThemeCSS

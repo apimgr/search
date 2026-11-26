@@ -49,15 +49,47 @@ func (t *updateNotifyTracker) markSeen(version string) bool {
 // notifications
 var updateNotifyState updateNotifyTracker
 
+func updateManualCommand(goos string, startedElevated bool) string {
+	command := config.ProjectName + " --update yes"
+	if goos == "windows" {
+		return command + " (run from an elevated prompt)"
+	}
+	if !startedElevated {
+		return "sudo " + command
+	}
+	return command
+}
+
+func updateVersionHasFailed(entries []logging.AuditEntry, version string) bool {
+	for _, entry := range entries {
+		if entry.Event != logging.AuditAction("update.failed") || entry.Result != "failure" {
+			continue
+		}
+		if failedVersion, ok := entry.Details["version"].(string); ok && failedVersion == version {
+			return true
+		}
+	}
+	return false
+}
+
 // installScheduledUpdate runs the full `--update yes` flow for a release the
 // update_check task found eligible, as AI.md PART 22 requires when
 // server.update.auto_install is true
 func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.UpdateInfo) error {
-	if runtime.GOOS == "windows" || !config.StartedElevated() {
-		manualCommand := config.ProjectName + " --update yes"
-		if runtime.GOOS != "windows" {
-			manualCommand = "sudo " + manualCommand
+	if s.logManager != nil && s.logManager.Audit() != nil {
+		result, err := s.logManager.Audit().QueryAuditLogs(logging.AuditQueryOptions{
+			Event: logging.AuditAction("update.failed"),
+		})
+		if err != nil {
+			return fmt.Errorf("check failed update versions: %w", err)
 		}
+		if result != nil && updateVersionHasFailed(result.Entries, info.LatestVersion) {
+			slog.Warn("scheduled update version previously failed; waiting for a new release", "latest_version", info.LatestVersion)
+			return nil
+		}
+	}
+	if runtime.GOOS == "windows" || !config.StartedElevated() {
+		manualCommand := updateManualCommand(runtime.GOOS, config.StartedElevated())
 		slog.Warn("scheduled update not installed because the process did not start elevated", "latest_version", info.LatestVersion, "manual_command", manualCommand)
 		if s.logManager != nil && s.logManager.Audit() != nil {
 			s.logManager.Audit().LogEvent(logging.AuditAction("update.install_skipped"), logging.AuditCategorySystem, logging.AuditSeverityInfo, logging.AuditActor{Type: "system", Username: "system"}, nil, "skipped", map[string]interface{}{"reason": "not_elevated", "version": info.LatestVersion}, "")
@@ -106,10 +138,14 @@ func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.Update
 }
 
 func (s *Server) recordUpdateFailure(version string, cause error) {
-	if s.logManager == nil || s.logManager.Audit() == nil {
-		return
+	if s.logManager != nil && s.logManager.Audit() != nil {
+		s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", map[string]interface{}{"version": version}, cause.Error())
 	}
-	s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", map[string]interface{}{"version": version}, cause.Error())
+	if s.mailer != nil {
+		if err := s.mailer.SendUpdateFailed(version, cause.Error()); err != nil {
+			slog.Error("failed to send update-failed notification", "latest_version", version, "err", err)
+		}
+	}
 }
 
 // initScheduler initializes and starts the scheduler per AI.md PART 19
@@ -227,7 +263,34 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 		SecurityCleanup: func(ctx context.Context) error {
 			return s.cleanupSecurityData(ctx)
 		},
-		DiskCheckSchedule: diskCheckSchedule(s.config.Server.Notifications.DiskLow.CheckInterval),
+		KeyserverRetry: func(ctx context.Context) error {
+			if len(s.config.Server.Web.Security.Keyservers) == 0 {
+				return nil
+			}
+			pub, err := security.LoadPublicKey(config.GetConfigDir())
+			if err != nil {
+				return nil
+			}
+			results, err := security.PublishKeyserversOnce(ctx, nil, config.GetConfigDir(), pub, s.config.Server.Web.Security.Keyservers, time.Now().UTC())
+			for _, result := range results {
+				if result.Err != nil {
+					slog.Warn("PGP keyserver publication retry failed", "keyserver", result.Keyserver, "err", result.Err)
+				}
+			}
+			return err
+		},
+		DiskCheckSchedule:     diskCheckSchedule(s.config.Server.Notifications.DiskLow.CheckInterval),
+		DatabaseCheckSchedule: databaseCheckSchedule(s.config.Server.Notifications.DatabaseError.CheckInterval),
+		DatabaseCheck: func(ctx context.Context) error {
+			if !s.config.Server.Notifications.DatabaseError.Enabled || s.dbManager == nil {
+				return nil
+			}
+			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			err := s.dbManager.Probe(probeCtx)
+			s.reportDatabaseStatus(err)
+			return err
+		},
 
 		// GeoIP Update - download ip-location-db databases
 		GeoIPUpdate: func(ctx context.Context) error {
@@ -326,12 +389,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 				if s.mailer != nil && s.mailer.IsEnabled() {
 					updateURL := s.config.Server.BaseURL + "/update"
-					var manualCommand string
-					if runtime.GOOS == "windows" {
-						manualCommand = config.ProjectName + " --update yes (run from an elevated prompt)"
-					} else if !config.StartedElevated() {
-						manualCommand = config.ProjectName + " --update yes"
-					}
+					manualCommand := updateManualCommand(runtime.GOOS, config.StartedElevated())
 					if err := s.mailer.SendUpdateAvailable(
 						info.CurrentVersion,
 						info.LatestVersion,
@@ -392,13 +450,6 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 		// Healthcheck Self - verify own health
 		HealthcheckSelf: func(ctx context.Context) error {
-			if s.dbManager != nil {
-				if err := s.dbManager.Ping(ctx); err != nil {
-					s.reportDatabaseStatus(err)
-				} else {
-					s.reportDatabaseStatus(nil)
-				}
-			}
 			if s.aggregator != nil {
 				if err := s.aggregator.RefreshEngineHealth(ctx); err != nil {
 					return err
@@ -451,6 +502,14 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 	if s.config.Server.Notifications.DiskLow.Enabled {
 		handlers.DiskCheck = s.checkDiskLow
 	}
+	if s.i2pManager != nil && s.i2pManager.Enabled() {
+		handlers.I2PHealth = func(ctx context.Context) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return s.i2pManager.CheckAndRestart()
+		}
+	}
 	return handlers
 }
 
@@ -462,6 +521,18 @@ func diskCheckSchedule(interval string) string {
 	if err != nil || duration <= 0 {
 		slog.Warn("invalid disk-low check interval, using default", "config_key", "server.notifications.disk_low.check_interval", "value", interval, "default", "5m")
 		return "@every 5m"
+	}
+	return "@every " + duration.String()
+}
+
+func databaseCheckSchedule(interval string) string {
+	if strings.TrimSpace(interval) == "" {
+		return "@every 1m"
+	}
+	duration, err := time.ParseDuration(strings.TrimSpace(interval))
+	if err != nil || duration <= 0 {
+		slog.Warn("invalid database check interval, using default", "config_key", "server.notifications.database_error.check_interval", "value", interval, "default", "1m")
+		return "@every 1m"
 	}
 	return "@every " + duration.String()
 }
@@ -595,6 +666,11 @@ func (s *Server) cleanupSecurityData(ctx context.Context) error {
 	if deleted > 0 {
 		slog.Info("expired closed security reports removed", "count", deleted)
 	}
+	if retired, err := security.CleanupExpiredPreviousEncryptionKey(ctx, s.dbManager.ServerDB(), s.config.Server.Security.EncryptionKey, time.Now().UTC()); err != nil {
+		return fmt.Errorf("retire previous encryption key: %w", err)
+	} else if retired {
+		slog.Info("expired previous encryption key retired")
+	}
 
 	pgpDir := filepath.Join(config.GetConfigDir(), security.PGPDirName)
 	expiryPath := filepath.Join(pgpDir, "pgp.old.expires")
@@ -661,11 +737,14 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 	applySettings(scheduler.TaskCVEUpdate, tasks.CVEUpdate)
 	applySettings(scheduler.TaskUpdateCheck, tasks.UpdateCheck)
 	applySettings(scheduler.TaskDiskCheck, tasks.DiskCheck)
+	applySettings(scheduler.TaskDatabaseCheck, tasks.DatabaseCheck)
 	applySettings(scheduler.TaskTokenCleanup, tasks.TokenCleanup)
 	applySettings(scheduler.TaskLogRotation, tasks.LogRotation)
 	applySettings(scheduler.TaskHealthcheckSelf, tasks.HealthcheckSelf)
 	applySettings(scheduler.TaskTorHealth, tasks.TorHealth)
-	applySettings(scheduler.TaskI2PHealth, tasks.I2PHealth)
+	if _, err := sched.GetTask(scheduler.TaskI2PHealth); err == nil {
+		applySettings(scheduler.TaskI2PHealth, tasks.I2PHealth)
+	}
 	applySettings(scheduler.TaskAlertsImmediate, tasks.AlertsImmediate)
 	applySettings(scheduler.TaskAlertsDaily, tasks.AlertsDaily)
 	applySettings(scheduler.TaskAlertsWeekly, tasks.AlertsWeekly)
@@ -705,6 +784,11 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 	if !tasks.DiskCheck.Enabled || !s.config.Server.Notifications.DiskLow.Enabled {
 		if err := sched.Disable(scheduler.TaskDiskCheck); err != nil {
 			slog.Warn("failed to disable disk check task", "error", err)
+		}
+	}
+	if !tasks.DatabaseCheck.Enabled || !s.config.Server.Notifications.DatabaseError.Enabled {
+		if err := sched.Disable(scheduler.TaskDatabaseCheck); err != nil {
+			slog.Warn("failed to disable database check task", "error", err)
 		}
 	}
 }
@@ -840,19 +924,16 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 
 	// Per AI.md PART 22: Check compliance mode
 	// If compliance enabled and no password, skip backup with warning
-	complianceEnabled := s.config.Server.Compliance.Enabled
-	encryptionEnabled := s.config.Server.Backup.Encryption.Enabled
-
-	// Get backup password from environment variable (NEVER stored in config)
-	// Per AI.md PART 22/24: Password is NEVER stored - derived on-demand
-	backupPassword := os.Getenv("BACKUP_PASSWORD")
+	complianceEnabled := s.config.Server.Compliance.AnyEnabled()
+	backupPassword := s.config.Server.Backup.EncryptionPassword
+	encryptionEnabled := backupPassword != ""
 
 	if complianceEnabled {
 		if backupPassword == "" {
 			// Per AI.md PART 22: Scheduled backups skip with audit log warning
-			slog.Warn("compliance mode enabled but BACKUP_PASSWORD not set, backup skipped")
+			slog.Warn("compliance mode enabled but server.backup.encryption_password not set, backup skipped")
 			s.logAuditEvent("backup.skipped", "Compliance mode requires backup encryption but password not set")
-			return fmt.Errorf("compliance mode requires backup encryption but BACKUP_PASSWORD not set")
+			return fmt.Errorf("compliance mode requires backup encryption; set server.backup.encryption_password in secrets.yml")
 		}
 		// Compliance mode forces encryption
 		encryptionEnabled = true

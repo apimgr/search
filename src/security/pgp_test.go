@@ -301,7 +301,7 @@ func TestFormatFingerprint(t *testing.T) {
 
 func TestPublishToKeyservers(t *testing.T) {
 	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/vks/v1/upload" {
+		if r.URL.Path != "/pks/add" || r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -334,4 +334,26 @@ func TestPublishToKeyservers(t *testing.T) {
 	if results[2].Published || results[2].Err == nil {
 		t.Errorf("expected keyserver 2 (invalid URL) to fail, got Published=%v Err=%v", results[2].Published, results[2].Err)
 	}
+}
+
+func TestPublishKeyserversOncePersistsRetryAndSuccess(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/pks/add" { w.WriteHeader(http.StatusNotFound); return }
+		if requests == 1 { w.WriteHeader(http.StatusServiceUnavailable); return }
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	configDir := t.TempDir()
+	kp := generateTestKeypair(t)
+	results, err := PublishKeyserversOnce(context.Background(), server.Client(), configDir, kp.PublicKeyArmor, []string{server.URL}, now)
+	if err != nil || len(results) != 1 || results[0].Published { t.Fatalf("initial publish results=%v err=%v", results, err) }
+	results, err = PublishKeyserversOnce(context.Background(), server.Client(), configDir, kp.PublicKeyArmor, []string{server.URL}, now.Add(30*time.Second))
+	if err != nil || len(results) != 0 || requests != 1 { t.Fatalf("early retry results=%v err=%v requests=%d", results, err, requests) }
+	results, err = PublishKeyserversOnce(context.Background(), server.Client(), configDir, kp.PublicKeyArmor, []string{server.URL}, now.Add(time.Minute))
+	if err != nil || len(results) != 1 || !results[0].Published || requests != 2 { t.Fatalf("due retry results=%v err=%v requests=%d", results, err, requests) }
+	results, err = PublishKeyserversOnce(context.Background(), server.Client(), configDir, kp.PublicKeyArmor, []string{server.URL}, now.Add(2*time.Minute))
+	if err != nil || len(results) != 0 || requests != 2 { t.Fatalf("published host was retried: results=%v err=%v requests=%d", results, err, requests) }
 }

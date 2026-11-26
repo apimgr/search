@@ -61,6 +61,29 @@ var vanityGen = &vanityGenerator{
 	progress: &VanityProgress{State: "idle"},
 }
 
+// ErrVanityCandidateNotFound indicates no saved candidate matches the prefix.
+var ErrVanityCandidateNotFound = errors.New("no vanity candidate matches the requested address")
+
+// VanitySearchConflictError reports that an existing search owns the single
+// active vanity-search slot.
+type VanitySearchConflictError struct {
+	Prefix string
+}
+
+func (e *VanitySearchConflictError) Error() string {
+	return fmt.Sprintf("a vanity search is already running for prefix %q", e.Prefix)
+}
+
+// AmbiguousVanityCandidateError identifies the candidate addresses matching
+// a non-unique prefix.
+type AmbiguousVanityCandidateError struct {
+	Candidates []string
+}
+
+func (e *AmbiguousVanityCandidateError) Error() string {
+	return fmt.Sprintf("vanity address prefix matches multiple candidates: %s", strings.Join(e.Candidates, ", "))
+}
+
 // vanityDir returns {data_dir}/tor/vanity — the candidate key store.
 func (t *TorService) vanityDir() string {
 	return filepath.Join(t.dataDir, "vanity")
@@ -153,7 +176,7 @@ func (t *TorService) GenerateVanityWithWorkers(prefix string, workers int) error
 	if vanityGen.progress.Running {
 		running := vanityGen.progress.Prefix
 		vanityGen.mu.Unlock()
-		return fmt.Errorf("a vanity search is already running for prefix %q", running)
+		return &VanitySearchConflictError{Prefix: running}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -168,7 +191,7 @@ func (t *TorService) GenerateVanityWithWorkers(prefix string, workers int) error
 	}
 	vanityGen.mu.Unlock()
 
-	if err := os.MkdirAll(t.vanityDir(), 0700); err != nil {
+	if err := os.MkdirAll(t.vanityDir(), 0o700); err != nil {
 		t.CancelVanity()
 		return fmt.Errorf("create vanity dir: %w", err)
 	}
@@ -236,7 +259,7 @@ func (t *TorService) runVanityWorker(ctx context.Context, cancel context.CancelF
 // writes into the live {data_dir}/tor/site/ directory.
 func (t *TorService) writeVanityCandidate(address string, expanded, pub []byte) error {
 	base := t.vanityDir()
-	if err := os.MkdirAll(base, 0700); err != nil {
+	if err := os.MkdirAll(base, 0o700); err != nil {
 		return fmt.Errorf("create vanity dir: %w", err)
 	}
 	tmp := filepath.Join(base, ".tmp-"+address)
@@ -286,7 +309,7 @@ func (t *TorService) ApplyVanityAddress() (string, error) {
 func (t *TorService) ApplyVanityCandidate(match string) (string, error) {
 	candidates := t.listVanityCandidates()
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("no vanity candidates found in %s", t.vanityDir())
+		return "", ErrVanityCandidateNotFound
 	}
 
 	match = strings.TrimSpace(strings.ToLower(strings.TrimSuffix(match, ".onion")))
@@ -300,8 +323,11 @@ func (t *TorService) ApplyVanityCandidate(match string) (string, error) {
 			}
 		}
 	}
-	if len(matched) != 1 {
-		return "", fmt.Errorf("expected exactly one matching candidate, got %d: %s", len(matched), strings.Join(candidates, ", "))
+	if len(matched) == 0 {
+		return "", ErrVanityCandidateNotFound
+	}
+	if len(matched) > 1 {
+		return "", &AmbiguousVanityCandidateError{Candidates: matched}
 	}
 
 	address := matched[0]
@@ -352,7 +378,7 @@ func (t *TorService) applyKeyDir(srcDir, expected string) (string, error) {
 	if err := os.RemoveAll(siteDir); err != nil {
 		return "", fmt.Errorf("remove old keys: %w", err)
 	}
-	if err := os.MkdirAll(siteDir, 0700); err != nil {
+	if err := os.MkdirAll(siteDir, 0o700); err != nil {
 		return "", fmt.Errorf("create site dir: %w", err)
 	}
 	for _, name := range torKeyFiles {
@@ -360,7 +386,7 @@ func (t *TorService) applyKeyDir(srcDir, expected string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("read %s: %w", name, err)
 		}
-		if err := os.WriteFile(filepath.Join(siteDir, name), data, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(siteDir, name), data, 0o600); err != nil {
 			return "", fmt.Errorf("write %s: %w", name, err)
 		}
 	}

@@ -86,7 +86,7 @@ func setupAlertAPITestDB(t *testing.T) *sql.DB {
 		CREATE INDEX idx_search_alerts_verify_token ON search_alerts(verify_token_hash);
 		CREATE INDEX idx_search_alerts_status_frequency ON search_alerts(status, frequency);
 		CREATE TABLE owners (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL);
-		CREATE TABLE api_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, token_prefix TEXT NOT NULL, active INTEGER DEFAULT 1, expires_at INTEGER, created_at INTEGER, owner_id TEXT, kind TEXT NOT NULL, token_enc TEXT NOT NULL, rotated_at INTEGER, last_used_at INTEGER, revoked_at INTEGER, revoked_reason TEXT);
+		CREATE TABLE api_tokens (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, name TEXT, token_hash TEXT UNIQUE NOT NULL, token_prefix TEXT NOT NULL, token_last4 TEXT NOT NULL, token_enc TEXT NOT NULL, created_at INTEGER NOT NULL, rotated_at INTEGER, expires_at INTEGER, last_used_at INTEGER, revoked_at INTEGER, revoked_reason TEXT);
 		CREATE TABLE audit_log (id TEXT PRIMARY KEY, timestamp DATETIME, actor_type TEXT, actor_id TEXT, action TEXT, resource_type TEXT, resource_id TEXT, details TEXT);
 
 		CREATE TABLE search_alert_results (

@@ -75,3 +75,29 @@ func TestContentNegotiationMiddlewareExplicitJSONBeatsHTTPTool(t *testing.T) {
 		t.Fatalf("JSON response changed: %s", response.Body.String())
 	}
 }
+
+func TestJSONProtocolRoutesKeepJSONForHTTPTools(t *testing.T) {
+	routes := []string{
+		APIPrefix + "/server/swagger", "/api/swagger",
+		APIPrefix + "/server/graphql", "/api/graphql",
+		APIPrefix + "/server/mcp", "/api/mcp",
+	}
+	for _, path := range routes {
+		t.Run(path, func(t *testing.T) {
+			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				_, _ = w.Write([]byte("{\"data\":{\"ok\":true}}\n"))
+			})
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request.Header.Set("User-Agent", "curl/8.0")
+			response := httptest.NewRecorder()
+			(&Handler{}).ContentNegotiationMiddleware(next).ServeHTTP(response, request)
+			if contentType := response.Header().Get("Content-Type"); contentType != "application/json; charset=utf-8" {
+				t.Errorf("Content-Type = %q, want JSON protocol content type", contentType)
+			}
+			if got, want := response.Body.String(), "{\"data\":{\"ok\":true}}\n"; got != want {
+				t.Errorf("body = %q, want unchanged JSON body %q", got, want)
+			}
+		})
+	}
+}

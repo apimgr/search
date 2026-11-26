@@ -46,8 +46,12 @@ func TestPublicPagesContentNegotiation(t *testing.T) {
 					t.Fatalf("GET %s: %v", path, err)
 				}
 				defer response.Body.Close()
-				if response.StatusCode != http.StatusOK {
-					t.Fatalf("GET %s with Accept %q: status %d", path, format.accept, response.StatusCode)
+				wantStatus := http.StatusOK
+				if path == "/server/healthz" {
+					wantStatus = http.StatusServiceUnavailable
+				}
+				if response.StatusCode != wantStatus {
+					t.Fatalf("GET %s with Accept %q: status %d, want %d", path, format.accept, response.StatusCode, wantStatus)
 				}
 				if got := response.Header.Get("Content-Type"); !strings.HasPrefix(got, format.contentType) {
 					t.Errorf("GET %s with Accept %q: Content-Type %q, want prefix %q", path, format.accept, got, format.contentType)

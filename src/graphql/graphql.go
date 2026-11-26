@@ -89,16 +89,39 @@ func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGraphQLQueryWithContext(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxGraphQLRequestBytes)
 	var params graphQLRequestParams
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			localizedHTTPError(w, r, http.StatusRequestEntityTooLarge, "errors.bad_request")
+	if r.Method == http.MethodGet {
+		params.Query = r.URL.Query().Get("query")
+		if len(r.URL.RawQuery) > maxGraphQLRequestBytes {
+			localizedHTTPError(w, r, http.StatusRequestURITooLong, "errors.bad_request")
 			return
 		}
-		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
-		return
+		if params.Query == "" {
+			localizedHTTPError(w, r, http.StatusBadRequest, "alerts.error_query_required")
+			return
+		}
+		params.OperationName = r.URL.Query().Get("operationName")
+		if variables := r.URL.Query().Get("variables"); variables != "" {
+			if err := json.Unmarshal([]byte(variables), &params.Variables); err != nil || params.Variables == nil {
+				localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+				return
+			}
+		}
+		if !graphQLQueryReadOnly(params.Query) {
+			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+			return
+		}
+	} else {
+		r.Body = http.MaxBytesReader(w, r.Body, maxGraphQLRequestBytes)
+		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				localizedHTTPError(w, r, http.StatusRequestEntityTooLarge, "errors.bad_request")
+				return
+			}
+			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+			return
+		}
 	}
 	if cost, depth, ok := graphQLQueryCost(params.Query); ok && (cost > maxGraphQLQueryFields || depth > maxGraphQLQueryDepth) {
 		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
@@ -122,7 +145,7 @@ func executeGraphQLQuery(w http.ResponseWriter, r *http.Request, params graphQLR
 	ctx := context.WithValue(r.Context(), graphqlRequestContextKey{}, r)
 	ctx = context.WithValue(ctx, graphqlResponseWriterContextKey{}, w)
 	return graphql.Do(graphql.Params{
-		Schema:         Schema,
+		Schema:         schemaForLanguage(i18n.RequestLanguage(r)),
 		RequestString:  params.Query,
 		VariableValues: params.Variables,
 		OperationName:  params.OperationName,
@@ -217,66 +240,58 @@ func graphQLSelectionCost(set *ast.SelectionSet, fragments map[string]*ast.Fragm
 	return cost, maxDepth, true
 }
 
-// serveGraphiQL serves a server-rendered GraphQL explorer UI.
-// Per frontend rules: vanilla JS only, no CDN frameworks, CSS custom properties for theming.
+// serveGraphiQL serves a native GraphQL query form without inline styles or scripts.
 func serveGraphiQL(w http.ResponseWriter, r *http.Request, response string) {
-	theme := getTheme(r)
 	lang, dir := i18n.DetectRequestLocale(r)
-	themeCSS := getGraphiQLThemeCSS(theme)
-
-	html := `<!DOCTYPE html>
+	theme := getTheme(r)
+	pageTitle := html.EscapeString(i18n.RequestString(r, "graphql.ui.title"))
+	heading := html.EscapeString(i18n.RequestString(r, "graphql.ui.heading"))
+	endpointLabel := html.EscapeString(i18n.RequestString(r, "graphql.ui.endpoint_label"))
+	queryLabel := html.EscapeString(i18n.RequestString(r, "graphql.ui.query_label"))
+	runLabel := html.EscapeString(i18n.RequestString(r, "graphql.ui.run_button"))
+	responseHeading := html.EscapeString(i18n.RequestString(r, "graphql.ui.response_heading"))
+	schemaLabel := html.EscapeString(i18n.RequestString(r, "graphql.ui.schema_summary"))
+	endpoint := html.EscapeString(api.APIBasePath() + "/server/graphql")
+	query := r.FormValue("query")
+	if query == "" {
+		query = "{ health { status version mode uptime } }"
+	}
+	page := `<!DOCTYPE html>
 <html lang="` + lang + `" dir="` + dir + `">
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Search API Explorer</title>
-	<style>
-` + themeCSS + `
-		*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-		body { font-family: monospace; background: var(--palette-background); color: var(--palette-foreground); min-height: 100vh; display: flex; flex-direction: column; }
-		header { padding: 0.75rem 1rem; background: var(--palette-surface); border-bottom: 1px solid var(--palette-border); display: flex; align-items: center; gap: 1rem; }
-		h1 { font-size: 1rem; font-weight: 600; color: var(--palette-primary); }
-		main { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 0; flex: 1; }
-		.panel { display: flex; flex-direction: column; border-right: 1px solid var(--palette-border); }
-		.panel:last-child { border-right: none; }
-		.panel-header { padding: 0.5rem 1rem; background: var(--palette-surface); border-bottom: 1px solid var(--palette-border); font-size: 0.75rem; color: var(--palette-muted); display: flex; justify-content: space-between; align-items: center; }
-		textarea { flex: 1; width: 100%; padding: 1rem; background: var(--palette-background); color: var(--palette-foreground); border: none; resize: none; font-family: monospace; font-size: 0.875rem; outline: none; min-height: 300px; }
-		pre { flex: 1; padding: 1rem; overflow: auto; font-size: 0.875rem; white-space: pre-wrap; word-break: break-all; background: var(--palette-background); color: var(--palette-foreground); min-height: 300px; }
-		button { padding: 0.375rem 0.875rem; background: var(--palette-primary); color: var(--palette-background); border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
-		button:hover { opacity: 0.85; }
-		.error { color: var(--palette-error); }
-		@media (max-width: 700px) { main { grid-template-columns: 1fr; } .panel { border-right: none; border-bottom: 1px solid var(--palette-border); } }
-	</style>
+	<title>` + pageTitle + `</title>
+	<link rel="stylesheet" href="/static/vendor/graphiql/graphiql-style.css">
+	<link rel="stylesheet" href="/static/vendor/graphiql/graphiql.css">
+	<link rel="stylesheet" href="/static/css/graphql.css">
+	<link rel="stylesheet" href="/static/css/graphql-theme.css">
 </head>
 <body>
-	<header>
-		<h1>GraphiQL API Explorer</h1>
-		<p>JSON API endpoint: <code>/api/graphql</code></p>
-	</header>
-	<form id="query-form" method="post" action="/server/docs/graphql">
 	<main>
-		<div class="panel">
-			<div class="panel-header">
-				<span>Query</span>
-				<button id="run-btn" type="submit">Run ▶</button>
-			</div>
-			<textarea id="query" name="query" spellcheck="false" placeholder="{ health { status version } }">{ health { status version mode uptime } }</textarea>
-		</div>
-		<div class="panel">
-			<div class="panel-header"><span>Response</span></div>
+		<h1>` + heading + `</h1>
+		<p>` + endpointLabel + `: <code>` + endpoint + `</code></p>
+		<div id="graphiql" class="graphql-explorer" data-endpoint="` + endpoint + `" data-theme="` + theme + `">
+		<form id="query-form" method="post" action="/server/docs/graphql">
+			<label for="query">` + queryLabel + `</label>
+			<textarea id="query" name="query" spellcheck="false">` + html.EscapeString(query) + `</textarea>
+			<button id="run-btn" type="submit">` + runLabel + `</button>
+		</form>
+		<section aria-labelledby="response-heading">
+			<h2 id="response-heading">` + responseHeading + `</h2>
 			<pre id="response">` + html.EscapeString(response) + `</pre>
+		</section>
+		<details class="schema-panel">
+			<summary>` + schemaLabel + `</summary>
+			<pre>` + html.EscapeString(GeneratedSchemaSDL) + `</pre>
+		</details>
 		</div>
 	</main>
-	</form>
-	<details class="schema-panel">
-		<summary>GraphQL schema</summary>
-		<pre>` + html.EscapeString(GeneratedSchemaSDL) + `</pre>
-	</details>
+	<script src="/static/vendor/graphiql/graphiql.js"></script>
 </body>
 </html>`
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if _, err := w.Write([]byte(html)); err != nil {
+	if _, err := w.Write([]byte(page)); err != nil {
 		slog.Debug("failed to write GraphQL UI", "error", err)
 	}
 }
@@ -297,13 +312,19 @@ func UIHandler(cfg *config.Config) http.HandlerFunc {
 }
 
 func UIHandlerWithDependencies(cfg *config.Config, dependencies Dependencies) http.HandlerFunc {
+	return UIHandlerWithRenderer(cfg, dependencies, func(w http.ResponseWriter, r *http.Request, query, response string) {
+		serveGraphiQL(w, r, response)
+	})
+}
+
+func UIHandlerWithRenderer(cfg *config.Config, dependencies Dependencies, render func(http.ResponseWriter, *http.Request, string, string)) http.HandlerFunc {
 	if dependencies.StartedAt.IsZero() {
 		dependencies.StartedAt = time.Now()
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			serveGraphiQL(w, r, "Run a query to see results.")
+			render(w, r, "{ health { status version mode uptime } }", "Run a query to see results.")
 		case http.MethodPost:
 			r.Body = http.MaxBytesReader(w, r.Body, maxGraphQLRequestBytes)
 			if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/x-www-form-urlencoded") {
@@ -335,7 +356,7 @@ func UIHandlerWithDependencies(cfg *config.Config, dependencies Dependencies) ht
 				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 				return
 			}
-			serveGraphiQL(w, r, string(body))
+			render(w, r, params.Query, string(body))
 		default:
 			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 			return
@@ -362,8 +383,8 @@ func graphQLQueryReadOnly(query string) bool {
 	return found
 }
 
-// QueryHandler returns an http.HandlerFunc that handles GraphQL POST queries only.
-// Registered at POST /api/graphql and POST /api/v1/server/graphql per AI.md PART 14.
+// QueryHandler returns an HTTP handler for GraphQL POST requests and read-only GET queries.
+// It is registered at both GraphQL API paths per AI.md PART 14.
 func QueryHandler(cfg *config.Config, dependencies ...Dependencies) http.HandlerFunc {
 	if len(dependencies) > 0 {
 		return QueryHandlerWithDependencies(cfg, dependencies[0])
@@ -391,9 +412,11 @@ type Dependencies struct {
 	StartedAt         time.Time
 }
 
-type dependenciesContextKey struct{}
-type graphqlRequestContextKey struct{}
-type graphqlResponseWriterContextKey struct{}
+type (
+	dependenciesContextKey          struct{}
+	graphqlRequestContextKey        struct{}
+	graphqlResponseWriterContextKey struct{}
+)
 
 func responseWriterFromContext(ctx context.Context) http.ResponseWriter {
 	writer, _ := ctx.Value(graphqlResponseWriterContextKey{}).(http.ResponseWriter)
@@ -418,7 +441,7 @@ func QueryHandlerWithDependencies(cfg *config.Config, dependencies Dependencies)
 		}
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPost && r.Method != http.MethodGet {
 			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 			return
 		}

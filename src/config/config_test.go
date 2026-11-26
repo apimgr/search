@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -81,6 +83,13 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")
 	}
+	databaseNotifications := cfg.Server.Notifications.DatabaseError
+	if !databaseNotifications.Enabled || databaseNotifications.Failures != 3 || databaseNotifications.CheckInterval != "1m" || databaseNotifications.Repeat != "24h" {
+		t.Errorf("database error notification defaults = %#v", databaseNotifications)
+	}
+	if !cfg.Server.Scheduler.Tasks.DatabaseCheck.Enabled || cfg.Server.Scheduler.Tasks.DatabaseCheck.Schedule != "@every 1m" {
+		t.Errorf("database check task defaults = %#v", cfg.Server.Scheduler.Tasks.DatabaseCheck)
+	}
 	if !strings.HasPrefix(cfg.Server.Token, "adm_") || len(strings.TrimPrefix(cfg.Server.Token, "adm_")) != 32 {
 		t.Errorf("Server.Token format = %q, want adm_ plus 32 characters", cfg.Server.Token)
 	}
@@ -114,6 +123,9 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.Server.Pages.Contact.SuccessMessage != "Thank you for your message. We'll respond soon." {
 		t.Errorf("Contact.SuccessMessage = %q, want the AI.md default", cfg.Server.Pages.Contact.SuccessMessage)
+	}
+	if cfg.Server.Privacy.Consent.Policy.Version != "1" {
+		t.Errorf("Privacy.Consent.Policy.Version = %q, want the AI.md default \"1\"", cfg.Server.Privacy.Consent.Policy.Version)
 	}
 }
 
@@ -209,14 +221,39 @@ func TestSafeDirPath(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsUnknownConfigFields(t *testing.T) {
+func TestLoadIgnoresAndPreservesUnknownDefinedSectionKeys(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.yml")
-	if err := os.WriteFile(configPath, []byte("server:\n  unknown_field: true\n"), 0600); err != nil {
+	contents := []byte("server:\n  port: 64580\n  compliance:\n    enabled: true\n")
+	if err := os.WriteFile(configPath, contents, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	if _, err := Load(configPath); err == nil || !strings.Contains(err.Error(), "unknown_field") {
-		t.Fatalf("Load() error = %v, want unknown config field to be rejected", err)
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+	if _, err := Load(configPath); err != nil {
+		t.Fatalf("Load() error = %v, want unknown key to be ignored", err)
+	}
+	if !strings.Contains(logs.String(), "server.compliance.enabled") {
+		t.Fatalf("Load() did not warn about unknown key: %s", logs.String())
+	}
+	retained, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config after Load: %v", err)
+	}
+	if !bytes.Contains(retained, []byte("enabled: true")) {
+		t.Fatalf("Load() removed unknown key from config: %s", retained)
+	}
+}
+
+func TestLoadRejectsInvalidKnownConfigField(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "server.yml")
+	if err := os.WriteFile(configPath, []byte("server:\n  port: invalid\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if _, err := Load(configPath); err == nil {
+		t.Fatal("Load() accepted invalid known server.port")
 	}
 }
 
@@ -294,6 +331,38 @@ func TestConfigValidateAndApplyDefaults(t *testing.T) {
 	_ = warnings
 }
 
+func TestI2PConfigurationIncludesBootstrapTimeoutAndSignatureType(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Server.I2P.BootstrapTimeout != 300 || cfg.Server.I2P.SignatureType != 7 {
+		t.Fatalf("I2P defaults timeout=%d signature_type=%d, want 300 and 7", cfg.Server.I2P.BootstrapTimeout, cfg.Server.I2P.SignatureType)
+	}
+	if err := yaml.Unmarshal([]byte("server:\n  i2p:\n    bootstrap_timeout: 90\n    signature_type: 7\n"), cfg); err != nil {
+		t.Fatalf("decode I2P settings: %v", err)
+	}
+	if cfg.Server.I2P.BootstrapTimeout != 90 || cfg.Server.I2P.SignatureType != 7 {
+		t.Fatalf("decoded I2P settings timeout=%d signature_type=%d, want 90 and 7", cfg.Server.I2P.BootstrapTimeout, cfg.Server.I2P.SignatureType)
+	}
+}
+
+func TestI2PConfigurationValidatesBootstrapTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.I2P.BootstrapTimeout = 601
+	warnings := cfg.ValidateAndApplyDefaults()
+	if cfg.Server.I2P.BootstrapTimeout != 300 {
+		t.Fatalf("invalid I2P bootstrap timeout = %d, want default 300", cfg.Server.I2P.BootstrapTimeout)
+	}
+	found := false
+	for _, warning := range warnings {
+		if warning.Field == "server.i2p.bootstrap_timeout" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("invalid I2P bootstrap timeout did not produce a validation warning")
+	}
+}
+
 func TestConfigApplyEnv(t *testing.T) {
 	cfg := DefaultConfig()
 	// Per AI.md PART 5: Init-only variables
@@ -348,6 +417,24 @@ func TestCacheConfigDefaults(t *testing.T) {
 	if cfg.Server.Cache.TTL != 3600 {
 		t.Errorf("Cache.TTL = %d, want 3600", cfg.Server.Cache.TTL)
 	}
+	if !cfg.Server.Cache.TLSSkipVerify {
+		t.Error("Cache.TLSSkipVerify should default to true for TLS-enabled cache connections")
+	}
+}
+
+func TestCacheTLSFileKeysLoadFromServerYAML(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "server.yml")
+	content := []byte("server:\n  cache:\n    tls: true\n    tls_skip_verify: false\n    tls_ca: ca.pem\n    tls_cert: client.pem\n    tls_key: client-key.pem\n")
+	if err := os.WriteFile(configPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Server.Cache; !got.TLS || got.TLSSkipVerify || got.TLSCA != "ca.pem" || got.TLSCert != "client.pem" || got.TLSKey != "client-key.pem" {
+		t.Fatalf("cache TLS config = %+v, want configured TLS keys", got)
+	}
 }
 
 func TestSecurityConfigDefaults(t *testing.T) {
@@ -399,6 +486,28 @@ func TestConfigSetPathAndGetPath(t *testing.T) {
 	cfg.SetPath("/test/config.yml")
 	if cfg.GetPath() != "/test/config.yml" {
 		t.Errorf("GetPath() = %q, want %q", cfg.GetPath(), "/test/config.yml")
+	}
+}
+
+func TestComplianceStandardsDefaultOffAndEnableIndependently(t *testing.T) {
+	var cfg ComplianceConfig
+	if cfg.AnyEnabled() {
+		t.Fatal("zero-value compliance config must leave every standard disabled")
+	}
+	cfg.HIPAA = true
+	if !cfg.AnyEnabled() {
+		t.Fatal("enabling HIPAA must enable compliance controls")
+	}
+	encoded, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal compliance config: %v", err)
+	}
+	var decoded ComplianceConfig
+	if err := yaml.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal compliance config: %v", err)
+	}
+	if !decoded.HIPAA || decoded.GDPR || decoded.CCPA || decoded.SOC2 || decoded.PCIDSS || decoded.ISO27001 || decoded.FedRAMP || decoded.LGPD || decoded.PIPEDA || decoded.APPI || decoded.PDPA {
+		t.Fatalf("independent compliance settings did not round-trip: %+v", decoded)
 	}
 }
 
@@ -486,7 +595,7 @@ func TestConfigReloadInvalidYAML(t *testing.T) {
 	configPath := tmpDir + "/server.yml"
 
 	// Write invalid YAML
-	err = os.WriteFile(configPath, []byte("invalid: yaml: content: ["), 0600)
+	err = os.WriteFile(configPath, []byte("invalid: yaml: content: ["), 0o600)
 	if err != nil {
 		t.Fatalf("WriteFile error = %v", err)
 	}
@@ -514,6 +623,8 @@ func TestLimitsConfigGetMaxBodySizeBytes(t *testing.T) {
 		{"1GB", LimitsConfig{MaxBodySize: "1GB"}, 1024 * 1024 * 1024},
 		{"1gb lowercase", LimitsConfig{MaxBodySize: "1gb"}, 1024 * 1024 * 1024},
 		{"plain bytes", LimitsConfig{MaxBodySize: "1024"}, 1024},
+		{"invalid size uses default", LimitsConfig{MaxBodySize: "not-a-size"}, 10 * 1024 * 1024},
+		{"non-positive size uses default", LimitsConfig{MaxBodySize: "0MB"}, 10 * 1024 * 1024},
 	}
 
 	for _, tt := range tests {
@@ -523,6 +634,23 @@ func TestLimitsConfigGetMaxBodySizeBytes(t *testing.T) {
 				t.Errorf("GetMaxBodySizeBytes() = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLimitsConfigValidationDefaultsInvalidValues(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.Limits.MaxBodySize = "invalid"
+	cfg.Server.Limits.ReadTimeout = "0s"
+	cfg.Server.Limits.WriteTimeout = "nonsense"
+	cfg.Server.Limits.IdleTimeout = "-1s"
+	warnings := cfg.ValidateAndApplyDefaults()
+	if cfg.Server.Limits.MaxBodySize != "10MB" || cfg.Server.Limits.ReadTimeout != "30s" || cfg.Server.Limits.WriteTimeout != "30s" || cfg.Server.Limits.IdleTimeout != "120s" {
+		t.Fatalf("invalid request limits were not replaced with defaults: %+v", cfg.Server.Limits)
+	}
+	fields := make(map[string]bool, len(warnings))
+	for _, warning := range warnings { fields[warning.Field] = true }
+	for _, field := range []string{"server.limits.max_body_size", "server.limits.read_timeout", "server.limits.write_timeout", "server.limits.idle_timeout"} {
+		if !fields[field] { t.Errorf("missing validation warning for %s", field) }
 	}
 }
 
@@ -922,7 +1050,7 @@ func TestMigrateYamlToYml(t *testing.T) {
 
 	// Create .yaml file
 	content := "server:\n  title: Test\n"
-	err = os.WriteFile(yamlPath, []byte(content), 0600)
+	err = os.WriteFile(yamlPath, []byte(content), 0o600)
 	if err != nil {
 		t.Fatalf("Failed to create yaml file: %v", err)
 	}
@@ -993,6 +1121,47 @@ func TestApplyRuntimeEnvComprehensive(t *testing.T) {
 	}
 	if cfg.Server.Mode != "development" {
 		t.Errorf("Mode not applied, got %q", cfg.Server.Mode)
+	}
+}
+
+func TestI2PEnabledDefaultsAndOverrides(t *testing.T) {
+	wasContainer := containerDetectionOverride
+	container := true
+	containerDetectionOverride = &container
+	t.Cleanup(func() { containerDetectionOverride = wasContainer })
+
+	for _, test := range []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{name: "container default", content: "server: {}\n", want: true},
+		{name: "explicit disabled", content: "server:\n  i2p:\n    enabled: false\n", want: false},
+		{name: "explicit enabled", content: "server:\n  i2p:\n    enabled: true\n", want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "server.yml")
+			if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if got := cfg.I2PEnabled(); got != test.want {
+				t.Fatalf("I2PEnabled() = %t, want %t", got, test.want)
+			}
+		})
+	}
+
+	cfg := DefaultConfig()
+	cfg.ApplyRuntimeEnv(&EnvConfig{I2PEnabled: "false"})
+	if cfg.I2PEnabled() {
+		t.Fatal("I2P_ENABLED=false must override the container default")
+	}
+	cfg.ApplyRuntimeEnv(&EnvConfig{I2PEnabled: "true"})
+	if !cfg.I2PEnabled() {
+		t.Fatal("I2P_ENABLED=true must enable I2P")
 	}
 }
 
@@ -1205,7 +1374,7 @@ func TestInitialize(t *testing.T) {
 
 func TestInitializeRepairsAndPersistsMissingEncryptionKey(t *testing.T) {
 	parent := filepath.Join(os.TempDir(), ProjectOrg)
-	if err := os.MkdirAll(parent, 0700); err != nil {
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	tmpDir, err := os.MkdirTemp(parent, ProjectName+"-config-init-")
@@ -1234,7 +1403,7 @@ func TestInitializeRepairsAndPersistsMissingEncryptionKey(t *testing.T) {
 	})
 
 	configPath := filepath.Join(tmpDir, "config", "server.yml")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	seed := DefaultConfig()
@@ -1271,7 +1440,7 @@ func TestLoadInvalidYAML(t *testing.T) {
 	configPath := tmpDir + "/server.yml"
 
 	// Write invalid YAML
-	err = os.WriteFile(configPath, []byte("invalid: yaml: [unclosed"), 0600)
+	err = os.WriteFile(configPath, []byte("invalid: yaml: [unclosed"), 0o600)
 	if err != nil {
 		t.Fatalf("WriteFile error = %v", err)
 	}
@@ -1391,7 +1560,7 @@ func TestTorContactEmailConfigKey(t *testing.T) {
 
 	configPath := tmpDir + "/server.yml"
 	yamlContent := "server:\n  tor:\n    contact_email: tor-admin@example.com\n"
-	if err := os.WriteFile(configPath, []byte(yamlContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o600); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
@@ -1420,7 +1589,7 @@ func TestLoadNormalizesLegacyUpdateChannels(t *testing.T) {
 		t.Run(test.branch, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "server.yml")
 			content := "server:\n  update:\n    branch: " + strconv.Quote(test.branch) + "\n"
-			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			cfg, err := Load(path)

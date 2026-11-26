@@ -41,11 +41,13 @@ const (
 	TaskCVEUpdate       TaskID = "cve_update"
 	TaskUpdateCheck     TaskID = "update_check"
 	TaskSecurityCleanup TaskID = "security_cleanup"
+	TaskKeyserverRetry TaskID = "keyserver_retry"
 	TaskTokenCleanup    TaskID = "token_cleanup"
 	TaskLogRotation     TaskID = "log_rotation"
 	TaskBackupDaily     TaskID = "backup_daily"
 	TaskBackupHourly    TaskID = "backup_hourly"
 	TaskDiskCheck       TaskID = "disk_check"
+	TaskDatabaseCheck   TaskID = "database_check"
 	TaskHealthcheckSelf TaskID = "healthcheck_self"
 	TaskTorHealth       TaskID = "tor_health"
 	TaskI2PHealth       TaskID = "i2p_health"
@@ -205,7 +207,7 @@ type TaskExecution struct {
 type AuditFunc func(execution *TaskExecution)
 
 // TaskHistoryEntry is one persisted execution history record.
-// Per AI.md PART 18 CLI Commands: `{project_name} scheduler history <id>`.
+// Per AI.md PART 18 CLI Commands: `{project_name} --maintenance scheduler history <id>`.
 type TaskHistoryEntry struct {
 	TaskID     string        `json:"task_id"`
 	StartedAt  time.Time     `json:"started_at"`
@@ -517,6 +519,11 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			slog.Error("failed to register security cleanup task", "error", err)
 		}
 	}
+	if handlers.KeyserverRetry != nil {
+		if err := s.Register(&Task{ID: TaskKeyserverRetry, Name: "PGP Keyserver Retry", Description: "Retry pending PGP key publication", Schedule: "@every 15m", TaskType: TaskTypeGlobal, Run: handlers.KeyserverRetry, Skippable: false, Enabled: true}); err != nil {
+			slog.Error("failed to register PGP keyserver retry task", "error", err)
+		}
+	}
 
 	// Update Check - Daily at 06:00, skippable
 	// Per AI.md PART 18/22: notify-only check for a newer release; honors
@@ -615,6 +622,25 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		}
 	}
 
+	if handlers.DatabaseCheck != nil {
+		schedule := handlers.DatabaseCheckSchedule
+		if schedule == "" {
+			schedule = "@every 1m"
+		}
+		if err := s.Register(&Task{
+			ID:          TaskDatabaseCheck,
+			Name:        "Database Connection Check",
+			Description: "Probe database write and read handles for connection notifications",
+			Schedule:    schedule,
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.DatabaseCheck,
+			Skippable:   true,
+			Enabled:     true,
+		}); err != nil {
+			slog.Error("failed to register database check task", "error", err)
+		}
+	}
+
 	// Health Check Self - Every 5 minutes, NOT skippable
 	if handlers.HealthcheckSelf != nil {
 		s.registerBuiltinTask(&Task{
@@ -645,10 +671,9 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
-	// I2P Health - Every 10 minutes, only registered when I2P is opt-in enabled
-	// Per AI.md PART 18 Built-in Tasks: i2p_health runs only when the operator
-	// has enabled I2P (PART 31.2 - I2P is opt-in, disabled by default), so the
-	// host application supplies this handler only in that case.
+	// I2P Health - Every 10 minutes, registered only while I2P is enabled.
+	// The host supplies the handler when configuration or the container default
+	// enables I2P.
 	if handlers.I2PHealth != nil {
 		s.registerBuiltinTask(&Task{
 			ID:          TaskI2PHealth,
@@ -718,7 +743,6 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Enabled:     true,
 		})
 	}
-
 }
 
 func (s *Scheduler) registerBuiltinTask(task *Task) {
@@ -729,22 +753,24 @@ func (s *Scheduler) registerBuiltinTask(task *Task) {
 
 // TaskHandlers holds handler functions for built-in tasks
 type TaskHandlers struct {
-	SSLRenewal        func(ctx context.Context) error
-	SecurityCleanup   func(ctx context.Context) error
-	GeoIPUpdate       func(ctx context.Context) error
-	BlocklistUpdate   func(ctx context.Context) error
-	CVEUpdate         func(ctx context.Context) error
-	UpdateCheck       func(ctx context.Context) error
-	TokenCleanup      func(ctx context.Context) error
-	LogRotation       func(ctx context.Context) error
-	BackupDaily       func(ctx context.Context) error
-	BackupHourly      func(ctx context.Context) error
-	DiskCheck         func(ctx context.Context) error
-	DiskCheckSchedule string
-	HealthcheckSelf   func(ctx context.Context) error
-	TorHealth         func(ctx context.Context) error
-	// I2PHealth is supplied only when I2P is enabled (AI.md PART 31.2:
-	// I2P is opt-in and disabled by default).
+	SSLRenewal            func(ctx context.Context) error
+	SecurityCleanup       func(ctx context.Context) error
+	KeyserverRetry        func(ctx context.Context) error
+	GeoIPUpdate           func(ctx context.Context) error
+	BlocklistUpdate       func(ctx context.Context) error
+	CVEUpdate             func(ctx context.Context) error
+	UpdateCheck           func(ctx context.Context) error
+	TokenCleanup          func(ctx context.Context) error
+	LogRotation           func(ctx context.Context) error
+	BackupDaily           func(ctx context.Context) error
+	BackupHourly          func(ctx context.Context) error
+	DiskCheck             func(ctx context.Context) error
+	DiskCheckSchedule     string
+	DatabaseCheck         func(ctx context.Context) error
+	DatabaseCheckSchedule string
+	HealthcheckSelf       func(ctx context.Context) error
+	TorHealth             func(ctx context.Context) error
+	// I2PHealth is supplied only when I2P is enabled.
 	I2PHealth       func(ctx context.Context) error
 	AlertsImmediate func(ctx context.Context) error
 	AlertsDaily     func(ctx context.Context) error
@@ -1316,9 +1342,14 @@ func (s *Scheduler) initDatabase() {
 	// Idempotent schema updates — add columns missing from older schema versions
 	// SQLite silently errors if the column already exists; errors are intentionally ignored
 	for _, column := range []struct{ name, definition string }{
-		{"task_name", "TEXT"}, {"schedule", "TEXT"}, {"last_status", "TEXT"},
-		{"fail_count", "INTEGER DEFAULT 0"}, {"retry_count", "INTEGER DEFAULT 0"},
-		{"next_retry", "DATETIME"}, {"locked_by", "TEXT"}, {"locked_at", "DATETIME"},
+		{"task_name", "TEXT"},
+		{"schedule", "TEXT"},
+		{"last_status", "TEXT"},
+		{"fail_count", "INTEGER DEFAULT 0"},
+		{"retry_count", "INTEGER DEFAULT 0"},
+		{"next_retry", "DATETIME"},
+		{"locked_by", "TEXT"},
+		{"locked_at", "DATETIME"},
 	} {
 		query := "ALTER TABLE scheduler_tasks ADD COLUMN " + column.name + " " + column.definition
 		if _, err := s.execWrite(initCtx, query); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
@@ -1438,7 +1469,6 @@ func (s *Scheduler) saveTaskState(task *Task) {
 		task.RetryCount,
 		nextRetry,
 	)
-
 	if err != nil {
 		slog.Error("Failed to save task state", "task", task.ID, "err", err)
 	}
@@ -1458,7 +1488,7 @@ func newHistoryID() string {
 
 // recordHistory persists one execution record and prunes older rows for the
 // same task. Per AI.md PART 18 the CLI exposes this as
-// `{project_name} scheduler history <id>` and the task detail view's
+// `{project_name} --maintenance scheduler history <id>` and the task detail view's
 // "RECENT HISTORY" section.
 func (s *Scheduler) recordHistory(task *Task, startedAt, finishedAt time.Time, status TaskStatus, errMsg string) {
 	if s.db == nil {

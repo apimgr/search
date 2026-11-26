@@ -1,6 +1,7 @@
 package swagger
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/version"
 )
 
 // Tests for OpenAPI types
@@ -262,7 +264,7 @@ func TestGenerateSpecHasRequiredPaths(t *testing.T) {
 		}
 	}
 	healthSchema := spec.Components.Schemas["HealthResponse"]
-	for _, property := range []string{"project", "status", "version", "go_version", "build", "uptime", "mode", "timestamp", "cluster", "features", "checks", "stats"} {
+	for _, property := range []string{"project", "status", "version", "go_version", "build", "uptime", "mode", "timestamp", "features", "checks", "stats"} {
 		if _, exists := healthSchema.Properties[property]; !exists {
 			t.Errorf("HealthResponse schema is missing %q", property)
 		}
@@ -272,6 +274,146 @@ func TestGenerateSpecHasRequiredPaths(t *testing.T) {
 	}
 	if _, exists := healthSchema.Properties["stats"].Properties["requests_total"]; !exists {
 		t.Error("HealthResponse stats schema is missing requests_total")
+	}
+}
+
+func TestEmbeddedOpenAPISpecMatchesGeneratedAnnotations(t *testing.T) {
+	generated, err := GenerateJSON(&config.Config{}, "https://generated.invalid")
+	if err != nil {
+		t.Fatalf("generate OpenAPI JSON from annotations: %v", err)
+	}
+	if !bytes.Equal(generated, generatedOpenAPISpec) {
+		t.Fatal("embedded openapi.json is stale; run go generate ./src/swagger/...")
+	}
+}
+
+func TestGenerateSpecIncludesRootDebugRoutesWithConditionAndAuth(t *testing.T) {
+	spec := GenerateSpec(&config.Config{}, "http://localhost:8080")
+	for _, path := range []string{"/debug/pprof", "/debug/vars", "/debug/config", "/debug/error500"} {
+		item, ok := spec.Paths[path]
+		if !ok {
+			t.Errorf("OpenAPI superset is missing root debug path %q", path)
+			continue
+		}
+		if item.XMountedWhen != debugMountedCondition {
+			t.Errorf("%s x-mounted-when = %q, want %s", path, item.XMountedWhen, debugMountedCondition)
+		}
+		if item.Get == nil || len(item.Get.Security) == 0 || item.Get.Security[0]["operatorToken"] == nil {
+			t.Errorf("%s does not require operator bearer authentication", path)
+		}
+	}
+	for _, path := range []string{version.APIPrefix + "/debug/config", "/api/debug/config"} {
+		if _, exists := spec.Paths[path]; exists {
+			t.Errorf("OpenAPI must not document forbidden API debug alias %q", path)
+		}
+	}
+}
+
+func TestOperatorAndOwnerTokenSchemasDescribeScopeAndRawField(t *testing.T) {
+	spec := GenerateSpec(&config.Config{}, "http://localhost:8080")
+	status := spec.Paths[version.APIPrefix+"/server/status"].Get
+	if status == nil {
+		t.Fatal("server status GET operation is missing")
+	}
+	if _, ok := status.Responses["401"]; !ok {
+		t.Error("operator status response is missing 401 for missing or invalid credentials")
+	}
+	if _, ok := status.Responses["403"]; !ok {
+		t.Error("operator status response is missing 403 for valid owner-token scope")
+	}
+	create := spec.Paths[version.APIPrefix+"/server/preferences/tokens"].Post
+	if create == nil {
+		t.Fatal("linked-token creation operation is missing")
+	}
+	createdSchema := create.Responses["201"].Content["application/json"].Schema
+	if createdSchema == nil || createdSchema.Properties["data"].Properties["linked_token"].Type != "string" {
+		t.Error("linked-token creation schema does not expose data.linked_token as a string")
+	}
+	for _, field := range []string{"id", "name", "kind", "token_masked", "created_at", "last_used_at", "expires_at", "status"} {
+		if createdSchema == nil || createdSchema.Properties["data"].Properties[field].Type == "" {
+			t.Errorf("linked-token creation schema is missing data.%s", field)
+		}
+	}
+	if createdSchema.Properties["data"].Properties["id"].Format != "uuid" {
+		t.Error("linked-token ID schema is not UUID-formatted")
+	}
+	if _, exists := createdSchema.Properties["data"].Properties["token"]; exists {
+		t.Error("linked-token schema exposes a generic token field")
+	}
+	primary := spec.Paths[version.APIPrefix+"/server/preferences/tokens/primary"]
+	if primary.Post == nil || primary.Post.Responses["201"].Content["application/json"].Schema.Properties["data"].Properties["owner_token"].Type != "string" {
+		t.Error("primary-token issue schema omits data.owner_token")
+	}
+	if primary.Delete == nil || primary.Delete.RequestBody.Content["application/json"].Schema.Properties["confirm"].MinLength != 4 || primary.Delete.Responses["200"].Content["application/json"].Schema.Properties["data"].Properties["resources"].Type != "integer" {
+		t.Error("primary-token revoke schema omits confirmation or deletion counts")
+	}
+	list := spec.Paths[version.APIPrefix+"/server/preferences/tokens"].Get
+	listData := list.Responses["200"].Content["application/json"].Schema.Properties["data"]
+	if listData.Properties["primary"].Type != "object" || listData.Properties["linked"].Type != "array" || listData.Properties["max_linked"].Type != "integer" {
+		t.Errorf("linked-token list schema does not match primary/linked/max_linked shape: %#v", listData.Properties)
+	}
+	for _, suffix := range []string{"{id}/reveal", "{id}/rotate"} {
+		operation := spec.Paths[version.APIPrefix+"/server/preferences/tokens/"+suffix].Post
+		data := operation.Responses["200"].Content["application/json"].Schema.Properties["data"]
+		if data.Properties["linked_token"].Type != "string" || data.Properties["token_masked"].Type != "string" {
+			t.Errorf("%s response lacks linked_token or token_masked", suffix)
+		}
+	}
+	updated := spec.Paths[version.APIPrefix+"/server/preferences/tokens/{id}"].Patch
+	updatedData := updated.Responses["200"].Content["application/json"].Schema.Properties["data"]
+	if updatedData.Properties["token_masked"].Type != "string" {
+		t.Error("token update response schema omits token_masked")
+	}
+	revoked := spec.Paths[version.APIPrefix+"/server/preferences/tokens/{id}"].Delete
+	revokedData := revoked.Responses["200"].Content["application/json"].Schema.Properties["data"]
+	if revokedData.Properties["id"].Format != "uuid" || len(revokedData.Properties["status"].Enum) != 1 || revokedData.Properties["status"].Enum[0] != "revoked" {
+		t.Error("token revoke schema does not return UUID id and revoked status")
+	}
+}
+
+func TestPrimaryOwnerTokenOperationsAreLocalized(t *testing.T) {
+	spec := GenerateSpec(&config.Config{}, "http://localhost:8080")
+	translateOpenAPISpec(spec, "es")
+	issue := spec.Paths[version.APIPrefix+"/server/preferences/tokens/primary"].Post
+	revoke := spec.Paths[version.APIPrefix+"/server/preferences/tokens/primary"].Delete
+	if issue.Summary != "Emitir un token de propietario principal" {
+		t.Errorf("localized issue summary = %q", issue.Summary)
+	}
+	if issue.Responses["201"].Description != "Token de propietario principal emitido" {
+		t.Errorf("localized issue response = %q", issue.Responses["201"].Description)
+	}
+	if revoke.Summary != "Revocar el token de propietario principal" || revoke.Responses["400"].Description != "La confirmación del token principal no coincide" {
+		t.Errorf("localized revoke operation = %#v", revoke)
+	}
+}
+
+func TestSpecHandlerFiltersConditionalDebugRoutes(t *testing.T) {
+	t.Setenv("DEBUG", "false")
+	cfg := &config.Config{}
+	cfg.SetDebug(false)
+	filtered := httptest.NewRecorder()
+	SpecHandler(cfg)(filtered, httptest.NewRequest(http.MethodGet, "/api/v1/server/swagger", nil))
+	var disabledSpec OpenAPISpec
+	if err := json.Unmarshal(filtered.Body.Bytes(), &disabledSpec); err != nil {
+		t.Fatalf("decode spec with debug disabled: %v", err)
+	}
+	if _, exists := disabledSpec.Paths["/debug/config"]; exists {
+		t.Fatal("OpenAPI served a debug path while debug mode was disabled")
+	}
+
+	cfg.SetDebug(true)
+	served := httptest.NewRecorder()
+	SpecHandler(cfg)(served, httptest.NewRequest(http.MethodGet, "/api/v1/server/swagger?lang=es", nil))
+	var enabledSpec OpenAPISpec
+	if err := json.Unmarshal(served.Body.Bytes(), &enabledSpec); err != nil {
+		t.Fatalf("decode spec with debug enabled: %v", err)
+	}
+	item, exists := enabledSpec.Paths["/debug/config"]
+	if !exists || item.XMountedWhen != debugMountedCondition {
+		t.Fatalf("debug path was not retained with conditional metadata: exists=%v condition=%q", exists, item.XMountedWhen)
+	}
+	if item.Get == nil || item.Get.Summary != "Diagnóstico de depuración" {
+		t.Fatalf("localized debug summary = %q, want Spanish translation", item.Get.Summary)
 	}
 }
 
@@ -337,8 +479,6 @@ func TestGeneratePathsCoverGeoIPAndSchedulerRoutes(t *testing.T) {
 		"/api/v1/server/scheduler/tasks/{task}":         {"GET"},
 		"/api/v1/server/scheduler/tasks/{task}/history": {"GET"},
 		"/api/v1/server/scheduler/tasks/{task}/run":     {"POST"},
-		"/api/v1/server/scheduler/tasks/{task}/enable":  {"POST"},
-		"/api/v1/server/scheduler/tasks/{task}/disable": {"POST"},
 	}
 	for path, methods := range required {
 		item, ok := paths[path]
@@ -365,6 +505,14 @@ func TestGeneratePathsCoverGeoIPAndSchedulerRoutes(t *testing.T) {
 					t.Errorf("%s %s must require operator bearer authentication", method, path)
 				}
 			}
+		}
+	}
+	for _, path := range []string{
+		"/api/v1/server/scheduler/tasks/{task}/enable",
+		"/api/v1/server/scheduler/tasks/{task}/disable",
+	} {
+		if _, exists := paths[path]; exists {
+			t.Errorf("scheduler enabled-state mutation %s must not be exposed over REST", path)
 		}
 	}
 }
@@ -411,8 +559,30 @@ func TestHandlerServesSwaggerUI(t *testing.T) {
 	if !strings.Contains(body, "swagger-ui") {
 		t.Error("Response should contain swagger-ui")
 	}
-	if !strings.Contains(body, "SwaggerUIBundle") {
-		t.Error("Response should contain SwaggerUIBundle")
+	if !strings.Contains(body, `/static/js/swagger.js`) || !strings.Contains(body, version.APIPrefix+`/server/swagger`) {
+		t.Error("Response should load the local explorer and link the OpenAPI document")
+	}
+	if strings.Contains(body, "<style") || strings.Contains(body, "<script>") {
+		t.Error("Response should not contain inline CSS or JavaScript")
+	}
+}
+
+func TestHandlerLocalizesSwaggerUI(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/server/docs/swagger?lang=es", nil)
+	rec := httptest.NewRecorder()
+	UIHandler(&config.Config{})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	for _, want := range []string{
+		"Interfaz Swagger de la API de búsqueda",
+		"Especificación de OpenAPI (JSON)",
+		"El explorador interactivo requiere JavaScript.",
+	} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("localized Swagger UI does not contain %q", want)
+		}
 	}
 }
 
@@ -441,6 +611,77 @@ func TestHandlerServesJSON(t *testing.T) {
 
 	if spec.OpenAPI != "3.0.0" {
 		t.Errorf("OpenAPI = %q", spec.OpenAPI)
+	}
+}
+
+func TestSpecHandlerLocalizesOpenAPITextFromRequestLanguage(t *testing.T) {
+	handler := SpecHandler(&config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/swagger?lang=es", nil)
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	vary := strings.Join(rec.Header().Values("Vary"), ", ")
+	if !strings.Contains(vary, "Cookie") || !strings.Contains(vary, "Accept-Language") {
+		t.Errorf("Vary = %q, want Cookie and Accept-Language", vary)
+	}
+	var spec OpenAPISpec
+	if err := json.NewDecoder(rec.Body).Decode(&spec); err != nil {
+		t.Fatalf("decode localized spec: %v", err)
+	}
+	if spec.Info.Title != "API de búsqueda" {
+		t.Errorf("localized OpenAPI title = %q, want %q", spec.Info.Title, "API de búsqueda")
+	}
+	search := spec.Paths["/api/v1/search"].Get
+	if search == nil {
+		t.Fatal("localized spec is missing the search GET operation")
+	}
+	if search.Summary != "Buscar" {
+		t.Errorf("localized search summary = %q, want %q", search.Summary, "Buscar")
+	}
+}
+
+func TestOpenAPILocalizationKeyIsStable(t *testing.T) {
+	const want = "swagger.text.search_api_aa054f98c3d9"
+	if got := openAPILocalizationKey("Search API"); got != want {
+		t.Errorf("openAPILocalizationKey() = %q, want %q", got, want)
+	}
+}
+
+func TestTranslateOpenAPIErrorExample(t *testing.T) {
+	spec := OpenAPISpec{Components: Components{Schemas: map[string]Schema{
+		"ErrorResponse": {Properties: map[string]Schema{
+			"message": {Type: "string", Example: "Human readable message"},
+		}},
+	}}}
+
+	translateOpenAPISpec(&spec, "es")
+	message := spec.Components.Schemas["ErrorResponse"].Properties["message"].Example
+	if message != "Mensaje legible para personas" {
+		t.Errorf("localized error example = %v, want %q", message, "Mensaje legible para personas")
+	}
+}
+
+func TestWebhookOpenAPIDescriptionsNeverReturnSigningSecrets(t *testing.T) {
+	path := generatePaths()[version.APIPrefix+"/server/config/contact/webhooks"]
+	if path.Post == nil {
+		t.Fatal("webhook configuration POST operation is missing")
+	}
+	spec := OpenAPISpec{Paths: map[string]PathItem{"/api/v1/server/config/contact/webhooks": path}}
+	translateOpenAPISpec(&spec, "es")
+	operation := spec.Paths["/api/v1/server/config/contact/webhooks"].Post
+	if strings.Contains(strings.ToLower(operation.Description), "returned once") || !strings.Contains(operation.Description, "nunca") {
+		t.Errorf("localized webhook description = %q, want no-return translation", operation.Description)
+	}
+	response := operation.Responses["200"]
+	if strings.Contains(strings.ToLower(response.Description), "returned once") || !strings.Contains(response.Description, "nunca") {
+		t.Errorf("localized webhook response description = %q, want no-return translation", response.Description)
+	}
+	if _, exists := response.Content["application/json"].Schema.Properties["data"].Properties["secret"]; exists {
+		t.Error("webhook success response schema still exposes a signing secret")
 	}
 }
 
@@ -786,29 +1027,29 @@ func TestExtractHostEdgeCases(t *testing.T) {
 // TestServeSwaggerUIWithDifferentThemes tests serveSwaggerUI with various theme cookies
 func TestServeSwaggerUIWithDifferentThemes(t *testing.T) {
 	tests := []struct {
-		name          string
-		themeCookie   string
-		expectDarkCSS bool
+		name        string
+		themeCookie string
+		expectTheme string
 	}{
 		{
-			name:          "no theme cookie defaults to dark",
-			themeCookie:   "",
-			expectDarkCSS: true,
+			name:        "no theme cookie defaults to dark",
+			themeCookie: "",
+			expectTheme: "dark",
 		},
 		{
-			name:          "light theme cookie",
-			themeCookie:   "light",
-			expectDarkCSS: false,
+			name:        "light theme cookie",
+			themeCookie: "light",
+			expectTheme: "light",
 		},
 		{
-			name:          "dark theme cookie",
-			themeCookie:   "dark",
-			expectDarkCSS: true,
+			name:        "dark theme cookie",
+			themeCookie: "dark",
+			expectTheme: "dark",
 		},
 		{
-			name:          "auto theme cookie includes the dark base palette",
-			themeCookie:   "auto",
-			expectDarkCSS: true,
+			name:        "auto theme cookie includes the dark base palette",
+			themeCookie: "auto",
+			expectTheme: "auto",
 		},
 	}
 
@@ -824,29 +1065,23 @@ func TestServeSwaggerUIWithDifferentThemes(t *testing.T) {
 
 			body := rec.Body.String()
 
-			if tt.expectDarkCSS {
-				if !strings.Contains(body, "#282a36") {
-					t.Error("Expected dark theme CSS in response")
-				}
-			} else {
-				if !strings.Contains(body, "#ffffff") {
-					t.Error("Expected light theme CSS in response")
-				}
+			if !strings.Contains(body, `data-theme="`+tt.expectTheme+`"`) {
+				t.Errorf("Response should preserve %q theme mode", tt.expectTheme)
 			}
 
 			// Verify HTML structure
 			if !strings.Contains(body, "<!DOCTYPE html>") {
 				t.Error("Response should be valid HTML")
 			}
-			if !strings.Contains(body, "swagger-ui-bundle.js") {
-				t.Error("Response should include Swagger UI bundle")
+			if strings.Contains(body, "<style") || !strings.Contains(body, `/static/css/swagger.css`) {
+				t.Error("Response should use the shared external stylesheet")
 			}
 		})
 	}
 }
 
 // TestServeSwaggerUIBaseURLInjection tests that the spec URL is built from the
-// request host and points at the canonical /api/swagger alias.
+// request host and points at the canonical versioned OpenAPI route.
 func TestServeSwaggerUIBaseURLInjection(t *testing.T) {
 	testHosts := []string{
 		"localhost:8080",
@@ -863,9 +1098,8 @@ func TestServeSwaggerUIBaseURLInjection(t *testing.T) {
 			UIHandler(nil)(rec, req)
 
 			body := rec.Body.String()
-			expectedURL := "http://" + host + "/api/swagger"
-			if !strings.Contains(body, expectedURL) {
-				t.Errorf("Response should contain spec URL %q", expectedURL)
+			if !strings.Contains(body, version.APIPrefix+`/server/swagger`) {
+				t.Errorf("Response should link the OpenAPI specification for host %q", host)
 			}
 		})
 	}
@@ -946,6 +1180,21 @@ func TestOpenAPISpecJSONSerialization(t *testing.T) {
 	}
 	if len(decoded.Paths) != len(spec.Paths) {
 		t.Errorf("Paths count mismatch: got %d, want %d", len(decoded.Paths), len(spec.Paths))
+	}
+}
+
+func TestEmbeddedOpenAPIRemovesSchedulerEnabledMutations(t *testing.T) {
+	var spec OpenAPISpec
+	if err := json.Unmarshal(generatedOpenAPISpec, &spec); err != nil {
+		t.Fatalf("decode embedded OpenAPI: %v", err)
+	}
+	for _, path := range []string{
+		"/api/v1/server/scheduler/tasks/{task}/enable",
+		"/api/v1/server/scheduler/tasks/{task}/disable",
+	} {
+		if _, exists := spec.Paths[path]; exists {
+			t.Errorf("embedded OpenAPI still exposes scheduler enabled-state mutation %s", path)
+		}
 	}
 }
 

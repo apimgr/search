@@ -5,6 +5,9 @@
 <meta name="keywords" content="{{.SEO.Keywords}}">
 <meta name="author" content="{{.SEO.Author}}">
 <meta name="robots" content="{{.SEO.Robots}}">
+<meta name="offline-title" content="{{t "offline.title"}}">
+<meta name="offline-heading" content="{{t "offline.heading"}}">
+<meta name="offline-message" content="{{t "offline.message"}}">
 {{if .SEO.CanonicalURL}}<link rel="canonical" href="{{.SEO.CanonicalURL}}">{{end}}
 {{range .SEO.MetaTags}}<meta name="{{.Name}}" content="{{.Content}}">
 {{end}}
@@ -62,5 +65,8 @@
 <link rel="stylesheet" href="{{asset "/static/css/components.css"}}">
 <link rel="stylesheet" href="{{asset "/static/css/public.css"}}">
 {{if .SEO.AccentCSSEnabled}}<link rel="stylesheet" href="{{asset "/static/css/accent.css"}}">{{end}}
+{{if .SEO.CustomCSSEnabled}}<link rel="stylesheet" href="/static/css/custom.css?v={{.SEO.CustomCSSVersion}}">{{end}}
+{{if eq .Page "swagger"}}<link rel="stylesheet" href="{{asset "/static/vendor/swagger-ui/swagger-ui.css"}}"><link rel="stylesheet" href="{{asset "/static/css/swagger.css"}}"><link rel="stylesheet" href="/static/css/swagger-theme.css">{{end}}
+{{if eq .Page "graphql"}}<link rel="stylesheet" href="{{asset "/static/vendor/graphiql/graphiql-style.css"}}"><link rel="stylesheet" href="{{asset "/static/vendor/graphiql/graphiql.css"}}"><link rel="stylesheet" href="{{asset "/static/css/graphql.css"}}"><link rel="stylesheet" href="/static/css/graphql-theme.css">{{end}}
 {{/* Per AI.md PART 16: All JS code is consolidated in app.js, loaded via scripts.tmpl */}}
 {{end}}

@@ -1,8 +1,8 @@
 {{define "content"}}
-<div class="static-page owner-tokens-page">
+<div class="container container-lg">
     <header class="page-header">
-        <a class="owner-token-back" href="/server/preferences"><span aria-hidden="true">←</span> {{t "preferences.title"}}</a>
-        <h1>{{t "preferences.owner_tokens.heading"}}</h1>
+        <nav class="breadcrumb" aria-label="{{t "accessibility.breadcrumb"}}"><a href="/server/preferences">← {{t "preferences.title"}}</a></nav>
+        <h1 class="page-title">{{t "preferences.owner_tokens.heading"}}</h1>
     </header>
     {{if index .Data "HasOwner"}}
     <div class="owner-token-layout">
@@ -114,7 +114,14 @@
                             <button class="btn btn-secondary" type="submit">{{t "preferences.owner_tokens.reveal"}}</button>
                         </form>
                         {{end}}
-                        <button class="btn btn-secondary" type="button" popovertarget="rotate-token-{{.ID}}">{{t "preferences.owner_tokens.rotate"}}</button>
+                        <details id="rotate-token-{{.ID}}" class="owner-token-confirm">
+                            <summary class="btn btn-secondary">{{t "preferences.owner_tokens.rotate"}}</summary>
+                            <p>{{t "preferences.owner_tokens.rotate_linked_confirm"}}</p>
+                            <form action="/server/preferences/tokens/{{.ID}}/rotate" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button class="btn btn-danger" type="submit">{{t "preferences.owner_tokens.rotate"}}</button>
+                            </form>
+                        </details>
                         <details class="owner-token-edit">
                             <summary class="btn btn-secondary">{{t "common.edit"}}</summary>
                             <form action="/server/preferences/tokens/{{.ID}}/update" method="POST">
@@ -138,28 +145,15 @@
                                 <div class="actions"><button class="btn btn-primary" type="submit">{{t "common.save"}}</button></div>
                             </form>
                         </details>
-                    <button class="btn btn-ghost-danger" type="button" popovertarget="revoke-token-{{.ID}}">{{t "admin.tokens_page.revoke"}}</button>
-                    <div id="revoke-token-{{.ID}}" class="owner-token-confirm" popover>
-                                <p>{{t "preferences.owner_tokens.revoke_linked_confirm"}}</p>
-                                <form action="/server/preferences/tokens/{{.ID}}/revoke" method="POST">
-                                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                                    <div class="actions">
-                                        <button class="btn btn-secondary" type="button" popovertarget="revoke-token-{{.ID}}" popovertargetaction="hide">{{t "common.cancel"}}</button>
-                                        <button class="btn btn-danger" type="submit">{{t "admin.tokens_page.revoke"}}</button>
-                                    </div>
-                                </form>
-                    </div>
-                    </footer>
-                    <div id="rotate-token-{{.ID}}" class="owner-token-confirm" popover>
-                        <p>{{t "preferences.owner_tokens.rotate_linked_confirm"}}</p>
-                        <form action="/server/preferences/tokens/{{.ID}}/rotate" method="POST">
+                    <details id="revoke-token-{{.ID}}" class="owner-token-confirm">
+                        <summary class="btn btn-ghost-danger">{{t "admin.tokens_page.revoke"}}</summary>
+                        <p>{{t "preferences.owner_tokens.revoke_linked_confirm"}}</p>
+                        <form action="/server/preferences/tokens/{{.ID}}/revoke" method="POST">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <div class="actions">
-                                <button class="btn btn-secondary" type="button" popovertarget="rotate-token-{{.ID}}" popovertargetaction="hide">{{t "common.cancel"}}</button>
-                                <button class="btn btn-danger" type="submit">{{t "preferences.owner_tokens.rotate"}}</button>
-                            </div>
+                            <button class="btn btn-danger" type="submit">{{t "admin.tokens_page.revoke"}}</button>
                         </form>
-                    </div>
+                    </details>
+                    </footer>
                 </article>
                 {{end}}
             </div>
@@ -170,7 +164,8 @@
         </section>
     </div>
     {{else}}
-    <section class="section-card owner-token-restore" id="restore">
+    <section class="section-card owner-token-restore" id="restore" aria-labelledby="restore-owner-heading">
+        <h2 id="restore-owner-heading">{{t "preferences.owner_tokens.restore_existing"}}</h2>
         <form action="/server/preferences/token/restore" method="POST">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <label for="restore-owner-token">{{t "preferences.owner_tokens.primary_token"}}</label>

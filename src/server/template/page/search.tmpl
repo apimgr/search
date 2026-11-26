@@ -146,7 +146,7 @@
         {{range .Results}}
         <article class="result-item">
             <div class="result-favicon">
-                <img src="/api/v1/favicon?url={{.URL}}"
+                <img src="{{$.APIBasePath}}/favicon?url={{.URL}}"
                      alt=""
                      loading="lazy"
                      data-favicon-fallback>

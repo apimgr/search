@@ -6,9 +6,10 @@
     </header>
 
     {{if .Config.Server.Pages.Help.Content}}
-    <div class="page-content markdown">
-        {{.Config.Server.Pages.Help.Content | safe}}
-    </div>
+    <section class="section-card page-content markdown" aria-labelledby="help-custom-heading">
+        <h2 id="help-custom-heading">{{t "help.getting_started.heading"}}</h2>
+        {{.Config.Server.Pages.Help.Content | markdownToHTML}}
+    </section>
     {{else}}
     <div class="page-content">
         {{/* Table of Contents */}}
@@ -344,12 +345,6 @@
                     <h3>{{t "help.api.graphql_heading"}}</h3>
                     <p>{{t "help.api.graphql_desc"}}</p>
                 </a>
-                {{if .MCPEnabled}}
-                <a href="/server/help/mcp" class="api-link-card">
-                    <h3>{{t "help.api.mcp_heading"}}</h3>
-                    <p>{{t "help.api.mcp_desc"}}</p>
-                </a>
-                {{end}}
             </div>
 
             <h3>{{t "help.api.endpoints_heading"}}</h3>
@@ -359,18 +354,18 @@
                     <tr><th scope="col">{{t "help.api.th_method"}}</th><th scope="col">{{t "help.api.th_endpoint"}}</th><th scope="col">{{t "help.api.th_description"}}</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/search</code></td><td>{{t "help.api.ep_search"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/search/related</code></td><td>{{t "help.api.ep_related"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/autocomplete</code></td><td>{{t "help.api.ep_autocomplete"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/instant</code></td><td>{{t "help.api.ep_instant"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/direct/{type}/{term}</code></td><td>{{t "help.api.ep_direct_prefix"}} <code>type:term</code> {{t "help.api.ep_direct_suffix"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/engines</code></td><td>{{t "help.api.ep_engines"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/categories</code></td><td>{{t "help.api.ep_categories"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/server/help</code></td><td>{{t "help.api.ep_help_json"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/search</code></td><td>{{t "help.api.ep_search"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/search/related</code></td><td>{{t "help.api.ep_related"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/autocomplete</code></td><td>{{t "help.api.ep_autocomplete"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/instant</code></td><td>{{t "help.api.ep_instant"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/direct/{type}/{term}</code></td><td>{{t "help.api.ep_direct_prefix"}} <code>type:term</code> {{t "help.api.ep_direct_suffix"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/engines</code></td><td>{{t "help.api.ep_engines"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/categories</code></td><td>{{t "help.api.ep_categories"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/server/help</code></td><td>{{t "help.api.ep_help_json"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/server/docs/swagger</code></td><td>{{t "help.api.openapi_heading"}}</td></tr>
-                    <tr><td><code>GET</code></td><td><code>/api/v1/server/swagger</code> / <code>/api/swagger</code></td><td>{{t "help.api.ep_openapi"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>{{.APIBasePath}}/server/swagger</code> / <code>/api/swagger</code></td><td>{{t "help.api.ep_openapi"}}</td></tr>
                     <tr><td><code>GET</code></td><td><code>/server/docs/graphql</code></td><td>{{t "help.api.graphql_heading"}}</td></tr>
-                    <tr><td><code>POST</code></td><td><code>/api/v1/server/graphql</code> / <code>/api/graphql</code></td><td>{{t "help.api.ep_graphql"}}</td></tr>
+                    <tr><td><code>POST</code></td><td><code>{{.APIBasePath}}/server/graphql</code> / <code>/api/graphql</code></td><td>{{t "help.api.ep_graphql"}}</td></tr>
                     {{if .Config.Search.OpenSearch.Enabled}}
                     <tr><td><code>GET</code></td><td><code>/opensearch.xml</code></td><td>{{t "help.api.ep_opensearch"}}</td></tr>
                     {{end}}
@@ -380,30 +375,30 @@
 
             <h3>{{t "help.api.example_search"}}</h3>
             <pre class="code-block"><code># Search for "golang tutorial"
-curl "{{.ServerURL}}/api/v1/search?q=golang+tutorial&category=general&limit=20"
+curl "{{.ServerURL}}{{.APIBasePath}}/search?q=golang+tutorial&category=general&limit=20"
 
 # Image search with strict safe search
-curl "{{.ServerURL}}/api/v1/search?q=nature&category=images&safe_search=2"
+curl "{{.ServerURL}}{{.APIBasePath}}/search?q=nature&category=images&safe_search=2"
 
 # Get related searches
-curl "{{.ServerURL}}/api/v1/search/related?q=golang+tutorial"</code></pre>
+curl "{{.ServerURL}}{{.APIBasePath}}/search/related?q=golang+tutorial"</code></pre>
 
             <h3>{{t "help.api.example_instant"}}</h3>
             <pre class="code-block"><code># Calculator
-curl "{{.ServerURL}}/api/v1/instant?q=sqrt(144)"
+curl "{{.ServerURL}}{{.APIBasePath}}/instant?q=sqrt(144)"
 
 # Unit conversion
-curl "{{.ServerURL}}/api/v1/instant?q=convert+10+km+to+miles"
+curl "{{.ServerURL}}{{.APIBasePath}}/instant?q=convert+10+km+to+miles"
 
 # IP lookup
-curl "{{.ServerURL}}/api/v1/instant?q=what+is+my+ip"</code></pre>
+curl "{{.ServerURL}}{{.APIBasePath}}/instant?q=what+is+my+ip"</code></pre>
 
             <h3>{{t "help.api.example_direct"}}</h3>
             <pre class="code-block"><code># HTTP status explanation
-curl "{{.ServerURL}}/api/v1/direct/http/404"
+curl "{{.ServerURL}}{{.APIBasePath}}/direct/http/404"
 
 # Rules of the Internet
-curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
+curl "{{.ServerURL}}{{.APIBasePath}}/direct/rules/34"</code></pre>
         </section>
 
         {{/* Privacy Features */}}

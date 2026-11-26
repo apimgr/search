@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/client/surface"
 	"github.com/apimgr/search/src/common/theme"
 )
 
@@ -148,7 +149,7 @@ func TestInitialModel(t *testing.T) {
 	if m.client != client {
 		t.Error("initialModel() should set client")
 	}
-	if m.input.Placeholder != "Enter search query..." {
+	if m.input.Placeholder != surface.Text("client.surface.enter_value") {
 		t.Errorf("input.Placeholder = %q", m.input.Placeholder)
 	}
 	if !m.input.Focused() {
@@ -165,6 +166,23 @@ func TestInitialModelWithNilClient(t *testing.T) {
 	if m.client != nil {
 		t.Error("initialModel(nil, false) should have nil client")
 	}
+}
+
+func TestTUISlashEntersSearchMode(t *testing.T) {
+	m := initialModel(&api.Client{}, false)
+	next, _, handled := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	if !handled || next.commandMode || !next.inputFocused {
+		t.Fatalf("slash key state = handled:%t commandMode:%t inputFocused:%t", handled, next.commandMode, next.inputFocused)
+	}
+}
+
+func searchModeModel(client *api.Client) model {
+	m := initialModel(client, false)
+	m.commandMode = false
+	m.commandView = false
+	m.inputFocused = true
+	m.input.Focus()
+	return m
 }
 
 // Tests for model.Init
@@ -218,7 +236,7 @@ func TestModelUpdateEnterWithQuery(t *testing.T) {
 	defer testServer.Close()
 
 	client := api.NewClient(testServer.URL, "", 30)
-	m := initialModel(client, false)
+	m := searchModeModel(client)
 	m.input.SetValue("test query")
 
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
@@ -252,7 +270,7 @@ func TestModelUpdateEnterWithoutQuery(t *testing.T) {
 // search state and returns focus to the input.
 func TestModelUpdateEsc(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client, false)
+	m := searchModeModel(client)
 	m.input.SetValue("test")
 	m.results = []api.SearchResult{{Title: "Test"}}
 	m.err = &testError{msg: "test error"}
@@ -587,7 +605,7 @@ func TestModelInputValue(t *testing.T) {
 // which is the second stage of the back binding.
 func TestModelInputClearOnEsc(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client, false)
+	m := searchModeModel(client)
 	m.input.SetValue("test")
 	m.inputFocused = false
 
@@ -602,6 +620,41 @@ func TestModelInputClearOnEsc(t *testing.T) {
 	}
 }
 
+func TestTUIResultNavigationClampsSelectionAndScrolls(t *testing.T) {
+	m := searchModeModel(&api.Client{})
+	m.inputFocused = false
+	m.results = []api.SearchResult{
+		{Title: "First", URL: "https://first.example"},
+		{Title: "Second", URL: "https://second.example"},
+		{Title: "Third", URL: "https://third.example"},
+	}
+	resized, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 10})
+	m = resized.(model)
+
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'j'}},
+		{Type: tea.KeyRunes, Runes: []rune{'j'}},
+		{Type: tea.KeyRunes, Runes: []rune{'j'}},
+	} {
+		next, _, handled := m.handleKey(key)
+		if !handled {
+			t.Fatal("result navigation key was not handled")
+		}
+		m = next
+	}
+	if m.selected != 2 {
+		t.Fatalf("selection after moving past final result = %d, want 2", m.selected)
+	}
+	if m.offset <= 0 {
+		t.Fatalf("result offset = %d, want selection to scroll into view", m.offset)
+	}
+
+	m, _, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.selected != 0 || m.offset != 0 {
+		t.Fatalf("top navigation state = selection:%d offset:%d, want 0,0", m.selected, m.offset)
+	}
+}
+
 // Test model state transitions
 
 func TestModelStateTransitions(t *testing.T) {
@@ -613,7 +666,7 @@ func TestModelStateTransitions(t *testing.T) {
 	defer testServer.Close()
 
 	client := api.NewClient(testServer.URL, "", 30)
-	m := initialModel(client, false)
+	m := searchModeModel(client)
 	m.width = 80
 	m.height = 24
 

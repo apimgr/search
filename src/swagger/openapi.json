@@ -20,20 +20,54 @@
     "/api/autodiscover": {
       "get": {
         "summary": "Autodiscover server settings",
-        "description": "Returns server settings, config schema, and options for the CLI client",
+        "description": "Returns the server name and version, API version prefix, public URLs, optional exposed overlay addresses, and published CLI versions",
         "tags": [
           "System"
         ],
         "responses": {
           "200": {
-            "description": "Server settings",
+            "description": "Autodiscover document",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "api": {
+                          "type": "object",
+                          "properties": {
+                            "current_version": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "cli_min_version": {
+                          "type": "string"
+                        },
+                        "cli_versions": {
+                          "type": "object"
+                        },
+                        "i2p": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "onion": {
+                          "type": "string"
+                        },
+                        "urls": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "version": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -53,6 +87,104 @@
       }
     },
     "/api/graphql": {
+      "get": {
+        "summary": "Read-only GraphQL query",
+        "description": "Execute a read-only GraphQL query. Pass query and optional variables and operationName as URL parameters. Mutations are not allowed with GET.",
+        "tags": [
+          "Docs"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variables",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "JSON object"
+            }
+          },
+          {
+            "name": "operationName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GraphQL result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed GraphQL request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "GET accepts queries only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "GraphQL query",
         "description": "Execute a GraphQL query or mutation",
@@ -169,14 +301,6 @@
                         },
                         "tor": {
                           "type": "string"
-                        }
-                      }
-                    },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
                         }
                       }
                     },
@@ -325,14 +449,6 @@
                         },
                         "tor": {
                           "type": "string"
-                        }
-                      }
-                    },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
                         }
                       }
                     },
@@ -840,6 +956,33 @@
           },
           "401": {
             "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
             "content": {
               "application/json": {
                 "schema": {
@@ -2240,6 +2383,33 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2253,7 +2423,7 @@
       "post": {
         "operationId": "postApiV1ServerConfigContactWebhooks",
         "summary": "Configure a contact notification webhook",
-        "description": "Operator bearer token required. A newly generated signing secret is returned once when a URL is first configured or changed.",
+        "description": "Operator bearer token required. Webhook signing secrets are never returned in API responses.",
         "tags": [
           "Configuration",
           "Notifications"
@@ -2289,7 +2459,7 @@
         },
         "responses": {
           "200": {
-            "description": "Webhook configuration updated; a new signing secret may be included once",
+            "description": "Webhook configuration updated. Signing secrets are never returned in API responses.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2302,9 +2472,6 @@
                           "type": "boolean"
                         },
                         "role": {
-                          "type": "string"
-                        },
-                        "secret": {
                           "type": "string"
                         },
                         "transport": {
@@ -2355,6 +2522,33 @@
           },
           "401": {
             "description": "Operator bearer token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
             "content": {
               "application/json": {
                 "schema": {
@@ -3048,6 +3242,33 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3167,6 +3388,33 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3222,6 +3470,33 @@
           },
           "401": {
             "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
             "content": {
               "application/json": {
                 "schema": {
@@ -3351,6 +3626,33 @@
               }
             }
           },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
           "404": {
             "description": "Preset not found",
             "content": {
@@ -3387,6 +3689,105 @@
       }
     },
     "/api/v1/server/graphql": {
+      "get": {
+        "operationId": "getApiV1ServerGraphql",
+        "summary": "Read-only GraphQL query",
+        "description": "Execute a read-only GraphQL query. Pass query and optional variables and operationName as URL parameters. Mutations are not allowed with GET.",
+        "tags": [
+          "Docs"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variables",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "JSON object"
+            }
+          },
+          {
+            "name": "operationName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GraphQL result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed GraphQL request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "GET accepts queries only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "postApiV1ServerGraphql",
         "summary": "GraphQL query",
@@ -3504,14 +3905,6 @@
                         },
                         "tor": {
                           "type": "string"
-                        }
-                      }
-                    },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
                         }
                       }
                     },
@@ -3660,14 +4053,6 @@
                         },
                         "tor": {
                           "type": "string"
-                        }
-                      }
-                    },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
                         }
                       }
                     },
@@ -3836,14 +4221,6 @@
                         }
                       }
                     },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -3989,14 +4366,6 @@
                         },
                         "tor": {
                           "type": "string"
-                        }
-                      }
-                    },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
                         }
                       }
                     },
@@ -4155,7 +4524,7 @@
       "get": {
         "operationId": "getApiV1ServerHelpMcp",
         "summary": "MCP connection help",
-        "description": "Return the enabled MCP endpoint, aliases, authentication scheme, live tools, and project-specific usage guidance",
+        "description": "Return the MCP endpoint, aliases, authentication scheme, live tools, and project-specific usage guidance",
         "tags": [
           "Server"
         ],
@@ -4180,33 +4549,6 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP is disabled",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "details": {
-                      "type": "object"
-                    },
-                    "error": {
-                      "type": "string",
-                      "example": "BAD_REQUEST"
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Human readable message"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": false
-                    }
-                  }
                 }
               }
             }
@@ -4774,9 +5116,102 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "linked": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "expires_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "primary",
+                                  "linked"
+                                ]
+                              },
+                              "last_used_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "active",
+                                  "expired",
+                                  "revoked"
+                                ]
+                              },
+                              "token_masked": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "max_linked": {
+                          "type": "integer"
+                        },
+                        "primary": {
+                          "type": "object",
+                          "properties": {
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "expires_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            },
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "primary",
+                                "linked"
+                              ]
+                            },
+                            "last_used_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "active",
+                                "expired",
+                                "revoked"
+                              ]
+                            },
+                            "token_masked": {
+                              "type": "string"
+                            }
+                          }
+                        }
                       }
                     },
                     "ok": {
@@ -4829,7 +5264,7 @@
       },
       "post": {
         "summary": "Create linked owner token",
-        "description": "Primary owner bearer token required",
+        "description": "Primary owner bearer token required. Send either expires (never, 7d, 30d, 90d, 1y) or expires_on (YYYY-MM-DD), not both",
         "tags": [
           "Owner Tokens"
         ],
@@ -4840,8 +5275,19 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "expires_at": {
-                    "type": "string"
+                  "expires": {
+                    "type": "string",
+                    "enum": [
+                      "never",
+                      "7d",
+                      "30d",
+                      "90d",
+                      "1y"
+                    ]
+                  },
+                  "expires_on": {
+                    "type": "string",
+                    "format": "date"
                   },
                   "name": {
                     "type": "string"
@@ -4860,7 +5306,51 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "primary",
+                            "linked"
+                          ]
+                        },
+                        "last_used_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "linked_token": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "expired",
+                            "revoked"
+                          ]
+                        },
+                        "token_masked": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -4872,6 +5362,271 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid linked-token expiry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Primary owner token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ownerBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/server/preferences/tokens/primary": {
+      "post": {
+        "summary": "Issue a primary owner token",
+        "description": "Creates a new owner and returns its primary credential in owner_token. A valid existing owner token receives a conflict response.",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "responses": {
+          "201": {
+            "description": "Primary owner token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "owner_token": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A valid existing owner token receives a conflict response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Revoke the primary owner token",
+        "description": "Requires the primary owner bearer token and confirmation with its last four characters. Deletes the owner, its tokens, and its resources in one transaction.",
+        "tags": [
+          "Owner Tokens"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 4
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner and resources deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "resources": {
+                          "type": "integer"
+                        },
+                        "tokens": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Primary token confirmation did not match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
                 }
               }
             }
@@ -4926,7 +5681,12 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "owner_token": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -4992,7 +5752,12 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "owner_token": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -5053,9 +5818,11 @@
           {
             "name": "id",
             "in": "path",
+            "description": "UUIDv7 token identifier",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5068,7 +5835,19 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "revoked"
+                          ]
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -5120,6 +5899,7 @@
       },
       "patch": {
         "summary": "Update linked owner token",
+        "description": "Send any of name, expires, or expires_on; expiry fields follow linked-token creation rules",
         "tags": [
           "Owner Tokens"
         ],
@@ -5127,9 +5907,11 @@
           {
             "name": "id",
             "in": "path",
+            "description": "UUIDv7 token identifier",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -5140,8 +5922,19 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "expires_at": {
-                    "type": "string"
+                  "expires": {
+                    "type": "string",
+                    "enum": [
+                      "never",
+                      "7d",
+                      "30d",
+                      "90d",
+                      "1y"
+                    ]
+                  },
+                  "expires_on": {
+                    "type": "string",
+                    "format": "date"
                   },
                   "name": {
                     "type": "string"
@@ -5160,7 +5953,48 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "primary",
+                            "linked"
+                          ]
+                        },
+                        "last_used_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "expired",
+                            "revoked"
+                          ]
+                        },
+                        "token_masked": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -5172,6 +6006,87 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid linked-token expiry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid owner token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Primary owner token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
                 }
               }
             }
@@ -5221,22 +6136,68 @@
           {
             "name": "id",
             "in": "path",
+            "description": "UUIDv7 token identifier",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Owner token",
+            "description": "Revealed owner token",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "primary",
+                            "linked"
+                          ]
+                        },
+                        "last_used_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "linked_token": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "expired",
+                            "revoked"
+                          ]
+                        },
+                        "token_masked": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -5297,22 +6258,68 @@
           {
             "name": "id",
             "in": "path",
+            "description": "UUIDv7 token identifier",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Owner token",
+            "description": "Rotated owner token",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "primary",
+                            "linked"
+                          ]
+                        },
+                        "last_used_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "linked_token": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "expired",
+                            "revoked"
+                          ]
+                        },
+                        "token_masked": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "ok": {
                       "type": "boolean",
@@ -5703,6 +6710,33 @@
               }
             }
           },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
           "503": {
             "description": "Scheduler unavailable",
             "content": {
@@ -5808,87 +6842,8 @@
               }
             }
           },
-          "404": {
-            "description": "Task not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "details": {
-                      "type": "object"
-                    },
-                    "error": {
-                      "type": "string",
-                      "example": "BAD_REQUEST"
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Human readable message"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": false
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "operatorToken": []
-          }
-        ]
-      }
-    },
-    "/api/v1/server/scheduler/tasks/{task}/disable": {
-      "post": {
-        "operationId": "postApiV1ServerSchedulerTasksTaskDisable",
-        "summary": "Disable scheduler task",
-        "description": "Operator bearer token required",
-        "tags": [
-          "Scheduler",
-          "Operator"
-        ],
-        "parameters": [
-          {
-            "name": "task",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Scheduler task action result",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": true
-                    }
-                  }
-                }
-              },
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid operator token",
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
             "content": {
               "application/json": {
                 "schema": {
@@ -5916,166 +6871,6 @@
           },
           "404": {
             "description": "Task not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "details": {
-                      "type": "object"
-                    },
-                    "error": {
-                      "type": "string",
-                      "example": "BAD_REQUEST"
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Human readable message"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": false
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Scheduler unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "details": {
-                      "type": "object"
-                    },
-                    "error": {
-                      "type": "string",
-                      "example": "BAD_REQUEST"
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Human readable message"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": false
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "operatorToken": []
-          }
-        ]
-      }
-    },
-    "/api/v1/server/scheduler/tasks/{task}/enable": {
-      "post": {
-        "operationId": "postApiV1ServerSchedulerTasksTaskEnable",
-        "summary": "Enable scheduler task",
-        "description": "Operator bearer token required",
-        "tags": [
-          "Scheduler",
-          "Operator"
-        ],
-        "parameters": [
-          {
-            "name": "task",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Scheduler task action result",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": true
-                    }
-                  }
-                }
-              },
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid operator token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "details": {
-                      "type": "object"
-                    },
-                    "error": {
-                      "type": "string",
-                      "example": "BAD_REQUEST"
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Human readable message"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": false
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Task not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "details": {
-                      "type": "object"
-                    },
-                    "error": {
-                      "type": "string",
-                      "example": "BAD_REQUEST"
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Human readable message"
-                    },
-                    "ok": {
-                      "type": "boolean",
-                      "example": false
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Scheduler unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -6182,6 +6977,33 @@
               }
             }
           },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
           "404": {
             "description": "Task not found",
             "content": {
@@ -6263,6 +7085,33 @@
           },
           "401": {
             "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
             "content": {
               "application/json": {
                 "schema": {
@@ -6517,6 +7366,33 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6698,6 +7574,1798 @@
         }
       }
     },
+    "/cli/binaries/{filename}": {
+      "get": {
+        "summary": "Download a verified CLI release binary",
+        "description": "Streams an operator-provisioned CLI binary only after its SHA-256 matches sha256.txt; requires the operator Bearer token when cli.binary_download.require_auth is true",
+        "tags": [
+          "System"
+        ],
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "description": "Published search-cli platform filename",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified CLI binary",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authorization required when downloads are private",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Binary is unavailable or failed checksum verification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/cache": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/config": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/db": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/error500": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Standard localized server error page",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/goroutines": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/memory": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/allocs": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/block": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/cmdline": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/goroutine": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/heap": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/mutex": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/profile": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/symbol": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/threadcreate": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/pprof/trace": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/routes": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/scheduler": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
+    "/debug/vars": {
+      "get": {
+        "summary": "Debug diagnostic",
+        "description": "Operator-only diagnostics, available only when debug mode is enabled.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid owner or linked token lacks operator scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "object"
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "BAD_REQUEST"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Human readable message"
+                    },
+                    "ok": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ]
+      },
+      "x-mounted-when": "--debug || DEBUG=true || MODE=debug"
+    },
     "/mcp": {
       "post": {
         "summary": "MCP Streamable HTTP endpoint",
@@ -6863,14 +9531,6 @@
                         }
                       }
                     },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -7016,14 +9676,6 @@
                         },
                         "tor": {
                           "type": "string"
-                        }
-                      }
-                    },
-                    "cluster": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
                         }
                       }
                     },
@@ -7179,14 +9831,6 @@
               },
               "tor": {
                 "type": "string"
-              }
-            }
-          },
-          "cluster": {
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "type": "boolean"
               }
             }
           },

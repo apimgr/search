@@ -1,10 +1,48 @@
 package security
 
 import (
+	"context"
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/apimgr/search/src/database"
 )
+
+func TestMigrateLegacyReportPlaintextEncryptsBeforeClearing(t *testing.T) {
+	ctx := context.Background()
+	const migrationKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	dm, err := database.NewDatabaseManager(&database.Config{Driver:"sqlite",DataDir:filepath.Join(t.TempDir(),"db"),MaxOpen:1,MaxIdle:1})
+	if err != nil { t.Fatal(err) }
+	defer dm.Close()
+	db:=dm.ServerDB()
+	_,err=db.Exec(ctx,`CREATE TABLE security_reports (tracking_id TEXT PRIMARY KEY, security_id_used TEXT, affected_component TEXT, affected_endpoint TEXT, severity TEXT, summary TEXT, encrypted_body BLOB, encryption_method TEXT, credit_preference TEXT, credit_name TEXT, disclosure_days INTEGER, cve_requested INTEGER, status TEXT, report_token_hash TEXT, last_status_access_date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, closed_at DATETIME)`)
+	if err != nil { t.Fatal(err) }
+	legacyCiphertext,err:=EncryptAESGCM(migrationKey,[]byte("legacy report body\nEmail: researcher@example.com"))
+	if err!=nil{t.Fatal(err)}
+	_,err=db.Exec(ctx,`INSERT INTO security_reports (tracking_id,security_id_used,affected_component,affected_endpoint,severity,summary,encrypted_body,encryption_method,credit_preference,report_token_hash) VALUES (?,?,?,?,?,?,?,?,?,?)`,"sec_0123456789abcdef","legacy-id-digest","search","/private/path","high","legacy summary",[]byte(legacyCiphertext),"aes-256-gcm","no","token-hash")
+	if err != nil { t.Fatal(err) }
+	if err:=database.InitSchema(ctx,dm);err!=nil{t.Fatal(err)}
+	count,err:=MigrateLegacyReportPlaintext(ctx,db,migrationKey,"","","","")
+	if err!=nil||count!=1{t.Fatalf("MigrateLegacyReportPlaintext() = %d, %v",count,err)}
+	var encrypted []byte; var algorithm,summary,endpoint,legacyID string
+	err=db.QueryRow(ctx,`SELECT body_enc,body_alg,summary,affected_endpoint,security_id_used FROM security_reports WHERE tracking_id=?`,"sec_0123456789abcdef").Scan(&encrypted,&algorithm,&summary,&endpoint,&legacyID)
+	if err!=nil{t.Fatal(err)}
+	plain,err:=DecryptAESGCM(migrationKey,string(encrypted));if err!=nil{t.Fatal(err)}
+	if !strings.Contains(string(plain),"legacy report body")||!strings.Contains(string(plain),"legacy summary")||!strings.Contains(string(plain),"/private/path"){t.Fatalf("migrated body = %q",plain)}
+	if algorithm!=EncryptionMethodAESGCM||summary!=""||endpoint!=""{t.Fatalf("algorithm=%q summary=%q endpoint=%q",algorithm,summary,endpoint)}
+	if legacyID!="legacy-id-digest"{t.Fatalf("legacy id digest changed before policy decision: %q",legacyID)}
+	var contactCipher []byte
+	if err:=db.QueryRow(ctx,`SELECT contact_enc FROM security_reports WHERE tracking_id=?`,"sec_0123456789abcdef").Scan(&contactCipher);err!=nil{t.Fatal(err)}
+	contactPlain,err:=DecryptAESGCM(migrationKey,string(contactCipher));if err!=nil{t.Fatal(err)}
+	var contact struct{Email string `json:"email"`};if err:=json.Unmarshal(contactPlain,&contact);err!=nil{t.Fatal(err)}
+	if contact.Email!="researcher@example.com"{t.Fatalf("migrated contact email = %q",contact.Email)}
+	var window int64
+	if err:=db.QueryRow(ctx,`SELECT id_window FROM security_reports WHERE tracking_id=?`,"sec_0123456789abcdef").Scan(&window);err!=nil{t.Fatal(err)}
+	if window!=0{t.Fatalf("legacy id window = %d, want migration sentinel 0 pending policy",window)}
+}
 
 // TestGenerateTrackingID verifies the "sec_" prefix and correct hex length,
 // and that repeated calls produce distinct ids.

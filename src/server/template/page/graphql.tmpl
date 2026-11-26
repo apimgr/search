@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="container container-lg">
+    <header class="page-header">
+        <h1 class="page-title">{{t "help.api.heading"}}</h1>
+        <p class="page-lead">{{t "help.api.graphql_desc"}}</p>
+    </header>
+
+    <section class="section-card" aria-labelledby="graphql-playground-heading">
+        <h2 id="graphql-playground-heading">{{t "help.api.graphql_heading"}}</h2>
+        <p>{{t "help.api.intro"}}</p>
+        <p><strong>{{t "help.api.th_endpoint"}}:</strong> <code>{{index .Data "APIURL"}}</code></p>
+        <p>{{t "help.api.th_endpoint"}}: <code>{{index .Data "APIAlias"}}</code></p>
+        <noscript><p>{{t "help.api.graphql_desc"}} <a href="{{index .Data "APIURL"}}">{{index .Data "APIURL"}}</a></p></noscript>
+        <div id="graphiql" class="graphql-explorer" data-endpoint="{{index .Data "APIURL"}}" aria-label="{{t "help.api.graphql_heading"}}">
+            <form id="query-form" class="graphql-query-form" method="POST" action="{{index .Data "Action"}}">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <label for="query">{{t "help.api.graphql_heading"}}</label>
+                <textarea id="query" name="query" spellcheck="false">{{index .Data "Query"}}</textarea>
+                <button id="run-btn" class="btn btn-primary" type="submit">{{t "common.submit"}}</button>
+            </form>
+            <pre id="response" class="graphql-response">{{index .Data "Response"}}</pre>
+        </div>
+        <details class="graphql-schema">
+            <summary>{{t "help.api.schema_heading"}}</summary>
+            <pre>{{index .Data "Schema"}}</pre>
+        </details>
+    </section>
+</div>
+{{end}}

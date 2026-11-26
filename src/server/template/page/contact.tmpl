@@ -1,12 +1,12 @@
 {{define "content"}}
-<div class="static-page contact-page">
+<div class="container container-md">
     <header class="page-header">
-        <h1>{{t "contact.title"}}</h1>
+        <h1 class="page-title">{{t "contact.title"}}</h1>
     </header>
 
     {{if .ContactSent}}
-    <div class="contact-success">
-        <h2>{{t "contact.success_title"}}</h2>
+    <section class="section-card contact-success" aria-labelledby="contact-success-heading">
+        <h2 id="contact-success-heading">{{t "contact.success_title"}}</h2>
         {{if .SecurityMode}}
         <p>{{t "contact.security_success_message"}}</p>
         <p class="security-tracking-id">{{t "contact.security_tracking_id_label"}} <strong>{{.TrackingID}}</strong></p>
@@ -14,35 +14,36 @@
         <p>{{if .Config.Server.Pages.Contact.SuccessMessage}}{{.Config.Server.Pages.Contact.SuccessMessage}}{{else}}{{t "contact.success_default"}}{{end}}</p>
         {{end}}
         <a href="/" class="btn btn-primary">{{t "contact.return_home"}}</a>
-    </div>
+    </section>
     {{else if .ReviewMode}}
     <div class="contact-review-backdrop">
-        <section class="contact-review-panel" aria-labelledby="contact-review-title">
-            <h2 id="contact-review-title">Review your report</h2>
+        <section class="section-card contact-review-panel" aria-labelledby="contact-review-title">
+            <h2 id="contact-review-title">{{t "contact.review_title"}}</h2>
             {{if .ContactError}}<p role="alert">{{.ContactError}}</p>{{end}}
             <p class="contact-review-email">{{.ReviewEmail}}</p>
-            <dl><dt>Type</dt><dd>{{.ReviewType}}</dd><dt>Subject</dt><dd>{{.ReviewSubject}}</dd></dl>
+            <dl><dt>{{t "contact.type_label"}}</dt><dd>{{.ReviewType}}</dd><dt>{{t "contact.subject_label"}}</dt><dd>{{.ReviewSubject}}</dd></dl>
             <form action="/server/contact" method="POST">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <input type="hidden" name="form_token" value="{{.FormToken}}">
                 <input type="hidden" name="review_token" value="{{.ReviewToken}}">
                 {{range $key, $value := .ReviewFields}}<input type="hidden" name="{{$key}}" value="{{$value}}">{{end}}
-                <label class="form-checkbox"><input type="checkbox" name="confirmed" value="true" required> This email address is correct, and this is a genuine report, not an advertisement, a solicitation or spam</label>
-                <button class="btn btn-primary" type="submit" name="step" value="confirm">Confirm</button>
-                <button class="btn btn-secondary" type="submit" name="step" value="edit" formnovalidate>Edit</button>
+                <label class="form-checkbox"><input type="checkbox" name="confirmed" value="true" required> {{t "contact.confirm_email_statement"}}</label>
+                <button class="btn btn-primary" type="submit" name="step" value="confirm">{{t "common.confirm"}}</button>
+                <button class="btn btn-secondary" type="submit" name="step" value="edit" formnovalidate>{{t "common.edit"}}</button>
             </form>
         </section>
     </div>
     {{else}}
     <div class="page-content">
-        <p>This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions.</p>
+        <p>{{t "contact.form_scope_notice"}}</p>
 
-        <form action="/server/contact" method="POST" class="contact-form">
+        <form action="/server/contact" method="POST" class="section-card contact-form">
+            <h2>{{t "contact.title"}}</h2>
             {{/* CSRF Token */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
             <div class="contact-honeypot" aria-hidden="true">
-                <label for="website">Leave this field empty</label>
+                <label for="website">{{t "contact.honeypot_label"}}</label>
                 <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
             </div>
             <input type="hidden" name="form_token" value="{{.FormToken}}">
@@ -59,48 +60,48 @@
 
             {{if not .SecurityMode}}
             <div class="form-group">
-                <label for="type">Type <span class="required">*</span></label>
+                <label for="type">{{t "contact.type_label"}} <span class="required">*</span></label>
                 <select id="type" name="type" required>
-                    <option value="abuse" {{if eq (index .ReviewFields "type") "abuse"}}selected{{end}}>Abuse</option>
-                    <option value="dmca" {{if eq (index .ReviewFields "type") "dmca"}}selected{{end}}>DMCA</option>
-                    <option value="privacy" {{if eq (index .ReviewFields "type") "privacy"}}selected{{end}}>Privacy request</option>
+                    <option value="abuse" {{if eq (index .ReviewFields "type") "abuse"}}selected{{end}}>{{t "contact.type_abuse"}}</option>
+                    <option value="dmca" {{if eq (index .ReviewFields "type") "dmca"}}selected{{end}}>{{t "contact.type_dmca"}}</option>
+                    <option value="privacy" {{if eq (index .ReviewFields "type") "privacy"}}selected{{end}}>{{t "contact.type_privacy"}}</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="reported_url">Reported URL</label>
+                <label for="reported_url">{{t "contact.reported_url_label"}}</label>
                 <input type="url" id="reported_url" name="reported_url" maxlength="2048" value="{{index .ReviewFields "reported_url"}}">
             </div>
             <div class="form-group">
-                <label for="reason">Abuse reason</label>
+                <label for="reason">{{t "contact.abuse_reason_label"}}</label>
                 <select id="reason" name="reason">
-                    <option value="illegal_content" {{if eq (index .ReviewFields "reason") "illegal_content"}}selected{{end}}>Illegal content</option>
-                    <option value="terms_violation" {{if eq (index .ReviewFields "reason") "terms_violation"}}selected{{end}}>Terms violation</option>
-                    <option value="harassment" {{if eq (index .ReviewFields "reason") "harassment"}}selected{{end}}>Harassment</option>
-                    <option value="malware_phishing" {{if eq (index .ReviewFields "reason") "malware_phishing"}}selected{{end}}>Malware or phishing</option>
-                    <option value="other" {{if eq (index .ReviewFields "reason") "other"}}selected{{end}}>Other</option>
+                    <option value="illegal_content" {{if eq (index .ReviewFields "reason") "illegal_content"}}selected{{end}}>{{t "contact.reason_illegal_content"}}</option>
+                    <option value="terms_violation" {{if eq (index .ReviewFields "reason") "terms_violation"}}selected{{end}}>{{t "contact.reason_terms_violation"}}</option>
+                    <option value="harassment" {{if eq (index .ReviewFields "reason") "harassment"}}selected{{end}}>{{t "contact.reason_harassment"}}</option>
+                    <option value="malware_phishing" {{if eq (index .ReviewFields "reason") "malware_phishing"}}selected{{end}}>{{t "contact.reason_malware_phishing"}}</option>
+                    <option value="other" {{if eq (index .ReviewFields "reason") "other"}}selected{{end}}>{{t "common.other"}}</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="copyrighted_work">Copyrighted work</label>
+                <label for="copyrighted_work">{{t "contact.copyrighted_work_label"}}</label>
                 <input type="text" id="copyrighted_work" name="copyrighted_work" maxlength="1000" value="{{index .ReviewFields "copyrighted_work"}}">
             </div>
             <div class="form-group form-checkbox">
-                <label><input type="checkbox" name="good_faith_statement" value="true" {{if eq (index .ReviewFields "good_faith_statement") "true"}}checked{{end}}> I have a good faith belief that the use is not authorized.</label>
-                <label><input type="checkbox" name="accuracy_statement" value="true" {{if eq (index .ReviewFields "accuracy_statement") "true"}}checked{{end}}> The information is accurate and I am authorized to act.</label>
+                <label><input type="checkbox" name="good_faith_statement" value="true" {{if eq (index .ReviewFields "good_faith_statement") "true"}}checked{{end}}> {{t "contact.good_faith_statement"}}</label>
+                <label><input type="checkbox" name="accuracy_statement" value="true" {{if eq (index .ReviewFields "accuracy_statement") "true"}}checked{{end}}> {{t "contact.accuracy_statement"}}</label>
             </div>
             <div class="form-group">
-                <label for="signature">Electronic signature</label>
+                <label for="signature">{{t "contact.electronic_signature_label"}}</label>
                 <input type="text" id="signature" name="signature" maxlength="254" value="{{index .ReviewFields "signature"}}">
             </div>
             <div class="form-group">
-                <label for="request_kind">Privacy request</label>
+                <label for="request_kind">{{t "contact.privacy_request_label"}}</label>
                 <select id="request_kind" name="request_kind">
-                    <option value="access" {{if eq (index .ReviewFields "request_kind") "access"}}selected{{end}}>Access</option>
-                    <option value="export" {{if eq (index .ReviewFields "request_kind") "export"}}selected{{end}}>Export</option>
-                    <option value="deletion" {{if eq (index .ReviewFields "request_kind") "deletion"}}selected{{end}}>Deletion</option>
-                    <option value="correction" {{if eq (index .ReviewFields "request_kind") "correction"}}selected{{end}}>Correction</option>
-                    <option value="opt_out" {{if eq (index .ReviewFields "request_kind") "opt_out"}}selected{{end}}>Opt out</option>
-                    <option value="other" {{if eq (index .ReviewFields "request_kind") "other"}}selected{{end}}>Other</option>
+                    <option value="access" {{if eq (index .ReviewFields "request_kind") "access"}}selected{{end}}>{{t "contact.request_access"}}</option>
+                    <option value="export" {{if eq (index .ReviewFields "request_kind") "export"}}selected{{end}}>{{t "contact.request_export"}}</option>
+                    <option value="deletion" {{if eq (index .ReviewFields "request_kind") "deletion"}}selected{{end}}>{{t "contact.request_deletion"}}</option>
+                    <option value="correction" {{if eq (index .ReviewFields "request_kind") "correction"}}selected{{end}}>{{t "contact.request_correction"}}</option>
+                    <option value="opt_out" {{if eq (index .ReviewFields "request_kind") "opt_out"}}selected{{end}}>{{t "contact.request_opt_out"}}</option>
+                    <option value="other" {{if eq (index .ReviewFields "request_kind") "other"}}selected{{end}}>{{t "common.other"}}</option>
                 </select>
             </div>
             {{end}}
@@ -237,13 +238,13 @@
                 <button type="submit" class="btn btn-primary">{{t "contact.send_message"}}</button>
             </div>
         </form>
-        <section class="contact-information">
-            <h2>Security Issues</h2>
-            <p>To report a security vulnerability, consult our <a href="/server/security">security policy</a>.</p>
+        <section class="section-card contact-information" aria-labelledby="contact-security-heading">
+            <h2 id="contact-security-heading">{{t "contact.security_issues_heading"}}</h2>
+            <p>{{t "contact.security_issues_intro"}} <a href="/server/security">{{t "security.policy_title"}}</a>.</p>
         </section>
-        <section class="contact-information">
-            <h2>Abuse Reports</h2>
-            <p>To report abusive content or a terms violation, choose the type Abuse above. To send a DMCA notice, choose the type DMCA.{{if .Config.Server.Contact.Abuse.Email}} or email {{.Config.Server.Contact.Abuse.Email}}{{else if .Config.Server.Contact.General.Email}} or email {{.Config.Server.Contact.General.Email}}{{end}}</p>
+        <section class="section-card contact-information" aria-labelledby="contact-abuse-heading">
+            <h2 id="contact-abuse-heading">{{t "contact.abuse_reports_heading"}}</h2>
+            <p>{{t "contact.abuse_reports_intro"}} {{if not .SecurityMode}}<a href="#type">{{t "security.report_abuse_link"}}</a>. {{end}}{{if .Config.Server.Contact.Abuse.Email}}{{tf "contact.abuse_reports_email" "email" .Config.Server.Contact.Abuse.Email}}{{else if .Config.Server.Contact.General.Email}}{{tf "contact.abuse_reports_email" "email" .Config.Server.Contact.General.Email}}{{end}}</p>
         </section>
     </div>
     {{end}}

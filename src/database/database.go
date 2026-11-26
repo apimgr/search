@@ -307,6 +307,24 @@ func (dm *DatabaseManager) Ping(ctx context.Context) error {
 	return nil
 }
 
+// Probe executes the same trivial read against each database's write and read
+// handles, so the health endpoint and scheduled database notification task
+// observe SQLite read-pool failures as well as connection failures.
+func (dm *DatabaseManager) Probe(ctx context.Context) error {
+	for _, item := range []struct {
+		name string
+		db   *DB
+	}{{name: "server", db: dm.ServerDB()}, {name: "users", db: dm.UsersDB()}} {
+		if item.db == nil {
+			return fmt.Errorf("%s db is unavailable", item.name)
+		}
+		if err := item.db.Probe(ctx); err != nil {
+			return fmt.Errorf("%s db: %w", item.name, err)
+		}
+	}
+	return nil
+}
+
 // SetBusyObserver installs an optional observer for delayed SQLite writes.
 func (dm *DatabaseManager) SetBusyObserver(observer func(time.Duration, string)) {
 	dm.mu.Lock()
@@ -640,18 +658,13 @@ func (db *DB) SnapshotTo(ctx context.Context, destination string) error {
 }
 
 // Ping checks database connectivity
-// CleanupExpiredAPITokens deletes expired API tokens from the server database.
+// CleanupExpiredAPITokens retains expired owner tokens so owners can still
+// see them and choose to revoke them or change their expiry.
 func (db *DB) CleanupExpiredAPITokens(ctx context.Context) (int64, error) {
-	query := "DELETE FROM " + serverTablePrefix(db) + "api_tokens WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP"
-	result, err := db.Exec(ctx, query)
-	if err != nil {
-		return 0, fmt.Errorf("delete expired API tokens: %w", err)
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("read expired API token cleanup count: %w", err)
-	}
-	return count, nil
+	return 0, nil
 }
 
 func (db *DB) Ping(ctx context.Context) error {
@@ -663,4 +676,24 @@ func (db *DB) Ping(ctx context.Context) error {
 	}
 
 	return db.db.PingContext(ctx)
+}
+
+// Probe executes SELECT 1 against the write and read handles under the caller's
+// deadline. A remote database has one handle, so it is queried once.
+func (db *DB) Probe(ctx context.Context) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if !db.ready || db.db == nil {
+		return fmt.Errorf("database not ready")
+	}
+	var value int
+	if err := db.db.QueryRowContext(ctx, "SELECT 1").Scan(&value); err != nil {
+		return fmt.Errorf("write handle probe: %w", err)
+	}
+	if db.readDB != nil {
+		if err := db.readDB.QueryRowContext(ctx, "SELECT 1").Scan(&value); err != nil {
+			return fmt.Errorf("read handle probe: %w", err)
+		}
+	}
+	return nil
 }

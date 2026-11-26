@@ -1,17 +1,17 @@
 {{define "content"}}
 {{/* Per AI.md PART 13: Health Check HTML Response */}}
-<div class="health-page">
+<div class="container container-lg">
     {{/* Project Header - per AI.md PART 13 */}}
-    <header class="health-header">
+    <header class="page-header health-header">
         {{if .Health.Project.Name}}
-        <h1>📦 {{.Health.Project.Name}}</h1>
+        <h1 class="page-title">📦 {{.Health.Project.Name}}</h1>
         {{if .Health.Project.Tagline}}
         <p class="tagline">{{.Health.Project.Tagline}}</p>
         {{end}}
-        <p class="description">{{.Health.Project.Description}}</p>
+        <p class="page-lead description">{{.Health.Project.Description}}</p>
         {{else}}
-        <h1>📦 {{.Config.Server.Title}}</h1>
-        <p class="description">{{.Config.Server.Description}}</p>
+        <h1 class="page-title">📦 {{.Config.Server.Title}}</h1>
+        <p class="page-lead description">{{.Config.Server.Description}}</p>
         {{end}}
     </header>
 
@@ -31,8 +31,8 @@
 
     <div class="health-grid">
         {{/* Version & Build per AI.md PART 13 */}}
-        <section class="section-card">
-            <h2>ℹ️ {{t "health.section.version"}}</h2>
+        <section class="section-card" aria-labelledby="health-version-heading">
+            <h2 id="health-version-heading">ℹ️ {{t "health.section.version"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>{{t "health.version"}}</dt>
@@ -54,8 +54,8 @@
         </section>
 
         {{/* Runtime per AI.md PART 13 */}}
-        <section class="section-card">
-            <h2>⏱️ {{t "health.section.runtime"}}</h2>
+        <section class="section-card" aria-labelledby="health-runtime-heading">
+            <h2 id="health-runtime-heading">⏱️ {{t "health.section.runtime"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>{{t "health.uptime"}}</dt>
@@ -80,22 +80,11 @@
             </dl>
         </section>
 
-        {{/* Cluster is always visible, including for this single-instance service. */}}
-        <section class="section-card">
-            <h2>{{t "health.section.cluster"}}</h2>
-            <dl class="health-info">
-                <div class="info-row">
-                    <dt>{{t "health.section.cluster"}}</dt>
-                    <dd>{{if .Health.Cluster.Enabled}}{{t "common.enabled"}}{{else}}{{t "common.disabled"}}{{end}}</dd>
-                </div>
-            </dl>
-        </section>
-
         {{/* Features per AI.md PART 13 */}}
-        <section class="section-card">
-            <h2>🎛️ {{t "health.section.features"}}</h2>
+        <section class="section-card" aria-labelledby="health-features-heading">
+            <h2 id="health-features-heading">🎛️ {{t "health.section.features"}}</h2>
             <ul class="feature-list">
-                <li class="feature-item feature-enabled">
+                <li class="feature-item {{if .Health.Features.Tor.Enabled}}feature-enabled{{else}}feature-disabled{{end}}">
                     <span class="feature-icon">🧅</span>
                     <span class="feature-name">{{t "health.tor_hidden_service"}}</span>
                     {{if eq .Health.Features.Tor.Status "healthy"}}
@@ -107,6 +96,7 @@
                     {{else}}
                     <span class="feature-status status-warning">{{t "health.starting"}}</span>
                     {{end}}
+                    <span class="feature-state">{{t "health.lifecycle_state"}}: {{if eq .Health.Features.Tor.State "disabled"}}{{t "common.disabled"}}{{else if eq .Health.Features.Tor.State "no_provider"}}{{t "health.no_provider"}}{{else if eq .Health.Features.Tor.State "starting"}}{{t "health.starting"}}{{else if eq .Health.Features.Tor.State "building"}}{{t "health.starting"}}{{else if eq .Health.Features.Tor.State "running"}}{{t "health.active"}}{{else}}{{t "health.unavailable"}}{{end}}</span>
                 </li>
                 {{if .Health.Features.Tor.Hostname}}
                 <li class="feature-detail">
@@ -120,7 +110,7 @@
                 </li>
                 {{end}}
 
-                <li class="feature-item feature-enabled">
+                <li class="feature-item {{if .Health.Features.I2P.Enabled}}feature-enabled{{else}}feature-disabled{{end}}">
                     <span class="feature-name">I2P</span>
                     {{if eq .Health.Features.I2P.Status "healthy"}}
                     <span class="feature-status status-ok">{{t "health.active"}}</span>
@@ -131,6 +121,7 @@
                     {{else}}
                     <span class="feature-status status-warning">{{t "health.starting"}}</span>
                     {{end}}
+                    <span class="feature-state">{{t "health.lifecycle_state"}}: {{if eq .Health.Features.I2P.State "disabled"}}{{t "common.disabled"}}{{else if eq .Health.Features.I2P.State "no_provider"}}{{t "health.no_provider"}}{{else if eq .Health.Features.I2P.State "starting"}}{{t "health.starting"}}{{else if eq .Health.Features.I2P.State "building"}}{{t "health.starting"}}{{else if eq .Health.Features.I2P.State "running"}}{{t "health.active"}}{{else}}{{t "health.unavailable"}}{{end}}</span>
                 </li>
                 {{if .Health.Features.I2P.Hostname}}
                 <li class="feature-detail">
@@ -155,8 +146,8 @@
 
 
         {{/* Component Status per AI.md PART 13 */}}
-        <section class="section-card">
-            <h2>🔧 {{t "health.section.checks"}}</h2>
+        <section class="section-card" aria-labelledby="health-checks-heading">
+            <h2 id="health-checks-heading">🔧 {{t "health.section.checks"}}</h2>
             <ul class="component-list">
                 <li class="component-item {{if eq .Health.Checks.Database "ok"}}component-ok{{else if eq .Health.Checks.Database "degraded"}}component-warning{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Database "ok"}}✓{{else if eq .Health.Checks.Database "degraded"}}!{{else}}✕{{end}}</span>
@@ -203,8 +194,8 @@
         </section>
 
         {{/* Statistics per AI.md PART 13 */}}
-        <section class="section-card">
-            <h2>📈 {{t "health.section.stats"}}</h2>
+        <section class="section-card" aria-labelledby="health-stats-heading">
+            <h2 id="health-stats-heading">📈 {{t "health.section.stats"}}</h2>
             <dl class="health-info stats-info">
                 <div class="info-row">
                     <dt>{{t "health.total_requests"}}</dt>

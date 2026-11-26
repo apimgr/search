@@ -28,6 +28,7 @@ import (
 	"github.com/apimgr/search/src/common/netutil"
 	"github.com/apimgr/search/src/logging"
 	"github.com/apimgr/search/src/security"
+	"github.com/apimgr/search/src/version"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )
@@ -83,6 +84,8 @@ type Config struct {
 	needsSave             bool
 	generatedSecretPaths  []string
 	legacyAppSecretValues map[string]string
+	i2pEnabledExplicit    bool
+	i2pEnabledOverride    *bool
 	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
 	debugEnabled bool
 	// reloadHooks are called after every successful Reload(); guarded by reloadHooksMu
@@ -100,6 +103,7 @@ type Config struct {
 	Engines map[string]EngineConfig `yaml:"engines"`
 	Data    DataConfig              `yaml:"data"`
 	Web     WebCSPConfig            `yaml:"web"`
+	CLI     CLIConfig               `yaml:"cli"`
 
 	// TorOverlay carries the root-level `tor:` block from AI.md PART 12 "Tor
 	// Hidden Service Configuration" (onion_address, contact_email). It is
@@ -112,6 +116,17 @@ type DataConfig struct {
 	SecurityDir string          `yaml:"security_dir"`
 	CVE         CVEDataConfig   `yaml:"cve"`
 	Trivy       TrivyDataConfig `yaml:"trivy"`
+}
+
+// CLIConfig controls the release binaries served to CLI clients per AI.md PART 32.
+type CLIConfig struct {
+	BinaryDownload CLIBinaryDownloadConfig `yaml:"binary_download"`
+}
+
+// CLIBinaryDownloadConfig controls the operator-provisioned CLI release directory.
+type CLIBinaryDownloadConfig struct {
+	Dir         string `yaml:"dir"`
+	RequireAuth bool   `yaml:"require_auth"`
 }
 
 type WebCSPConfig struct {
@@ -247,6 +262,7 @@ func (c *Config) Reload() error {
 	if err != nil {
 		return err
 	}
+	newCfg.ApplyRuntimeEnv(&EnvConfig{I2PEnabled: os.Getenv("I2P_ENABLED")})
 	if newCfg.needsSave {
 		if err := newCfg.Save(path); err != nil {
 			return fmt.Errorf("persist normalized configuration: %w", err)
@@ -266,6 +282,8 @@ func (c *Config) Reload() error {
 
 		// Preserve path and mutex
 		newCfg.configPath = c.configPath
+		c.i2pEnabledExplicit = newCfg.i2pEnabledExplicit
+		c.i2pEnabledOverride = newCfg.i2pEnabledOverride
 
 		// Snapshot the restart-required values before overwriting, then copy
 		// all reloadable settings and categorize changes (AI.md PART 12:
@@ -483,7 +501,6 @@ type ServerConfig struct {
 	// Per AI.md: two-tier auth — server.token + per-resource api_tokens.
 	Token  string            `yaml:"token"`
 	Tokens OwnerTokensConfig `yaml:"tokens"`
-	MCP    MCPConfig         `yaml:"mcp"`
 
 	// Branding
 	Branding BrandingConfig `yaml:"branding"`
@@ -497,7 +514,7 @@ type ServerConfig struct {
 	// Tor
 	Tor TorConfig `yaml:"tor"`
 
-	// I2P — per AI.md PART 31.2: opt-in eepsite, disabled by default
+	// I2P — per AI.md PART 31.2: opt-in outside application containers.
 	I2P I2PConfig `yaml:"i2p"`
 
 	// Notifications — per AI.md PART 17: webui toasts (client-side) and email
@@ -598,10 +615,6 @@ type OwnerTokensConfig struct {
 	IdlePurgeDays int    `yaml:"idle_purge_days"`
 }
 
-type MCPConfig struct {
-	Enabled bool `yaml:"-"`
-}
-
 // DebugConfig holds the debug-gated settings from AI.md PART 6
 // "Debug Configuration". Every setting applies only while the debug flag is on.
 type DebugConfig struct {
@@ -668,12 +681,19 @@ type BrandingConfig struct {
 	// Per PART 13: project.description source
 	Description string `yaml:"description"`
 	// Per AI.md: {PLATFORM_REPO_URL} - repository URL
-	SourceCodeURL string `yaml:"-"`
-	Logo          string `yaml:"logo"`
-	Favicon       string `yaml:"favicon"`
-	FooterText    string `yaml:"-"`
-	Theme         string `yaml:"-"`
-	PrimaryColor  string `yaml:"-"`
+	SourceCodeURL string                         `yaml:"-"`
+	Logo          string                         `yaml:"logo"`
+	Favicon       string                         `yaml:"favicon"`
+	Content       map[string]BrandingPageContent `yaml:"content"`
+	FooterText    string                         `yaml:"-"`
+	Theme         string                         `yaml:"-"`
+	PrimaryColor  string                         `yaml:"-"`
+}
+
+// BrandingPageContent stores operator-authored public page content.
+type BrandingPageContent struct {
+	Format string `yaml:"format"`
+	Body   any    `yaml:"body"`
 }
 
 // RateLimitEndpointConfig holds per-endpoint rate limit parameters per AI.md PART 12.
@@ -685,7 +705,7 @@ type RateLimitEndpointConfig struct {
 }
 
 // RateLimitConfig represents per-endpoint rate limiting configuration per AI.md PART 12.
-// read: 120/min, write: 10/min, health: 120/min, global_burst: 240 per-IP sliding window.
+// read: 120/min, write: 10/min, health: 120/min, strict: 10/15min, auth failures: 5/15min.
 type RateLimitConfig struct {
 	Enabled bool `yaml:"-"`
 	// Read endpoints (search, results, static) — default 120 req/60s
@@ -694,6 +714,10 @@ type RateLimitConfig struct {
 	Write RateLimitEndpointConfig `yaml:"write"`
 	// Health endpoints (/server/healthz, /server/status) — default 120 req/60s
 	Health RateLimitEndpointConfig `yaml:"health"`
+	// Strict sensitive operations (owner-token issue/reveal/rotate/revoke) — default 10 req/900s.
+	Strict RateLimitEndpointConfig `yaml:"strict"`
+	// AuthFailures limits failed token authentication attempts — default 5 req/900s.
+	AuthFailures RateLimitEndpointConfig `yaml:"auth_failures"`
 	// GlobalBurst is the maximum burst size per IP across all endpoint types
 	GlobalBurst int `yaml:"global_burst"`
 }
@@ -744,9 +768,11 @@ type LogsConfig struct {
 // OPT-IN: the eepsite is created only when Enabled is true; no provider is
 // contacted and no port is allocated while it is false.
 type I2PConfig struct {
-	// OPT-IN: disabled by default. Unlike Tor (auto-enabled when the binary
-	// is found), the eepsite is created only when this is true.
+	// Explicit value. When omitted, application containers enable the eepsite
+	// and other environments leave it disabled.
 	Enabled bool `yaml:"enabled"`
+	// Expose controls whether the public autodiscover response advertises this address.
+	Expose bool `yaml:"expose"`
 	// Path to the i2pd binary (auto-detected if empty). Model A when found.
 	Binary string `yaml:"binary"`
 	// SAM bridge address for Model B (external I2P router). Used only when no
@@ -760,6 +786,10 @@ type I2PConfig struct {
 	// Parallel tunnels (1-16; higher = more resilient)
 	InboundQuantity  int `yaml:"inbound_quantity"`
 	OutboundQuantity int `yaml:"outbound_quantity"`
+	// SAM/destination signature type (7 = EdDSA-SHA512-Ed25519)
+	SignatureType int `yaml:"signature_type"`
+	// Bootstrap timeout in seconds: 30-600, default 300
+	BootstrapTimeout int `yaml:"bootstrap_timeout"`
 }
 
 // TorConfig represents Tor configuration
@@ -770,6 +800,8 @@ type TorConfig struct {
 	Enabled bool `yaml:"-"`
 	// Set at runtime when Tor starts
 	OnionAddress string `yaml:"-"`
+	// Expose controls whether the public autodiscover response advertises this address.
+	Expose bool `yaml:"expose"`
 
 	// Contact email for .onion responses (security.txt, contact pages, error pages)
 	// Per AI.md PART 12 Tor Hidden Service Configuration.
@@ -821,9 +853,18 @@ type TorConfig struct {
 // public WebUI toasts (client-side, visitor-facing) and email (SMTP),
 // including per-event email enable/disable switches.
 type NotificationsConfig struct {
-	WebUI   WebUINotifyConfig `yaml:"webui"`
-	Email   EmailConfig       `yaml:"email"`
-	DiskLow DiskLowConfig     `yaml:"disk_low"`
+	WebUI         WebUINotifyConfig   `yaml:"webui"`
+	Email         EmailConfig         `yaml:"email"`
+	DatabaseError DatabaseErrorConfig `yaml:"database_error"`
+	DiskLow       DiskLowConfig       `yaml:"disk_low"`
+}
+
+// DatabaseErrorConfig controls the scheduled database health notification.
+type DatabaseErrorConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	Failures      int    `yaml:"failures"`
+	CheckInterval string `yaml:"check_interval"`
+	Repeat        string `yaml:"repeat"`
 }
 
 // DiskLowConfig configures scheduled per-volume low-disk notifications.
@@ -851,6 +892,7 @@ type EmailConfig struct {
 	Enabled bool            `yaml:"-"`
 	SMTP    SMTPConfig      `yaml:"smtp"`
 	From    EmailFromConfig `yaml:"from"`
+	ReplyTo string          `yaml:"reply_to"`
 	// Per-event email settings (override defaults) — AI.md PART 17
 	Events EmailEventsConfig `yaml:"events"`
 }
@@ -870,6 +912,7 @@ type EmailEventsConfig struct {
 	DatabaseError    bool `yaml:"database_error"`
 	UpdateAvailable  bool `yaml:"update_available"`
 	UpdateInstalled  bool `yaml:"update_installed"`
+	UpdateFailed     bool `yaml:"update_failed"`
 }
 
 // SMTPConfig represents SMTP server configuration
@@ -1267,8 +1310,9 @@ type PrivacyConsent struct {
 
 // PrivacyConsentPolicy is the privacy-policy link shown in the consent banner.
 type PrivacyConsentPolicy struct {
-	Text string `yaml:"text"`
-	URL  string `yaml:"url"`
+	Text    string `yaml:"text"`
+	URL     string `yaml:"url"`
+	Version string `yaml:"version"`
 }
 
 // PrivacyConsentButtons holds the consent banner button labels.
@@ -1441,6 +1485,7 @@ type SchedulerTasksConfig struct {
 	// Update check (skippable) - notify-only newer-version check at 06:00
 	UpdateCheck     TaskConfig `yaml:"update_check"`
 	DiskCheck       TaskConfig `yaml:"disk_check"`
+	DatabaseCheck   TaskConfig `yaml:"database_check"`
 	TokenCleanup    TaskConfig `yaml:"token_cleanup"`
 	LogRotation     TaskConfig `yaml:"log_rotation"`
 	HealthcheckSelf TaskConfig `yaml:"healthcheck_self"`
@@ -1484,6 +1529,10 @@ type CacheConfig struct {
 	TLS bool `yaml:"tls"`
 	// TLSSkipVerify disables certificate verification (self-signed servers)
 	TLSSkipVerify bool `yaml:"tls_skip_verify"`
+	// TLSCA, TLSCert and TLSKey name private client TLS files inside config_dir/ssl.
+	TLSCA   string `yaml:"tls_ca"`
+	TLSCert string `yaml:"tls_cert"`
+	TLSKey  string `yaml:"tls_key"`
 
 	// Connection pool settings
 	PoolSize int `yaml:"pool_size"`
@@ -1503,7 +1552,7 @@ type CacheConfig struct {
 type GeoIPConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// Directory for MMDB files
-	Dir string `yaml:"dir"`
+	Dir string `yaml:"-"`
 	// Countries to block (ISO 3166-1 alpha-2)
 	DenyCountries []string `yaml:"deny_countries"`
 	// If set, only these countries allowed
@@ -1513,7 +1562,7 @@ type GeoIPConfig struct {
 	// with a bundled regulatory list per AI.md PART 19 "Country Blocking Presets"
 	Presets map[string][]string `yaml:"presets"`
 	// Which databases to download and use
-	Databases GeoIPDatabasesConfig `yaml:"databases"`
+	Databases GeoIPDatabasesConfig `yaml:"-"`
 }
 
 // GeoIPDatabasesConfig selects which ip-location-db databases are downloaded
@@ -1672,6 +1721,9 @@ type MetricsLokiConfig struct {
 // BackupConfig represents backup configuration
 // Per AI.md PART 22: Backup & Restore configuration
 type BackupConfig struct {
+	// EncryptionPassword is held only in secrets.yml so scheduled backups can
+	// run unattended without exposing key material in logs or API responses.
+	EncryptionPassword string `yaml:"encryption_password" json:"-"`
 	// Encryption configuration
 	Encryption BackupEncryptionConfig `yaml:"encryption"`
 	// Retention policy
@@ -1714,11 +1766,24 @@ type BackupRetentionConfig struct {
 	MaxTotalSize string `yaml:"max_total_size"`
 }
 
-// ComplianceConfig represents compliance mode configuration
-// Per AI.md PART 22: When enabled, backup encryption is REQUIRED
+// ComplianceConfig stores independently enabled compliance standards.
 type ComplianceConfig struct {
-	// HIPAA, SOC2, etc. compliance mode
-	Enabled bool `yaml:"enabled"`
+	GDPR     bool `yaml:"gdpr"`
+	CCPA     bool `yaml:"ccpa"`
+	HIPAA    bool `yaml:"hipaa"`
+	SOC2     bool `yaml:"soc2"`
+	PCIDSS   bool `yaml:"pci_dss"`
+	ISO27001 bool `yaml:"iso27001"`
+	FedRAMP  bool `yaml:"fedramp"`
+	LGPD     bool `yaml:"lgpd"`
+	PIPEDA   bool `yaml:"pipeda"`
+	APPI     bool `yaml:"appi"`
+	PDPA     bool `yaml:"pdpa"`
+}
+
+// AnyEnabled reports whether any configured standard applies.
+func (c ComplianceConfig) AnyEnabled() bool {
+	return c.GDPR || c.CCPA || c.HIPAA || c.SOC2 || c.PCIDSS || c.ISO27001 || c.FedRAMP || c.LGPD || c.PIPEDA || c.APPI || c.PDPA
 }
 
 // UpdateConfig represents the self-update release channel and rollout policy
@@ -1734,6 +1799,8 @@ type UpdateConfig struct {
 	// 30 = adopt releases only after they have been public for 30 days; 0 = immediately
 	// Gates the scheduled update_check task only - manual --update check/yes always sees the true latest
 	DeferDays int `yaml:"defer_days"`
+	// Minimum CLI version accepted by the server; empty means no minimum.
+	CLIMinVersion string `yaml:"cli_min_version"`
 }
 
 // HealthzConfig controls the /healthz root-level alias per AI.md PART 13.
@@ -1912,27 +1979,26 @@ func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
 		// Default 10MB
 		return 10 * 1024 * 1024
 	}
-	size := l.MaxBodySize
+	bytes, err := parseSizeBytes(l.MaxBodySize)
+	if err != nil || bytes <= 0 { return 10 * 1024 * 1024 }
+	return bytes
+}
+
+func parseSizeBytes(value string) (int64, error) {
+	size := strings.TrimSpace(value)
 	multiplier := int64(1)
-	if len(size) > 2 {
-		suffix := size[len(size)-2:]
+	if len(size) >= 2 {
+		suffix := strings.ToUpper(size[len(size)-2:])
 		switch suffix {
-		case "KB", "kb":
-			multiplier = 1024
-			size = size[:len(size)-2]
-		case "MB", "mb":
-			multiplier = 1024 * 1024
-			size = size[:len(size)-2]
-		case "GB", "gb":
-			multiplier = 1024 * 1024 * 1024
-			size = size[:len(size)-2]
+		case "KB": multiplier, size = 1024, size[:len(size)-2]
+		case "MB": multiplier, size = 1024*1024, size[:len(size)-2]
+		case "GB": multiplier, size = 1024*1024*1024, size[:len(size)-2]
 		}
 	}
-	n, err := strconv.ParseInt(size, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return n * multiplier
+	n, err := strconv.ParseInt(strings.TrimSpace(size), 10, 64)
+	if err != nil { return 0, err }
+	if n > int64(^uint64(0)>>1)/multiplier { return 0, fmt.Errorf("size overflows int64") }
+	return n * multiplier, nil
 }
 
 // GetReadTimeout parses ReadTimeout and returns a duration, falling back to
@@ -2186,7 +2252,6 @@ func DefaultConfig() *Config {
 			// SHA-256 compared against Authorization: Bearer header.
 			Token:  generateBearerToken("adm"),
 			Tokens: OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y", IdlePurgeDays: 0},
-			MCP:    MCPConfig{Enabled: true},
 			Branding: BrandingConfig{
 				Title:         "Search",
 				Tagline:       "Privacy-respecting metasearch",
@@ -2200,6 +2265,8 @@ func DefaultConfig() *Config {
 				Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},
 				Write:       RateLimitEndpointConfig{Requests: 10, Window: 60},
 				Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
+				Strict:      RateLimitEndpointConfig{Requests: 10, Window: 900},
+				AuthFailures: RateLimitEndpointConfig{Requests: 5, Window: 900},
 				GlobalBurst: 240,
 			},
 			Logs: LogsConfig{
@@ -2236,7 +2303,7 @@ func DefaultConfig() *Config {
 				NumIntroPoints:            3,
 				VirtualPort:               80,
 			},
-			// Per AI.md PART 31.2: I2P is OPT-IN and disabled by default
+			// Per AI.md PART 31.2: I2P defaults off outside application containers.
 			I2P: I2PConfig{
 				Enabled:          false,
 				Binary:           "",
@@ -2246,8 +2313,16 @@ func DefaultConfig() *Config {
 				OutboundLength:   3,
 				InboundQuantity:  5,
 				OutboundQuantity: 5,
+				SignatureType:    7,
+				BootstrapTimeout: 300,
 			},
 			Notifications: NotificationsConfig{
+				DatabaseError: DatabaseErrorConfig{
+					Enabled:       true,
+					Failures:      3,
+					CheckInterval: "1m",
+					Repeat:        "24h",
+				},
 				DiskLow: DiskLowConfig{
 					Enabled:          true,
 					ThresholdPercent: 85,
@@ -2278,6 +2353,7 @@ func DefaultConfig() *Config {
 						DatabaseError:    true,
 						UpdateAvailable:  false,
 						UpdateInstalled:  true,
+						UpdateFailed:     false,
 					},
 				},
 			},
@@ -2305,7 +2381,7 @@ func DefaultConfig() *Config {
 					// Per AI.md PART 11: full per-directive default policy.
 					// script-src has no 'unsafe-inline' — all JS lives in static/js/app.js.
 					// img-src/media-src/font-src are scoped to self+data/blob/https, never "*".
-					ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' https:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-to default; report-uri /api/v1/server/reports/csp",
+					ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' https:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-to default; report-uri " + version.APIPrefix + "/server/reports/csp",
 					// Per AI.md PART 11: full Permissions-Policy — locked tracking proposals,
 					// spec-required features scoped to self, all sensors locked by default.
 					// geolocation is scoped to self (not disabled) because the weather widget's
@@ -2467,8 +2543,9 @@ func DefaultConfig() *Config {
 					Message:               "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data is stored on our servers and is never sold.",
 					MessageIfSold:         "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data may be shared with or sold to third parties as described in our Privacy Policy.",
 					Policy: PrivacyConsentPolicy{
-						Text: "Privacy Policy",
-						URL:  "/server/privacy",
+						Text:    "Privacy Policy",
+						URL:     "/server/privacy",
+						Version: "1",
 					},
 					Buttons: PrivacyConsentButtons{
 						Decline: "Decline",
@@ -2560,6 +2637,7 @@ func DefaultConfig() *Config {
 					BackupDaily:     TaskConfig{Schedule: "0 2 * * *", Enabled: true, RetryOnFail: true},
 					BackupHourly:    TaskConfig{Schedule: "@hourly", Enabled: false},
 					DiskCheck:       TaskConfig{Enabled: true},
+					DatabaseCheck:   TaskConfig{Schedule: "@every 1m", Enabled: true},
 					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true, RetryOnFail: true},
 					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
 					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true, RetryOnFail: true, RetryDelay: "1h"},
@@ -2584,6 +2662,9 @@ func DefaultConfig() *Config {
 				Timeout:  "5s",
 				Prefix:   "search:",
 				TTL:      3600,
+				// TLS verification is opt-in for cache connections; the value
+				// is only used when TLS is enabled.
+				TLSSkipVerify: true,
 			},
 			// Per AI.md PART 19: GeoIP enabled by default; dir resolved at runtime;
 			// all three databases on; no country blocking and no bundled presets.
@@ -2924,8 +3005,8 @@ func configDropInPaths(path string) ([]string, error) {
 		if !info.IsDir() {
 			return nil, fmt.Errorf("drop-in path %s is not a directory", dropInDir)
 		}
-		if info.Mode().Perm() != 0700 {
-			if err := os.Chmod(dropInDir, 0700); err != nil {
+		if info.Mode().Perm() != 0o700 {
+			if err := os.Chmod(dropInDir, 0o700); err != nil {
 				return nil, fmt.Errorf("secure drop-in directory %s: %w", dropInDir, err)
 			}
 		}
@@ -3001,6 +3082,7 @@ func Load(path string) (*Config, error) {
 		mergeConfigNodes(root, node, "", filePath, winners)
 		slog.Info("loaded configuration drop-in", "path", filePath)
 	}
+	i2pEnabledExplicit := configPathPresent(root, "server.i2p.enabled")
 	secretsPath := filepath.Join(filepath.Dir(path), "secrets.yml")
 	if _, statErr := os.Stat(secretsPath); statErr == nil {
 		secretNode, secretErr := yamlNodeFromConfig(secretsPath)
@@ -3051,13 +3133,26 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode merged configuration: %w", err)
 	}
+	var validationNode yaml.Node
+	if err := yaml.Unmarshal(encoded, &validationNode); err != nil {
+		return nil, fmt.Errorf("inspect merged configuration fields: %w", err)
+	}
+	unknownFields := pruneUnknownConfigFields(&validationNode, reflect.TypeOf(Config{}), "")
+	for _, field := range unknownFields {
+		slog.Warn("unrecognized configuration key is ignored and preserved", "key", field)
+	}
+	validationBytes, err := yaml.Marshal(&validationNode)
+	if err != nil {
+		return nil, fmt.Errorf("encode configuration field validation: %w", err)
+	}
 	var strictCheck Config
-	strictDecoder := yaml.NewDecoder(bytes.NewReader(encoded))
+	strictDecoder := yaml.NewDecoder(bytes.NewReader(validationBytes))
 	strictDecoder.KnownFields(true)
 	if err := strictDecoder.Decode(&strictCheck); err != nil {
 		return nil, fmt.Errorf("decode merged configuration with strict fields: %w", err)
 	}
 	cfg := DefaultConfig()
+	cfg.i2pEnabledExplicit = i2pEnabledExplicit
 	cfg.firstRun = false
 	cfg.legacyAppSecretValues = make(map[string]string)
 	for _, legacyPath := range []string{
@@ -3133,6 +3228,102 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// pruneUnknownConfigFields removes unknown keys from a validation-only YAML
+// tree. The original merged tree remains untouched so forward-compatible keys
+// are ignored by this version and preserved for future versions.
+func pruneUnknownConfigFields(node *yaml.Node, valueType reflect.Type, parent string) []string {
+	for valueType.Kind() == reflect.Pointer {
+		valueType = valueType.Elem()
+	}
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return pruneUnknownConfigFields(node.Content[0], valueType, parent)
+	}
+	if node.Kind != yaml.MappingNode {
+		if valueType.Kind() == reflect.Slice || valueType.Kind() == reflect.Array {
+			var unknown []string
+			for _, child := range node.Content {
+				unknown = append(unknown, pruneUnknownConfigFields(child, valueType.Elem(), parent)...)
+			}
+			return unknown
+		}
+		return nil
+	}
+
+	if valueType.Kind() == reflect.Map {
+		var unknown []string
+		for index := 1; index < len(node.Content); index += 2 {
+			unknown = append(unknown, pruneUnknownConfigFields(node.Content[index], valueType.Elem(), joinConfigField(parent, node.Content[index-1].Value))...)
+		}
+		return unknown
+	}
+	if valueType.Kind() != reflect.Struct {
+		return nil
+	}
+
+	fields := configYAMLFields(valueType)
+	var unknown []string
+	for index := 0; index+1 < len(node.Content); {
+		keyNode, valueNode := node.Content[index], node.Content[index+1]
+		fieldType, found := fields[keyNode.Value]
+		fieldPath := joinConfigField(parent, keyNode.Value)
+		if !found {
+			if parent == "" {
+				index += 2
+				continue
+			}
+			unknown = append(unknown, fieldPath)
+			node.Content = append(node.Content[:index], node.Content[index+2:]...)
+			continue
+		}
+		unknown = append(unknown, pruneUnknownConfigFields(valueNode, fieldType, fieldPath)...)
+		index += 2
+	}
+	return unknown
+}
+
+func configYAMLFields(valueType reflect.Type) map[string]reflect.Type {
+	fields := make(map[string]reflect.Type)
+	for index := 0; index < valueType.NumField(); index++ {
+		field := valueType.Field(index)
+		if field.PkgPath != "" {
+			continue
+		}
+		tag := field.Tag.Get("yaml")
+		parts := strings.Split(tag, ",")
+		if parts[0] == "-" {
+			continue
+		}
+		if len(parts) > 1 && parts[1] == "inline" {
+			inlineType := field.Type
+			for inlineType.Kind() == reflect.Pointer {
+				inlineType = inlineType.Elem()
+			}
+			if inlineType.Kind() == reflect.Struct {
+				for name, typeOfField := range configYAMLFields(inlineType) {
+					fields[name] = typeOfField
+				}
+			}
+			continue
+		}
+		name := parts[0]
+		if name == "" {
+			name = strings.ToLower(field.Name)
+		}
+		fields[name] = field.Type
+	}
+	return fields
+}
+
+func joinConfigField(parent, field string) string {
+	if parent == "" {
+		return field
+	}
+	return parent + "." + field
+}
+
 func isGeneratedHexSecret(value *yaml.Node) bool {
 	if value == nil || value.Kind != yaml.ScalarNode || len(value.Value) != 64 {
 		return false
@@ -3157,9 +3348,8 @@ func (c *Config) encryptDNSCredentials() error {
 	key := c.Server.Security.EncryptionKey
 	for name, value := range credentials {
 		if strings.HasPrefix(value, "enc:v1:") {
-			if _, err := security.DecryptAESGCM(key, strings.TrimPrefix(value, "enc:v1:")); err != nil {
-				return fmt.Errorf("decrypt DNS credential %s: invalid encrypted value", name)
-			}
+			// The database may contain the wrapped previous key after a crash
+			// during rotation. Validate/decrypt after startup loads app_secrets.
 			continue
 		}
 		encrypted, err := security.EncryptAESGCM(key, []byte(value))
@@ -3170,6 +3360,39 @@ func (c *Config) encryptDNSCredentials() error {
 		c.needsSave = true
 	}
 	return nil
+}
+
+// ReencryptDNSCredentials moves encrypted DNS provider credentials to the
+// active key, using previousKey only for credentials that the active key
+// cannot open. It returns whether the config needs to be saved.
+func (c *Config) ReencryptDNSCredentials(currentKey, previousKey string) (bool, error) {
+	if c == nil || currentKey == "" {
+		return false, fmt.Errorf("DNS credential rotation requires an active encryption key")
+	}
+	changed := false
+	for name, value := range c.Server.SSL.LetsEncrypt.DNSCredentials {
+		if !strings.HasPrefix(value, "enc:v1:") {
+			return changed, fmt.Errorf("DNS credential %s is not encrypted", name)
+		}
+		encoded := strings.TrimPrefix(value, "enc:v1:")
+		if _, err := security.DecryptAESGCM(currentKey, encoded); err == nil {
+			continue
+		}
+		if previousKey == "" {
+			return changed, fmt.Errorf("security.decrypt_failed table=configuration row=dns_credentials field=%s", name)
+		}
+		plaintext, err := security.DecryptAESGCM(previousKey, encoded)
+		if err != nil {
+			return changed, fmt.Errorf("security.decrypt_failed table=configuration row=dns_credentials field=%s", name)
+		}
+		reencrypted, err := security.EncryptAESGCM(currentKey, plaintext)
+		if err != nil {
+			return changed, fmt.Errorf("re-encrypt DNS credential %s: %w", name, err)
+		}
+		c.Server.SSL.LetsEncrypt.DNSCredentials[name] = "enc:v1:" + reencrypted
+		changed = true
+	}
+	return changed, nil
 }
 
 func yamlNodeFromConfig(path string) (*yaml.Node, error) {
@@ -3201,8 +3424,8 @@ func enforceOwnerOnlyFile(path string) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("must be a regular file")
 	}
-	if info.Mode().Perm() != 0600 {
-		if err := os.Chmod(path, 0600); err != nil {
+	if info.Mode().Perm() != 0o600 {
+		if err := os.Chmod(path, 0o600); err != nil {
 			return fmt.Errorf("set mode 0600: %w", err)
 		}
 	}
@@ -3374,7 +3597,7 @@ func (c *Config) Save(path string) error {
 
 	// Ensure directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -3396,7 +3619,7 @@ func writeYAMLAtomic(path string, node *yaml.Node, pattern string) error {
 
 func writeTextAtomic(path, contents, pattern string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(dir, pattern)
@@ -3409,7 +3632,7 @@ func writeTextAtomic(path, contents, pattern string) error {
 			slog.Warn("failed to clean temporary config file", "err", err)
 		}
 	}()
-	if err := tmp.Chmod(0600); err != nil {
+	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
 		return err
 	}
@@ -3806,7 +4029,7 @@ func migrateYamlToYml(yamlPath, ymlPath string) error {
 	}
 
 	// Write to .yml file
-	if err := os.WriteFile(ymlPath, data, 0600); err != nil {
+	if err := os.WriteFile(ymlPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write yml file: %w", err)
 	}
 
@@ -3873,6 +4096,13 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if env.I2PEnabled != "" {
+		if enabled, err := ParseBool(env.I2PEnabled, false); err == nil {
+			c.i2pEnabledOverride = &enabled
+		} else {
+			slog.Warn("invalid I2P_ENABLED environment override; keeping configured value", "error", err)
+		}
+	}
 	if env.Port != "" {
 		port, httpsPort, err := ParsePortValue(env.Port)
 		if err != nil {
@@ -3928,6 +4158,20 @@ func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
 	if env.SMTPTLS != "" {
 		c.Server.Notifications.Email.SMTP.TLS = env.SMTPTLS
 	}
+}
+
+// I2PEnabled resolves an explicit runtime override, configured value, or the
+// application-container default in that order.
+func (c *Config) I2PEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.i2pEnabledOverride != nil {
+		return *c.i2pEnabledOverride
+	}
+	if c.i2pEnabledExplicit {
+		return c.Server.I2P.Enabled
+	}
+	return IsRunningInContainer()
 }
 
 // generateSecret generates a random secret key.
@@ -4448,6 +4692,38 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 
 	var warnings []ValidationWarning
 
+	if c.Server.I2P.VirtualPort < 1 || c.Server.I2P.VirtualPort > 65535 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.virtual_port", Message: "Invalid I2P virtual port, using default", Default: 80})
+		c.Server.I2P.VirtualPort = 80
+	}
+	if c.Server.I2P.InboundLength < 0 || c.Server.I2P.InboundLength > 7 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.inbound_length", Message: "Invalid I2P inbound tunnel length, using default", Default: 3})
+		c.Server.I2P.InboundLength = 3
+	}
+	if c.Server.I2P.OutboundLength < 0 || c.Server.I2P.OutboundLength > 7 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.outbound_length", Message: "Invalid I2P outbound tunnel length, using default", Default: 3})
+		c.Server.I2P.OutboundLength = 3
+	}
+	if c.Server.I2P.InboundQuantity < 1 || c.Server.I2P.InboundQuantity > 16 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.inbound_quantity", Message: "Invalid I2P inbound tunnel quantity, using default", Default: 5})
+		c.Server.I2P.InboundQuantity = 5
+	}
+	if c.Server.I2P.OutboundQuantity < 1 || c.Server.I2P.OutboundQuantity > 16 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.outbound_quantity", Message: "Invalid I2P outbound tunnel quantity, using default", Default: 5})
+		c.Server.I2P.OutboundQuantity = 5
+	}
+	if strings.TrimSpace(c.Server.I2P.SAMAddress) == "" {
+		c.Server.I2P.SAMAddress = "127.0.0.1:7656"
+	}
+	if c.Server.I2P.SignatureType <= 0 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.signature_type", Message: "Invalid I2P signature type, using default", Default: 7})
+		c.Server.I2P.SignatureType = 7
+	}
+	if c.Server.I2P.BootstrapTimeout < 30 || c.Server.I2P.BootstrapTimeout > 600 {
+		warnings = append(warnings, ValidationWarning{Field: "server.i2p.bootstrap_timeout", Message: "Invalid I2P bootstrap timeout, using default", Default: 300})
+		c.Server.I2P.BootstrapTimeout = 300
+	}
+
 	for i, language := range c.Server.I18n.SupportedLanguages {
 		c.Server.I18n.SupportedLanguages[i] = strings.ToLower(strings.TrimSpace(language))
 	}
@@ -4612,6 +4888,18 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		if c.Server.RateLimit.Write.Window <= 0 {
 			c.Server.RateLimit.Write.Window = 60
 		}
+		if c.Server.RateLimit.Strict.Requests <= 0 {
+			c.Server.RateLimit.Strict.Requests = 10
+		}
+		if c.Server.RateLimit.Strict.Window <= 0 {
+			c.Server.RateLimit.Strict.Window = 900
+		}
+		if c.Server.RateLimit.AuthFailures.Requests <= 0 {
+			c.Server.RateLimit.AuthFailures.Requests = 5
+		}
+		if c.Server.RateLimit.AuthFailures.Window <= 0 {
+			c.Server.RateLimit.AuthFailures.Window = 900
+		}
 		if c.Server.RateLimit.Health.Requests <= 0 {
 			c.Server.RateLimit.Health.Requests = 120
 		}
@@ -4670,6 +4958,28 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 	// Metrics configuration
 	if c.Server.Metrics.Enabled && c.Server.Metrics.Endpoint == "" {
 		c.Server.Metrics.Endpoint = "/server/metrics"
+	}
+
+	// Request sizes and connection timeouts use the explicit PART 12 defaults
+	// instead of silently falling back inside the HTTP server getters.
+	if size, err := parseSizeBytes(c.Server.Limits.MaxBodySize); err != nil || size <= 0 {
+		warnings = append(warnings, ValidationWarning{Field: "server.limits.max_body_size", Message: "Invalid body-size limit, using default", Default: "10MB"})
+		c.Server.Limits.MaxBodySize = "10MB"
+	}
+	for _, item := range []struct {
+		field string
+		value *string
+		fallback string
+	}{
+		{"server.limits.read_timeout", &c.Server.Limits.ReadTimeout, "30s"},
+		{"server.limits.write_timeout", &c.Server.Limits.WriteTimeout, "30s"},
+		{"server.limits.idle_timeout", &c.Server.Limits.IdleTimeout, "120s"},
+	} {
+		duration, err := time.ParseDuration(strings.TrimSpace(*item.value))
+		if err != nil || duration <= 0 {
+			warnings = append(warnings, ValidationWarning{Field: item.field, Message: "Invalid timeout, using default", Default: item.fallback})
+			*item.value = item.fallback
+		}
 	}
 
 	// Compression configuration

@@ -15,6 +15,9 @@ func getSwaggerThemeCSS(mode string) string {
 	}
 }
 
+// ThemeCSS returns the self-hosted Swagger UI theme for the visitor's selected mode.
+func ThemeCSS(mode string) string { return getSwaggerThemeCSS(mode) }
+
 var (
 	swaggerDarkTheme  = theme.CSSPaletteVariables(":root", theme.ThemePaletteDark) + swaggerThemeCSS
 	swaggerLightTheme = theme.CSSPaletteVariables(":root", theme.ThemePaletteLight) + swaggerThemeCSS

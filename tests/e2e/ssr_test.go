@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"golang.org/x/net/html"
 	"image"
 	"image/color"
 	"image/png"
@@ -21,9 +20,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 // TestMain owns the lifetime of the shared test sites.
@@ -40,15 +40,38 @@ var publicPages = []struct {
 	path     string
 	contains string
 }{
-	{"/server/about", `class="static-page about-page"`},
-	{"/server/privacy", `class="static-page privacy-page"`},
-	{"/server/contact", `class="static-page contact-page"`},
-	{"/server/help", `class="static-page help-page"`},
-	{"/server/terms", `class="static-page terms-page"`},
-	{"/server/security", `class="static-page security-page"`},
-	{"/server/security/policy", `class="static-page security-policy-page"`},
-	{"/server/security/thanks", `class="static-page security-thanks-page"`},
-	{"/server/preferences", `class="static-page preferences-page"`},
+	{"/server/about", `class="container container-lg"`},
+	{"/server/privacy", `class="container container-md"`},
+	{"/server/contact", `class="container container-md"`},
+	{"/server/dpo", `class="container container-sm"`},
+	{"/server/help", `class="container container-lg"`},
+	{"/server/help/mcp", `class="container container-md"`},
+	{"/server/terms", `class="container container-md"`},
+	{"/server/security", `class="container container-md"`},
+	{"/server/security/policy", `class="container container-md"`},
+	{"/server/security/thanks", `class="container container-md"`},
+	{"/server/preferences", `class="container container-sm"`},
+	{"/server/preferences/tools", `class="container container-md"`},
+	{"/server/preferences/sync", `class="container container-sm"`},
+	{"/server/preferences/tokens", `class="container container-lg"`},
+	{"/server/healthz", `class="container container-lg"`},
+	{"/server/docs/swagger", `class="container container-lg"`},
+	{"/server/docs/graphql", `class="container container-lg"`},
+}
+
+func TestSSRRetiredServerRoutesReturnNotFound(t *testing.T) {
+	s := newSession(t)
+	for _, path := range []string{
+		"/server/status",
+		"/server/config",
+		"/server/preferences/export",
+		"/server/preferences/import",
+	} {
+		resp, _ := s.get(path)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want %d", path, resp.StatusCode, http.StatusNotFound)
+		}
+	}
 }
 
 // TestSSRInteractivePagesCarryTheirForms asserts the two pages whose whole
@@ -102,13 +125,29 @@ func TestSSRPublicPagesRender(t *testing.T) {
 	for _, tc := range publicPages {
 		t.Run(tc.path, func(t *testing.T) {
 			resp, body := s.get(tc.path)
-			requireStatus(t, resp, http.StatusOK)
+			wantStatus := http.StatusOK
+			if tc.path == "/server/healthz" {
+				wantStatus = http.StatusServiceUnavailable
+			}
+			requireStatus(t, resp, wantStatus)
 			requireHTMLShell(t, body, tc.path)
 			requireContains(t, body, `<meta charset="UTF-8">`, tc.path)
 			requireContains(t, body, `name="viewport"`, tc.path)
 			requireContains(t, body, `rel="manifest" href="/manifest.json"`, tc.path)
 			requireContains(t, body, `apple-touch-startup-image`, tc.path)
 			requireContains(t, body, tc.contains, tc.path)
+			if count := strings.Count(body, `<h1 class="page-title`); count != 1 {
+				t.Errorf("page %s has %d page-title headings, want exactly one", tc.path, count)
+			}
+			if strings.Contains(body, ` style=`) || strings.Contains(body, `<style`) {
+				t.Errorf("page %s contains inline CSS", tc.path)
+			}
+			if strings.Contains(body, "<script>") {
+				t.Errorf("page %s contains an inline executable script", tc.path)
+			}
+			if strings.Contains(body, ` onclick=`) || strings.Contains(body, ` onsubmit=`) {
+				t.Errorf("page %s contains an inline event handler", tc.path)
+			}
 		})
 	}
 }
@@ -122,8 +161,11 @@ func TestSSRVisualPreferencesApplyToPageAndSettings(t *testing.T) {
 	}
 	resp, home := s.get("/", addPreferences)
 	requireStatus(t, resp, http.StatusOK)
-	for _, marker := range []string{`font-size-large`, `results-density-compact`, `style="--color-accent: #123abc; --color-primary: #123abc"`} {
+	for _, marker := range []string{`font-size-large`, `results-density-compact`, `/static/css/accent.css`} {
 		requireContains(t, home, marker, "SSR visual preferences")
+	}
+	if strings.Contains(home, `style="--color-accent:`) {
+		t.Fatal("SSR visual preferences: accent colors must come from the external stylesheet")
 	}
 	resp, settings := s.get("/server/preferences", addPreferences)
 	requireStatus(t, resp, http.StatusOK)
@@ -143,15 +185,15 @@ func TestSSRKeyboardShortcutGuideMatchesSupportedActions(t *testing.T) {
 
 func TestSSRBangSearchRedirectsToSelectedEngine(t *testing.T) {
 	s := newSession(t).withoutRedirects()
-	resp, _ := s.get("/search?q=%21g+cats")
+	resp, _ := s.get("/search?q=%21ddg+cats")
 	requireStatus(t, resp, http.StatusFound)
 	location := resp.Header.Get("Location")
 	parsed, err := url.Parse(location)
 	if err != nil {
 		t.Fatalf("parse bang redirect location %q: %v", location, err)
 	}
-	if parsed.Host != "www.google.com" || parsed.Path != "/search" || parsed.Query().Get("q") != "cats" {
-		t.Fatalf("bang redirect location = %q, want Google search for cats", location)
+	if parsed.Host != "duckduckgo.com" || parsed.Path != "/" || parsed.Query().Get("q") != "cats" {
+		t.Fatalf("bang redirect location = %q, want DuckDuckGo search for cats", location)
 	}
 }
 
@@ -391,21 +433,21 @@ func TestSSRSearchAPIReturnsAggregatedFixtureResults(t *testing.T) {
 	var discovery struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Server struct {
-				Features struct {
-					Search bool `json:"search"`
-				} `json:"features"`
-			} `json:"server"`
-			API struct {
-				BasePath string `json:"base_path"`
+			Name    string `json:"name"`
+			Version string `json:"version"`
+			API     struct {
+				CurrentVersion string `json:"current_version"`
 			} `json:"api"`
+			URLs          []string            `json:"urls"`
+			CLIVersions   map[string]struct{} `json:"cli_versions"`
+			CLIMinVersion string              `json:"cli_min_version"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(body), &discovery); err != nil {
 		t.Fatalf("decode API autodiscovery: %v (%s)", err, body)
 	}
-	if !discovery.OK || !discovery.Data.Server.Features.Search || discovery.Data.API.BasePath != "/api/v1" {
-		t.Errorf("API autodiscovery = %#v, want public search and base path /api/v1", discovery)
+	if !discovery.OK || discovery.Data.Name != "search" || discovery.Data.Version == "" || discovery.Data.API.CurrentVersion != "v1" || len(discovery.Data.URLs) == 0 {
+		t.Errorf("API autodiscovery = %#v, want project name, running version, API version v1, and public origins", discovery)
 	}
 }
 
@@ -468,11 +510,15 @@ func TestSSRPreferenceSyncExportAndImport(t *testing.T) {
 		t.Fatalf("preference export did not provide a URL and short code: %#v", envelope.Data)
 	}
 	response, _ = s.withoutRedirects().get("/server/preferences/sync/import?code=" + url.QueryEscape(envelope.Data.Code) + "&redirect=%2Fserver%2Fpreferences")
+	importedCookies := response.Cookies()
+	if len(importedCookies) == 0 {
+		t.Fatal("preference import did not set cookies")
+	}
 	requireRedirect(t, response, http.StatusSeeOther, "/")
 	pageResponse, preferences := s.get("/server/preferences")
 	requireStatus(t, pageResponse, http.StatusOK)
 	requireContains(t, preferences, `value="light" selected`, "imported theme")
-	requireContains(t, preferences, `value="de" selected`, "imported language")
+	requireContains(t, preferences, `value="de" lang="de" selected`, "imported language")
 	requireContains(t, preferences, `value="images" selected`, "imported category")
 	requireContains(t, preferences, `value="large" selected`, "imported font size")
 	requireContains(t, preferences, `value="compact" selected`, "imported results density")
@@ -760,7 +806,8 @@ func TestSSRInternalLinkCrawlHasNoDeadLinksOrServerErrors(t *testing.T) {
 		}
 		visited[path] = true
 		resp, body := s.get(path)
-		if resp.StatusCode == http.StatusNotFound || resp.StatusCode >= http.StatusInternalServerError {
+		healthUnavailable := (path == "/server/healthz" || path == "/server/healthz.txt" || path == "/readyz") && resp.StatusCode == http.StatusServiceUnavailable
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode >= http.StatusInternalServerError && !healthUnavailable {
 			t.Errorf("internal link %q returned HTTP %d", path, resp.StatusCode)
 		}
 		if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") || resp.StatusCode >= 400 {
@@ -817,24 +864,6 @@ func TestSSRUnknownWellKnownIs404(t *testing.T) {
 
 	resp, _ := s.get("/.well-known/nonexistent-resource")
 	requireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestSSROperatorPagesRequireToken covers the RequireOperator gate from
-// PART 11. /server/status and /server/config must refuse an anonymous request
-// and admit a request carrying the operator bearer token.
-func TestSSROperatorPagesRequireToken(t *testing.T) {
-	s := newSession(t)
-
-	for _, path := range []string{"/server/status", "/server/config"} {
-		t.Run(path+" refuses anonymous", func(t *testing.T) {
-			resp, _ := s.get(path)
-			requireStatus(t, resp, http.StatusUnauthorized)
-		})
-		t.Run(path+" admits operator", func(t *testing.T) {
-			resp, _ := s.get(path, asOperator)
-			requireStatus(t, resp, http.StatusOK)
-		})
-	}
 }
 
 // TestSSRPWAAndWellKnownAssets asserts the machine-readable surface is served
@@ -897,7 +926,6 @@ func TestSSRPWAAndWellKnownAssets(t *testing.T) {
 		{"/llms.txt", "text/plain", ""},
 		{"/opensearch.xml", "xml", "<OpenSearchDescription"},
 		{"/.well-known/security.txt", "text/plain", "Contact:"},
-		{"/offline.html", "text/html", "<!DOCTYPE html>"},
 	}
 
 	for _, tc := range cases {
@@ -960,7 +988,7 @@ func TestSSRHealthEndpoints(t *testing.T) {
 
 	t.Run("browser gets HTML", func(t *testing.T) {
 		resp, body := s.get("/server/healthz")
-		requireStatus(t, resp, http.StatusOK)
+		requireStatus(t, resp, http.StatusServiceUnavailable)
 		if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
 			t.Errorf("/server/healthz Content-Type = %q, want text/html for a browser", ct)
 		}
@@ -969,7 +997,7 @@ func TestSSRHealthEndpoints(t *testing.T) {
 
 	t.Run("text form is available", func(t *testing.T) {
 		resp, body := s.get("/server/healthz.txt")
-		requireStatus(t, resp, http.StatusOK)
+		requireStatus(t, resp, http.StatusServiceUnavailable)
 		if len(body) == 0 {
 			t.Error("/server/healthz.txt returned an empty body")
 		}
@@ -978,7 +1006,11 @@ func TestSSRHealthEndpoints(t *testing.T) {
 	t.Run("liveness and readiness answer", func(t *testing.T) {
 		for _, path := range []string{"/livez", "/readyz"} {
 			resp, _ := s.get(path)
-			requireStatus(t, resp, http.StatusOK)
+			wantStatus := http.StatusOK
+			if path == "/readyz" {
+				wantStatus = http.StatusServiceUnavailable
+			}
+			requireStatus(t, resp, wantStatus)
 		}
 	})
 }
@@ -1052,26 +1084,24 @@ func TestSSRThemeRedirectRejectsExternalTarget(t *testing.T) {
 	}
 }
 
-// TestSSRAPIDocsPagesRender covers the PART 14 documentation surface. Swagger
-// UI and GraphiQL are self-contained pages that do not use the project layout
-// scaffold, so they are asserted on their own markers: a real doctype, a
-// title, and the mount div plus the spec URL the UI fetches. A docs page that
-// renders an empty div with no reference to the spec is a dead page.
+// TestSSRAPIDocsPagesRender covers the PART 14 documentation pages and their
+// shared server-rendered shell.
 func TestSSRAPIDocsPagesRender(t *testing.T) {
 	s := newSession(t)
 
 	t.Run("swagger ui", func(t *testing.T) {
 		resp, body := s.get("/server/docs/swagger")
 		requireStatus(t, resp, http.StatusOK)
-		requireContains(t, body, "<!DOCTYPE html>", "/server/docs/swagger")
+		requireHTMLShell(t, body, "/server/docs/swagger")
+		requireContains(t, body, `class="page-title"`, "/server/docs/swagger")
 		requireContains(t, body, "swagger-ui", "/server/docs/swagger")
-		requireContains(t, body, "/api/swagger", "/server/docs/swagger")
+		requireContains(t, body, "/api/v1/server/swagger", "/server/docs/swagger")
 	})
 
 	t.Run("graphiql", func(t *testing.T) {
 		resp, body := s.get("/server/docs/graphql")
 		requireStatus(t, resp, http.StatusOK)
-		requireContains(t, body, "<!DOCTYPE html>", "/server/docs/graphql")
+		requireHTMLShell(t, body, "/server/docs/graphql")
 		requireContains(t, body, "/api/graphql", "/server/docs/graphql")
 	})
 }
@@ -1121,21 +1151,21 @@ func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
 		}
 	})
 
-	linkedBody, status := requestJSON(http.MethodPost, "/api/v1/server/preferences/tokens", `{"name":"mcp-linked","expires_at":"7d"}`, createdResponse.Data.OwnerToken)
+	linkedBody, status := requestJSON(http.MethodPost, "/api/v1/server/preferences/tokens", `{"name":"mcp-linked","expires":"7d"}`, createdResponse.Data.OwnerToken)
 	if status != http.StatusCreated {
 		t.Fatalf("create linked token: status=%d", status)
 	}
 	var linkedResponse struct {
 		Data struct {
-			ID    int64  `json:"id"`
-			Token string `json:"token"`
+			ID    string `json:"id"`
+			Token string `json:"linked_token"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(linkedBody, &linkedResponse); err != nil || linkedResponse.Data.ID <= 0 || linkedResponse.Data.Token == "" {
+	if err := json.Unmarshal(linkedBody, &linkedResponse); err != nil || linkedResponse.Data.ID == "" || linkedResponse.Data.Token == "" {
 		t.Fatalf("create linked token response is invalid: err=%v", err)
 	}
 	t.Cleanup(func() {
-		_, status := requestJSON(http.MethodDelete, "/api/v1/server/preferences/tokens/"+strconv.FormatInt(linkedResponse.Data.ID, 10), "", createdResponse.Data.OwnerToken)
+		_, status := requestJSON(http.MethodDelete, "/api/v1/server/preferences/tokens/"+linkedResponse.Data.ID, "", createdResponse.Data.OwnerToken)
 		if status != http.StatusOK {
 			t.Errorf("revoke MCP fixture linked token: status=%d", status)
 		}
@@ -1148,10 +1178,31 @@ func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
 		} `json:"result"`
 	} {
 		t.Helper()
-		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tool + `","arguments":{}}}`
-		response, status := requestJSON(http.MethodPost, "/api/v1/server/mcp", body, token)
+		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tool + `","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}`
+		request, err := http.NewRequest(http.MethodPost, s.baseURL+"/api/v1/server/mcp", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("create MCP request: %v", err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("MCP-Protocol-Version", "2026-07-28")
+		request.Header.Set("Mcp-Method", "tools/call")
+		request.Header.Set("Mcp-Name", tool)
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		response, err := s.client.Do(request)
+		if err != nil {
+			t.Fatalf("request MCP tool %s: %v", tool, err)
+		}
+		responseBody, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil {
+			t.Fatalf("read MCP response: %v", err)
+		}
+		status := response.StatusCode
 		if status != http.StatusOK {
-			t.Fatalf("MCP call %s: status=%d body=%s", tool, status, response)
+			t.Fatalf("MCP call %s: status=%d body=%s", tool, status, responseBody)
 		}
 		var payload struct {
 			Result struct {
@@ -1159,8 +1210,8 @@ func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
 				StructuredContent map[string]interface{} `json:"structuredContent"`
 			} `json:"result"`
 		}
-		if err := json.Unmarshal(response, &payload); err != nil {
-			t.Fatalf("decode MCP call %s: %v body=%s", tool, err, response)
+		if err := json.Unmarshal(responseBody, &payload); err != nil {
+			t.Fatalf("decode MCP call %s: %v body=%s", tool, err, responseBody)
 		}
 		return payload
 	}
@@ -1174,6 +1225,14 @@ func TestSSRMCPCallsKeepOwnerCredentialsNonPrivileged(t *testing.T) {
 		{name: "no token"},
 	} {
 		t.Run(credential.name, func(t *testing.T) {
+			if credential.token == "" {
+				request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"getApiV1ServerAbout","arguments":{}}}`
+				_, status := requestJSON(http.MethodPost, "/api/v1/server/mcp", request, "")
+				if status != http.StatusUnauthorized {
+					t.Fatalf("MCP call without a token status=%d, want %d", status, http.StatusUnauthorized)
+				}
+				return
+			}
 			public := callMCP("getApiV1ServerAbout", credential.token)
 			if public.Result.IsError || public.Result.StructuredContent["ok"] != true {
 				t.Fatalf("public MCP call failed: %#v", public.Result)

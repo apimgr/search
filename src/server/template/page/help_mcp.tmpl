@@ -1,12 +1,13 @@
 {{define "content"}}
-<article class="static-page mcp-help-page">
+<div class="container container-md">
   <header class="page-header">
-    <h1>{{t "mcp_help.title"}}</h1>
-    <p>{{t "mcp_help.subtitle"}}</p>
+    <nav class="breadcrumb" aria-label="{{t "accessibility.breadcrumb"}}"><a href="/server/help">← {{t "help.title"}}</a></nav>
+    <h1 class="page-title">{{t "mcp_help.title"}}</h1>
+    <p class="page-lead">{{t "mcp_help.subtitle"}}</p>
   </header>
 
-  <nav aria-label="{{t "mcp_help.contents_label"}}">
-    <h2>{{t "mcp_help.contents_title"}}</h2>
+  <nav class="section-card" aria-labelledby="mcp-help-contents-heading">
+    <h2 id="mcp-help-contents-heading">{{t "mcp_help.contents_title"}}</h2>
     <ul>
       <li><a href="#overview">{{t "mcp_help.overview_title"}}</a></li>
       <li><a href="#endpoint">{{t "mcp_help.endpoint_title"}}</a></li>
@@ -19,13 +20,13 @@
     </ul>
   </nav>
 
-  <section id="overview">
-    <h2>{{t "mcp_help.overview_title"}}</h2>
+  <section id="overview" class="section-card" aria-labelledby="mcp-overview-heading">
+    <h2 id="mcp-overview-heading">{{t "mcp_help.overview_title"}}</h2>
     <p>{{tf "mcp_help.overview_body" "app_name" .Config.Server.Branding.Title}}</p>
   </section>
 
-  <section id="endpoint">
-    <h2>{{t "mcp_help.endpoint_title"}}</h2>
+  <section id="endpoint" class="section-card" aria-labelledby="mcp-endpoint-heading">
+    <h2 id="mcp-endpoint-heading">{{t "mcp_help.endpoint_title"}}</h2>
     <p>{{t "mcp_help.endpoint_intro"}}</p>
     <div class="code-block">
       <code id="mcp-endpoint" class="copy-value">{{.MCPURL}}</code>
@@ -41,21 +42,25 @@
     </ul>
   </section>
 
-  <section id="authentication">
-    <h2>{{t "mcp_help.authentication_title"}}</h2>
+  <section id="authentication" class="section-card" aria-labelledby="mcp-authentication-heading">
+    <h2 id="mcp-authentication-heading">{{t "mcp_help.authentication_title"}}</h2>
     <p>{{t "mcp_help.authentication_body"}}</p>
     <p>{{t "mcp_help.anonymous_access"}}</p>
     <p>{{t "mcp_help.linked_token_intro"}} <a href="/server/preferences/tokens">{{t "mcp_help.linked_token_link"}}</a> {{t "mcp_help.linked_token_outro"}}</p>
     <p>{{t "mcp_help.never_use_operator_token"}}</p>
   </section>
 
-  <section id="connect">
-    <h2>{{t "mcp_help.connect_title"}}</h2>
+  <section id="connect" class="section-card" aria-labelledby="mcp-connect-heading">
+    <h2 id="mcp-connect-heading">{{t "mcp_help.connect_title"}}</h2>
     <h3>{{t "mcp_help.claude_code_title"}}</h3>
-    <pre class="code-block"><code>claude mcp add --transport http {{.Config.Server.Branding.Title}} {{.MCPURL}} --header "Authorization: Bearer $MCP_TOKEN"</code></pre>
+    <div class="code-block">
+      <pre><code id="mcp-claude-command" class="copy-value">claude mcp add --transport http {{.Config.Server.Branding.Title}} {{.MCPURL}} --header "Authorization: Bearer $MCP_TOKEN"</code></pre>
+      <button type="button" class="copy-btn" data-copy-target="mcp-claude-command" aria-label="{{t "common.copy"}}" data-copied-label="{{t "common.copied"}}">{{t "common.copy"}}</button>
+    </div>
 
     <h3>{{t "mcp_help.generic_client_title"}}</h3>
-    <pre class="code-block"><code>{
+    <div class="code-block">
+      <pre><code id="mcp-client-config" class="copy-value">{
   "mcpServers": {
     "{{.Config.Server.Branding.Title}}": {
       "type": "http",
@@ -66,19 +71,25 @@
     }
   }
 }</code></pre>
+      <button type="button" class="copy-btn" data-copy-target="mcp-client-config" aria-label="{{t "common.copy"}}" data-copied-label="{{t "common.copied"}}">{{t "common.copy"}}</button>
+    </div>
 
     <h3>{{t "mcp_help.verify_title"}}</h3>
     <p>{{t "mcp_help.verify_intro"}}</p>
-    <pre class="code-block"><code>curl -sS {{.MCPURL}} \
+    <div class="code-block">
+      <pre><code id="mcp-curl-command" class="copy-value">curl -q -LSsf {{.MCPURL}} \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: {{.MCPProtocolVersion}}' \
+  -H 'Mcp-Method: tools/list' \
   -H "Authorization: Bearer $MCP_TOKEN" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"{{.MCPProtocolVersion}}","capabilities":{},"clientInfo":{"name":"mcp-check","version":"1.0.0"}}}'</code></pre>
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"{{.MCPProtocolVersion}}"}}}'</code></pre>
+      <button type="button" class="copy-btn" data-copy-target="mcp-curl-command" aria-label="{{t "common.copy"}}" data-copied-label="{{t "common.copied"}}">{{t "common.copy"}}</button>
+    </div>
   </section>
 
-  <section id="tools">
-    <h2>{{t "mcp_help.tools_title"}}</h2>
+  <section id="tools" class="section-card" aria-labelledby="mcp-tools-heading">
+    <h2 id="mcp-tools-heading">{{t "mcp_help.tools_title"}}</h2>
     <p>{{t "mcp_help.tools_intro"}}</p>
     {{if .MCPAuthenticatedToolsAvailable}}
     <p>{{t "mcp_help.authenticated_tools_note"}}</p>
@@ -86,7 +97,7 @@
     {{if .MCPTools}}
     <ul>
       {{range .MCPTools}}
-      <li><code>{{.Name}}</code>{{if .Description}} — {{.Description}}{{end}}</li>
+      <li><code>{{.Name}}</code>{{if .Description}}<div class="markdown">{{.Description | markdownToHTML}}</div>{{end}}</li>
       {{end}}
     </ul>
     {{else}}
@@ -94,8 +105,8 @@
     {{end}}
   </section>
 
-  <section id="limits">
-    <h2>{{t "mcp_help.limits_title"}}</h2>
+  <section id="limits" class="section-card" aria-labelledby="mcp-limits-heading">
+    <h2 id="mcp-limits-heading">{{t "mcp_help.limits_title"}}</h2>
     <ul>
       <li>{{t "mcp_help.limit_post_only"}}</li>
       <li>{{t "mcp_help.limit_no_sessions"}}</li>
@@ -105,11 +116,12 @@
     </ul>
   </section>
 
-  <section id="troubleshooting">
-    <h2>{{t "mcp_help.troubleshooting_title"}}</h2>
-    <table>
+  <section id="troubleshooting" class="section-card" aria-labelledby="mcp-troubleshooting-heading">
+    <h2 id="mcp-troubleshooting-heading">{{t "mcp_help.troubleshooting_title"}}</h2>
+    <div class="table-wrapper">
+      <table class="data-table">
       <thead>
-        <tr><th>{{t "mcp_help.status_heading"}}</th><th>{{t "mcp_help.cause_heading"}}</th><th>{{t "mcp_help.fix_heading"}}</th></tr>
+        <tr><th scope="col">{{t "mcp_help.status_heading"}}</th><th scope="col">{{t "mcp_help.cause_heading"}}</th><th scope="col">{{t "mcp_help.fix_heading"}}</th></tr>
       </thead>
       <tbody>
         <tr><td><code>400</code></td><td>{{t "mcp_help.error_400_cause"}}</td><td>{{t "mcp_help.error_400_fix"}}</td></tr>
@@ -118,16 +130,17 @@
         <tr><td><code>404</code></td><td>{{t "mcp_help.error_404_cause"}}</td><td>{{t "mcp_help.error_404_fix"}}</td></tr>
         <tr><td><code>405</code></td><td>{{t "mcp_help.error_405_cause"}}</td><td>{{t "mcp_help.error_405_fix"}}</td></tr>
       </tbody>
-    </table>
+      </table>
+    </div>
   </section>
 
-  <section id="project">
-    <h2>{{t "mcp_help.project_title"}}</h2>
+  <section id="project" class="section-card" aria-labelledby="mcp-project-heading">
+    <h2 id="mcp-project-heading">{{t "mcp_help.project_title"}}</h2>
     {{if .MCPProjectMarkdown}}
     <div class="markdown">{{.MCPProjectMarkdown | markdownToHTML}}</div>
     {{else}}
     <p>{{t "mcp_help.project_empty"}}</p>
     {{end}}
   </section>
-</article>
+</div>
 {{end}}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -204,33 +205,12 @@ func TestHealthResponseJSON(t *testing.T) {
 // Tests for AutodiscoverResponse struct
 
 func TestAutodiscoverResponseStruct(t *testing.T) {
-	response := AutodiscoverResponse{}
-	response.Server.Name = "search"
-	response.Server.Version = "1.0.0"
-	response.Server.URL = "https://api.example.com"
-	response.Server.Features.Auth = true
-	response.Server.Features.Search = true
-	response.Server.Features.Register = false
-	response.API.Version = "v1"
-	response.API.BasePath = version.APIPrefix
-
-	if response.Server.Name != "search" {
-		t.Errorf("Server.Name = %q", response.Server.Name)
+	response := AutodiscoverResponse{Name: "search", Version: "1.0.0", API: AutodiscoverAPIInfo{CurrentVersion: "v1"}, URLs: []string{"https://api.example.com"}}
+	if response.Name != "search" || response.Version != "1.0.0" {
+		t.Errorf("identity = %q/%q", response.Name, response.Version)
 	}
-	if response.Server.Version != "1.0.0" {
-		t.Errorf("Server.Version = %q", response.Server.Version)
-	}
-	if !response.Server.Features.Auth {
-		t.Error("Server.Features.Auth should be true")
-	}
-	if !response.Server.Features.Search {
-		t.Error("Server.Features.Search should be true")
-	}
-	if response.Server.Features.Register {
-		t.Error("Server.Features.Register should be false")
-	}
-	if response.API.Version != "v1" {
-		t.Errorf("API.Version = %q", response.API.Version)
+	if response.API.CurrentVersion != "v1" || len(response.URLs) != 1 {
+		t.Errorf("API/URLs = %#v/%#v", response.API, response.URLs)
 	}
 }
 
@@ -373,10 +353,8 @@ func TestAutodiscover(t *testing.T) {
 			t.Errorf("Expected path /api/autodiscover, got %s", r.URL.Path)
 		}
 
-		response := AutodiscoverResponse{}
-		response.Server.Name = "search"
-		response.Server.Version = "1.0.0"
-		json.NewEncoder(w).Encode(response)
+		response := AutodiscoverResponse{Name: "search", Version: "1.0.0", API: AutodiscoverAPIInfo{CurrentVersion: "v1"}}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": response})
 	}))
 	defer server.Close()
 
@@ -386,8 +364,8 @@ func TestAutodiscover(t *testing.T) {
 		t.Fatalf("Autodiscover() error = %v", err)
 	}
 
-	if result.Server.Name != "search" {
-		t.Errorf("result.Server.Name = %q", result.Server.Name)
+	if result.Name != "search" {
+		t.Errorf("result.Name = %q", result.Name)
 	}
 }
 
@@ -746,15 +724,7 @@ func TestSearchPagination(t *testing.T) {
 
 // Test AutodiscoverResponse JSON serialization
 func TestAutodiscoverResponseJSON(t *testing.T) {
-	response := AutodiscoverResponse{}
-	response.Server.Name = "search"
-	response.Server.Version = "1.0.0"
-	response.Server.URL = "https://api.example.com"
-	response.Server.Features.Auth = true
-	response.Server.Features.Search = true
-	response.Server.Features.Register = false
-	response.API.Version = "v1"
-	response.API.BasePath = version.APIPrefix
+	response := AutodiscoverResponse{Name: "search", Version: "1.0.0", API: AutodiscoverAPIInfo{CurrentVersion: "v1"}, URLs: []string{"https://api.example.com"}, CLIVersions: map[string]CLIBinaryInfo{}}
 
 	data, err := json.Marshal(response)
 	if err != nil {
@@ -766,14 +736,14 @@ func TestAutodiscoverResponseJSON(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	if decoded.Server.Name != response.Server.Name {
-		t.Errorf("decoded.Server.Name = %q, want %q", decoded.Server.Name, response.Server.Name)
+	if decoded.Name != response.Name || decoded.Version != response.Version {
+		t.Errorf("identity = %q/%q, want %q/%q", decoded.Name, decoded.Version, response.Name, response.Version)
 	}
-	if decoded.Server.Features.Auth != response.Server.Features.Auth {
-		t.Error("Server.Features.Auth mismatch")
+	if decoded.API.CurrentVersion != response.API.CurrentVersion {
+		t.Errorf("API.CurrentVersion = %q, want %q", decoded.API.CurrentVersion, response.API.CurrentVersion)
 	}
-	if decoded.API.Version != response.API.Version {
-		t.Errorf("API.Version = %q, want %q", decoded.API.Version, response.API.Version)
+	if !reflect.DeepEqual(decoded.URLs, response.URLs) {
+		t.Errorf("URLs = %#v, want %#v", decoded.URLs, response.URLs)
 	}
 }
 

@@ -1,5 +1,5 @@
 {{define "content"}}
-<div class="container container-sm preferences-page">
+<div class="container container-sm">
     <header class="page-header">
         <h1 class="page-title">{{t "preferences.title"}}</h1>
         <p class="page-lead">{{t "preferences.subtitle"}}</p>
@@ -200,6 +200,16 @@
             </div>
     </section>
 
+    <section class="section-card" aria-labelledby="custom-css-heading">
+        <h2 id="custom-css-heading">{{t "preferences.custom_css_heading"}}</h2>
+        <p class="help-text">{{t "preferences.custom_css_help"}}</p>
+        <div class="form-group">
+            <label for="custom-css">{{t "preferences.custom_css_label"}}</label>
+            <textarea class="form-input" id="custom-css" name="search_pref_custom_css" rows="4" maxlength="64" spellcheck="false" autocomplete="off" aria-describedby="custom-css-help">{{.Prefs.CustomCSS}}</textarea>
+            <p class="form-help" id="custom-css-help">{{t "preferences.custom_css_limit"}}</p>
+        </div>
+    </section>
+
     <section class="section-card preferences-section" data-preference-tab="engines" aria-labelledby="engine-preferences-heading">
         <h2 id="engine-preferences-heading">{{t "preferences.engines_tab"}}</h2>
         <p class="help-text">{{t "preferences.engines_help"}}</p>
@@ -331,7 +341,7 @@
         <p>{{t "preferences.reset_confirm_title"}}</p>
         <p>{{t "preferences.reset_everything_warning"}}</p>
         <button type="button" popovertarget="reset-preferences" popovertargetaction="hide">{{t "form.cancel"}}</button>
-        <button type="submit" name="action" value="reset">{{t "preferences.erase_everything"}}</button>
+        <button type="submit" form="general-settings" formaction="/server/preferences?action=reset">{{t "preferences.erase_everything"}}</button>
     </div>
     </form>
 

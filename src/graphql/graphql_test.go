@@ -31,6 +31,19 @@ func TestInitSchema(t *testing.T) {
 	}
 }
 
+func TestGraphQLSchemaDescriptionsUseLocaleCatalog(t *testing.T) {
+	for _, lang := range []string{"en", "fr", "de", "es", "ar", "fa", "he", "it", "ja", "nl", "pl", "pt", "ru", "ur", "zh"} {
+		if got := graphQLDescription(lang, "Search query response"); strings.HasPrefix(got, "graphql.descriptions.") {
+			t.Errorf("GraphQL description key is missing in locale %q: %q", lang, got)
+		}
+	}
+	for _, lang := range []string{"en", "fr"} {
+		if schema := schemaForLanguage(lang); schema.QueryType() == nil {
+			t.Errorf("GraphQL schema for %q has no query type", lang)
+		}
+	}
+}
+
 // Tests for resolvers
 
 func TestResolveSearch(t *testing.T) {
@@ -741,9 +754,8 @@ func TestServeGraphiQLWithLightTheme(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	// Light theme should have specific CSS
-	if !strings.Contains(body, "background: #ffffff") {
-		t.Error("Light theme should contain white background CSS")
+	if !strings.Contains(body, `href="/static/css/graphql-theme.css"`) {
+		t.Error("Light theme should load the self-hosted theme stylesheet")
 	}
 }
 
@@ -767,9 +779,8 @@ func TestServeGraphiQLWithDarkTheme(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	// Dark theme should have specific CSS
-	if !strings.Contains(body, "--palette-background: #282a36") || !strings.Contains(body, "background: var(--palette-background)") {
-		t.Error("Dark theme should contain dark background CSS")
+	if !strings.Contains(body, `href="/static/css/graphql-theme.css"`) {
+		t.Error("Dark theme should load the self-hosted theme stylesheet")
 	}
 }
 
@@ -1477,14 +1488,16 @@ func TestGraphiQLHTMLStructure(t *testing.T) {
 		"<!DOCTYPE html>",
 		"<html",
 		"<head>",
-		"<title>Search API Explorer</title>",
+		"<title>Search GraphQL API</title>",
 		"<body>",
 		`<textarea id="query"`,
 		`<form id="query-form" method="post" action="/server/docs/graphql">`,
 		`name="query"`,
 		`<pre id="response">`,
 		`<summary>GraphQL schema</summary>`,
-		"Run ▶",
+		`id="graphiql"`,
+		`src="/static/vendor/graphiql/graphiql.js"`,
+		"Run</button>",
 		"</html>",
 	}
 
@@ -1507,6 +1520,9 @@ func TestServeGraphiQLLanguageAttributes(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, `<html lang="de" dir="ltr">`) {
 		t.Fatalf("GraphiQL should use request locale, got body: %s", body)
+	}
+	if !strings.Contains(body, "GraphiQL-API-Explorer") {
+		t.Fatalf("GraphiQL should translate its heading, got body: %s", body)
 	}
 }
 

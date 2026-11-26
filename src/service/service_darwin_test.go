@@ -3,6 +3,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/apimgr/search/src/config"
@@ -36,6 +37,37 @@ func TestLaunchdTemplate(t *testing.T) {
 	for _, req := range required {
 		if !contains(launchdTemplate, req) {
 			t.Errorf("launchdTemplate missing required element: %q", req)
+		}
+	}
+}
+
+func TestLaunchdUserAgentTemplateUsesUserLogPaths(t *testing.T) {
+	if !contains(launchdUserAgentTemplate, "{stdout_path}") || !contains(launchdUserAgentTemplate, "{stderr_path}") {
+		t.Fatal("LaunchAgent template must use configured user log paths")
+	}
+	if contains(launchdUserAgentTemplate, "/tmp/") {
+		t.Fatal("LaunchAgent template must not write logs under /tmp")
+	}
+	if got := escapePlistText(`/Users/ops/Library/Logs/a&b/search`); got != `/Users/ops/Library/Logs/a&amp;b/search` {
+		t.Errorf("escapePlistText() = %q", got)
+	}
+}
+
+func TestLaunchdUserArgs(t *testing.T) {
+	path := "/Users/ops/Library/LaunchAgents/io.github.apimgr.search.plist"
+	tests := []struct {
+		action string
+		want   []string
+	}{
+		{action: "start", want: []string{"load", "-w", path}},
+		{action: "stop", want: []string{"unload", path}},
+		{action: "enable", want: []string{"load", "-w", path}},
+		{action: "disable", want: []string{"unload", "-w", path}},
+	}
+	for _, tt := range tests {
+		got := launchdUserArgs(tt.action, path)
+		if strings.Join(got, " ") != strings.Join(tt.want, " ") {
+			t.Errorf("launchdUserArgs(%q) = %#v, want %#v", tt.action, got, tt.want)
 		}
 	}
 }

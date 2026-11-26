@@ -3,18 +3,18 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,57 +56,59 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	config            *config.Config
-	publicIPProviders []string
-	httpServer        *http.Server
+	config                        *config.Config
+	securityReportsRecoveryFailed bool
+	publicIPProviders             []string
+	httpServer                    *http.Server
 	// For dual port mode
-	httpsServer       *http.Server
-	preboundListeners map[int]net.Listener
-	preboundRedirect  net.Listener
-	redirectServer    *http.Server
-	pidFile           string
-	registry          *engine.Registry
-	healthRegistry    *health.Registry
-	healthRegistryMu  sync.RWMutex
-	aggregator        *search.Aggregator
-	startTime         time.Time
-	middleware        *Middleware
-	rateLimiter       *RateLimiter
-	csrf              *CSRFMiddleware
-	renderer          *TemplateRenderer
-	apiHandler        *api.Handler
-	torService        *service.TorService
-	bangManager       *bang.Manager
-	widgetManager     *widget.Manager
-	relatedSearches   *search.RelatedSearches
-	logManager        *logging.Manager
-	tlsManager        *ssl.Manager
-	instantManager    *instant.Manager
-	directManager     *direct.Manager
-	geoipLookup       *geoip.Lookup
-	mailer            *email.Mailer
-	notifyManager     *notify.Manager
-	notifyCancel      context.CancelFunc
-	scheduler         *scheduler.Scheduler
-	metrics           *Metrics
-	dbManager         *database.DatabaseManager
-	alertManager      *alert.Manager
-	ownerManager      *owner.Manager
-	diskLowMu         sync.Mutex
-	diskLowState      map[string]diskLowState
-	databaseFailureMu sync.Mutex
-	databaseFailureSince time.Time
-	databaseFailureNotified bool
-	ownerFlashMu      sync.Mutex
-	ownerFlashes      map[string]ownerTokenFlash
-	contactSpamMu     sync.Mutex
-	contactSpamState  *contactSpamState
-	feedQueriesMu     sync.RWMutex
-	feedQueries       []feedQuery
-	apiCaptchasMu     sync.Mutex
-	apiCaptchas       map[string]apiContactCaptcha
-	blocklistManager  *security.BlocklistManager
-	cveManager        *security.CVEManager
+	httpsServer             *http.Server
+	preboundListeners       map[int]net.Listener
+	preboundRedirect        net.Listener
+	redirectServer          *http.Server
+	pidFile                 string
+	registry                *engine.Registry
+	healthRegistry          *health.Registry
+	healthRegistryMu        sync.RWMutex
+	aggregator              *search.Aggregator
+	startTime               time.Time
+	middleware              *Middleware
+	rateLimiter             *RateLimiter
+	csrf                    *CSRFMiddleware
+	renderer                *TemplateRenderer
+	apiHandler              *api.Handler
+	torService              *service.TorService
+	bangManager             *bang.Manager
+	widgetManager           *widget.Manager
+	relatedSearches         *search.RelatedSearches
+	logManager              *logging.Manager
+	tlsManager              *ssl.Manager
+	instantManager          *instant.Manager
+	directManager           *direct.Manager
+	geoipLookup             *geoip.Lookup
+	mailer                  *email.Mailer
+	notifyManager           *notify.Manager
+	notifyCancel            context.CancelFunc
+	scheduler               *scheduler.Scheduler
+	metrics                 *Metrics
+	dbManager               *database.DatabaseManager
+	alertManager            *alert.Manager
+	ownerManager            *owner.Manager
+	diskLowMu               sync.Mutex
+	diskLowState            map[string]diskLowState
+	databaseFailureMu       sync.Mutex
+	databaseFailureSince    time.Time
+	databaseFailureCount    int
+	databaseFailureNotified time.Time
+	ownerFlashMu            sync.Mutex
+	ownerFlashes            map[string]ownerTokenFlash
+	contactSpamMu           sync.Mutex
+	contactSpamState        *contactSpamState
+	feedQueriesMu           sync.RWMutex
+	feedQueries             []feedQuery
+	apiCaptchasMu           sync.Mutex
+	apiCaptchas             map[string]apiContactCaptcha
+	blocklistManager        *security.BlocklistManager
+	cveManager              *security.CVEManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
 	configSync *config.ConfigSync
 
@@ -123,12 +125,12 @@ type Server struct {
 	// hidden-service requests per AI.md PART 12/31. Set after StartTorService.
 	torBackendPort atomic.Int64
 
-	// I2P eepsite manager per AI.md PART 31.2 — opt-in, disabled by default
+	// I2P eepsite manager; config resolves the application-container default.
 	i2pManager *i2p.I2PManager
 
 	// Set at the top of Shutdown per AI.md PART 13: the server reports
 	// status "shutting_down" (503) once it begins draining.
-	shuttingDown atomic.Bool
+	shuttingDown   atomic.Bool
 	shutdownReason atomic.Value
 }
 
@@ -187,6 +189,9 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	// Create logging manager
 	logDir := config.GetLogDir()
 	logMgr := logging.NewManager(logDir)
+	if err := configureAuditRetention(cfg, logMgr.Audit()); err != nil {
+		slog.Error("configure audit log retention", "err", err)
+	}
 
 	// Configure log levels based on config
 	switch cfg.Server.Logs.Level {
@@ -229,16 +234,22 @@ func newServer(cfg *config.Config, providers []string) *Server {
 			}
 		}
 		redisCfg := &cache.RedisConfig{
-			Type:     cacheType,
-			URL:      cfg.Server.Cache.URL,
-			Host:     cfg.Server.Cache.Host,
-			Port:     cfg.Server.Cache.Port,
-			Password: cfg.Server.Cache.Password,
-			DB:       cfg.Server.Cache.DB,
-			PoolSize: cfg.Server.Cache.PoolSize,
-			MinIdle:  cfg.Server.Cache.MinIdle,
-			Timeout:  timeout,
-			Prefix:   cfg.Server.Cache.Prefix,
+			Type:          cacheType,
+			URL:           cfg.Server.Cache.URL,
+			Host:          cfg.Server.Cache.Host,
+			Port:          cfg.Server.Cache.Port,
+			Password:      cfg.Server.Cache.Password,
+			DB:            cfg.Server.Cache.DB,
+			TLS:           cfg.Server.Cache.TLS,
+			TLSSkipVerify: cfg.Server.Cache.TLSSkipVerify,
+			TLSCA:         cfg.Server.Cache.TLSCA,
+			TLSCert:       cfg.Server.Cache.TLSCert,
+			TLSKey:        cfg.Server.Cache.TLSKey,
+			SSLDir:        filepath.Join(config.GetConfigDir(), "ssl"),
+			PoolSize:      cfg.Server.Cache.PoolSize,
+			MinIdle:       cfg.Server.Cache.MinIdle,
+			Timeout:       timeout,
+			Prefix:        cfg.Server.Cache.Prefix,
 		}
 		if redisCfg.Prefix == "" {
 			redisCfg.Prefix = "search:"
@@ -306,6 +317,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	// Create API handler
 	apiHandler := api.NewHandler(cfg, registry, aggregator)
+	apiHandler.SetMCPOriginAllowlist(mw.mcpOriginAllowed)
 
 	// Create Tor service - auto-enabled if tor binary found per AI.md PART 32
 	// "Auto-enabled if tor binary is installed - no enable flag needed"
@@ -314,13 +326,12 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	// Set Tor service on API handler for health checks per AI.md PART 32
 	apiHandler.SetTorService(torSvc)
 
-	// Create I2P manager per AI.md PART 31.2 — opt-in only, disabled by default.
-	// Started in StartHTTPServer when config enables it.
+	// Create the I2P manager when explicitly enabled or enabled by the container default.
 	var i2pMgr *i2p.I2PManager
-	if cfg.Server.I2P.Enabled {
+	if cfg.I2PEnabled() {
 		i2pMgr = i2p.NewI2PManager(context.Background(),
 			&i2p.I2PConfig{
-				Enabled:          cfg.Server.I2P.Enabled,
+				Enabled:          true,
 				Binary:           cfg.Server.I2P.Binary,
 				SAMAddress:       cfg.Server.I2P.SAMAddress,
 				VirtualPort:      cfg.Server.I2P.VirtualPort,
@@ -328,6 +339,8 @@ func newServer(cfg *config.Config, providers []string) *Server {
 				OutboundLength:   cfg.Server.I2P.OutboundLength,
 				InboundQuantity:  cfg.Server.I2P.InboundQuantity,
 				OutboundQuantity: cfg.Server.I2P.OutboundQuantity,
+				SignatureType:    cfg.Server.I2P.SignatureType,
+				BootstrapTimeout: cfg.Server.I2P.BootstrapTimeout,
 			},
 			netutil.JoinHostPort(cfg.Server.Address, strconv.Itoa(cfg.Server.Port)))
 	}
@@ -483,7 +496,10 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	// Create database manager for server persistence
 	var dbMgr *database.DatabaseManager
 	var ownerMgr *owner.Manager
+	var encryptionRotationPending bool
+	var encryptionRotationReason string
 	var err error
+	securityReportsRecoveryFailed := false
 
 	dbConfig := &database.Config{
 		Driver:   "sqlite",
@@ -494,6 +510,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	}
 	dbMgr, err = database.NewDatabaseManager(dbConfig)
 	if err != nil {
+		securityReportsRecoveryFailed = true
 		slog.Warn("Database initialization failed", "err", err)
 		if mailer != nil {
 			if notifyErr := mailer.SendDatabaseError(err, time.Now().UTC()); notifyErr != nil {
@@ -502,6 +519,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 		}
 	} else {
 		if err := database.InitSchema(context.Background(), dbMgr); err != nil {
+			securityReportsRecoveryFailed = true
 			slog.Warn("Database schema initialization failed", "err", err)
 			if mailer != nil {
 				if notifyErr := mailer.SendDatabaseError(err, time.Now().UTC()); notifyErr != nil {
@@ -510,10 +528,128 @@ func newServer(cfg *config.Config, providers []string) *Server {
 			}
 		} else {
 			slog.Info("Database schema initialized")
-			if serverDB := dbMgr.ServerDB(); serverDB != nil {
+			if err := security.RecoverPGPRotation(config.GetConfigDir(), dbMgr.ServerDB()); err != nil {
+				securityReportsRecoveryFailed = true
+				slog.Error("PGP rotation recovery failed; security report submissions are disabled", "err", err)
+			}
+			if !securityReportsRecoveryFailed {
+				serverDB := dbMgr.ServerDB()
 				if err := cfg.ImportLegacyAppSecrets(context.Background(), serverDB); err != nil {
-					slog.Error("Legacy application secret migration failed", "err", err)
+					securityReportsRecoveryFailed = true
+					slog.Error("Legacy application secret migration failed; encrypted data access is disabled", "err", err)
 				}
+			}
+			if !securityReportsRecoveryFailed {
+				serverDB := dbMgr.ServerDB()
+				currentKey, previousKey, _, rotationReason, pending, rotationErr := security.ResumeEncryptionKeyRotation(context.Background(), serverDB, cfg.Server.Security.EncryptionKey)
+				if rotationErr != nil {
+					securityReportsRecoveryFailed = true
+					slog.Error("Encryption key recovery failed; encrypted data access is disabled", "err", rotationErr)
+				} else {
+					encryptionRotationPending = pending
+					encryptionRotationReason = rotationReason
+					if currentKey != cfg.Server.Security.EncryptionKey {
+						cfg.Server.Security.EncryptionKey = currentKey
+					}
+					if pending {
+						if err := cfg.Save(config.GetConfigPath()); err != nil {
+							securityReportsRecoveryFailed = true
+							slog.Error("Encryption key recovery could not be persisted; encrypted data access is disabled", "err", err)
+						}
+					}
+					if !securityReportsRecoveryFailed {
+						var publicKey, encryptedPrivateKey string
+						if key, keyErr := security.LoadPublicKey(config.GetConfigDir()); keyErr == nil {
+							publicKey = key
+						}
+						if key, keyErr := security.LoadEncryptedPrivateKey(config.GetConfigDir()); keyErr == nil {
+							encryptedPrivateKey = key
+						}
+						if _, err := security.MigrateLegacyReportPlaintext(context.Background(), serverDB, currentKey, previousKey, publicKey, encryptedPrivateKey, cfg.Server.Security.InstallationSecret); err != nil {
+							securityReportsRecoveryFailed = true
+							slog.Error("Legacy security report migration failed; encrypted data access is disabled", "err", err)
+						}
+					}
+					if !securityReportsRecoveryFailed {
+						prefix := ""
+						if serverDB.Driver() == "libsql" {
+							prefix = "srv_"
+						}
+						if _, err := owner.ReencryptTokenCopies(context.Background(), serverDB, prefix, previousKey, currentKey); err != nil {
+							securityReportsRecoveryFailed = true
+							slog.Error("Owner token encryption recovery failed", "err", err)
+						}
+						if !securityReportsRecoveryFailed {
+							if _, err := security.ReencryptAESReportData(context.Background(), serverDB, currentKey, previousKey); err != nil {
+								securityReportsRecoveryFailed = true
+								slog.Error("Security report encryption recovery failed", "err", err)
+							}
+						}
+						if !securityReportsRecoveryFailed {
+							if _, err := security.ReencryptQRShortlinks(context.Background(), serverDB, currentKey, previousKey); err != nil {
+								securityReportsRecoveryFailed = true
+								slog.Error("QR short-link encryption recovery failed", "err", err)
+							}
+						}
+						if !securityReportsRecoveryFailed {
+							changed, err := cfg.ReencryptDNSCredentials(currentKey, previousKey)
+							if err != nil {
+								securityReportsRecoveryFailed = true
+								slog.Error("DNS credential encryption recovery failed", "err", err)
+							} else if changed {
+								if err := cfg.Save(config.GetConfigPath()); err != nil {
+									securityReportsRecoveryFailed = true
+									slog.Error("DNS credential encryption recovery could not be persisted", "err", err)
+								}
+							}
+						}
+					}
+				}
+			}
+			if !securityReportsRecoveryFailed {
+				var publicKey string
+				if key, keyErr := security.LoadPublicKey(config.GetConfigDir()); keyErr == nil {
+					publicKey = key
+				}
+				var encryptedPrivateKey string
+				if key, keyErr := security.LoadEncryptedPrivateKey(config.GetConfigDir()); keyErr == nil {
+					encryptedPrivateKey = key
+				}
+				previousKey, _, previousErr := security.EnsurePreviousEncryptionKey(context.Background(), dbMgr.ServerDB(), cfg.Server.Security.EncryptionKey, cfg.Server.Security.EncryptionKeyPrevious, cfg.Server.Security.EncryptionKeyPreviousExpires)
+				if previousErr != nil {
+					securityReportsRecoveryFailed = true
+					slog.Error("Previous encryption key could not be loaded", "err", previousErr)
+				}
+				migrated, migrationErr := security.MigrateLegacyReportPlaintext(context.Background(), dbMgr.ServerDB(), cfg.Server.Security.EncryptionKey, previousKey, publicKey, encryptedPrivateKey, cfg.Server.Security.InstallationSecret)
+				if migrationErr != nil {
+					securityReportsRecoveryFailed = true
+					slog.Error("Legacy security report migration failed; report submissions are disabled", "err", migrationErr)
+				} else if migrated > 0 {
+					slog.Info("legacy security report plaintext encrypted", "reports", migrated)
+				}
+				if !securityReportsRecoveryFailed {
+					if created, thanksErr := security.MigrateSecurityThanks(context.Background(), dbMgr.ServerDB()); thanksErr != nil {
+						securityReportsRecoveryFailed = true
+						slog.Error("Security acknowledgment migration failed; report submissions are disabled", "err", thanksErr)
+					} else if created > 0 {
+						slog.Info("legacy disclosed security reports added to acknowledgments", "reports", created)
+					}
+				}
+				if !securityReportsRecoveryFailed && encryptionRotationPending {
+					auditManager := logging.NewManager(config.GetLogDir())
+					if audit := auditManager.Audit(); audit != nil {
+						audit.LogEvent(logging.AuditActionEncryptionKeyRotated, logging.AuditCategorySecurity, logging.AuditSeverityCritical, logging.AuditActor{Type: "system", Username: "system"}, &logging.AuditTarget{Type: "secret", Name: "encryption_key"}, "success", map[string]interface{}{"recovered": true}, encryptionRotationReason)
+					}
+					if err := auditManager.Close(); err != nil {
+						slog.Warn("close encryption rotation audit logger", "err", err)
+					}
+					if err := security.CompleteEncryptionKeyRotation(context.Background(), dbMgr.ServerDB()); err != nil {
+						securityReportsRecoveryFailed = true
+						slog.Error("Encryption key recovery marker could not be cleared; encrypted data access is disabled", "err", err)
+					}
+				}
+			}
+			if serverDB := dbMgr.ServerDB(); serverDB != nil {
 				cfg.OnReload(func(reloaded *config.Config) {
 					if err := reloaded.ImportLegacyAppSecrets(context.Background(), serverDB); err != nil {
 						slog.Error("Failed to reload application secrets", "err", err)
@@ -524,12 +660,16 @@ func newServer(cfg *config.Config, providers []string) *Server {
 			if dbMgr.ServerDB().Driver() == "libsql" {
 				prefix = "srv_"
 			}
-			var ownerErr error
-			ownerMgr, ownerErr = owner.NewManagerWithDB(dbMgr.ServerDB(), prefix, cfg.Server.Security.EncryptionKey, cfg.Server.Tokens.MaxLinked)
-			if ownerErr != nil {
-				slog.Error("Owner token manager initialization failed", "err", ownerErr)
-			} else {
-				apiHandler.SetOwnerManager(ownerMgr)
+			if !securityReportsRecoveryFailed {
+				var ownerErr error
+				ownerMgr, ownerErr = owner.NewManagerWithDB(dbMgr.ServerDB(), prefix, cfg.Server.Security.EncryptionKey, cfg.Server.Tokens.MaxLinked)
+				if ownerErr != nil {
+					slog.Error("Owner token manager initialization failed", "err", ownerErr)
+				} else if _, ownerErr = ownerMgr.BackfillTokenLast4(context.Background()); ownerErr != nil {
+					slog.Error("Owner token display metadata migration failed", "err", ownerErr)
+				} else {
+					apiHandler.SetOwnerManager(ownerMgr)
+				}
 			}
 		}
 	}
@@ -582,6 +722,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	}
 
 	renderer = NewTemplateRenderer(cfg, i18nMgr)
+	mw.SetTemplateRenderer(renderer)
 
 	var alertMgr *alert.Manager
 	if dbMgr != nil && dbMgr.ServerDB() != nil && dbMgr.ServerDB().ReadSQL() != nil {
@@ -643,25 +784,26 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	}
 
 	s := &Server{
-		config:            cfg,
-		apiCaptchas:       make(map[string]apiContactCaptcha),
-		publicIPProviders: providers,
-		registry:          registry,
-		aggregator:        aggregator,
-		middleware:        mw,
-		rateLimiter:       rl,
-		csrf:              csrf,
-		renderer:          renderer,
-		apiHandler:        apiHandler,
-		torService:        torSvc,
-		bangManager:       bangMgr,
-		widgetManager:     widgetMgr,
-		logManager:        logMgr,
-		tlsManager:        tlsMgr,
-		instantManager:    instantMgr,
-		directManager:     directMgr,
-		geoipLookup:       geoLookup,
-		mailer:            mailer,
+		config:                        cfg,
+		securityReportsRecoveryFailed: securityReportsRecoveryFailed,
+		apiCaptchas:                   make(map[string]apiContactCaptcha),
+		publicIPProviders:             providers,
+		registry:                      registry,
+		aggregator:                    aggregator,
+		middleware:                    mw,
+		rateLimiter:                   rl,
+		csrf:                          csrf,
+		renderer:                      renderer,
+		apiHandler:                    apiHandler,
+		torService:                    torSvc,
+		bangManager:                   bangMgr,
+		widgetManager:                 widgetMgr,
+		logManager:                    logMgr,
+		tlsManager:                    tlsMgr,
+		instantManager:                instantMgr,
+		directManager:                 directMgr,
+		geoipLookup:                   geoLookup,
+		mailer:                        mailer,
 		// scheduler is initialized below after Server creation
 		metrics:          metrics,
 		dbManager:        dbMgr,
@@ -792,10 +934,88 @@ func applyEngineCredentials(registry *engine.Registry, engines map[string]config
 // TorAddress returns the active .onion address, or empty string if Tor is not running.
 // Per AI.md PART 31: available after StartHTTPServer signals readyCh.
 func (s *Server) TorAddress() string {
-	if s.torService == nil || !s.torService.IsRunning() {
+	if s.torService == nil {
 		return ""
 	}
-	return s.torService.GetOnionAddress()
+	var address string
+	if s.torService.IsStarting() {
+		address = s.torService.GetOnionAddress()
+	} else if s.torService.IsRunning() {
+		address = s.torService.GetOnionAddress()
+	}
+	if address != "" {
+		s.torService.MarkAddressDisplayed()
+	}
+	return address
+}
+
+// I2PAddress returns the persisted eepsite address without waiting for startup.
+func (s *Server) I2PAddress() string {
+	if s.i2pManager == nil {
+		return ""
+	}
+	address := s.i2pManager.EepsiteAddress()
+	if address != "" {
+		s.i2pManager.MarkAddressDisplayed()
+	}
+	return address
+}
+
+// WaitForOverlayAddresses waits briefly for identities to reach the startup banner.
+func (s *Server) WaitForOverlayAddresses(timeout time.Duration) {
+	if timeout <= 0 {
+		return
+	}
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		pending := false
+		if s.torService != nil && s.torService.IsStarting() && s.torService.GetOnionAddress() == "" {
+			pending = true
+		}
+		if s.i2pManager != nil {
+			state := s.i2pManager.LifecycleState()
+			if (state == "starting" || state == "building") && s.i2pManager.EepsiteAddress() == "" {
+				pending = true
+			}
+		}
+		if !pending {
+			return
+		}
+		select {
+		case <-deadline.C:
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *Server) logI2PAddressWhenAvailable() {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if address := s.i2pManager.EepsiteAddressFromDisk(); address != "" {
+			timer := time.NewTimer(5 * time.Second)
+			select {
+			case <-timer.C:
+				s.i2pManager.LogAddressOnce(address)
+			case <-s.i2pManager.Done():
+				timer.Stop()
+			}
+			return
+		}
+		state := s.i2pManager.LifecycleState()
+		if state != "starting" && state != "building" {
+			return
+		}
+		select {
+		case <-s.i2pManager.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // SetPreboundListeners supplies sockets bound during privileged startup. The
@@ -822,18 +1042,25 @@ func (s *Server) StartHTTPServer(readyCh chan<- struct{}) error {
 	// Do not create a duplicate PID file here
 
 	// Step 17: Start Tor (before HTTP binds — per AI.md PART 8 startup sequence)
+	torBackendPort := 0
 	if s.torService != nil {
-		if err := s.torService.StartTorService(); err != nil {
-			slog.Warn("Tor service start failed", "err", err)
+		backendReady, done := s.torService.StartTorServiceAsync()
+		select {
+		case torBackendPort = <-backendReady:
+			go func() {
+				if err := <-done; err != nil {
+					slog.Warn("Tor service start failed", "err", err)
+				}
+			}()
+		case err := <-done:
+			if err != nil {
+				slog.Warn("Tor service start failed", "err", err)
+			}
 		}
 	}
 	// Record the PROXY-protocol backend port so middleware and metrics can
 	// identify hidden-service requests and key them on the Tor circuit ID
 	// (AI.md PART 12 lines 16098/16109, PART 31 backend-listener rules).
-	torBackendPort := 0
-	if s.torService != nil {
-		torBackendPort = s.torService.BackendPort()
-	}
 	if s.metrics != nil {
 		s.metrics.SetTorBackendPort(torBackendPort)
 	}
@@ -845,21 +1072,17 @@ func (s *Server) StartHTTPServer(readyCh chan<- struct{}) error {
 	setMiddlewareCircuitResolver(func(r *http.Request) string {
 		return s.torIdentity(r)
 	})
-	if s.torService != nil && s.torService.IsRunning() {
-		slog.Info("Tor hidden service active", "onion_address", s.torService.GetOnionAddress())
-	}
-
-	// Start the I2P eepsite when enabled per AI.md PART 31.2 (opt-in).
-	// Monitor watches tunnel state so healthz reports live status.
+	// I2P provider startup and tunnel construction run in the background so
+	// network bootstrap never delays the HTTP listener.
 	if s.i2pManager != nil {
-		if err := s.i2pManager.Start(); err != nil {
-			slog.Warn("I2P eepsite start failed", "err", err)
-		} else {
-			go s.i2pManager.Monitor()
-			if addr := s.i2pManager.EepsiteAddress(); addr != "" {
-				slog.Info("I2P eepsite active", "hostname", addr)
+		go func() {
+			if err := s.i2pManager.Start(); err != nil {
+				slog.Warn("I2P eepsite start failed", "err", err)
+				return
 			}
-		}
+			go s.i2pManager.Monitor()
+		}()
+		go s.logI2PAddressWhenAvailable()
 	}
 
 	// Scheduler is already started by initScheduler() per AI.md PART 19
@@ -1084,9 +1307,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	// Stop Tor service
 	if s.torService != nil {
-		if err := s.torService.StopTorService(); err != nil {
-			slog.Warn("failed to stop Tor service during shutdown", "error", err)
-		}
+		s.torService.Shutdown()
 	}
 
 	// Stop the I2P eepsite manager per AI.md PART 31.2
@@ -1186,25 +1407,56 @@ func (s *Server) NotifyStartup(hostname string) {
 }
 
 func (s *Server) reportDatabaseStatus(err error) {
+	if s.config == nil || !s.config.Server.Notifications.DatabaseError.Enabled {
+		return
+	}
+	cfg := s.config.Server.Notifications.DatabaseError
+	threshold := cfg.Failures
+	if threshold < 1 {
+		threshold = 3
+	}
+	repeat := 24 * time.Hour
+	if value := strings.TrimSpace(cfg.Repeat); value != "" {
+		parsed, parseErr := time.ParseDuration(value)
+		if parseErr == nil && parsed > 0 {
+			repeat = parsed
+		} else {
+			slog.Warn("invalid database notification repeat interval, using default", "config_key", "server.notifications.database_error.repeat", "default", repeat.String())
+		}
+	}
+	now := time.Now().UTC()
 	s.databaseFailureMu.Lock()
 	if err == nil {
+		recovered := s.databaseFailureCount > 0
 		s.databaseFailureSince = time.Time{}
-		s.databaseFailureNotified = false
+		s.databaseFailureCount = 0
+		s.databaseFailureNotified = time.Time{}
 		s.databaseFailureMu.Unlock()
+		if recovered {
+			slog.Info("Database connection recovered")
+		}
 		return
 	}
 	if s.databaseFailureSince.IsZero() {
-		s.databaseFailureSince = time.Now().UTC()
+		s.databaseFailureSince = now
 	}
+	s.databaseFailureCount++
 	since := s.databaseFailureSince
-	shouldNotify := !s.databaseFailureNotified
+	shouldNotify := s.databaseFailureCount >= threshold && (s.databaseFailureNotified.IsZero() || now.Sub(s.databaseFailureNotified) >= repeat)
 	if shouldNotify {
-		s.databaseFailureNotified = true
+		s.databaseFailureNotified = now
 	}
+	failures := s.databaseFailureCount
 	s.databaseFailureMu.Unlock()
-	if shouldNotify && s.mailer != nil {
-		if sendErr := s.mailer.SendDatabaseError(err, since); sendErr != nil {
-			slog.Error("database error notification failed", "err", sendErr)
+	if failures < threshold {
+		return
+	}
+	if shouldNotify {
+		slog.Warn("database connection probe failed", "consecutive_failures", failures)
+		if s.mailer != nil {
+			if sendErr := s.mailer.SendDatabaseError(err, since); sendErr != nil {
+				slog.Error("database error notification failed")
+			}
 		}
 	}
 }
@@ -1225,13 +1477,17 @@ func (s *Server) NotifyUpdateInstalled(previousVersion, newVersion string) {
 
 // NotifyUpdateFailed records a failed staged update after startup has created
 // the audit logger and configured the notification mailer.
-func (s *Server) NotifyUpdateFailed(reason string) {
-	slog.Error("staged update failed", "reason", reason)
+func (s *Server) NotifyUpdateFailed(version, reason string) {
+	slog.Error("staged update failed", "version", version, "reason", reason)
 	if s.logManager != nil && s.logManager.Audit() != nil {
-		s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", nil, reason)
+		details := map[string]interface{}{}
+		if version != "" {
+			details["version"] = version
+		}
+		s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", details, reason)
 	}
 	if s.mailer != nil {
-		if err := s.mailer.SendSchedulerError("update_check", reason, ""); err != nil {
+		if err := s.mailer.SendUpdateFailed(version, reason); err != nil {
 			slog.Error("failed to send update-failed notification", "err", err)
 		}
 	}
@@ -1299,7 +1555,9 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	// Set Tor status per AI.md PART 32
 	if s.torService != nil {
 		data.TorEnabled = true
-		if s.torService.IsRunning() {
+		if s.torService.IsStarting() {
+			data.TorStatus = "starting..."
+		} else if s.torService.IsRunning() {
 			data.OnionAddress = s.torService.GetOnionAddress()
 			if data.OnionAddress != "" {
 				data.TorStatus = "connected"
@@ -1310,7 +1568,7 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 			data.TorStatus = "starting..."
 		}
 	}
-	if s.i2pManager != nil && s.i2pManager.IsRunning() {
+	if s.i2pManager != nil {
 		data.I2PAddress = s.i2pManager.EepsiteAddress()
 	}
 	// Set HasConsentCookie: skip banner when a valid cookie_consent cookie exists.
@@ -1397,6 +1655,11 @@ func buildSEOPageData(cfg *config.Config, r *http.Request, page *PageData) SEOPa
 	if isPublicSEORoute(r.URL.Path) && !seo.NoIndex {
 		canonicalURL = canonicalSEOURL(seo.Canonical, r)
 	}
+	customCSSVersion := ""
+	if page.Prefs.CustomCSS != "" {
+		digest := sha256.Sum256([]byte(page.Prefs.CustomCSS))
+		customCSSVersion = fmt.Sprintf("%x", digest[:8])
+	}
 	return SEOPageData{
 		Title:             fullTitle,
 		Description:       description,
@@ -1406,7 +1669,9 @@ func buildSEOPageData(cfg *config.Config, r *http.Request, page *PageData) SEOPa
 		CanonicalURL:      canonicalURL,
 		TitleSeparator:    separator,
 		OpenGraphEnabled:  seo.OpenGraph.Enabled,
-		AccentCSSEnabled:  validAccentColor(cfg.Web.UI.Accent),
+		AccentCSSEnabled:  validAccentColor(cfg.Web.UI.Accent) || validAccentColor(page.Prefs.AccentColor),
+		CustomCSSEnabled:  page.Prefs.CustomCSS != "",
+		CustomCSSVersion:  customCSSVersion,
 		OpenGraphType:     seo.OpenGraph.Type,
 		OpenGraphSiteName: siteName,
 		OpenGraphImage:    seo.OGImage,
@@ -1473,7 +1738,7 @@ func (s *Server) createPIDFile() error {
 
 	// Write PID file
 	pid := fmt.Sprintf("%d", os.Getpid())
-	return os.WriteFile(s.pidFile, []byte(pid), 0644)
+	return os.WriteFile(s.pidFile, []byte(pid), 0o644)
 }
 
 // removePIDFile removes the PID file
@@ -1547,10 +1812,6 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Autocomplete (per AI.md PART 32 line 28280)
 	r.HandleFunc("/autocomplete", s.handleAutocomplete)
-
-	// Operator-gated server management endpoints per API.md PART 13/14
-	r.Get("/server/status", s.RequireOperator(s.handleServerStatus))
-	r.Get("/server/config", s.RequireOperator(s.handleServerConfig))
 
 	// Standard server pages (per AI.md spec)
 	// /server → /server/about redirect per AI.md line 17696
@@ -1643,8 +1904,6 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/server/preferences/sync", s.handlePreferencesSync)
 	r.Post("/server/preferences/sync", s.csrfProtect(s.handlePreferencesSync))
 	r.Get("/server/preferences/sync/import", s.handlePreferencesImport)
-	r.Get("/server/preferences/export", s.handleLegacyPreferencesSync)
-	r.Get("/server/preferences/import", s.handleLegacyPreferencesSync)
 
 	// No-JS theme switch (header partial fallback per AI.md PART 16)
 	r.Post("/theme", s.csrfProtect(s.handleThemeSet))
@@ -1658,14 +1917,15 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Post("/announcements/dismiss", s.csrfProtect(s.handleAnnouncementDismiss))
 
 	// PWA root routes per AI.md PART 16: the service worker must be served from
-	// the root so its scope covers the whole origin; the manifest and offline
-	// page live at the root alongside it.
+	// the root so its scope covers the whole origin; the manifest lives alongside it.
 	r.HandleFunc("/sw.js", s.handleServiceWorker)
 	r.HandleFunc("/manifest.json", s.handleManifest)
-	r.HandleFunc("/offline.html", s.handleOfflinePage)
 
 	// Static files (served from embedded filesystem)
 	r.Get("/static/css/accent.css", s.handleAccentCSS)
+	r.Get("/static/css/custom.css", s.handleCustomCSS)
+	r.Get("/static/css/swagger-theme.css", s.handleSwaggerThemeCSS)
+	r.Get("/static/css/graphql-theme.css", s.handleGraphQLThemeCSS)
 	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))
 	r.HandleFunc("/locales/*", s.handleLocale)
 
@@ -1675,6 +1935,7 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// API routes
 	s.apiHandler.RegisterRoutes(r)
+	r.Get("/server/docs/swagger", s.handleSwaggerDocs)
 
 	// GraphQL routes per AI.md PART 14
 	graphqlDependencies := graphqlpkg.Dependencies{
@@ -1698,13 +1959,15 @@ func (s *Server) setupRoutes() http.Handler {
 		ThumbnailRewriter: s.apiHandler.RewriteThumbnail,
 	}
 	// GET /server/docs/graphql → GraphiQL explorer with native read-only query submission.
-	explorerHandler := graphqlpkg.UIHandlerWithDependencies(s.config, graphqlDependencies)
+	explorerHandler := graphqlpkg.UIHandlerWithRenderer(s.config, graphqlDependencies, s.renderGraphQLDocs)
 	r.MethodFunc(http.MethodGet, "/server/docs/graphql", explorerHandler)
 	r.MethodFunc(http.MethodPost, "/server/docs/graphql", explorerHandler)
-	// POST /api/graphql → JSON GraphQL queries (unversioned alias for current API version).
-	r.Post("/api/graphql", graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies))
-	// POST /api/{api_version}/server/graphql → GraphQL queries (versioned canonical)
-	r.Post(api.APIPrefix+"/server/graphql", graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies))
+	// GraphQL API routes accept POST operations and read-only GET queries.
+	queryHandler := graphqlpkg.QueryHandlerWithDependencies(s.config, graphqlDependencies)
+	for _, path := range []string{"/api/graphql", api.APIPrefix + "/server/graphql"} {
+		r.Post(path, queryHandler)
+		r.Get(path, queryHandler)
+	}
 
 	// OpenAPI/Swagger routes
 	s.apiHandler.RegisterOpenAPIRoutes(r)
@@ -1720,7 +1983,7 @@ func (s *Server) setupRoutes() http.Handler {
 	s.registerDebugRoutes(r)
 
 	// Internal Tor control endpoints (loopback-only) per AI.md PART 31 —
-	// used by `search tor <subcommand>` to reach the embedded Tor process
+	// used by `search --maintenance tor <subcommand>` to reach the embedded Tor process
 	// owned by this running server. Never public, never documented.
 	s.registerTorInternalRoutes(r)
 
@@ -1737,7 +2000,7 @@ func (s *Server) setupRoutes() http.Handler {
 		// Apply the configured request-body limit to every route before parsing.
 		s.middleware.MaxBodySize,
 		// Add build-scoped validators to rendered HTML without changing private cache policy.
-		HTMLCacheHeaders,
+		HTMLCacheHeadersWithCSRF(s.config.Server.Security.CSRF.CookieName),
 		// 1. normalize URLs (trailing slash, etc.)
 		URLNormalizeMiddleware,
 		// 2. attach request ID (before logging)
@@ -1771,7 +2034,7 @@ func (s *Server) setupRoutes() http.Handler {
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -2377,11 +2640,7 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 		Answer:   answer,
 	}
 
-	// Try to render with template
-	if err := s.renderer.Render(w, "direct", data); err != nil {
-		// Fallback to inline rendering
-		s.renderDirectAnswerFallback(w, r, answer)
-	}
+	s.renderPageTemplate(w, r, "direct", data)
 }
 
 // DirectAnswerPageData contains data for rendering a direct answer page
@@ -2390,121 +2649,48 @@ type DirectAnswerPageData struct {
 	Answer *direct.Answer
 }
 
-// renderDirectAnswerFallback renders a direct answer without templates
-func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, r *http.Request, answer *direct.Answer) {
-	baseURL := s.config.Server.BaseURL
-	if baseURL == "" {
-		baseURL = ""
-	}
-	appName := s.config.Server.Branding.Title
-	if appName == "" {
-		appName = "Search"
-	}
-	baseData := s.newPageData(w, r, answer.Title, "direct")
-	t := func(key string, args ...interface{}) string {
-		return s.getI18nManager().T(baseData.Lang, key, args...)
-	}
+// renderDirectAnswerFallback retains the fallback entry point without emitting
+// markup that bypasses the shared page shell. Failed pages receive the standard
+// localized recovery response instead of partially rendered answer content.
+func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, r *http.Request, _ *direct.Answer) {
+	s.renderTemplateFailure(w, r, http.StatusInternalServerError)
+}
 
-	// Build minimal HTML5 page
-	writeResponseText(w, `<!DOCTYPE html>
-<html lang="`)
-	writeResponseText(w, html.EscapeString(baseData.Lang))
-	writeResponseText(w, `" dir="`)
-	writeResponseText(w, html.EscapeString(baseData.Dir))
-	writeResponseText(w, `">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>`)
-	writeResponseText(w, html.EscapeString(answer.Title))
-	writeResponseText(w, ` - `)
-	writeResponseText(w, html.EscapeString(appName))
-	writeResponseText(w, `</title>
-<style>
-:root{--bg:#0f0f0f;--fg:#e0e0e0;--accent:#4a9eff;--surface:#1a1a1a;--border:#2a2a2a;--code-bg:#1e1e1e}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;min-height:100vh}
-.container{max-width:900px;margin:0 auto;padding:20px}
-header{border-bottom:1px solid var(--border);padding-bottom:15px;margin-bottom:20px}
-header h1{font-size:1.5rem;color:var(--accent)}
-header .meta{font-size:0.875rem;color:#888;margin-top:5px}
-.answer-type{display:inline-block;background:var(--accent);color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;margin-right:10px}
-.content{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px}
-.content pre{background:var(--code-bg);padding:15px;border-radius:4px;overflow-x:auto;font-family:"SF Mono",Consolas,monospace;font-size:0.875rem}
-.content code{font-family:"SF Mono",Consolas,monospace;font-size:0.875rem}
-.content h2{color:var(--accent);margin:20px 0 10px;font-size:1.1rem}
-.content h3{color:var(--fg);margin:15px 0 8px;font-size:1rem}
-.content p{margin:10px 0}
-.content ul,.content ol{margin:10px 0;padding-left:25px}
-.content li{margin:5px 0}
-.content table{width:100%;border-collapse:collapse;margin:15px 0}
-.content th,.content td{border:1px solid var(--border);padding:8px 12px;text-align:left}
-.content th{background:var(--code-bg)}
-.source{font-size:0.875rem;color:#888;padding-top:15px;border-top:1px solid var(--border)}
-.source a{color:var(--accent);text-decoration:none}
-.source a:hover{text-decoration:underline}
-.error{background:#331111;border-color:#662222;color:#ff6b6b}
-footer{text-align:center;padding:20px;font-size:0.75rem;color:#666}
-footer a{color:var(--accent);text-decoration:none}
-@media(max-width:600px){.container{padding:15px}.content{padding:15px}}
-</style>
-</head>
-<body>
-<div class="container">
-<header>
-<h1><span class="answer-type">`)
-	writeResponseText(w, html.EscapeString(string(answer.Type)))
-	writeResponseText(w, `</span>`)
-	writeResponseText(w, html.EscapeString(answer.Title))
-	writeResponseText(w, `</h1>
-<div class="meta">`)
-	if answer.Description != "" {
-		writeResponseText(w, html.EscapeString(answer.Description))
+// renderPageTemplate buffers template output so a failed template cannot leave
+// partial markup in the response before the last-resort error page is written.
+func (s *Server) renderPageTemplate(w http.ResponseWriter, r *http.Request, name string, data any) {
+	s.renderPageTemplateStatus(w, r, name, data, http.StatusOK)
+}
+
+func (s *Server) renderPageTemplateStatus(w http.ResponseWriter, r *http.Request, name string, data any, status int) {
+	var body bytes.Buffer
+	var err error
+	if s.renderer == nil {
+		err = errors.New("template renderer is unavailable")
+	} else {
+		err = s.renderer.Render(&body, name, data)
 	}
-	writeResponseText(w, `</div>
-</header>
-<main>
-<div class="content`)
-	if answer.Error != "" {
-		writeResponseText(w, ` error`)
+	if err != nil {
+		slog.Error("failed to render server page", "template", name, "error", err)
+		s.renderTemplateFailure(w, r, http.StatusInternalServerError)
+		return
 	}
-	writeResponseText(w, `">`)
-	// Content is already HTML formatted by handlers
-	writeResponseText(w, answer.Content)
-	writeResponseText(w, `</div>`)
-	if answer.Source != "" || answer.SourceURL != "" {
-		writeResponseText(w, `<div class="source">`)
-		writeResponseText(w, html.EscapeString(t("direct.source_label")))
-		writeResponseText(w, ` `)
-		if answer.SourceURL != "" {
-			writeResponseText(w, `<a href="`)
-			writeResponseText(w, html.EscapeString(answer.SourceURL))
-			writeResponseText(w, `" rel="noopener noreferrer">`)
-			if answer.Source != "" {
-				writeResponseText(w, html.EscapeString(answer.Source))
-			} else {
-				writeResponseText(w, html.EscapeString(answer.SourceURL))
-			}
-			writeResponseText(w, `</a>`)
-		} else {
-			writeResponseText(w, html.EscapeString(answer.Source))
-		}
-		writeResponseText(w, `</div>`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	if _, err := w.Write(body.Bytes()); err != nil {
+		slog.Warn("failed to write rendered server page", "template", name, "error", err)
 	}
-	writeResponseText(w, `
-</main>
-<footer>
-<a href="`)
-	writeResponseText(w, baseURL)
-	writeResponseText(w, `/">`)
-	writeResponseText(w, html.EscapeString(appName))
-	writeResponseText(w, `</a> &middot; `)
-	writeResponseText(w, html.EscapeString(t("direct.footer_label")))
-	writeResponseText(w, `
-</footer>
-</div>
-</body>
-</html>`)
+}
+
+// renderTemplateFailure emits the specified minimal recovery response when a
+// server page cannot be rendered. API clients receive the canonical JSON error.
+func (s *Server) renderTemplateFailure(w http.ResponseWriter, r *http.Request, status int) {
+	w.Header().Set("Cache-Control", "no-store")
+	if acceptsJSONError(r) {
+		localizedHTTPError(w, r, status, "errors.server_error")
+		return
+	}
+	writeRecoveryHTMLStatus(w, r, status)
 }
 
 // renderSearchError renders an error page
@@ -2537,11 +2723,7 @@ func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query
 		Message:    i18n.RequestString(r, "search.error_message"),
 	}
 
-	w.WriteHeader(statusCode)
-	if renderErr := s.renderer.Render(w, "error", data); renderErr != nil {
-		// Fallback to plain error - still no internal details
-		localizedHTTPError(w, r, statusCode, "errors.server_error")
-	}
+	s.renderPageTemplateStatus(w, r, "error", data, statusCode)
 }
 
 // buildSearchPageData constructs a SearchPageData struct without writing any response.
@@ -2629,55 +2811,13 @@ func (s *Server) buildSearchPageData(w http.ResponseWriter, r *http.Request, que
 func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
 	data := s.buildSearchPageData(w, r, query, results, category, instantAnswer)
 
-	if err := s.renderer.Render(w, "search", data); err != nil {
-		// Fallback to inline rendering
-		s.renderSearchResultsInline(w, r, query, results, category)
-	}
+	s.renderPageTemplate(w, r, "search", data)
 }
 
-// renderSearchResultsInline is a fallback for when templates fail
-func (s *Server) renderSearchResultsInline(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string) {
-	baseData := s.newPageData(w, r, query, "search")
-	writeResponseFormatted(w, `<!DOCTYPE html>
-<html lang="%s" dir="%s" class="theme-%s">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s - %s</title>
-    <link rel="stylesheet" href="/static/css/common.css">
-    <link rel="stylesheet" href="/static/css/components.css">
-    <link rel="stylesheet" href="/static/css/public.css">
-        <h1>Results for: %s</h1>
-        <p>%d results (%.3fs)</p>`,
-		html.EscapeString(baseData.Lang),
-		html.EscapeString(baseData.Dir),
-		html.EscapeString(baseData.Theme),
-		html.EscapeString(query),
-		html.EscapeString(s.config.Server.Title),
-		html.EscapeString(query),
-		results.TotalResults,
-		results.SearchTime,
-	)
-
-	for i, result := range results.Results {
-		if i >= 20 {
-			break
-		}
-		writeResponseFormatted(w, `
-        <article class="result">
-            <h3><a href="%s" target="_blank">%s</a></h3>
-            <p>%s</p>
-        </article>`,
-			html.EscapeString(result.URL),
-			html.EscapeString(result.Title),
-			html.EscapeString(result.Content),
-		)
-	}
-
-	writeResponseFormatted(w, `
-    </main>
-</body>
-</html>`)
+// renderSearchResultsInline retains the fallback entry point without emitting
+// markup that bypasses the shared server-rendered page shell.
+func (s *Server) renderSearchResultsInline(w http.ResponseWriter, r *http.Request, _ string, _ *model.SearchResults, _ string) {
+	s.renderTemplateFailure(w, r, http.StatusInternalServerError)
 }
 
 // sanitizeInput removes potentially dangerous characters from user input
@@ -2694,35 +2834,4 @@ func sanitizeInput(input string) string {
 	}
 
 	return result.String()
-}
-
-// handleServerStatus returns runtime detail as JSON, gated by operator token.
-// Per API.md PART 13/14: /server/status returns uptime, goroutines, memory, version, mode.
-func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-	respondJSON(w, http.StatusOK, map[string]any{
-		"ok": true,
-		"data": map[string]any{
-			"version":    getVersion(),
-			"mode":       s.config.Server.Mode,
-			"uptime":     formatDuration(time.Since(s.startTime)),
-			"goroutines": runtime.NumGoroutine(),
-			"memory": map[string]any{
-				"alloc_bytes":       memStats.Alloc,
-				"total_alloc_bytes": memStats.TotalAlloc,
-				"sys_bytes":         memStats.Sys,
-				"num_gc":            memStats.NumGC,
-			},
-		},
-	})
-}
-
-// handleServerConfig returns the sanitized running configuration as JSON, gated by operator token.
-// Per API.md PART 13/14: /server/config exposes redacted config to operators.
-func (s *Server) handleServerConfig(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]any{
-		"ok":   true,
-		"data": s.config.Sanitized(),
-	})
 }

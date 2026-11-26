@@ -91,8 +91,10 @@ type SearchResponse struct {
 
 // apiResponse wraps API responses with ok and data fields
 type apiResponse struct {
-	OK   bool            `json:"ok"`
-	Data json.RawMessage `json:"data"`
+	OK      bool            `json:"ok"`
+	Data    json.RawMessage `json:"data"`
+	Error   string          `json:"error"`
+	Message string          `json:"message"`
 }
 
 // HealthResponse represents health check response
@@ -775,15 +777,6 @@ func (c *Client) RunSchedulerTask(taskID string) error {
 	return c.schedulerAction(taskID, "run")
 }
 
-// SetSchedulerTaskEnabled enables or disables a skippable task.
-func (c *Client) SetSchedulerTaskEnabled(taskID string, enabled bool) error {
-	action := "disable"
-	if enabled {
-		action = "enable"
-	}
-	return c.schedulerAction(taskID, action)
-}
-
 func (c *Client) schedulerAction(taskID, action string) error {
 	resp, err := c.doRequest(http.MethodPost, searchapi.APIPrefix+"/server/scheduler/tasks/"+url.PathEscape(taskID)+"/"+action, nil)
 	if err != nil {
@@ -793,9 +786,9 @@ func (c *Client) schedulerAction(taskID, action string) error {
 	return nil
 }
 
-// GetStatus returns detailed server status from GET /server/status (requires operator token)
+// GetStatus returns detailed server status from the versioned API (requires operator token).
 func (c *Client) GetStatus() (*StatusResponse, error) {
-	resp, err := c.get("/server/status")
+	resp, err := c.get(searchapi.APIPrefix + "/server/status")
 	if err != nil {
 		return nil, err
 	}
@@ -813,9 +806,9 @@ func (c *Client) GetStatus() (*StatusResponse, error) {
 	return &result, nil
 }
 
-// GetServerConfig returns server configuration from GET /server/config (requires operator token)
+// GetServerConfig returns server configuration from the versioned API (requires operator token).
 func (c *Client) GetServerConfig() (*ServerConfigResponse, error) {
-	resp, err := c.get("/server/config")
+	resp, err := c.get(searchapi.APIPrefix + "/server/config")
 	if err != nil {
 		return nil, err
 	}
@@ -833,9 +826,9 @@ func (c *Client) GetServerConfig() (*ServerConfigResponse, error) {
 	return &result, nil
 }
 
-// GetMetrics returns Prometheus-format metrics text from GET /server/metrics (requires operator token)
+// GetMetrics returns Prometheus-format metrics text from the versioned API (requires operator token).
 func (c *Client) GetMetrics() (string, error) {
-	resp, err := c.get("/server/metrics")
+	resp, err := c.get(searchapi.APIPrefix + "/server/metrics")
 	if err != nil {
 		return "", err
 	}
@@ -873,23 +866,19 @@ type CLIBinaryInfo struct {
 // AutodiscoverResponse represents /api/autodiscover response.
 // Per AI.md PART 32: includes cli_versions and cli_min_version for auto-update checks.
 type AutodiscoverResponse struct {
-	Server struct {
-		Name     string `json:"name"`
-		Version  string `json:"version"`
-		URL      string `json:"url"`
-		Features struct {
-			Auth     bool `json:"auth"`
-			Search   bool `json:"search"`
-			Register bool `json:"register"`
-		} `json:"features"`
-	} `json:"server"`
-	API struct {
-		Version  string `json:"version"`
-		BasePath string `json:"base_path"`
-	} `json:"api"`
-	// Per AI.md PART 32: CLI binary info per platform for auto-update.
+	Name          string                   `json:"name"`
+	Version       string                   `json:"version"`
+	API           AutodiscoverAPIInfo      `json:"api"`
+	URLs          []string                 `json:"urls"`
+	Onion         string                   `json:"onion,omitempty"`
+	I2P           string                   `json:"i2p,omitempty"`
 	CLIVersions   map[string]CLIBinaryInfo `json:"cli_versions"`
 	CLIMinVersion string                   `json:"cli_min_version"`
+}
+
+// AutodiscoverAPIInfo describes the API version prefix served by the server.
+type AutodiscoverAPIInfo struct {
+	CurrentVersion string `json:"current_version"`
 }
 
 // Autodiscover fetches server settings from /api/autodiscover.
@@ -901,9 +890,16 @@ func (c *Client) Autodiscover() (*AutodiscoverResponse, error) {
 	}
 	defer closeutil.Close(resp.Body)
 
-	var result AutodiscoverResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var envelope apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return nil, fmt.Errorf("failed to decode autodiscover response: %w", err)
+	}
+	if !envelope.OK {
+		return nil, fmt.Errorf("autodiscover failed: %s: %s", envelope.Error, envelope.Message)
+	}
+	var result AutodiscoverResponse
+	if err := json.Unmarshal(envelope.Data, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode autodiscover data: %w", err)
 	}
 
 	return &result, nil

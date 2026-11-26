@@ -79,22 +79,25 @@ type TorService struct {
 	config *config.Config
 	tor    *tor.Tor
 	// .onion address (without .onion suffix)
-	serviceID string
-	dialer    *tor.Dialer
-	running   bool
-	onionAddr string
-	mu        sync.RWMutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	dataDir   string
-	configDir string
+	serviceID     string
+	dialer        *tor.Dialer
+	running       bool
+	onionAddr     string
+	mu            sync.RWMutex
+	statusQueryMu sync.Mutex
+	ctx           context.Context
+	cancel        context.CancelFunc
+	dataDir       string
+	configDir     string
 	// Dedicated PROXY-protocol loopback listener the hidden service targets
 	backend *torBackend
 	// Runtime-allocated port the backend listener binds; never the clearnet port
-	backendPort int
+	backendPort  int
+	backendReady chan<- int
 	// Last startup failure, surfaced as status "error:{message}"
-	lastError string
-	starting  atomic.Bool
+	lastError     string
+	starting      atomic.Bool
+	addressLogged atomic.Bool
 }
 
 // NewTorService creates a new Tor service manager
@@ -127,11 +130,11 @@ func (t *TorService) ensureTorDirs() error {
 	gid := os.Getgid()
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 		// Enforce permissions on existing dirs too — per AI.md PART 31: "Enforce on exist"
-		if err := os.Chmod(dir, 0700); err != nil {
+		if err := os.Chmod(dir, 0o700); err != nil {
 			return fmt.Errorf("chmod tor dir %s: %w", dir, err)
 		}
 		// Enforce ownership (skip on Windows — no chown)
@@ -319,6 +322,26 @@ func (t *TorService) StartTorService() error {
 	return err
 }
 
+// StartTorServiceAsync starts Tor and reports the backend port as soon as it
+// is bound, while network bootstrap continues in the background.
+func (t *TorService) StartTorServiceAsync() (<-chan int, <-chan error) {
+	backendReady := make(chan int, 1)
+	done := make(chan error, 1)
+	finished := make(chan struct{})
+	t.mu.Lock()
+	t.backendReady = backendReady
+	t.mu.Unlock()
+	go t.logAddressWhenAvailable(finished)
+	go func() {
+		done <- t.StartTorService()
+		close(finished)
+		t.mu.Lock()
+		t.backendReady = nil
+		t.mu.Unlock()
+	}()
+	return backendReady, done
+}
+
 // startTorProcess performs the actual startup sequence.
 func (t *TorService) startTorProcess() error {
 	t.mu.Lock()
@@ -358,13 +381,19 @@ func (t *TorService) startTorProcess() error {
 		}
 		t.backend = backend
 		t.backendPort = port
+		if t.backendReady != nil {
+			select {
+			case t.backendReady <- port:
+			default:
+			}
+		}
 	}
 
 	torrcPath := filepath.Join(t.configDir, "torrc")
 
 	// Per AI.md PART 31: regenerate torrc every startup — it is derived state
 	// from TorConfig plus the current backend port, never hand-edited state.
-	if err := os.WriteFile(torrcPath, []byte(t.getTorConfig()), 0600); err != nil {
+	if err := os.WriteFile(torrcPath, []byte(t.getTorConfig()), 0o600); err != nil {
 		return fmt.Errorf("failed to write torrc: %w", err)
 	}
 	slog.Info("Tor wrote torrc", "path", torrcPath)
@@ -446,8 +475,11 @@ func (t *TorService) startTorProcess() error {
 		}
 	}
 
-	// Per AI.md PART 31 success log: "Tor: {onion_address}" (short, once at startup)
-	slog.Info("Tor hidden service active", "onion_address", t.onionAddr)
+	// Synchronous restarts log immediately; the asynchronous server startup
+	// gives its banner five seconds to show an already-published address.
+	if t.backendReady == nil {
+		t.logAddressOnce(t.onionAddr)
+	}
 
 	// Start monitoring goroutine
 	go t.monitorTor()
@@ -531,19 +563,79 @@ func (t *TorService) IsStarting() bool { return t != nil && t.starting.Load() }
 
 // GetOnionAddress returns the .onion address
 func (t *TorService) GetOnionAddress() string {
+	if t.IsStarting() {
+		return t.readOnionAddressFromDisk()
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.onionAddr
 }
 
+func (t *TorService) logAddressWhenAvailable(finished <-chan struct{}) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if address := t.readOnionAddressFromDisk(); address != "" {
+			t.logAddressAfterBannerWindow(address)
+			return
+		}
+		select {
+		case <-finished:
+			if address := t.readOnionAddressFromDisk(); address != "" {
+				t.logAddressAfterBannerWindow(address)
+			}
+			return
+		case <-t.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (t *TorService) logAddressAfterBannerWindow(address string) {
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		t.logAddressOnce(address)
+	case <-t.ctx.Done():
+	}
+}
+
+// MarkAddressDisplayed prevents a later startup log when the banner showed it.
+func (t *TorService) MarkAddressDisplayed() {
+	t.addressLogged.Store(true)
+}
+
+func (t *TorService) logAddressOnce(address string) {
+	if address != "" && t.addressLogged.CompareAndSwap(false, true) {
+		slog.Info("Tor hidden service address available", "onion_address", address)
+	}
+}
+
+func (t *TorService) readOnionAddressFromDisk() string {
+	data, err := os.ReadFile(filepath.Join(t.dataDir, "site", "hostname"))
+	if err != nil {
+		return ""
+	}
+	address := strings.TrimSpace(string(data))
+	if !strings.HasSuffix(address, ".onion") || len(strings.TrimSuffix(address, ".onion")) != 56 {
+		return ""
+	}
+	return address
+}
+
 // GetHTTPClient returns an HTTP client, optionally routed through Tor
 // Per AI.md PART 31: useTor: true = route through Tor, false = direct
 func (t *TorService) GetHTTPClient(useTor bool) *http.Client {
+	if !useTor {
+		return &http.Client{Timeout: 30 * time.Second}
+	}
 	t.mu.RLock()
 	dialer := t.dialer
 	t.mu.RUnlock()
 
-	if !useTor || dialer == nil {
+	if dialer == nil {
 		// Direct connection
 		return &http.Client{
 			Timeout: 30 * time.Second,
@@ -588,6 +680,7 @@ func (t *TorService) RegenerateAddress() (string, error) {
 	if err := os.RemoveAll(filepath.Join(t.dataDir, "site")); err != nil {
 		return "", fmt.Errorf("remove hidden service keys: %w", err)
 	}
+	t.addressLogged.Store(false)
 
 	if err := t.StartTorService(); err != nil {
 		return "", fmt.Errorf("start tor with new keys: %w", err)

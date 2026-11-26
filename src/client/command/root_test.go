@@ -177,7 +177,7 @@ func TestGetTokenFromFile(t *testing.T) {
 
 	tempDir := t.TempDir()
 	tokenPath := filepath.Join(tempDir, "testtoken")
-	os.WriteFile(tokenPath, []byte("file-token\n"), 0600)
+	os.WriteFile(tokenPath, []byte("file-token\n"), 0o600)
 	tokenFile = tokenPath
 
 	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
@@ -362,8 +362,7 @@ func TestInitClientWithServer(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/autodiscover" {
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"server":  map[string]interface{}{"name": "test"},
-				"cluster": map[string]interface{}{"nodes": []string{}},
+				"server": map[string]interface{}{"name": "test"},
 			})
 		} else {
 			w.WriteHeader(http.StatusOK)
@@ -376,7 +375,6 @@ func TestInitClientWithServer(t *testing.T) {
 	apiClient = nil
 
 	err := initClient()
-
 	if err != nil {
 		t.Fatalf("initClient() error = %v", err)
 	}
@@ -400,7 +398,6 @@ func TestInitClientWithUserContext(t *testing.T) {
 	apiClient = nil
 
 	err := initClient()
-
 	if err != nil {
 		t.Fatalf("initClient() error = %v", err)
 	}
@@ -425,7 +422,6 @@ func TestInitClientWithTimeout(t *testing.T) {
 	apiClient = nil
 
 	err := initClient()
-
 	if err != nil {
 		t.Fatalf("initClient() error = %v", err)
 	}
@@ -445,7 +441,7 @@ func TestBackgroundAutodiscoverNilClient(t *testing.T) {
 
 func TestBackgroundAutodiscoverSuccess(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.AutodiscoverResponse{})
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.AutodiscoverResponse{}})
 	}))
 	defer testServer.Close()
 
@@ -457,10 +453,8 @@ func TestBackgroundAutodiscoverSuccess(t *testing.T) {
 
 func TestBackgroundAutodiscoverWithResponse(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := api.AutodiscoverResponse{}
-		resp.Server.Name = "search"
-		resp.Server.Version = "1.0.0"
-		json.NewEncoder(w).Encode(resp)
+		resp := api.AutodiscoverResponse{Name: "search", Version: "1.0.0", API: api.AutodiscoverAPIInfo{CurrentVersion: "v1"}}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": resp})
 	}))
 	defer testServer.Close()
 
@@ -504,7 +498,6 @@ func TestRunSearchSuccess(t *testing.T) {
 	limit = 10
 
 	err := runSearch("test query")
-
 	if err != nil {
 		t.Fatalf("runSearch() error = %v", err)
 	}
@@ -535,7 +528,6 @@ func TestRunSearchJSONOutput(t *testing.T) {
 	output = "json"
 
 	err := runSearch("test")
-
 	if err != nil {
 		t.Fatalf("runSearch() with json output error = %v", err)
 	}
@@ -568,7 +560,6 @@ func TestRunSearchTableOutput(t *testing.T) {
 	output = "table"
 
 	err := runSearch("test")
-
 	if err != nil {
 		t.Fatalf("runSearch() with table output error = %v", err)
 	}
@@ -592,7 +583,6 @@ func TestRunSearchInitializesClient(t *testing.T) {
 	output = "plain"
 
 	err := runSearch("test")
-
 	if err != nil {
 		t.Fatalf("runSearch() error = %v", err)
 	}
@@ -634,7 +624,7 @@ func TestInitConfig(t *testing.T) {
 func TestInitConfigWithFile(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test.yml")
-	os.WriteFile(configPath, []byte("server:\n  primary: https://test.example.com\n"), 0600)
+	os.WriteFile(configPath, []byte("server:\n  primary: https://test.example.com\n"), 0o600)
 
 	clicfg.Reset()
 	cfgFile = configPath

@@ -1328,8 +1328,8 @@ func TestDeleteAlertServerError(t *testing.T) {
 
 func TestGetStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/server/status" {
-			t.Errorf("path = %q, want '/server/status'", r.URL.Path)
+		if r.URL.Path != version.APIPrefix+"/server/status" {
+			t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/server/status")
 		}
 		// Operator token should be present
 		auth := r.Header.Get("Authorization")
@@ -1407,8 +1407,8 @@ func TestGetStatusInvalidDataJSON(t *testing.T) {
 
 func TestGetServerConfig(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/server/config" {
-			t.Errorf("path = %q, want '/server/config'", r.URL.Path)
+		if r.URL.Path != version.APIPrefix+"/server/config" {
+			t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/server/config")
 		}
 		cfg := ServerConfigResponse{
 			Config: map[string]interface{}{
@@ -1482,8 +1482,8 @@ func TestGetMetrics(t *testing.T) {
 	metricsBody := "# HELP search_requests_total Total HTTP requests\n# TYPE search_requests_total counter\nsearch_requests_total 1234\n"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/server/metrics" {
-			t.Errorf("path = %q, want '/server/metrics'", r.URL.Path)
+		if r.URL.Path != version.APIPrefix+"/server/metrics" {
+			t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/server/metrics")
 		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		w.Write([]byte(metricsBody))

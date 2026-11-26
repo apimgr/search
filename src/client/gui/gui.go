@@ -4,6 +4,7 @@
 package gui
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -28,109 +29,111 @@ import (
 
 	"github.com/apimgr/search/src/client/api"
 	"github.com/apimgr/search/src/client/clicfg"
+	"github.com/apimgr/search/src/client/surface"
 	clientpath "github.com/apimgr/search/src/client/path"
 )
 
 // Available reports whether this build includes native GUI support.
 func Available() bool { return true }
 
+// Screens returns GUI command screens in the same order as CLI root help.
+func Screens() []surface.Command { return surface.Commands() }
+
 // Launch opens the native Search client window.
 func Launch(client *api.Client) error {
 	if client == nil {
-		return fmt.Errorf("API client is not initialized")
+		return fmt.Errorf("%s", surface.Text("client.surface.api_client_missing"))
 	}
-	query := state.NewSignal("")
-	status := state.NewSignal("Enter a search query.")
-	page := state.NewSignal(1)
-	pages := state.NewSignal(1)
+	commands := Screens()
+	selected := state.NewSignal(0)
+	status := state.NewSignal(surface.Text("client.surface.choose_command"))
 	theme := systemTheme()
-	var requestID atomic.Uint64
-	activeQuery := ""
-	search := func() {
-		q := strings.TrimSpace(query.Get())
-		if q == "" {
-			status.Set("Enter a search query.")
+	maxArguments := 0
+	for _, command := range commands {
+		if len(command.Arguments) > maxArguments {
+			maxArguments = len(command.Arguments)
+		}
+	}
+	values := make([]state.Signal[string], maxArguments)
+	labels := make([]state.Signal[string], maxArguments)
+	fields := make([]*primitives.BoxWidget, 0, len(values))
+	for i := range values {
+		values[i] = state.NewSignal("")
+		labels[i] = state.NewSignal("")
+		field := textfield.New(
+			textfield.A11yLabel(surface.Text("client.surface.argument_accessibility")),
+			textfield.Placeholder(surface.Text("client.surface.enter_value")),
+			textfield.ValueSignal(values[i]),
+			textfield.PainterOpt(material3.TextFieldPainter{Theme: theme}),
+		).Padding(10)
+		fields = append(fields, primitives.Box(primitives.TextFn(func() string { return labels[i].Get() }), field))
+	}
+	var runID atomic.Uint64
+	selectCommand := func(index int) {
+		if index < 0 || index >= len(commands) {
 			return
 		}
-		if q != activeQuery {
-			activeQuery = q
-			page.Set(1)
+		selected.Set(index)
+		for i := range values {
+			values[i].Set("")
+			labels[i].Set("")
 		}
-		currentPage := page.Get()
-		request := requestID.Add(1)
-		status.Set("Searching…")
+		command := commands[index]
+		for i, argument := range command.Arguments {
+			label := surface.Text(argument.Label)
+			if argument.Required {
+				label = surface.Text("client.surface.required", label)
+			}
+		labels[i].Set(label)
+		}
+		status.Set(surface.DescriptionText(command))
+	}
+	menuItems := make([]*primitives.BoxWidget, 0, len(commands))
+	for i, command := range commands {
+		index := i
+		menuItems = append(menuItems, primitives.Box(button.New(
+			button.TextOpt(command.Name()),
+			button.A11yHint(surface.DescriptionText(command)),
+			button.OnClick(func() { selectCommand(index) }),
+			button.PainterOpt(material3.ButtonPainter{Theme: theme}),
+		), primitives.Text(command.Description).FontSize(12)).Gap(5))
+	}
+	menu := scrollview.New(primitives.Box(menuItems...).Gap(8), scrollview.DirectionOpt(scrollview.Vertical))
+	run := func() {
+		index := selected.Get()
+		command := commands[index]
+		arguments := make(map[string]string, len(command.Arguments))
+		for i, argument := range command.Arguments {
+			arguments[argument.Name] = values[i].Get()
+		}
+		request := runID.Add(1)
+		status.Set(surface.Text("client.surface.running_command", command.Name()))
 		go func() {
-			result, err := client.Search(q, currentPage, 20)
-			if requestID.Load() != request {
+			output, err := surface.Run(context.Background(), client, command, arguments)
+			if runID.Load() != request {
 				return
 			}
 			if err != nil {
-				status.Set("Search failed: " + err.Error())
+				status.Set(surface.Text("client.surface.command_failed", err.Error()) + "\n\n" + output)
 				return
 			}
-			pages.Set(max(result.Pagination.Pages, 1))
-			var output strings.Builder
-			fmt.Fprintf(&output, "%d results for %q — page %d of %d\n\n", result.Pagination.Total, q, result.Pagination.Page, max(result.Pagination.Pages, 1))
-			for i, item := range result.Results {
-				if i == 20 {
-					break
-				}
-				fmt.Fprintf(&output, "%d. %s\n   %s\n   %s\n\n", i+1, item.Title, item.URL, item.Description)
-			}
-			if result.Pagination.Total == 0 {
-				output.WriteString("No results found.")
-			}
-			status.Set(output.String())
+			status.Set(output)
 		}()
 	}
-
-	field := textfield.New(
-		textfield.A11yLabel("Search query"),
-		textfield.Placeholder("Search the web"),
-		textfield.InputTypeOpt(textfield.TypeSearch),
-		textfield.ValueSignal(query),
-		textfield.OnSubmit(func(string) { search() }),
-		textfield.PainterOpt(material3.TextFieldPainter{Theme: theme}),
-	).Padding(12)
-	searchButton := button.New(
-		button.TextOpt("Search"),
-		button.A11yHint("Run the web search"),
-		button.OnClick(search),
-		button.PainterOpt(material3.ButtonPainter{Theme: theme}),
-	)
-	previous := button.New(
-		button.TextOpt("Previous page"),
-		button.OnClick(func() {
-			if page.Get() > 1 {
-				page.Set(page.Get() - 1)
-				search()
-			}
-		}),
-		button.PainterOpt(material3.ButtonPainter{Theme: theme}),
-	)
-	next := button.New(
-		button.TextOpt("Next page"),
-		button.OnClick(func() {
-			if page.Get() < pages.Get() {
-				page.Set(page.Get() + 1)
-				search()
-			}
-		}),
-		button.PainterOpt(material3.ButtonPainter{Theme: theme}),
-	)
-	results := scrollview.New(
-		primitives.TextFn(func() string { return status.Get() }).FontSize(14),
-		scrollview.DirectionOpt(scrollview.Vertical),
-	)
+	form := primitives.Box(fields...).Gap(8)
+	result := scrollview.New(primitives.TextFn(func() string { return status.Get() }).FontSize(14), scrollview.DirectionOpt(scrollview.Vertical))
 	root := primitives.Box(
-		primitives.Text("Search").FontSize(28).Bold(),
-		primitives.Text("Search the web across configured search engines.").FontSize(15),
-		primitives.Box(field, searchButton).Gap(12),
-		results,
-		primitives.Box(previous, next).Gap(12),
-	).Padding(28).Gap(18)
+		primitives.Text(surface.Text("client.surface.title")).FontSize(28).Bold(),
+		primitives.Text(surface.Text("client.surface.instructions")).FontSize(15),
+		primitives.Box(menu, primitives.Box(
+			primitives.TextFn(func() string { return commands[selected.Get()].Name() }).FontSize(20).Bold(),
+			form,
+			button.New(button.TextOpt(surface.Text("client.surface.run")), button.A11yHint(surface.Text("client.surface.run_accessibility")), button.OnClick(run), button.PainterOpt(material3.ButtonPainter{Theme: theme})),
+			result,
+		).Gap(12)).Gap(18),
+	).Padding(28).Gap(16)
 
-	return runWindow("Search", 1000, 720, root, status)
+	return runWindow(surface.Text("client.surface.title"), 1000, 720, root, status)
 }
 
 // Configure opens the first-run wizard, validates the server, and stores
@@ -138,20 +141,20 @@ func Launch(client *api.Client) error {
 func Configure() error {
 	server := state.NewSignal("https://")
 	token := state.NewSignal("")
-	status := state.NewSignal("Connect to a Search server to continue.")
+	status := state.NewSignal(surface.Text("client.surface.setup.initial_status"))
 	var connected atomic.Bool
 	theme := systemTheme()
 	connect := func() {
 		address := strings.TrimSpace(server.Get())
 		parsed, err := url.Parse(address)
 		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			status.Set("Enter a valid http:// or https:// server URL.")
+			status.Set(surface.Text("client.surface.setup.invalid_url"))
 			return
 		}
 		address = strings.TrimRight(address, "/")
 		client := api.NewClient(address, strings.TrimSpace(token.Get()), 10)
 		if _, err := client.GetVersion(); err != nil {
-			status.Set("Connection failed: " + err.Error())
+			status.Set(surface.Text("client.surface.setup.connection_failed", err.Error()))
 			return
 		}
 		clicfg.Set("server.primary", address)
@@ -159,56 +162,56 @@ func Configure() error {
 			clicfg.Set("auth.token", value)
 		}
 		if err := clientpath.EnsureDirs(); err != nil {
-			status.Set("Unable to create configuration directory: " + err.Error())
+			status.Set(surface.Text("client.surface.setup.config_directory_failed", err.Error()))
 			return
 		}
 		configPath, err := clientpath.ConfigFile()
 		if err != nil {
-			status.Set("Unable to locate configuration file: " + err.Error())
+			status.Set(surface.Text("client.surface.setup.config_file_failed", err.Error()))
 			return
 		}
 		if err := clicfg.WriteConfigAs(configPath); err != nil {
-			status.Set("Unable to save configuration: " + err.Error())
+			status.Set(surface.Text("client.surface.setup.save_failed", err.Error()))
 			return
 		}
 		if err := os.Chmod(configPath, 0600); err != nil {
-			status.Set("Unable to secure configuration file: " + err.Error())
+			status.Set(surface.Text("client.surface.setup.secure_failed", err.Error()))
 			return
 		}
 		connected.Store(true)
-		status.Set("Connected and saved. Close this window to continue.")
+		status.Set(surface.Text("client.surface.setup.connected"))
 	}
 	root := primitives.Box(
-		primitives.Text("Connect to Search").FontSize(28).Bold(),
-		primitives.Text("Enter the URL of the Search server you want to use.").FontSize(15),
-		primitives.Text("Server URL").FontSize(14),
+		primitives.Text(surface.Text("client.surface.setup.title")).FontSize(28).Bold(),
+		primitives.Text(surface.Text("client.surface.setup.instructions")).FontSize(15),
+		primitives.Text(surface.Text("client.surface.setup.server_label")).FontSize(14),
 		textfield.New(
-			textfield.A11yLabel("Server URL"),
-			textfield.Placeholder("https://search.example.com"),
+			textfield.A11yLabel(surface.Text("client.surface.setup.server_label")),
+			textfield.Placeholder(surface.Text("client.surface.setup.server_placeholder")),
 			textfield.ValueSignal(server),
 			textfield.PainterOpt(material3.TextFieldPainter{Theme: theme}),
 		).Padding(12),
-		primitives.Text("API token (optional)").FontSize(14),
+		primitives.Text(surface.Text("client.surface.setup.token_label")).FontSize(14),
 		textfield.New(
-			textfield.A11yLabel("API token"),
-			textfield.Placeholder("Leave blank for anonymous access"),
+			textfield.A11yLabel(surface.Text("client.surface.setup.token_label")),
+			textfield.Placeholder(surface.Text("client.surface.setup.token_placeholder")),
 			textfield.InputTypeOpt(textfield.TypePassword),
 			textfield.ValueSignal(token),
 			textfield.PainterOpt(material3.TextFieldPainter{Theme: theme}),
 		).Padding(12),
 		button.New(
-			button.TextOpt("Test connection and save"),
-			button.A11yHint("Validate the server and save configuration"),
+			button.TextOpt(surface.Text("client.surface.setup.connect_button")),
+			button.A11yHint(surface.Text("client.surface.setup.connect_accessibility")),
 			button.OnClick(connect),
 			button.PainterOpt(material3.ButtonPainter{Theme: theme}),
 		),
 		primitives.TextFn(func() string { return status.Get() }).FontSize(14).MaxLines(5),
 	).Padding(28).Gap(14)
-	if err := runWindow("Search CLI Setup", 800, 640, root, status); err != nil {
+	if err := runWindow(surface.Text("client.surface.setup.window_title"), 800, 640, root, status); err != nil {
 		return err
 	}
 	if !connected.Load() {
-		return fmt.Errorf("setup window closed before a server was configured")
+		return fmt.Errorf("%s", surface.Text("client.surface.setup.closed"))
 	}
 	return nil
 }
@@ -235,7 +238,7 @@ func runWindow(title string, width, height int, root *primitives.BoxWidget, stat
 			var err error
 			canvas, err = ggcanvas.New(provider, w, h)
 			if err != nil {
-				status.Set("Unable to initialize the display: " + err.Error())
+				status.Set(surface.Text("client.surface.display_init_failed", err.Error()))
 				return
 			}
 		}
@@ -243,7 +246,7 @@ func runWindow(title string, width, height int, root *primitives.BoxWidget, stat
 		cw, ch := canvas.Size()
 		if cw != w || ch != h {
 			if err := canvas.Resize(w, h); err != nil {
-				status.Set("Unable to resize the display: " + err.Error())
+				status.Set(surface.Text("client.surface.display_resize_failed", err.Error()))
 				return
 			}
 			cw, ch = canvas.Size()
@@ -255,7 +258,7 @@ func runWindow(title string, width, height int, root *primitives.BoxWidget, stat
 			ui.Window().DrawTo(render.NewCanvas(ctx, cw, ch))
 		})
 		if err := canvas.Render(dc.RenderTarget()); err != nil {
-			status.Set("Unable to render the window: " + err.Error())
+			status.Set(surface.Text("client.surface.display_render_failed", err.Error()))
 		}
 	})
 	window.OnClose(func() { gg.CloseAccelerator() })

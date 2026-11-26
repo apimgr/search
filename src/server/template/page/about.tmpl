@@ -1,7 +1,7 @@
 {{define "content"}}
-<div class="static-page about-page">
-    <header class="page-header about-header">
-        <h1>{{.Config.Server.Branding.Title}}</h1>
+<div class="container container-lg">
+    <header class="page-header">
+        <h1 class="page-title">{{.Config.Server.Branding.Title}}</h1>
         <p class="tagline">{{.Config.Server.Description}}</p>
         <div class="version-info">
             <span class="version-badge">{{version}}</span>
@@ -9,14 +9,15 @@
     </header>
 
     {{if .Config.Server.Pages.About.Content}}
-    <div class="page-content markdown">
-        {{.Config.Server.Pages.About.Content | safe}}
-    </div>
+    <section class="section-card page-content markdown" aria-labelledby="about-custom-heading">
+        <h2 id="about-custom-heading">{{t "nav.about"}}</h2>
+        {{.Config.Server.Pages.About.Content | markdownToHTML}}
+    </section>
     {{else}}
     <div class="page-content">
         {{/* Features section */}}
-        <section class="about-section">
-            <h2>{{t "about.features_heading"}}</h2>
+        <section class="section-card about-section" aria-labelledby="about-features-heading">
+            <h2 id="about-features-heading">{{t "about.features_heading"}}</h2>
             <div class="feature-grid">
                 <div class="feature-card">
                     <span class="feature-icon">🔒</span>
@@ -62,8 +63,8 @@
         </section>
 
         {{/* API Documentation */}}
-        <section class="about-section">
-            <h2>{{t "about.api_docs_heading"}}</h2>
+        <section class="section-card about-section" aria-labelledby="about-api-heading">
+            <h2 id="about-api-heading">{{t "about.api_docs_heading"}}</h2>
             <p>{{t "about.api_docs_description"}}</p>
             <div class="api-links">
                 <a href="/server/docs/swagger" class="api-link">
@@ -92,8 +93,8 @@
         </section>
 
         {{/* Open Source */}}
-        <section class="about-section">
-            <h2>{{t "about.open_source_heading"}}</h2>
+        <section class="section-card about-section" aria-labelledby="about-open-source-heading">
+            <h2 id="about-open-source-heading">{{t "about.open_source_heading"}}</h2>
             <p>{{t "about.open_source_description"}}</p>
             {{if .Config.Server.Branding.SourceCodeURL}}
             <div class="source-links">
@@ -108,8 +109,8 @@
         </section>
 
         {{/* Version & Build Info */}}
-        <section class="about-section version-section">
-            <h2>{{t "about.version_info_heading"}}</h2>
+        <section class="section-card about-section version-section" aria-labelledby="about-version-heading">
+            <h2 id="about-version-heading">{{t "about.version_info_heading"}}</h2>
             <dl class="version-grid">
                 <dt>{{t "about.version_label"}}</dt>
                 <dd><code>{{version}}</code></dd>
@@ -119,9 +120,10 @@
         </section>
     </div>
     {{end}}
-    <section class="about-section attribution">
+    <section class="section-card about-section attribution" aria-labelledby="about-attribution-heading">
+        <h2 id="about-attribution-heading">{{t "about.attribution_heading"}}</h2>
         <p><a href="https://db-ip.com/">IP Geolocation by DB-IP</a></p>
     </section>
-    {{if operatorHTMLExists "about" .}}<div class="page-content operator-content">{{operatorHTML "about" .}}</div>{{end}}
+    {{if operatorHTMLExists "about" .}}<section class="section-card page-content operator-content" aria-labelledby="about-operator-heading"><h2 id="about-operator-heading">{{t "nav.about"}}</h2>{{operatorHTML "about" .}}</section>{{end}}
 </div>
 {{end}}

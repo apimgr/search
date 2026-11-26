@@ -1,8 +1,11 @@
 {{define "content"}}
-<div class="error-page">
-    <div class="error-container">
-        <div class="error-code">{{.StatusCode}}</div>
-        <h1 class="error-title">{{.StatusText}}</h1>
+<div class="container container-sm">
+    <header class="page-header">
+        <h1 class="page-title">{{.StatusText}}</h1>
+        <p class="page-lead">{{t "common.error"}}</p>
+    </header>
+    <section class="section-card error-container" aria-labelledby="error-code">
+        <h2 id="error-code" class="error-code">{{.StatusCode}}</h2>
         <p class="error-message">{{.Message}}</p>
 
         {{if and .Config.IsDevelopment .ErrorDetails}}
@@ -15,6 +18,6 @@
         <div class="error-actions">
             <a href="/" class="btn btn-primary">{{t "errors.go_home"}}</a>
         </div>
-    </div>
+    </section>
 </div>
 {{end}}

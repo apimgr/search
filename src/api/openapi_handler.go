@@ -9,7 +9,6 @@ import (
 
 // RegisterOpenAPIRoutes registers the OpenAPI/Swagger routes.
 // Per AI.md PART 14 "Root-Level Endpoints":
-//   - /server/docs/swagger              — Swagger UI (fetches /api/swagger)
 //   - /api/{api_version}/server/swagger — OpenAPI JSON spec (versioned)
 //   - /api/swagger                      — same handler, unversioned alias
 //
@@ -19,7 +18,6 @@ import (
 func (h *Handler) RegisterOpenAPIRoutes(r chi.Router) {
 	specHandler := swagger.SpecHandler(h.config)
 
-	r.Get("/server/docs/swagger", swagger.UIHandler(h.config))
 	r.Get(APIPrefix+"/server/swagger", specHandler)
 	r.Get("/api/swagger", specHandler)
 }
@@ -30,7 +28,8 @@ func (h *Handler) ServeOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	swagger.SpecHandler(h.config)(w, r)
 }
 
-// ServeSwaggerUI serves the themed Swagger UI page.
+// ServeSwaggerUI serves the standalone Swagger UI fallback. The normal web
+// route is rendered by the server package using its shared page shell.
 func (h *Handler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 	swagger.UIHandler(h.config)(w, r)
 }

@@ -18,7 +18,10 @@ func TestRcdTemplate(t *testing.T) {
 		"# PROVIDE:",
 		"# REQUIRE:",
 		"search_enable",
-		"/usr/local/bin/search",
+		"/usr/sbin/daemon",
+		"-P ${pidfile} -r -f /usr/local/bin/search",
+		"start_precmd=\"search_prestart\"",
+		"install -d -m 0755 /var/run/apimgr/search /var/log/apimgr/search",
 	}
 
 	for _, req := range required {

@@ -14,8 +14,10 @@ import (
 
 const CookieMaxAge = 31536000
 
-var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
-var preferenceValuePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+var (
+	keyPattern             = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	preferenceValuePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+)
 
 var controlFields = map[string]bool{
 	"csrf_token": true, "code": true, "redirect": true, "action": true,
@@ -216,6 +218,9 @@ func Apply(w http.ResponseWriter, r *http.Request, projectName string, result Im
 func validTheme(value string) bool { return value == "dark" || value == "light" || value == "auto" }
 
 func validPref(key, value string) bool {
+	if key == "custom_css" {
+		return ValidCustomCSS(value)
+	}
 	if key == "accent_color" {
 		return ValidAccentColor(value)
 	}
@@ -230,6 +235,22 @@ func validPref(key, value string) bool {
 		return options[value]
 	}
 	return preferenceValuePattern.MatchString(value)
+}
+
+func ValidCustomCSS(value string) bool {
+	if len(value) == 0 || len(value) > 64 || strings.Contains(strings.ToLower(value), "url") {
+		return false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') {
+			continue
+		}
+		if strings.ContainsRune(" #{}:;.,()_%!*-", char) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func ValidAccentColor(value string) bool {

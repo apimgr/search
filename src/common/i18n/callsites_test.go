@@ -56,7 +56,7 @@ func TestTemplateTranslationKeysExist(t *testing.T) {
 				return nil
 			}
 			if d.IsDir() {
-				if strings.HasPrefix(d.Name(), "node_modules") {
+				if strings.HasPrefix(d.Name(), "node_modules") || d.Name() == "vendor" {
 					return filepath.SkipDir
 				}
 				return nil
@@ -150,6 +150,124 @@ func TestOwnerTokenTranslationsExistInEveryLocale(t *testing.T) {
 		for _, key := range keys {
 			if _, ok := translations[key]; !ok {
 				t.Errorf("%s: missing owner-token translation %q", locale.Name(), key)
+			}
+		}
+	}
+}
+
+func TestServerTorCLITranslationsExistInEveryLocale(t *testing.T) {
+	keys := []string{
+		"server_cli.tor.address", "server_cli.tor.address_unknown", "server_cli.tor.applied_vanity",
+		"server_cli.tor.bootstrap", "server_cli.tor.check_progress", "server_cli.tor.circuit_established",
+		"server_cli.tor.config_invalid", "server_cli.tor.config_missing", "server_cli.tor.config_path",
+		"server_cli.tor.config_valid", "server_cli.tor.confirm_apply_vanity", "server_cli.tor.confirm_import",
+		"server_cli.tor.confirm_regenerate", "server_cli.tor.error", "server_cli.tor.help_import_keys",
+		"server_cli.tor.help_regenerate", "server_cli.tor.help_restart", "server_cli.tor.help_status",
+		"server_cli.tor.help_subcommands", "server_cli.tor.help_usage", "server_cli.tor.help_validate",
+		"server_cli.tor.help_vanity_apply", "server_cli.tor.help_vanity_start", "server_cli.tor.help_vanity_stop",
+		"server_cli.tor.hostname_missing", "server_cli.tor.imported_address", "server_cli.tor.issue",
+		"server_cli.tor.new_address", "server_cli.tor.no_running_server", "server_cli.tor.offline_heading",
+		"server_cli.tor.path_absolute", "server_cli.tor.pid", "server_cli.tor.prefix_duplicate",
+		"server_cli.tor.prefix_required", "server_cli.tor.prefix_value_required", "server_cli.tor.restarted",
+		"server_cli.tor.status_connected", "server_cli.tor.status_disconnected", "server_cli.tor.status_unknown",
+		"server_cli.tor.torrc_missing", "server_cli.tor.unknown_option", "server_cli.tor.unknown_subcommand",
+		"server_cli.tor.usage_import_keys", "server_cli.tor.usage_vanity", "server_cli.tor.usage_vanity_stop",
+		"server_cli.tor.vanity_candidates", "server_cli.tor.vanity_not_running", "server_cli.tor.vanity_started",
+		"server_cli.tor.vanity_state", "server_cli.tor.vanity_stopped", "server_cli.tor.version",
+		"server_cli.tor.workers_duplicate", "server_cli.tor.workers_integer", "server_cli.tor.workers_minimum",
+		"server_cli.tor.workers_value_required", "server_cli.tor.vanity_prefix", "server_cli.tor.vanity_workers",
+		"server_cli.tor.vanity_attempts", "server_cli.tor.vanity_rate", "server_cli.tor.vanity_elapsed_seconds",
+		"server_cli.tor.vanity_state_idle", "server_cli.tor.vanity_state_running", "server_cli.tor.vanity_state_found",
+	}
+	if len(keys) != 63 {
+		t.Fatalf("Tor CLI translation inventory has %d keys, want 63", len(keys))
+	}
+	locales, err := fs.ReadDir(LocalesFS(), "locales")
+	if err != nil {
+		t.Fatalf("cannot read locales: %v", err)
+	}
+	for _, locale := range locales {
+		if locale.IsDir() || !strings.HasSuffix(locale.Name(), ".json") {
+			continue
+		}
+		data, err := fs.ReadFile(LocalesFS(), "locales/"+locale.Name())
+		if err != nil {
+			t.Errorf("%s: cannot read locale: %v", locale.Name(), err)
+			continue
+		}
+		var raw interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Errorf("%s: cannot parse locale: %v", locale.Name(), err)
+			continue
+		}
+		translations := make(map[string]string)
+		flattenTranslations("", raw, translations)
+		for _, key := range keys {
+			value, ok := translations[key]
+			if !ok {
+				t.Errorf("%s: missing Tor CLI translation %q", locale.Name(), key)
+				continue
+			}
+			if locale.Name() != "en.json" && value == key {
+				t.Errorf("%s: Tor CLI translation %q is an untranslated key", locale.Name(), key)
+			}
+		}
+	}
+}
+
+func TestServerCLICatalogCallsitesExistInEveryLocale(t *testing.T) {
+	pattern := regexp.MustCompile(`"(server_cli\.(?:tor|pgp|maintenance|status|help|version|main)\.[a-zA-Z0-9_]+)"`)
+	keys := make(map[string]struct{})
+	for _, path := range []string{"../../tor_cli.go", "../../main_pgp.go", "../../maintenance_cli.go", "../../maintenance_email.go", "../../maintenance_scheduler.go", "../../main.go"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("cannot read server CLI source %s: %v", path, err)
+		}
+		for _, match := range pattern.FindAllStringSubmatch(string(data), -1) {
+			keys[match[1]] = struct{}{}
+		}
+	}
+	delete(keys, "server_cli.tor.vanity_")
+	delete(keys, "server_cli.tor.vanity_state_")
+	delete(keys, "server_cli.maintenance.token_status_")
+	delete(keys, "server_cli.maintenance.scheduler_status_")
+	for _, state := range []string{"active", "revoked", "expired"} {
+		keys["server_cli.maintenance.token_status_"+state] = struct{}{}
+	}
+	for _, state := range []string{"unknown", "success", "failed", "skipped", "running", "retrying"} {
+		keys["server_cli.maintenance.scheduler_status_"+state] = struct{}{}
+	}
+	if len(keys) == 0 {
+		t.Fatal("no server CLI translation keys were found; the source scan is stale")
+	}
+	locales, err := fs.ReadDir(LocalesFS(), "locales")
+	if err != nil {
+		t.Fatalf("cannot read locales: %v", err)
+	}
+	for _, locale := range locales {
+		if locale.IsDir() || !strings.HasSuffix(locale.Name(), ".json") {
+			continue
+		}
+		data, err := fs.ReadFile(LocalesFS(), "locales/"+locale.Name())
+		if err != nil {
+			t.Errorf("%s: cannot read locale: %v", locale.Name(), err)
+			continue
+		}
+		var raw interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Errorf("%s: cannot parse locale: %v", locale.Name(), err)
+			continue
+		}
+		translations := make(map[string]string)
+		flattenTranslations("", raw, translations)
+		for key := range keys {
+			value, ok := translations[key]
+			if !ok {
+				t.Errorf("%s: missing server CLI translation %q", locale.Name(), key)
+				continue
+			}
+			if locale.Name() != "en.json" && value == key {
+				t.Errorf("%s: server CLI translation %q is an untranslated key", locale.Name(), key)
 			}
 		}
 	}

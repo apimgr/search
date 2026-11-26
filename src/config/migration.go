@@ -45,7 +45,7 @@ var serverNodeKeys = map[string]bool{
 	"port": true, "address": true, "fqdn": true, "mode": true,
 	"api_version": true, "baseurl": true, "user": true, "group": true,
 	"pidfile": true, "daemonize": true, "debug": true, "database": true,
-	"cache": true, "ssl": true, "trusted_proxies": true, "cluster": true,
+	"cache": true, "ssl": true, "trusted_proxies": true,
 }
 
 func partitionConfigNode(document *yaml.Node) (map[string]*yaml.Node, *yaml.Node) {
@@ -94,6 +94,9 @@ func partitionConfigNode(document *yaml.Node) (map[string]*yaml.Node, *yaml.Node
 			root.Content = append(root.Content[:index], root.Content[index+2:]...)
 		case "data":
 			appendConfigChild(areas["security"], []string{"data"}, value)
+			root.Content = append(root.Content[:index], root.Content[index+2:]...)
+		case "cli":
+			appendConfigChild(areas["maintenance"], []string{"cli"}, value)
 			root.Content = append(root.Content[:index], root.Content[index+2:]...)
 		default:
 			appendConfigChild(areas["app"], []string{key.Value}, value)
@@ -246,6 +249,12 @@ func extractSecretsFromFiles(configDir string, serverDocument, secrets *yaml.Nod
 			return nil, false, fmt.Errorf("read drop-in %s: %w", filePath, readErr)
 		}
 		before, _ := yaml.Marshal(document)
+		legacyChanged := migrateLegacyKeys(document)
+		legacyChanged = migrateLegacyHTTPSPort(document) || legacyChanged
+		legacyChanged = migrateSchedulerTaskKeys(document) || legacyChanged
+		if legacyChanged {
+			changed = true
+		}
 		moved := emptyYAMLDocument()
 		extractConfigSecrets(document, moved)
 		if hasConfigSecrets(moved) {
@@ -272,6 +281,7 @@ func migrateLegacyKeys(document *yaml.Node) bool {
 			changed = true
 		}
 	}
+	remove("server.cluster")
 
 	if logging := configPathValue(document, "server.logging"); logging != nil && logging.Kind == yaml.MappingNode {
 		if accessFormat := mappingValue(logging, "access_format"); accessFormat != nil {
@@ -548,10 +558,10 @@ func backupConfig(path string) error {
 		return err
 	}
 	backup := migrationBackupPath(path)
-	if err := os.WriteFile(backup, data, 0600); err != nil {
+	if err := os.WriteFile(backup, data, 0o600); err != nil {
 		return err
 	}
-	return os.Chmod(backup, 0600)
+	return os.Chmod(backup, 0o600)
 }
 
 func parsePortScalar(node *yaml.Node) (int, bool) {
@@ -699,13 +709,17 @@ func (c *Config) ImportLegacyAppSecrets(ctx context.Context, db *database.DB) er
 	}
 	for _, name := range secretNames {
 		path := "server.security." + name
-		secret, err := database.GetSecret(ctx, db, name)
+		databaseName := name
+		if name == "encryption_key_previous_expires" {
+			databaseName = database.SecretEncryptionKeyPreviousUntil
+		}
+		secret, err := database.GetSecret(ctx, db, databaseName)
 		if errors.Is(err, sql.ErrNoRows) {
 			if value := strings.TrimSpace(c.legacyAppSecretValues[path]); value != "" {
-				if err := database.SetAppSecretValue(ctx, db, name, value); err != nil {
+				if err := database.SetAppSecretValue(ctx, db, databaseName, value); err != nil {
 					return err
 				}
-				secret, err = database.GetSecret(ctx, db, name)
+				secret, err = database.GetSecret(ctx, db, databaseName)
 			}
 		} else if err != nil {
 			return fmt.Errorf("read app secret %s: %w", name, err)
@@ -713,7 +727,7 @@ func (c *Config) ImportLegacyAppSecrets(ctx context.Context, db *database.DB) er
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("read app secret %s: %w", name, err)
 		}
-		if secret != nil && secret.Value != "" {
+		if secret != nil && secret.Value != "" && databaseName == name {
 			c.setLegacyAppSecret(name, secret.Value)
 		}
 		if name == "installation_secret" {

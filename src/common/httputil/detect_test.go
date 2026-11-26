@@ -1,13 +1,54 @@
 package httputil
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
+	"net"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/version"
 )
+
+func TestTrustedProxyDNSNamesResolveAndRefresh(t *testing.T) {
+	oldLookup, oldNow := trustedProxyLookupIP, trustedProxyNow
+	trustedProxyDNSMu.Lock()
+	oldCache := trustedProxyDNSCache
+	trustedProxyDNSCache = make(map[string]trustedProxyDNSResult)
+	trustedProxyDNSMu.Unlock()
+	defer func() {
+		trustedProxyLookupIP, trustedProxyNow = oldLookup, oldNow
+		trustedProxyDNSMu.Lock()
+		trustedProxyDNSCache = oldCache
+		trustedProxyDNSMu.Unlock()
+		SetAdditionalTrustedProxies(nil)
+	}()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	trustedProxyNow = func() time.Time { return now }
+	lookups := 0
+	current := net.ParseIP("203.0.113.10")
+	trustedProxyLookupIP = func(context.Context, string) ([]net.IP, error) {
+		lookups++
+		return []net.IP{current}, nil
+	}
+	SetAdditionalTrustedProxies([]string{"proxy.example.test"})
+	if lookups != 1 { t.Fatalf("startup DNS lookups = %d, want 1", lookups) }
+	if !isTrustedProxy("203.0.113.10:8443") { t.Fatal("startup-resolved proxy address was not trusted") }
+
+	now = now.Add(trustedProxyDNSRefresh + time.Second)
+	current = net.ParseIP("203.0.113.11")
+	if isTrustedProxy("203.0.113.10:8443") { t.Fatal("stale DNS address remained trusted after refresh interval") }
+	if !isTrustedProxy("203.0.113.11:8443") { t.Fatal("refreshed DNS address was not trusted") }
+	if lookups != 2 { t.Fatalf("DNS lookups after refresh = %d, want 2", lookups) }
+
+	trustedProxyLookupIP = func(context.Context, string) ([]net.IP, error) { return nil, errors.New("name unavailable") }
+	SetAdditionalTrustedProxies([]string{"unavailable.example.test"})
+	if isTrustedProxy("203.0.113.12:8443") { t.Fatal("unresolved DNS proxy name trusted an unrelated address") }
+}
 
 func TestProjectName(t *testing.T) {
 	if ProjectName != "search" {

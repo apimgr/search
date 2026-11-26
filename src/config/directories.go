@@ -211,16 +211,30 @@ func IsRunningInContainer() bool {
 	if containerDetectionOverride != nil {
 		return *containerDetectionOverride
 	}
+	if os.Getenv("INVOCATION_ID") != "" || os.Getenv("RC_SVCNAME") != "" {
+		return false
+	}
+	if comm, err := os.ReadFile("/proc/1/comm"); err == nil && strings.TrimSpace(string(comm)) == "systemd" {
+		return false
+	}
+	if os.Getppid() == 1 {
+		if _, err := os.Stat("/run/openrc"); err == nil {
+			return false
+		}
+	}
 
-	// Check for Docker/container indicators
-	if _, err := os.Stat("/.dockerenv"); err == nil {
+	for _, indicator := range []string{"/.dockerenv", "/run/.containerenv", "/dev/lxc"} {
+		if _, err := os.Stat(indicator); err == nil {
+			return true
+		}
+	}
+	if os.Getenv("container") != "" || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
 		return true
 	}
 
-	// Check if init process is tini (common container init)
-	if data, err := os.ReadFile("/proc/1/comm"); err == nil {
-		comm := string(data)
-		if comm == "tini\n" || comm == "dumb-init\n" {
+	if parent, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", os.Getppid())); err == nil {
+		switch strings.TrimSpace(string(parent)) {
+		case "tini", "dumb-init", "s6-svscan", "runsv", "runsvdir", "catatonit", ProjectName:
 			return true
 		}
 	}
@@ -263,8 +277,8 @@ func GetConfigDir() string {
 		return "/config/" + ProjectName
 	}
 
-	// Check if running as root/admin
-	isRoot := IsPrivileged()
+	// Keep the path mode stable when the service later drops privileges.
+	isRoot := startedElevated
 
 	switch GetOS() {
 	case "linux":
@@ -313,7 +327,7 @@ func GetDataDir() string {
 		return "/data/" + ProjectName
 	}
 
-	isRoot := IsPrivileged()
+	isRoot := startedElevated
 
 	switch GetOS() {
 	case "linux":
@@ -362,7 +376,7 @@ func GetLogDir() string {
 		return "/data/log/" + ProjectName
 	}
 
-	isRoot := IsPrivileged()
+	isRoot := startedElevated
 
 	switch GetOS() {
 	case "linux":
@@ -406,7 +420,7 @@ func GetCacheDir() string {
 		return "/data/" + ProjectName + "/cache"
 	}
 
-	isRoot := IsPrivileged()
+	isRoot := startedElevated
 
 	switch GetOS() {
 	case "linux":
@@ -416,9 +430,15 @@ func GetCacheDir() string {
 		return os.ExpandEnv("$HOME/.cache/" + InternalOrg + "/" + InternalName)
 
 	case "darwin":
+		if isRoot {
+			return "/Library/Caches/" + InternalOrg + "/" + InternalName
+		}
 		return os.ExpandEnv("$HOME/Library/Caches/" + InternalOrg + "/" + InternalName)
 
 	case "windows":
+		if isRoot {
+			return filepath.Join(os.Getenv("ProgramData"), InternalOrg, InternalName, "cache")
+		}
 		return filepath.Join(os.Getenv("LocalAppData"), InternalOrg, InternalName, "cache")
 
 	case "freebsd", "openbsd", "netbsd":
@@ -482,7 +502,7 @@ func userBackupDir() string {
 }
 
 func writableBackupDir(path string) bool {
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return false
 	}
 	test, err := os.CreateTemp(path, ".write-test-")
@@ -513,9 +533,6 @@ func GetPIDFile() string {
 
 // GetSSLDir returns the SSL certificate directory.
 func GetSSLDir() string {
-	if IsRunningInContainer() {
-		return "/config/" + ProjectName + "/ssl"
-	}
 	return filepath.Join(GetConfigDir(), "ssl")
 }
 
@@ -604,22 +621,22 @@ func GetWellKnownDir() string {
 // GetDirectoryPermissions returns the appropriate directory permissions
 // Per AI.md PART 7: root: 0755, user: 0700
 func GetDirectoryPermissions() os.FileMode {
-	if IsPrivileged() {
-		return 0755
+	if startedElevated {
+		return 0o755
 	}
-	return 0700
+	return 0o700
 }
 
 // GetSensitiveDirectoryPermissions returns permissions for sensitive directories
 // Per AI.md PART 7: Tor dirs, SSL dirs always 0700
 func GetSensitiveDirectoryPermissions() os.FileMode {
-	return 0700
+	return 0o700
 }
 
 // GetSensitiveFilePermissions returns permissions for sensitive files
 // Per AI.md PART 7: keys, config files 0600
 func GetSensitiveFilePermissions() os.FileMode {
-	return 0600
+	return 0o600
 }
 
 // EnsureDirectories creates all required directories if they don't exist
@@ -722,7 +739,7 @@ func EnsureSystemDirectories(userName string) error {
 
 	// Create standard system directories
 	for _, dir := range systemDirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 		// Set ownership to service user
@@ -733,7 +750,7 @@ func EnsureSystemDirectories(userName string) error {
 
 	// Create sensitive directories with restricted permissions
 	for _, dir := range sensitiveDirs {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 		if err := chownRecursive(dir, userName); err != nil {
@@ -797,7 +814,7 @@ func GetServiceFile() string {
 		return "/etc/systemd/system/" + InternalName + ".service"
 
 	case "darwin":
-		if IsPrivileged() {
+		if startedElevated {
 			return "/Library/LaunchDaemons/io.github." + InternalOrg + "." + InternalName + ".plist"
 		}
 		return os.ExpandEnv("$HOME/Library/LaunchAgents/io.github." + InternalOrg + "." + InternalName + ".plist")
@@ -818,19 +835,19 @@ func GetServiceFile() string {
 func GetBinaryPath() string {
 	switch GetOS() {
 	case "linux":
-		if IsPrivileged() {
+		if startedElevated {
 			return "/usr/local/bin/" + ProjectName
 		}
 		return os.ExpandEnv("$HOME/.local/bin/" + ProjectName)
 
 	case "darwin":
-		if IsPrivileged() {
+		if startedElevated {
 			return "/usr/local/bin/" + ProjectName
 		}
 		return os.ExpandEnv("$HOME/bin/" + ProjectName)
 
 	case "windows":
-		if IsPrivileged() {
+		if startedElevated {
 			return filepath.Join(os.Getenv("ProgramFiles"), InternalOrg, InternalName, ProjectName+".exe")
 		}
 		return filepath.Join(os.Getenv("LocalAppData"), InternalOrg, InternalName, ProjectName+".exe")

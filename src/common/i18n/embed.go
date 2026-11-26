@@ -65,6 +65,16 @@ func RequestString(r *http.Request, key string, args ...interface{}) string {
 	return manager.T(manager.DetectLanguage(r), key, args...)
 }
 
+// RequestLanguage returns the language selected by the embedded locale
+// manager for an HTTP request.
+func RequestLanguage(r *http.Request) string {
+	manager, err := CachedDefaultManager()
+	if err != nil || manager == nil {
+		return "en"
+	}
+	return manager.DetectLanguage(r)
+}
+
 // RequestFormat replaces named tokens in a request-localized translation.
 func RequestFormat(r *http.Request, key string, args ...interface{}) string {
 	manager, err := CachedDefaultManager()

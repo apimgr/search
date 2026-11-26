@@ -72,6 +72,148 @@ func TestBuildArchiveIncludesOnlineDatabaseSnapshot(t *testing.T) {
 	}
 }
 
+func TestBuildArchiveOptionalSSLAndDataContents(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	if err := os.MkdirAll(filepath.Join(configDir, "ssl"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte("server:\n  title: Test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		filepath.Join(configDir, "ssl", "optional.pem"): "optional ssl",
+		filepath.Join(dataDir, "payload.json"):            "optional data",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := &Manager{configDir: configDir, dataDir: dataDir, databaseDir: filepath.Join(dataDir, "database")}
+	archiveNames := func(includeSSL, includeData bool) map[string]bool {
+		t.Helper()
+		manager.SetIncludeSSL(includeSSL)
+		manager.SetIncludeData(includeData)
+		archive, err := manager.buildArchiveAt(time.Now().UTC())
+		if err != nil {
+			t.Fatalf("buildArchiveAt(): %v", err)
+		}
+		reader, err := gzip.NewReader(bytes.NewReader(archive))
+		if err != nil {
+			t.Fatalf("gzip.NewReader(): %v", err)
+		}
+		defer reader.Close()
+		found := map[string]bool{}
+		tarReader := tar.NewReader(reader)
+		for {
+			header, err := tarReader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatalf("tar.Next(): %v", err)
+			}
+			found[header.Name] = true
+		}
+		return found
+	}
+	defaultFiles := archiveNames(false, false)
+	if defaultFiles["config/ssl/optional.pem"] || defaultFiles["data/payload.json"] {
+		t.Fatalf("default backup unexpectedly includes optional files: %#v", defaultFiles)
+	}
+	withOptionalFiles := archiveNames(true, true)
+	if !withOptionalFiles["config/ssl/optional.pem"] || !withOptionalFiles["data/payload.json"] {
+		t.Fatalf("backup with inclusion options omits optional files: %#v", withOptionalFiles)
+	}
+}
+
+func TestExternalServerTLSFilesRestoreToConfigSSLPaths(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	backupDir := filepath.Join(root, "backups")
+	externalDir := filepath.Join(root, "external")
+	for _, dir := range []string{configDir, dataDir, backupDir, externalDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	certPath := filepath.Join(externalDir, "cert.pem")
+	keyPath := filepath.Join(externalDir, "key.pem")
+	if err := os.WriteFile(certPath, []byte("certificate"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("private key"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	configText := fmt.Sprintf("server:\n  ssl:\n    cert: %q\n    key: %q\n", certPath, keyPath)
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte(configText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir, databaseDir: filepath.Join(dataDir, "database")}
+	archive, err := manager.buildArchiveAt(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("buildArchiveAt(): %v", err)
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	archiveFiles := map[string][]byte{}
+	tarReader := tar.NewReader(reader)
+	for {
+		header, nextErr := tarReader.Next()
+		if nextErr == io.EOF {
+			break
+		}
+		if nextErr != nil {
+			t.Fatalf("tar.Next(): %v", nextErr)
+		}
+		if header.Name == "ssl-external/server.key" && header.Mode != 0o600 {
+			t.Fatalf("archived external key mode = %#o, want 0600", header.Mode)
+		}
+		if header.Typeflag == tar.TypeReg {
+			content, readErr := io.ReadAll(tarReader)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			archiveFiles[header.Name] = content
+		}
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if string(archiveFiles["ssl-external/server.crt"]) != "certificate" || string(archiveFiles["ssl-external/server.key"]) != "private key" {
+		t.Fatalf("archive external TLS files = %#v", archiveFiles)
+	}
+	if err := manager.restoreFromData(archive); err != nil {
+		t.Fatalf("restoreFromData(): %v", err)
+	}
+	certTarget := filepath.Join(configDir, "ssl", "server.crt")
+	keyTarget := filepath.Join(configDir, "ssl", "server.key")
+	if _, err := os.Stat(certTarget); err != nil {
+		t.Fatalf("restored cert: %v", err)
+	}
+	keyInfo, err := os.Stat(keyTarget)
+	if err != nil {
+		t.Fatalf("restored key: %v", err)
+	}
+	if keyInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("restored key mode = %#o, want 0600", keyInfo.Mode().Perm())
+	}
+	restored, err := config.Load(filepath.Join(configDir, "server.yml"))
+	if err != nil {
+		t.Fatalf("load restored config: %v", err)
+	}
+	if restored.Server.SSL.CertFile != certTarget || restored.Server.SSL.KeyFile != keyTarget {
+		t.Fatalf("restored TLS paths = %q / %q", restored.Server.SSL.CertFile, restored.Server.SSL.KeyFile)
+	}
+}
+
 func TestFileManifestUsesSnapshotForDatabaseInsideDataDir(t *testing.T) {
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")
@@ -96,7 +238,7 @@ func TestFileManifestUsesSnapshotForDatabaseInsideDataDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, err := manager.fileManifest([]string{archivePath}, map[string]string{archivePath: checksum}, snapshot)
+	manifest, err := manager.fileManifest([]string{archivePath}, map[string]string{archivePath: checksum}, snapshot, nil)
 	if err != nil {
 		t.Fatalf("fileManifest(): %v", err)
 	}
@@ -124,7 +266,7 @@ func TestCumulativeIncrementalBackupAndRestore(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dataDir, "deleted.txt"), []byte("remove"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir}
+	m := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir, includeData: true}
 	snapshot := time.Date(2026, 11, 21, 2, 0, 0, 0, time.UTC)
 	fullPath, err := m.CreateAt("search_backup_2026-11-21.tar.gz", snapshot)
 	if err != nil {
@@ -224,7 +366,7 @@ func TestDailyPairUsesOneCapturedArchive(t *testing.T) {
 	if err := os.WriteFile(file, []byte("base"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir}
+	m := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir, includeData: true}
 	baseAt := time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC)
 	basePath, err := m.CreateAt("search_backup_2026-11-20.tar.gz", baseAt)
 	if err != nil {
@@ -265,6 +407,43 @@ func TestDailyPairUsesOneCapturedArchive(t *testing.T) {
 	}
 	if fullHash == "" || fullHash != incrementalHash {
 		t.Fatalf("paired archive state mismatch: full hash=%q incremental hash=%q", fullHash, incrementalHash)
+	}
+}
+
+func TestPublishVerifiedBackupPairRestoresBothPreviousFilesOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	fullTarget := filepath.Join(dir, "full.tar.gz")
+	incTarget := filepath.Join(dir, "incremental.tar.gz")
+	fullStage := filepath.Join(dir, "full.stage")
+	missingIncrementalStage := filepath.Join(dir, "missing.stage")
+	for path, content := range map[string]string{
+		fullTarget: "old full",
+		incTarget:  "old incremental",
+		fullStage:  "new full",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := publishVerifiedBackupPair([]verifiedBackup{
+		{stagePath: fullStage, targetPath: fullTarget},
+		{stagePath: missingIncrementalStage, targetPath: incTarget},
+	})
+	if err == nil {
+		t.Fatal("publishVerifiedBackupPair() succeeded with a missing incremental stage")
+	}
+	for path, want := range map[string]string{
+		fullTarget: "old full",
+		incTarget:  "old incremental",
+	} {
+		got, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read restored %s: %v", filepath.Base(path), readErr)
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", filepath.Base(path), got, want)
+		}
 	}
 }
 
@@ -1633,7 +1812,7 @@ func TestManagerRestore(t *testing.T) {
 	// Create initial files
 	os.MkdirAll(configDir, 0755)
 	os.MkdirAll(dataDir, 0755)
-	originalContent := []byte("original config content")
+	originalContent := []byte("server:\n  title: Original\n")
 	os.WriteFile(filepath.Join(configDir, "server.yml"), originalContent, 0644)
 	os.WriteFile(filepath.Join(dataDir, "test.db"), []byte("original data"), 0644)
 

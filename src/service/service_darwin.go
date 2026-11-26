@@ -29,18 +29,33 @@ func (sm *ServiceManager) Status() (string, error) {
 
 // StartAllServices starts the service on macOS.
 func (sm *ServiceManager) StartAllServices() error {
+	if !config.IsPrivileged() {
+		path, err := sm.getLaunchdUserAgentPath()
+		if err != nil {
+			return err
+		}
+		return runCommand("launchctl", launchdUserArgs("start", path)...)
+	}
 	return runCommand("launchctl", "load", sm.getLaunchdPath())
 }
 
 // StopAllServices stops the service on macOS.
 func (sm *ServiceManager) StopAllServices() error {
+	if !config.IsPrivileged() {
+		path, err := sm.getLaunchdUserAgentPath()
+		if err != nil {
+			return err
+		}
+		return runCommand("launchctl", launchdUserArgs("stop", path)...)
+	}
 	return runCommand("launchctl", "unload", sm.getLaunchdPath())
 }
 
 // RestartAllServices restarts the service on macOS.
 func (sm *ServiceManager) RestartAllServices() error {
-	// Ignore stop errors
-	sm.StopAllServices() //nolint:errcheck
+	if err := sm.StopAllServices(); err != nil {
+		return fmt.Errorf("stop service before restart: %w", err)
+	}
 	return sm.StartAllServices()
 }
 
@@ -51,11 +66,25 @@ func (sm *ServiceManager) Reload() error {
 
 // Enable enables the service to start on boot on macOS.
 func (sm *ServiceManager) Enable() error {
+	if !config.IsPrivileged() {
+		path, err := sm.getLaunchdUserAgentPath()
+		if err != nil {
+			return err
+		}
+		return runCommand("launchctl", launchdUserArgs("enable", path)...)
+	}
 	return runCommand("launchctl", "load", "-w", sm.getLaunchdPath())
 }
 
 // Disable disables the service from starting on boot on macOS.
 func (sm *ServiceManager) Disable() error {
+	if !config.IsPrivileged() {
+		path, err := sm.getLaunchdUserAgentPath()
+		if err != nil {
+			return err
+		}
+		return runCommand("launchctl", launchdUserArgs("disable", path)...)
+	}
 	return runCommand("launchctl", "unload", "-w", sm.getLaunchdPath())
 }
 
@@ -73,6 +102,27 @@ func (sm *ServiceManager) ensureSystemUser() error {
 
 func (sm *ServiceManager) getLaunchdPath() string {
 	return "/Library/LaunchDaemons/io.github.apimgr.search.plist"
+}
+
+func (sm *ServiceManager) getLaunchdUserAgentPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine home directory: %w", err)
+	}
+	return filepath.Join(homeDir, "Library", "LaunchAgents", "io.github.apimgr.search.plist"), nil
+}
+
+func launchdUserArgs(action, plistPath string) []string {
+	switch action {
+	case "start", "enable":
+		return []string{"load", "-w", plistPath}
+	case "stop":
+		return []string{"unload", plistPath}
+	case "disable":
+		return []string{"unload", "-w", plistPath}
+	default:
+		return nil
+	}
 }
 
 // launchdTemplate is the macOS launchd plist template.
@@ -164,9 +214,9 @@ const launchdUserAgentTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 	<key>KeepAlive</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>/tmp/apimgr/search.log</string>
+    <string>{stdout_path}</string>
 	<key>StandardErrorPath</key>
-	<string>/tmp/apimgr/search.err</string>
+    <string>{stderr_path}</string>
 </dict>
 </plist>
 `
@@ -183,10 +233,20 @@ func (sm *ServiceManager) installLaunchdUserAgent() error {
 	if err := os.MkdirAll(agentDir, 0755); err != nil {
 		return fmt.Errorf("failed to create LaunchAgents directory: %w", err)
 	}
+	logDir := config.GetLogDir()
+	if err := os.MkdirAll(logDir, config.GetDirectoryPermissions()); err != nil {
+		return fmt.Errorf("failed to create user service log directory: %w", err)
+	}
 
-	plistPath := filepath.Join(agentDir, "io.github.apimgr.search.plist")
-	if err := os.WriteFile(plistPath, []byte(launchdUserAgentTemplate), 0644); err != nil {
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "io.github.apimgr.search.plist")
+	plist := strings.ReplaceAll(launchdUserAgentTemplate, "{stdout_path}", escapePlistText(filepath.Join(logDir, "stdout.log")))
+	plist = strings.ReplaceAll(plist, "{stderr_path}", escapePlistText(filepath.Join(logDir, "stderr.log")))
+	if err := os.WriteFile(plistPath, []byte(plist), 0644); err != nil {
 		return fmt.Errorf("failed to write LaunchAgent plist: %w", err)
 	}
 	return nil
+}
+
+func escapePlistText(value string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;", "'", "&apos;").Replace(value)
 }

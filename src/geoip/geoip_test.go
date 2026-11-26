@@ -46,6 +46,68 @@ func TestDatabaseURLSources(t *testing.T) {
 	}
 }
 
+func TestDatabaseHealthUsesGeoIPLastUpdatedMarker(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		age        time.Duration
+		writeStamp bool
+		want       string
+	}{
+		{name: "missing marker is stale", want: "degraded"},
+		{name: "current marker is healthy", age: 24 * time.Hour, writeStamp: true, want: "ok"},
+		{name: "marker older than 21 days is stale", age: 22 * 24 * time.Hour, writeStamp: true, want: "degraded"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := writeTempMMDB(t, dir, countryFile)
+			database, err := openMMDB(path)
+			if err != nil {
+				t.Fatalf("open fixture database: %v", err)
+			}
+			defer database.Close()
+			if tc.writeStamp {
+				stamp := time.Now().UTC().Add(-tc.age).Format(time.RFC3339)
+				if err := os.WriteFile(filepath.Join(dir, ".last_updated"), []byte(stamp+"\n"), 0600); err != nil {
+					t.Fatalf("write freshness marker: %v", err)
+				}
+			}
+			lookup := &Lookup{dbDir: dir, config: &Config{Country: true}, countryDB: database, loaded: true}
+			if got := lookup.DatabaseHealth()["country"]; got != tc.want {
+				t.Errorf("country health = %q, want %q", got, tc.want)
+			}
+			if lookup.countryDB != database || !lookup.loaded {
+				t.Error("stale marker must not discard the last loaded database")
+			}
+		})
+	}
+}
+
+func TestInstallValidatedDatabasePreservesPreviousFileOnInvalidStage(t *testing.T) {
+	dir := t.TempDir()
+	livePath := writeTempMMDB(t, dir, countryFile)
+	before, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatalf("read previous database: %v", err)
+	}
+	stagePath := filepath.Join(dir, "staged.mmdb")
+	if err := os.WriteFile(stagePath, []byte("invalid database"), 0600); err != nil {
+		t.Fatalf("write invalid staged database: %v", err)
+	}
+	if reader, err := installValidatedDatabase(stagePath, livePath); err == nil {
+		if reader != nil {
+			reader.Close()
+		}
+		t.Fatal("installValidatedDatabase accepted invalid staged data")
+	}
+	after, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatalf("read restored database: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("invalid staged data replaced the last-good database")
+	}
+}
+
 func TestCountryStruct(t *testing.T) {
 	c := Country{Code: "US", Name: "United States", Continent: "NA"}
 	if c.Code != "US" || c.Name != "United States" || c.Continent != "NA" {
@@ -1059,12 +1121,28 @@ func TestUpdateDatabasesDownloadFails(t *testing.T) {
 	if err := l.LoadDatabases(); err != nil {
 		t.Fatalf("LoadDatabases setup: %v", err)
 	}
+	originalDatabase, err := os.ReadFile(filepath.Join(dir, countryFile))
+	if err != nil {
+		t.Fatalf("read initial database: %v", err)
+	}
+	oldMarker := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, ".last_updated"), []byte(oldMarker), 0600); err != nil {
+		t.Fatalf("write old freshness marker: %v", err)
+	}
 
 	// UpdateDatabases always downloads; reject these requests locally so the test
 	// exercises the update failure without contacting the release host.
 	l.httpClient = &http.Client{Transport: geoIPRejectTransport{}}
-	err := l.UpdateDatabases()
-	_ = err
+	err = l.UpdateDatabases()
+	if err == nil {
+		t.Fatal("UpdateDatabases should fail when all download requests are rejected")
+	}
+	if got, readErr := os.ReadFile(filepath.Join(dir, ".last_updated")); readErr != nil || string(got) != oldMarker {
+		t.Errorf("failed update changed last-good freshness marker: got %q, err %v", got, readErr)
+	}
+	if got, readErr := os.ReadFile(filepath.Join(dir, countryFile)); readErr != nil || string(got) != string(originalDatabase) {
+		t.Errorf("failed update changed last-good database: err %v", readErr)
+	}
 }
 
 // TestUpdateDatabasesWithMockServer verifies UpdateDatabases success path using

@@ -246,11 +246,11 @@ func TestUIHandlerGETRendersTheme(t *testing.T) {
 	tests := []struct {
 		name        string
 		cookieValue string
-		wantBg      string
+		wantTheme   string
 	}{
-		{"dark theme (default)", "", "#282a36"},
-		{"light theme", "light", "#ffffff"},
-		{"dark theme explicit", "dark", "#282a36"},
+		{"dark theme (default)", "", "dark"},
+		{"light theme", "light", "light"},
+		{"dark theme explicit", "dark", "dark"},
 	}
 
 	for _, tt := range tests {
@@ -268,8 +268,8 @@ func TestUIHandlerGETRendersTheme(t *testing.T) {
 				t.Errorf("UIHandler status = %d, want 200", resp.StatusCode)
 			}
 			body := w.Body.String()
-			if !strings.Contains(body, tt.wantBg) {
-				t.Errorf("UIHandler body does not contain expected bg color %q for theme %q", tt.wantBg, tt.cookieValue)
+			if !strings.Contains(body, `href="/static/css/graphql-theme.css"`) || !strings.Contains(body, `data-theme="`+tt.wantTheme+`"`) {
+				t.Errorf("UIHandler body does not load the self-hosted theme for %q", tt.wantTheme)
 			}
 		})
 	}
@@ -311,7 +311,7 @@ func TestQueryHandlerNonPOSTReturns405(t *testing.T) {
 	cfg := config.DefaultConfig()
 	handler := QueryHandler(cfg, testGraphQLDependencies())
 
-	methods := []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch}
+	methods := []string{http.MethodPut, http.MethodDelete, http.MethodPatch}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/api/graphql", nil)
@@ -322,6 +322,32 @@ func TestQueryHandlerNonPOSTReturns405(t *testing.T) {
 			resp := w.Result()
 			if resp.StatusCode != http.StatusMethodNotAllowed {
 				t.Errorf("QueryHandler %s status = %d, want %d", method, resp.StatusCode, http.StatusMethodNotAllowed)
+			}
+		})
+	}
+}
+
+func TestQueryHandlerGETReadOnlyQuery(t *testing.T) {
+	if err := InitSchema(); err != nil {
+		t.Fatalf("InitSchema() error = %v", err)
+	}
+	handler := QueryHandler(config.DefaultConfig(), testGraphQLDependencies())
+	for _, test := range []struct {
+		name string
+		url  string
+		want int
+	}{
+		{name: "query", url: "/api/graphql?query=%7Bhealth%7Bstatus%7D%7D", want: http.StatusOK},
+		{name: "missing query", url: "/api/graphql", want: http.StatusBadRequest},
+		{name: "mutation", url: "/api/graphql?query=mutation%7B%7D", want: http.StatusMethodNotAllowed},
+		{name: "variables", url: "/api/graphql?query=query%28%24name%3AString%21%29%7Bhealth%7Bstatus%7D%7D&variables=%7B%22name%22%3A%22x%22%7D", want: http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, test.url, nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+			if got := w.Code; got != test.want {
+				t.Fatalf("GET status = %d, want %d; body: %s", got, test.want, w.Body.String())
 			}
 		})
 	}

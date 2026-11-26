@@ -1001,7 +1001,7 @@ func newCoreSearchTestSite(t *testing.T) *httptest.Server {
 		if err := os.WriteFile(filepath.Join(blocklistDir, "e2e.txt"), []byte("blocked.example.test\n"), 0600); err != nil {
 			panic(fmt.Errorf("write E2E blocklist: %w", err))
 		}
-		cfg.Server.Security.Blocklists = []config.BlocklistSourceConfig{{Name: "e2e", URL: "https://blocklist.example.test/domains.txt", Type: "domain", Enabled: true}}
+		cfg.Server.Security.ExtraSources = []config.BlocklistSourceConfig{{ID: "e2e", URL: "https://blocklist.example.test/domains.txt", Type: "domain", Enabled: true}}
 		cfg.Server.RateLimit.Enabled = false
 		cfg.Server.GeoIP.Enabled = false
 		cfg.Server.Security.Headers.ContentSecurityPolicy = strings.ReplaceAll(

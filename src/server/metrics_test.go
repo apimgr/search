@@ -67,23 +67,23 @@ func TestMetricsRequestStatsPersistAndRefreshFromSharedDatabase(t *testing.T) {
 		t.Fatalf("persisted trailing count = %d, want 1", got)
 	}
 
-	// Simulate another cluster node writing the shared hourly row. A scheduled
+	// Simulate another process writing the shared hourly row. A scheduled
 	// refresh with no local requests must still observe it.
 	hour := now.Unix()
 	if err := db.Write(context.Background(), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(context.Background(), `INSERT INTO `+table+` (hour, request_count) VALUES (?, 2) ON CONFLICT(hour) DO UPDATE SET request_count = request_count + excluded.request_count`, hour)
 		return err
 	}); err != nil {
-		t.Fatalf("simulate cluster write: %v", err)
+		t.Fatalf("simulate external writer update: %v", err)
 	}
 	if err := m.PersistRequestStats(context.Background()); err != nil {
 		t.Fatalf("refresh shared request stats: %v", err)
 	}
 	if got := m.GetTotalRequests(); got != 3 {
-		t.Fatalf("cluster total = %d, want 3", got)
+		t.Fatalf("shared total = %d, want 3", got)
 	}
 	if got := m.GetRequestsLast24Hours(); got != 3 {
-		t.Fatalf("cluster trailing count = %d, want 3", got)
+		t.Fatalf("shared trailing count = %d, want 3", got)
 	}
 }
 

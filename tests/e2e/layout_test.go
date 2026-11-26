@@ -51,6 +51,10 @@ func TestBrowserLayoutContract(t *testing.T) {
 				var result struct {
 					Width       int      `json:"width"`
 					InnerWidth  int      `json:"innerWidth"`
+					BodyWidth   int      `json:"bodyWidth"`
+					BodyScroll  int      `json:"bodyScroll"`
+					BodyAfter   string   `json:"bodyAfter"`
+					WideContent []string `json:"wideContent"`
 					BadElements []string `json:"badElements"`
 					BadFields   []string `json:"badFields"`
 					EmptySelect []string `json:"emptySelect"`
@@ -58,12 +62,21 @@ func TestBrowserLayoutContract(t *testing.T) {
 				if err := chromedp.Run(ctx, chromedp.Evaluate(`(() => {
 					const visible = element => {
 						const style = getComputedStyle(element);
-						return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+						return style.display !== 'none' && element.getClientRects().length > 0;
 					};
 					return {
 						width: document.documentElement.scrollWidth,
 						innerWidth: window.innerWidth,
+						bodyWidth: Math.round(document.body.getBoundingClientRect().width),
+						bodyScroll: document.body.scrollWidth,
+						bodyAfter: getComputedStyle(document.body, '::after').content,
+						wideContent: Array.from(document.body.querySelectorAll('*')).filter(e => e.scrollWidth > e.clientWidth + 1).map(e => {
+							const r = e.getBoundingClientRect();
+							return e.tagName.toLowerCase() + '.' + (e.getAttribute('class') || '') + '@' + Math.round(r.left) + ':' + Math.round(r.right) + ' scroll=' + e.scrollWidth + '/' + e.clientWidth;
+						}).slice(0, 12),
 						badElements: Array.from(document.body.querySelectorAll('*')).filter(visible).filter(element => {
+							const wrapper = element.closest('.table-wrapper');
+							if (wrapper && getComputedStyle(wrapper).overflowX === 'auto') return false;
 							const rect = element.getBoundingClientRect();
 							return rect.left < -1 || rect.right > window.innerWidth + 1;
 						}).map(element => {
@@ -78,7 +91,7 @@ func TestBrowserLayoutContract(t *testing.T) {
 					t.Fatalf("inspect layout: %v", err)
 				}
 				if result.Width > result.InnerWidth {
-					t.Errorf("document overflows horizontally: scrollWidth=%d innerWidth=%d", result.Width, result.InnerWidth)
+					t.Errorf("document overflows horizontally: scrollWidth=%d innerWidth=%d bodyWidth=%d bodyScroll=%d bodyAfter=%q elements=%v wideContent=%v", result.Width, result.InnerWidth, result.BodyWidth, result.BodyScroll, result.BodyAfter, result.BadElements, result.WideContent)
 				}
 				if len(result.BadElements) != 0 {
 					t.Errorf("elements extend beyond viewport: %v", result.BadElements)
@@ -114,14 +127,15 @@ func TestBrowserLayoutContract(t *testing.T) {
 							url += separator + "lang=ar"
 						}
 						var result struct {
-							Width      int    `json:"width"`
-							InnerWidth int    `json:"innerWidth"`
-							Direction  string `json:"direction"`
-							Theme      string `json:"theme"`
+							Width      int      `json:"width"`
+							InnerWidth int      `json:"innerWidth"`
+							Direction  string   `json:"direction"`
+							Theme      string   `json:"theme"`
+							Overflow   []string `json:"overflow"`
 						}
 						if err := chromedp.Run(ctx,
 							chromedp.Navigate(url),
-							chromedp.Evaluate(`({width: document.documentElement.scrollWidth, innerWidth: innerWidth, direction: document.documentElement.dir, theme: document.documentElement.dataset.themeMode})`, &result),
+							chromedp.Evaluate(`({width: document.documentElement.scrollWidth, innerWidth: innerWidth, direction: document.documentElement.dir, theme: document.documentElement.dataset.themeMode, overflow: Array.from(document.body.querySelectorAll('*')).map(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > innerWidth + 1 ? e.tagName.toLowerCase() + '.' + (e.getAttribute('class') || '') + '@' + Math.round(r.left) + ':' + Math.round(r.right) : '' }).filter(Boolean).slice(0, 12)})`, &result),
 						); err != nil {
 							t.Fatalf("load layout variant: %v", err)
 						}
@@ -130,7 +144,7 @@ func TestBrowserLayoutContract(t *testing.T) {
 							wantDirection = "rtl"
 						}
 						if result.Width > result.InnerWidth || result.Direction != wantDirection || result.Theme != theme {
-							t.Errorf("layout variant failed: width=%d innerWidth=%d direction=%q theme=%q", result.Width, result.InnerWidth, result.Direction, result.Theme)
+							t.Errorf("layout variant failed: width=%d innerWidth=%d direction=%q theme=%q overflowing elements=%v", result.Width, result.InnerWidth, result.Direction, result.Theme, result.Overflow)
 						}
 					})
 				}
@@ -161,7 +175,7 @@ func TestBrowserLayoutContract(t *testing.T) {
 	})()`, &drawer)); err != nil {
 		t.Fatalf("inspect mobile navigation drawer: %v", err)
 	}
-	if drawer.Height < 843 || drawer.Width > 390 || len(drawer.Links) != 3 || !drawer.Visible || !drawer.Focused {
+	if drawer.Height < 843 || drawer.Width > 390 || len(drawer.Links) != 1 || drawer.Links[0] != "/" || !drawer.Visible || !drawer.Focused {
 		t.Errorf("mobile drawer has unexpected visibility, dimensions, focus, or links: visible=%t focused=%t height=%.0f width=%.0f links=%v", drawer.Visible, drawer.Focused, drawer.Height, drawer.Width, drawer.Links)
 	}
 	var closed bool

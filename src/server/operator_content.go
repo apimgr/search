@@ -29,9 +29,12 @@ var operatorContentCache = struct {
 	entries map[string]operatorContentCacheEntry
 }{entries: make(map[string]operatorContentCacheEntry)}
 
-func operatorHTMLExists(name, lang string) bool {
+func operatorHTMLExists(name, lang string, page PageData) bool {
 	if name != "header" && name != "about" && name != "privacy" && name != "terms" && name != "footer" {
 		return false
+	}
+	if _, ok := configuredOperatorContent(name, lang, page); ok {
+		return true
 	}
 	root := filepath.Join(config.GetConfigDir(), "html")
 	info, err := os.Stat(root)
@@ -64,6 +67,16 @@ func operatorHTMLExists(name, lang string) bool {
 func loadOperatorHTML(name, lang string, page PageData) template.HTML {
 	if name != "header" && name != "about" && name != "privacy" && name != "terms" && name != "footer" {
 		return ""
+	}
+	if entry, ok := configuredOperatorContent(name, lang, page); ok {
+		contents := expandOperatorVariables(entry.body, page)
+		switch entry.format {
+		case "md":
+			contents = string(markdownToHTML(contents))
+		case "txt":
+			contents = operatorTextHTML(contents)
+		}
+		return sanitizeOperatorHTML(contents, name == "header" || name == "footer")
 	}
 	root := filepath.Join(config.GetConfigDir(), "html")
 	info, err := os.Stat(root)
@@ -105,6 +118,68 @@ func loadOperatorHTML(name, lang string, page PageData) template.HTML {
 			if cached, ok := cachedOperatorContent(root, name, lang); ok && cached.found {
 				return cached.content
 			}
+		}
+	}
+	return ""
+}
+
+type resolvedOperatorContent struct {
+	format string
+	body   string
+}
+
+func configuredOperatorContent(name, lang string, page PageData) (resolvedOperatorContent, bool) {
+	if page.Config == nil {
+		return resolvedOperatorContent{}, false
+	}
+	entry, ok := page.Config.Server.Branding.Content[name]
+	if !ok {
+		return resolvedOperatorContent{}, false
+	}
+	format := strings.ToLower(strings.TrimSpace(entry.Format))
+	if format == "" {
+		format = "md"
+		if name == "header" || name == "footer" {
+			format = "html"
+		}
+	}
+	if name == "header" || name == "footer" {
+		if format != "html" {
+			slog.Warn("operator content ignored", "key", "server.branding.content."+name, "reason", "header and footer require html format")
+			return resolvedOperatorContent{}, false
+		}
+	} else if format != "md" && format != "html" && format != "txt" {
+		slog.Warn("operator content ignored", "key", "server.branding.content."+name, "reason", "unsupported format")
+		return resolvedOperatorContent{}, false
+	}
+	body := resolveOperatorBody(entry.Body, lang)
+	if len(body) > maxOperatorContentBytes {
+		slog.Warn("operator content ignored", "key", "server.branding.content."+name, "reason", "body exceeds 256 KiB")
+		return resolvedOperatorContent{}, false
+	}
+	if strings.TrimSpace(body) == "" {
+		return resolvedOperatorContent{}, false
+	}
+	return resolvedOperatorContent{format: format, body: body}, true
+}
+
+func resolveOperatorBody(body any, lang string) string {
+	switch value := body.(type) {
+	case string:
+		return value
+	case map[string]any:
+		if localized, ok := value[lang].(string); ok && strings.TrimSpace(localized) != "" {
+			return localized
+		}
+		if fallback, ok := value["default"].(string); ok {
+			return fallback
+		}
+	case map[any]any:
+		if localized, ok := value[lang].(string); ok && strings.TrimSpace(localized) != "" {
+			return localized
+		}
+		if fallback, ok := value["default"].(string); ok {
+			return fallback
 		}
 	}
 	return ""

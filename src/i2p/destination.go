@@ -30,9 +30,9 @@ func b32Address(destBinary []byte) string {
 }
 
 // destinationFromKeys extracts the leading destination from an I2P private-key
-// blob. Both the SAM `DEST PRIV=` value and the i2pd `site-keys.dat` file store
-// the destination first, followed by the private keys, so the same parse serves
-// Model A and Model B. The certificate header at offset 384 is
+// blob. The SAM `DEST PRIV=` value and the persisted one-line base64 key file
+// both decode to the destination followed by private keys, so the same parse
+// serves Model A and Model B. The certificate header at offset 384 is
 // [type:1][length:2] and the declared length extends the destination.
 func destinationFromKeys(keys []byte) ([]byte, error) {
 	if len(keys) < minDestinationLen {

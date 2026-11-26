@@ -1,12 +1,12 @@
 {{define "content"}}
-<div class="static-page security-page">
+<div class="container container-md">
     <header class="page-header">
-        <h1>{{t "security.overview_title"}}</h1>
+        <h1 class="page-title">{{t "security.overview_title"}}</h1>
     </header>
 
     <div class="page-content">
-        <section class="security-section">
-            <h2>{{t "security.reporting_heading"}}</h2>
+        <section class="section-card security-section" aria-labelledby="security-reporting-heading">
+            <h2 id="security-reporting-heading">{{t "security.reporting_heading"}}</h2>
             <p>{{t "security.reporting_intro"}}</p>
             <ul>
                 {{if .ReportURL}}
@@ -20,9 +20,9 @@
                     <a href="{{.ContactURL}}">{{t "security.channel_form_link_text"}}</a>
                 </li>{{end}}
                 {{if .ContactURL}}
-                <li><a href="/server/contact?type=abuse">Report abuse or a terms violation</a></li>
-                <li><a href="/server/contact?type=dmca">Send a DMCA notice</a></li>
-                <li><a href="/server/contact?type=privacy">Submit a privacy request</a></li>
+                <li><a href="/server/contact?type=abuse">{{t "security.report_abuse_link"}}</a></li>
+                <li><a href="/server/contact?type=dmca">{{t "security.report_dmca_link"}}</a></li>
+                <li><a href="/server/contact?type=privacy">{{t "security.report_privacy_link"}}</a></li>
                 {{end}}
                 {{if .MailtoContact}}
                 <li>
@@ -33,8 +33,8 @@
             </ul>
         </section>
 
-        <section class="security-section">
-            <h2>{{t "security.details_heading"}}</h2>
+        <section class="section-card security-section" aria-labelledby="security-details-heading">
+            <h2 id="security-details-heading">{{t "security.details_heading"}}</h2>
             <dl>
                 <dt>{{t "security.expires_label"}}</dt>
                 <dd>{{.Expires}}</dd>
@@ -47,8 +47,8 @@
             </dl>
         </section>
 
-        <section class="security-section">
-            <h2>{{t "security.links_heading"}}</h2>
+        <section class="section-card security-section" aria-labelledby="security-links-heading">
+            <h2 id="security-links-heading">{{t "security.links_heading"}}</h2>
             <ul>
                 <li><a href="/server/security/policy">{{t "security.policy_title"}}</a></li>
                 <li><a href="/server/security/thanks">{{t "security.thanks_title"}}</a></li>

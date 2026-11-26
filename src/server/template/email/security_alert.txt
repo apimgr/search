@@ -1,21 +1,3 @@
-Subject: {subject_prefix} - {app_name}
+Subject: {subject}
 ---
-{heading}
-
-{label_from} {app_name} ({fqdn})
-{label_time} {timestamp}
-
-{event}
-
-{label_details}
-  {label_source_ip} {ip}
-  {details}
-
-────────────────────────────────────────────────────────────────────────
-{app_name}
-{app_url}
-────────────────────────────────────────────────────────────────────────
-
---
-{app_name}
-{app_url}
+{body}

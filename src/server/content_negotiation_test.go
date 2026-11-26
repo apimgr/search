@@ -62,3 +62,20 @@ func TestFrontendContentNegotiation(t *testing.T) {
 		t.Fatalf("text negotiation returned HTML: %q", textResponse.Body.String())
 	}
 }
+
+func TestMCPRootAliasSkipsFrontendContentNegotiation(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":{}}`))
+	})
+	request := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	request.Header.Set("User-Agent", "curl/8.0")
+	response := httptest.NewRecorder()
+	(&Server{}).contentNegotiationMiddleware(next).ServeHTTP(response, request)
+	if contentType := response.Header().Get("Content-Type"); contentType != "application/json; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want unchanged JSON", contentType)
+	}
+	if got, want := response.Body.String(), `{"jsonrpc":"2.0","result":{}}`; got != want {
+		t.Fatalf("body = %q, want unchanged JSON %q", got, want)
+	}
+}

@@ -6,18 +6,18 @@ func TestTorStatePublicContract(t *testing.T) {
 	tests := []struct {
 		name                       string
 		enabled, starting, running bool
-		status                     string
+		state, status              string
 		wantEnabled, wantRunning   bool
 	}{
-		{"disabled", false, false, false, "disabled", false, false},
-		{"starting", true, true, false, "starting", true, false},
-		{"healthy", true, false, true, "healthy", true, true},
-		{"unavailable", true, false, false, "unavailable", true, false},
+		{"disabled", false, false, false, "disabled", "disabled", false, false},
+		{"starting", true, true, false, "starting", "starting", true, false},
+		{"healthy", true, false, true, "running", "healthy", true, true},
+		{"unavailable", true, false, false, "error", "unavailable", true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := TorState(tt.enabled, tt.starting, tt.running, "safe.onion")
-			if got.Status != tt.status || got.Enabled != tt.wantEnabled || got.Running != tt.wantRunning {
+			if got.State != tt.state || got.Status != tt.status || got.Enabled != tt.wantEnabled || got.Running != tt.wantRunning {
 				t.Fatalf("TorState() = %#v", got)
 			}
 			if got.Status != "healthy" && got.Hostname != "" {
@@ -52,8 +52,8 @@ func TestI2PStatePublicContract(t *testing.T) {
 			if got.Status != "healthy" && got.Hostname != "" {
 				t.Fatalf("non-healthy I2P leaked hostname: %#v", got)
 			}
-			if got.State == "disabled" && got.Provider != "" {
-				t.Fatalf("disabled I2P leaked provider: %#v", got)
+			if !got.Enabled && got.Provider != "none" {
+				t.Fatalf("disabled I2P provider = %q, want none", got.Provider)
 			}
 		})
 	}

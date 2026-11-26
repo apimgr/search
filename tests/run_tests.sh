@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
 # @@License : WTFPL
-# Per AI.md PART 28: Auto-detect runtime and run tests
+# Per AI.md PART 28: the basic integration suite is Docker-only.
 set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
-# Detect available container runtime
-if command -v incus &>/dev/null; then
-    echo "Detected: incus"
-    echo "Running full integration tests with systemd..."
-    exec ./tests/incus.sh
-elif command -v docker &>/dev/null; then
-    echo "Detected: docker"
-    echo "Running integration tests..."
-    exec ./tests/docker.sh
-else
-    echo "ERROR: No container runtime found."
-    echo "Please install docker or incus to run integration tests."
+# The systemd integration suite is available separately as tests/incus.sh.
+if ! command -v docker &>/dev/null; then
+    echo "ERROR: Docker is required for the integration test suite." >&2
     exit 1
 fi
+
+echo "Running Docker integration tests..."
+exec ./tests/docker.sh

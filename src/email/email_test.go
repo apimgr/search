@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -736,6 +737,14 @@ func TestNewEmailTemplate(t *testing.T) {
 	}
 }
 
+func completeEmailTemplateFixtureVars(overrides map[string]string) map[string]string {
+	vars := previewVariableNames("TestApp", "https://example.com")
+	for key, value := range overrides {
+		vars[key] = value
+	}
+	return vars
+}
+
 func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
@@ -747,6 +756,7 @@ func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 		"ip":        "10.0.0.1",
 		"details":   "Multiple failed login attempts detected",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateSecurityAlert, vars)
 	if err != nil {
@@ -770,6 +780,7 @@ func TestEmailTemplateRenderBackupCompleted(t *testing.T) {
 		"filename":  "search_backup_2026-06-13_020000.tar.gz",
 		"size":      "10.5 MB",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, _, err := et.Render(TemplateBackupCompleted, vars)
 	if err != nil {
@@ -793,6 +804,7 @@ func TestEmailTemplateRenderUpdateAvailable(t *testing.T) {
 		"release_notes":   "Bug fixes and improvements",
 		"update_url":      "https://example.com/releases/1.3.0",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateUpdateAvailable, vars)
 	if err != nil {
@@ -803,6 +815,26 @@ func TestEmailTemplateRenderUpdateAvailable(t *testing.T) {
 	}
 	if !strings.Contains(body, "1.3.0") {
 		t.Error("Body should contain new version")
+	}
+}
+
+func TestEmailTemplateRenderUpdateFailedAcrossSupportedLocales(t *testing.T) {
+	et := NewEmailTemplate()
+	for _, locale := range []string{"en", "ar", "de", "es", "fa", "fr", "he", "it", "ja", "nl", "pl", "pt", "ru", "ur", "zh"} {
+		t.Run(locale, func(t *testing.T) {
+			subject, body, err := et.PreviewTemplateLocalized(TemplateUpdateFailed, locale, "TestApp", "https://example.com")
+			if err != nil {
+				t.Fatalf("PreviewTemplateLocalized(): %v", err)
+			}
+			for _, required := range []string{"1.0.0", "sample error"} {
+				if !strings.Contains(body, required) {
+					t.Errorf("localized update failure body missing %q", required)
+				}
+			}
+			if subject == "" || strings.Contains(body, "{error}") {
+				t.Fatalf("invalid localized update failure template: subject=%q body=%q", subject, body)
+			}
+		})
 	}
 }
 
@@ -818,9 +850,9 @@ func TestEmailTemplateRenderInvalidType(t *testing.T) {
 func TestEmailTemplateRenderNilData(t *testing.T) {
 	et := NewEmailTemplate()
 
-	// nil map is valid — no substitution occurs, template renders with placeholders
-	_, _, err := et.Render(TemplateTest, nil)
-	_ = err
+	if _, _, err := et.Render(TemplateTest, nil); err == nil {
+		t.Fatal("Render() accepted missing required template variables")
+	}
 }
 
 // Tests for PreviewTemplate
@@ -856,6 +888,33 @@ func TestEmailTemplatePreviewTemplate(t *testing.T) {
 	}
 }
 
+func TestDefaultEmailTemplatesAreLocalizedAcrossSupportedLocales(t *testing.T) {
+	et := NewEmailTemplate()
+	english := make(map[TemplateType][2]string, len(AllTemplateTypes))
+	for _, templateType := range AllTemplateTypes {
+		subject, body, err := et.PreviewTemplateLocalized(templateType, "en", "TestApp", "https://example.com")
+		if err != nil {
+			t.Fatalf("English preview for %s: %v", templateType, err)
+		}
+		english[templateType] = [2]string{subject, body}
+	}
+	for _, lang := range i18n.DefaultSupportedLanguages() {
+		for _, templateType := range AllTemplateTypes {
+			subject, body, err := et.PreviewTemplateLocalized(templateType, lang, "TestApp", "https://example.com")
+			if err != nil {
+				t.Errorf("PreviewTemplateLocalized(%s, %s): %v", templateType, lang, err)
+				continue
+			}
+			if strings.Contains(subject, "{") || strings.Contains(body, "{") {
+				t.Errorf("%s template in %s has unresolved placeholders", templateType, lang)
+			}
+			if lang != "en" && subject == english[templateType][0] && body == english[templateType][1] {
+				t.Errorf("%s template in %s is still English", templateType, lang)
+			}
+		}
+	}
+}
+
 func TestEmailTemplatePreviewTemplateInvalid(t *testing.T) {
 	et := NewEmailTemplate()
 
@@ -883,6 +942,7 @@ func TestGetAllTemplateTypes(t *testing.T) {
 		TemplateSecurityAlert,
 		TemplateSchedulerError,
 		TemplateBackupCompleted,
+		TemplateUpdateFailed,
 	}
 
 	for _, tt := range expectedTypes {
@@ -921,6 +981,7 @@ func TestIsAccountEmail(t *testing.T) {
 		TemplateSSLRenewed,
 		TemplateSchedulerError,
 		TemplateTest,
+		TemplateUpdateFailed,
 	}
 
 	for _, tt := range allTemplates {
@@ -1224,6 +1285,7 @@ func TestEmailTemplateRenderBackupFailed(t *testing.T) {
 		"filename":  "daily-backup",
 		"error":     "Disk full",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateBackupFailed, vars)
 	if err != nil {
@@ -1246,6 +1308,7 @@ func TestEmailTemplateRenderSSLExpiring(t *testing.T) {
 		"expires_in":  "7 days",
 		"expiry_date": "2026-06-20",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateSSLExpiring, vars)
 	if err != nil {
@@ -1267,6 +1330,7 @@ func TestEmailTemplateRenderSSLRenewed(t *testing.T) {
 		"domain":      "example.com",
 		"valid_until": "2027-06-13",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateSSLRenewed, vars)
 	if err != nil {
@@ -1289,6 +1353,7 @@ func TestEmailTemplateRenderSchedulerError(t *testing.T) {
 		"error":     "Task timed out",
 		"next_run":  "2026-06-14 00:00:00 UTC",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateSchedulerError, vars)
 	if err != nil {
@@ -1310,6 +1375,7 @@ func TestEmailTemplateRenderTest(t *testing.T) {
 		"sent_at":   "2026-06-13 12:00:00 UTC",
 		"app_url":   "https://example.com",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateTest, vars)
 	if err != nil {
@@ -1431,6 +1497,7 @@ func TestEmailTemplateRenderSchedulerErrorCritical(t *testing.T) {
 		"error":     "Server is not responding",
 		"next_run":  "2026-06-14 12:00:00 UTC",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateSchedulerError, vars)
 	if err != nil {
@@ -1460,6 +1527,7 @@ func TestEmailTemplateRenderSecurityAlertCritical(t *testing.T) {
 		"details":         "Account credentials exposed",
 		"action_required": "Immediate action required",
 	}
+	vars = completeEmailTemplateFixtureVars(vars)
 
 	subject, body, err := et.Render(TemplateSecurityAlert, vars)
 	if err != nil {
@@ -1478,19 +1546,13 @@ func TestEmailTemplateRenderSecurityAlertCritical(t *testing.T) {
 func TestEmailTemplateRenderPartialVars(t *testing.T) {
 	et := NewEmailTemplate()
 
-	// Only supply the minimum — template renders with leftover {placeholders}
 	vars := map[string]string{
 		"app_name": "TestApp",
 	}
 
-	subject, body, err := et.Render(TemplateSecurityAlert, vars)
-	if err != nil {
-		t.Fatalf("Render() with partial vars error = %v", err)
+	if _, _, err := et.Render(TemplateSecurityAlert, vars); err == nil {
+		t.Fatal("Render() accepted unresolved template variables")
 	}
-	if subject == "" {
-		t.Error("Subject should not be empty even with partial vars")
-	}
-	_ = body
 }
 
 // Tests for Render with empty vars map
@@ -1498,15 +1560,9 @@ func TestEmailTemplateRenderPartialVars(t *testing.T) {
 func TestEmailTemplateRenderEmptyVars(t *testing.T) {
 	et := NewEmailTemplate()
 
-	subject, body, err := et.Render(TemplateTest, map[string]string{})
-	if err != nil {
-		t.Fatalf("Render() with empty vars error = %v", err)
+	if _, _, err := et.Render(TemplateTest, map[string]string{}); err == nil {
+		t.Fatal("Render() accepted unresolved template variables")
 	}
-	// Subject line becomes "Test Email - {app_name}" — still non-empty
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	_ = body
 }
 
 // Tests for TemplateInfo JSON tags

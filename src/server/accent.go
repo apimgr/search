@@ -9,7 +9,11 @@ import (
 )
 
 func (s *Server) handleAccentCSS(w http.ResponseWriter, r *http.Request) {
-	dark, light, ok := accentThemeColors(s.config.Web.UI.Accent)
+	accent := s.config.Web.UI.Accent
+	if preference := resolveGeneralPrefs(r).AccentColor; validAccentColor(preference) {
+		accent = preference
+	}
+	dark, light, ok := accentThemeColors(accent)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -19,6 +23,14 @@ func (s *Server) handleAccentCSS(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, ":root{--color-primary:%s;--color-primary-bg:%s}\n", dark, accentWithAlpha(dark, 0.15))
 	_, _ = fmt.Fprintf(w, "html.theme-light{--color-primary:%s;--color-primary-bg:%s}\n", light, accentWithAlpha(light, 0.12))
 	_, _ = fmt.Fprintf(w, "@media (prefers-color-scheme:light){html.theme-auto{--color-primary:%s;--color-primary-bg:%s}}\n", light, accentWithAlpha(light, 0.12))
+}
+
+func (s *Server) handleCustomCSS(w http.ResponseWriter, r *http.Request) {
+	css := resolveGeneralPrefs(r).CustomCSS
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write([]byte(css))
 }
 
 func validAccentColor(value string) bool {

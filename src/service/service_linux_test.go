@@ -54,7 +54,8 @@ func TestServiceManagerGetRunitActiveDir(t *testing.T) {
 }
 
 func TestSystemdTemplate(t *testing.T) {
-	// Verify systemd template contains required elements per AI.md PART 25
+	// Verify systemd template preserves the writable paths needed by startup
+	// account creation and privilege dropping per AI.md PART 24.
 	if systemdTemplate == "" {
 		t.Fatal("systemdTemplate is empty")
 	}
@@ -65,7 +66,7 @@ func TestSystemdTemplate(t *testing.T) {
 		"[Install]",
 		"ExecStart=/usr/local/bin/search",
 		"Restart=on-failure",
-		"ProtectSystem=strict",
+		"ProtectSystem=true",
 		"ProtectHome=yes",
 		"PrivateTmp=yes",
 	}
@@ -73,6 +74,47 @@ func TestSystemdTemplate(t *testing.T) {
 	for _, req := range required {
 		if !contains(systemdTemplate, req) {
 			t.Errorf("systemdTemplate missing required element: %q", req)
+		}
+	}
+	if contains(systemdTemplate, "ProtectSystem=strict") || contains(systemdTemplate, "NoNewPrivileges=true") {
+		t.Fatal("systemd sandbox prevents privileged startup from creating accounts or dropping privileges")
+	}
+}
+
+func TestSystemdUserArgs(t *testing.T) {
+	for action, want := range map[string][]string{
+		"start":   {"--user", "start", "search"},
+		"stop":    {"--user", "stop", "search"},
+		"restart": {"--user", "restart", "search"},
+		"enable":  {"--user", "enable", "search"},
+		"disable": {"--user", "disable", "search"},
+	} {
+		got := systemdUserArgs(action)
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("systemdUserArgs(%q) = %#v, want %#v", action, got, want)
+		}
+	}
+}
+
+func TestSysVInitTemplateUsesSupervisorPIDAndPrivilegeDrop(t *testing.T) {
+	for _, required := range []string{
+		"PIDFILE=/var/run/apimgr-search.pid",
+		"start-stop-daemon --start --quiet --background --make-pidfile",
+		"--pidfile $PIDFILE --exec $DAEMON",
+		"chown -R search:search $(dirname $LOGFILE)",
+		"exit 2",
+	} {
+		if !strings.Contains(sysVInitTemplate, required) {
+			t.Errorf("SysVinit template is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"PIDFILE=/var/run/apimgr/search/search.pid",
+		"--chuid",
+		"$(dirname $PIDFILE)",
+	} {
+		if strings.Contains(sysVInitTemplate, forbidden) {
+			t.Errorf("SysVinit template must not contain %q", forbidden)
 		}
 	}
 }

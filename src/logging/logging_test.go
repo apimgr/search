@@ -561,6 +561,81 @@ func TestAuditLogger(t *testing.T) {
 	}
 }
 
+func TestAuditLoggerChainsEntriesAndVerifiesRotationAnchor(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	logger.LogEventQuiet(AuditActionConfigChange, AuditCategoryConfig, AuditSeverityInfo, AuditActor{Type: "operator"}, nil, "success", nil, "")
+	logger.LogEventQuiet(AuditActionConfigChange, AuditCategoryConfig, AuditSeverityInfo, AuditActor{Type: "operator"}, nil, "success", nil, "")
+	if entries, issue, err := VerifyAuditLog(path); err != nil || issue != nil || entries != 2 {
+		t.Fatalf("VerifyAuditLog() = (%d, %#v, %v), want (2, nil, nil)", entries, issue, err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(contents)), "\n")
+	var first, second AuditEntry
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("decode first entry: %v", err)
+	}
+	if first.Prev != strings.Repeat("0", sha256.Size*2) {
+		t.Fatalf("first prev = %q, want zero hash", first.Prev)
+	}
+	hash := sha256.Sum256([]byte(lines[0]))
+	if err := json.Unmarshal([]byte(lines[1]), &second); err != nil {
+		t.Fatalf("decode second entry: %v", err)
+	}
+	if second.Prev != hex.EncodeToString(hash[:]) {
+		t.Fatalf("second prev = %q, want hash of preceding line", second.Prev)
+	}
+	if err := logger.Rotate(); err != nil {
+		t.Fatalf("rotate audit log: %v", err)
+	}
+	anchor, err := os.ReadFile(filepath.Join(tmpDir, "audit.anchor"))
+	if err != nil {
+		t.Fatalf("read audit anchor: %v", err)
+	}
+	if strings.TrimSpace(string(anchor)) != hex.EncodeToString(hashLastAuditLine(lines)) {
+		t.Fatalf("anchor = %q, want hash of last line", anchor)
+	}
+	if info, err := os.Stat(filepath.Join(tmpDir, "audit.anchor")); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("anchor permissions = %v, %v; want 0600", info, err)
+	}
+	logger.LogEventQuiet(AuditActionConfigChange, AuditCategoryConfig, AuditSeverityInfo, AuditActor{Type: "operator"}, nil, "success", nil, "")
+	if entries, issue, err := VerifyAuditLog(path); err != nil || issue != nil || entries != 1 {
+		t.Fatalf("VerifyAuditLog() after rotation = (%d, %#v, %v), want (1, nil, nil)", entries, issue, err)
+	}
+}
+
+func TestVerifyAuditLogReportsEditedEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	logger.LogEventQuiet(AuditActionConfigChange, AuditCategoryConfig, AuditSeverityInfo, AuditActor{Type: "operator"}, nil, "success", nil, "")
+	logger.LogEventQuiet(AuditActionConfigChange, AuditCategoryConfig, AuditSeverityInfo, AuditActor{Type: "operator"}, nil, "success", nil, "")
+	if err := logger.Close(); err != nil {
+		t.Fatalf("close audit log: %v", err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	contents = bytes.Replace(contents, []byte("config.updated"), []byte("config.changed"), 1)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatalf("edit audit log fixture: %v", err)
+	}
+	entries, issue, err := VerifyAuditLog(path)
+	if err != nil || entries != 2 || issue == nil || issue.Line != 2 {
+		t.Fatalf("VerifyAuditLog() = (%d, %#v, %v), want two entries and a line 2 chain issue", entries, issue, err)
+	}
+}
+
+func hashLastAuditLine(lines []string) []byte {
+	hash := sha256.Sum256([]byte(lines[len(lines)-1]))
+	return hash[:]
+}
+
 func TestAuditLoggerGenerateID(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "audit.log")
@@ -1074,7 +1149,7 @@ func TestAccessLoggerRotateWithExistingFile(t *testing.T) {
 	// Create the rotated file that would be created by date
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := path + "." + timestamp
-	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+	os.WriteFile(rotatedPath, []byte("existing"), 0o644)
 
 	// Now rotate - should create a file with time suffix
 	err := logger.Rotate()
@@ -1171,7 +1246,7 @@ func TestServerLoggerRotateWithExistingFile(t *testing.T) {
 	// Create the rotated file
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := path + "." + timestamp
-	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+	os.WriteFile(rotatedPath, []byte("existing"), 0o644)
 
 	err := logger.Rotate()
 	if err != nil {
@@ -1347,7 +1422,7 @@ func TestSecurityLoggerRotateWithExistingFile(t *testing.T) {
 	// Create the rotated file
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := path + "." + timestamp
-	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+	os.WriteFile(rotatedPath, []byte("existing"), 0o644)
 
 	err := logger.Rotate()
 	if err != nil {
@@ -1494,7 +1569,7 @@ func TestAuditLoggerRotateWithExistingFile(t *testing.T) {
 	// Create the rotated file
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := path + "." + timestamp
-	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+	os.WriteFile(rotatedPath, []byte("existing"), 0o644)
 
 	err := logger.Rotate()
 	if err != nil {
@@ -1602,7 +1677,7 @@ func TestErrorLoggerRotateWithExistingFile(t *testing.T) {
 	// Create the rotated file
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := path + "." + timestamp
-	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+	os.WriteFile(rotatedPath, []byte("existing"), 0o644)
 
 	err := logger.Rotate()
 	if err != nil {
@@ -1747,7 +1822,7 @@ func TestDebugLoggerRotateWithExistingFile(t *testing.T) {
 	// Create the rotated file
 	timestamp := time.Now().Format("20060102")
 	rotatedPath := path + "." + timestamp
-	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+	os.WriteFile(rotatedPath, []byte("existing"), 0o644)
 
 	err := logger.Rotate()
 	if err != nil {
@@ -2069,6 +2144,8 @@ func TestMoreAuditActions(t *testing.T) {
 		{AuditActionServerUpdated, "server.updated"},
 		{AuditActionSchedulerTaskFail, "scheduler.task_failed"},
 		{AuditActionSchedulerTaskRun, "scheduler.task_manual_run"},
+		{AuditActionSchedulerTaskEnabled, "scheduler.task_enabled"},
+		{AuditActionSchedulerTaskDisabled, "scheduler.task_disabled"},
 	}
 
 	for _, a := range actions {
@@ -2441,6 +2518,32 @@ func TestDefaultAuditRetentionPolicy(t *testing.T) {
 
 	if policy.MaxAge != 0 {
 		t.Errorf("DefaultAuditRetentionPolicy MaxAge = %v, want 0 (keep: none)", policy.MaxAge)
+	}
+}
+
+func TestAuditRetentionPolicyFromKeep(t *testing.T) {
+	tests := []struct {
+		value string
+		want  time.Duration
+	}{
+		{value: "none", want: 0},
+		{value: "30d", want: 30 * 24 * time.Hour},
+		{value: "12m", want: 365 * 24 * time.Hour},
+		{value: "6y", want: 6 * 365 * 24 * time.Hour},
+		{value: "forever", want: -1},
+	}
+	for _, test := range tests {
+		policy, err := AuditRetentionPolicyFromKeep(test.value)
+		if err != nil {
+			t.Errorf("AuditRetentionPolicyFromKeep(%q): %v", test.value, err)
+			continue
+		}
+		if policy.MaxAge != test.want {
+			t.Errorf("AuditRetentionPolicyFromKeep(%q) = %s, want %s", test.value, policy.MaxAge, test.want)
+		}
+	}
+	if _, err := AuditRetentionPolicyFromKeep("tomorrow"); err == nil {
+		t.Error("AuditRetentionPolicyFromKeep accepted an unsupported value")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -70,6 +71,8 @@ var (
 	flagBaseURL string
 	flagColor   string
 	flagLang    string
+	flagBackupIncludeSSL  bool
+	flagBackupIncludeData bool
 )
 
 // exitFunc is the function used to exit the process.
@@ -85,11 +88,13 @@ func init() {
 	flag.BoolVar(&flagStatus, "status", false, "Show server status")
 	flag.BoolVar(&flagDaemon, "daemon", false, "Daemonize (detach from terminal)")
 	flag.BoolVar(&flagDebug, "debug", false, "Enable debug mode (verbose logging, debug endpoints)")
-	flag.BoolVar(&flagI2P, "i2p", false, "Enable the I2P eepsite")
+	flag.BoolVar(&flagI2P, "i2p", false, "Enable the I2P eepsite (default on in application containers)")
 
 	// Commands with optional arguments
 	flag.StringVar(&flagService, "service", "", "Service management: start|stop|restart|reload|status|--install|--uninstall|--disable|--help")
-	flag.StringVar(&flagMaintenance, "maintenance", "", "Maintenance: backup|restore|update|mode|setup|pgp|secret|token|data|compliance|--help")
+	flag.StringVar(&flagMaintenance, "maintenance", "", "Maintenance: backup|restore|update|mode|setup|pgp|security|secret|token|data|compliance|email|scheduler|--help")
+	flag.BoolVar(&flagBackupIncludeSSL, "include-ssl", false, "Include optional SSL files in a maintenance backup")
+	flag.BoolVar(&flagBackupIncludeData, "include-data", false, "Include optional data files in a maintenance backup")
 	flag.StringVar(&flagUpdate, "update", "", "Update management: check|yes|branch")
 	flag.StringVar(&flagShell, "shell", "", "Shell integration: completions|init|--help")
 
@@ -122,6 +127,11 @@ func main() {
 
 	// Parse flags
 	flag.Parse()
+	if (flagBackupIncludeSSL || flagBackupIncludeData) && flagMaintenance != "backup" {
+		fmt.Fprintln(os.Stderr, "--include-ssl and --include-data are valid only with --maintenance backup")
+		exitFunc(2)
+		return
+	}
 
 	// Initialize display output (colors and emojis) based on NO_COLOR, TERM, and --color flag
 	// Per AI.md PART 8: Must be called early, before any output
@@ -166,9 +176,6 @@ func main() {
 		return
 	case len(os.Args) > 1 && os.Args[1] == "tor":
 		runTor(os.Args[2:])
-		return
-	case len(os.Args) > 1 && os.Args[1] == "email":
-		runEmail(os.Args[2:])
 		return
 	}
 
@@ -365,7 +372,7 @@ func handleLegacyArgs() {
 		if len(os.Args) > 2 {
 			runMaintenance(os.Args[2])
 		} else {
-			slog.Error("Missing maintenance subcommand", "usage", "search --maintenance {backup|restore|update|mode|setup|pgp|secret|token|data|compliance|--help}")
+			slog.Error("Missing maintenance subcommand", "usage", "search --maintenance {backup|restore|update|mode|setup|pgp|security|secret|token|data|compliance|email|scheduler|tor|--help}")
 		}
 	case "--update":
 		subCmd := "yes"
@@ -550,6 +557,12 @@ func runServerServiceBody() {
 			if setErr := os.Setenv("_SEARCH_UPDATE_FAILED", err.Error()); setErr != nil {
 				slog.Error("failed to record staged update error for notification", "err", setErr)
 			}
+			var failedUpdate *update.StagedUpdateFailure
+			if errors.As(err, &failedUpdate) && failedUpdate.Version != "" {
+				if setErr := os.Setenv("_SEARCH_UPDATE_FAILED_VERSION", failedUpdate.Version); setErr != nil {
+					slog.Error("failed to record staged update version for notification", "err", setErr)
+				}
+			}
 		} else if applied {
 			return
 		}
@@ -688,6 +701,9 @@ func runServerServiceBody() {
 
 	// Show the operator token once, at first creation, so it can be saved.
 	showSetup := cfg.IsFirstRun()
+	if cfg.Server.Backup.EncryptionPassword == "" && !cfg.Server.Compliance.AnyEnabled() {
+		slog.Warn("backup encryption is not configured; backup archives are unencrypted", "setting", "server.backup.encryption_password")
+	}
 
 	// Create server (initialises DB, scheduler, etc. — steps 13-16 per AI.md PART 8)
 	srv := server.NewServer(cfg)
@@ -739,7 +755,9 @@ func runServerServiceBody() {
 	}
 	if updateFailure := os.Getenv("_SEARCH_UPDATE_FAILED"); updateFailure != "" {
 		_ = os.Unsetenv("_SEARCH_UPDATE_FAILED")
-		srv.NotifyUpdateFailed(updateFailure)
+		failedVersion := os.Getenv("_SEARCH_UPDATE_FAILED_VERSION")
+		_ = os.Unsetenv("_SEARCH_UPDATE_FAILED_VERSION")
+		srv.NotifyUpdateFailed(failedVersion, updateFailure)
 	}
 	if cfg.Server.Scheduler.Tasks.BlocklistUpdate.Enabled {
 		srv.StartBlocklistUpdateIfMissing()
@@ -749,7 +767,8 @@ func runServerServiceBody() {
 	}
 
 	// Step 20: Print responsive startup banner per AI.md PART 7 and PART 8.
-	// Now the server is listening; Tor address (if any) is available from srv.TorAddress().
+	// The server is already listening; wait up to five seconds for overlay identity files.
+	srv.WaitForOverlayAddresses(5 * time.Second)
 	urls := buildListenURLs(cfg)
 	if torAddr := srv.TorAddress(); torAddr != "" {
 		// Add live Tor address — buildListenURLs reads cfg.Server.Tor.OnionAddress which
@@ -763,6 +782,18 @@ func runServerServiceBody() {
 		}
 		if !alreadyHasOnion {
 			urls = append(urls, "http://"+torAddr)
+		}
+	}
+	if i2pAddr := srv.I2PAddress(); i2pAddr != "" {
+		alreadyHasI2P := false
+		for _, u := range urls {
+			if strings.Contains(u, ".b32.i2p") {
+				alreadyHasI2P = true
+				break
+			}
+		}
+		if !alreadyHasI2P {
+			urls = append(urls, "http://"+i2pAddr)
 		}
 	}
 
@@ -806,131 +837,17 @@ func printVersion() {
 	// Note: No v prefix in version string
 	binaryName := filepath.Base(os.Args[0])
 
-	fmt.Printf("%s %s\n", binaryName, config.Version)
-	fmt.Printf("Built: %s\n", config.BuildDate)
-	fmt.Printf("Go: %s\n", runtime.Version())
-	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Println(serverCLITf("server_cli.version.binary", "binary", binaryName, "version", config.Version))
+	fmt.Println(serverCLITf("server_cli.version.built", "date", config.BuildDate))
+	fmt.Println(serverCLITf("server_cli.version.go", "version", runtime.Version()))
+	fmt.Println(serverCLITf("server_cli.version.os_arch", "os", runtime.GOOS, "arch", runtime.GOARCH))
 }
 
 func printHelp() {
-	// Per AI.md PART 6: Use actual binary name in help
+	// Per AI.md PART 6: Use actual binary name in help.
 	binaryName := filepath.Base(os.Args[0])
-
-	fmt.Printf(`%s - Privacy-Respecting Metasearch Engine
-
-Usage:
-  %s [options]             Start the server with optional flags
-  %s [command]             Execute a command
-
-Runtime Flags:
-  --mode <mode>            Set application mode (production|development|debug)
-  --data <dir>             Set data directory
-  --config <dir>           Set config directory
-  --cache <dir>            Set cache directory
-  --log <dir>              Set log directory
-  --backup <dir>           Set backup directory
-  --pid <file>             Set PID file path
-  --address <addr>         Set listen address
-  --port <port[,https]>   Set listen port(s)
-  --i2p                  Enable the I2P eepsite
-  --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
-  --color <mode>           Set color output mode (auto|yes|no)
-  --lang <code>            Set language for output (default: auto, from LANG env)
-  --daemon                 Daemonize (detach from terminal, Unix only)
-  --debug                  Enable debug mode (verbose logging, debug endpoints)
-
-Information:
-  --help, -h               Show this help message
-  --version, -v            Show version information
-  --status                 Show server status and health
-
-Shell Integration:
-  --shell completions [SHELL]  Print shell completions script
-  --shell init [SHELL]         Print shell init command for eval
-  --shell --help               Show shell help
-
-Service Management:
-  --service <action>       Service management (requires privileges):
-    --install              Install, enable, and start system service
-    --uninstall            Stop, disable, and remove system service
-    start                  Start the service
-    stop                   Stop the service
-    status                 Check service status
-    restart                Restart the service
-    reload                 Reload configuration (SIGHUP)
-    --disable              Stop and disable service autostart
-    --help                 Show service commands and current status
-
-Maintenance:
-  --maintenance <action>   Maintenance commands:
-    backup [file]          Create backup archive
-                           Use BACKUP_PASSWORD env var for encryption
-    restore <file>         Restore from backup
-                           Use BACKUP_PASSWORD env var if encrypted
-    update                 Alias for --update yes
-    mode                   Toggle maintenance mode
-    setup                  Reset configuration to defaults
-    pgp <action>           PGP keypair management (generate/export/import)
-    secret rotate <name>   Rotate an installation or encryption secret
-    token list|revoke <prefix> Manage API tokens
-    data export|delete <subject> GDPR/CCPA data access and erasure
-    compliance report     Print a compliance summary
-    --help                 Show maintenance commands
-
-Updates:
-  --update [subcommand]    Update management:
-    check                  Check for available updates
-    yes                    Download and install update (default)
-    branch <name>          Set update branch (stable|beta|devel; aliases: daily, rolling, dev, development)
-
-Tor Hidden Service:
-  tor <subcommand>         Tor hidden service management (talks to a running
-                           server over its loopback control endpoint):
-    status                 View Tor hidden service status
-    validate               Validate Tor configuration
-    restart                Restart the Tor process
-    regenerate             Regenerate the .onion address
-    vanity start <prefix>  Start vanity address search
-    vanity apply           Apply the found vanity address
-    import-keys <path>     Import an existing Tor key file
-
-Email:
-  email test <address>     Send a test email to verify SMTP configuration
-
-Environment Variables:
-  DOMAIN                   Public hostname override
-  MODE                     Application mode (production|development|debug)
-  DATABASE_DRIVER          Database driver
-  DATABASE_URL             Database connection string
-  SMTP_HOST, SMTP_PORT     SMTP server connection
-  SMTP_USERNAME, SMTP_PASSWORD
-                           SMTP authentication
-  SMTP_FROM_NAME, SMTP_FROM_EMAIL, SMTP_TLS
-                           SMTP sender identity and transport
-  CONFIG_DIR, DATA_DIR, LOG_DIR
-                           Configuration, data, and log directories
-  DATABASE_DIR, BACKUP_DIR Database and backup directories
-  PORT, LISTEN             First-run server port and listen address
-  APPLICATION_NAME, APPLICATION_TAGLINE
-                           First-run title and description
-  DEBUG                    Enable debug features
-  NO_COLOR, TERM           Standard terminal behavior
-
-Examples:
-  %s                                 Start server with defaults
-  %s --port 8080                     Start on port 8080
-  %s --mode development              Start in dev mode
-  %s --config /etc/search --data /var/lib/search  Custom directories
-  %s --service --install             Install as system service
-  %s --service reload                Reload configuration
-  %s --update check                  Check for updates
-
-For more information: https://github.com/apimgr/search
-`, binaryName, binaryName, binaryName,
-		binaryName, binaryName, binaryName, binaryName,
-		binaryName, binaryName, binaryName)
+	fmt.Println(serverCLITf("server_cli.help.full", "binary", binaryName))
 }
-
 func showStatus() {
 	// Per AI.md PART 31 - --status output format
 	binaryName := filepath.Base(os.Args[0])
@@ -956,12 +873,12 @@ func showStatus() {
 	fmt.Println()
 
 	if isRunning {
-		fmt.Println("Server Status: Running")
+		fmt.Println(serverCLIText("server_cli.status.server_running"))
 	} else {
-		fmt.Println("Server Status: Not Running")
+		fmt.Println(serverCLIText("server_cli.status.server_not_running"))
 		fmt.Println()
-		fmt.Printf("Start the server with: %s\n", binaryName)
-		fmt.Printf("Or install as service: %s --service --install\n", binaryName)
+		fmt.Println(serverCLITf("server_cli.status.start_server", "binary", binaryName))
+		fmt.Println(serverCLITf("server_cli.status.install_service", "binary", binaryName))
 		// Per AI.md PART 8: --status exits 0 when healthy and 1 when unhealthy.
 		// A server that is not running is unhealthy.
 		exitFunc(1)
@@ -973,6 +890,7 @@ func showStatus() {
 	var mode string
 	var torEnabled bool
 	var torAddress string
+	var i2pEnabled bool
 	var baseurl string
 	var fqdn string
 
@@ -982,6 +900,7 @@ func showStatus() {
 		mode = cfg.Server.Mode
 		torEnabled = cfg.Server.Tor.Enabled
 		torAddress = cfg.Server.Tor.OnionAddress
+		i2pEnabled = cfg.I2PEnabled()
 		baseurl = cfg.Server.BaseURL
 		fqdn = cfg.Server.FQDN
 	} else {
@@ -996,43 +915,80 @@ func showStatus() {
 		uptime = formatUptime(time.Since(startTime))
 	}
 
-	fmt.Printf("  PID: %d\n", pid)
-	fmt.Printf("  Port: %d\n", port)
-	fmt.Printf("  Mode: %s\n", mode)
-	fmt.Printf("  Uptime: %s\n", uptime)
+	fmt.Println(serverCLITf("server_cli.status.pid", "pid", pid))
+	fmt.Println(serverCLITf("server_cli.status.port", "port", port))
+	fmt.Println(serverCLITf("server_cli.status.mode", "mode", mode))
+	fmt.Println(serverCLITf("server_cli.status.uptime", "uptime", uptime))
 	fmt.Println()
 
 	// Instance mode (single-instance per AI.md line 2055)
-	fmt.Println("Mode: standalone")
+	fmt.Println(serverCLIText("server_cli.status.mode_standalone"))
 	fmt.Println()
 
 	// Tor Hidden Service status
 	if torEnabled {
 		if torAddress != "" {
-			fmt.Println("Tor Hidden Service: Connected")
+			fmt.Println(serverCLIText("server_cli.status.tor_connected"))
 			// Truncate address for display
 			displayAddr := torAddress
 			if len(torAddress) > 16 {
 				displayAddr = torAddress[:8] + "..." + torAddress[len(torAddress)-10:]
 			}
-			fmt.Printf("  Address: %s\n", displayAddr)
+			fmt.Println(serverCLITf("server_cli.status.tor_address", "address", displayAddr))
 		} else {
-			fmt.Println("Tor Hidden Service: Enabled (waiting for address)")
+			fmt.Println(serverCLIText("server_cli.status.tor_waiting"))
 		}
 	} else {
-		fmt.Println("Tor Hidden Service: Disabled")
+		fmt.Println(serverCLIText("server_cli.status.tor_disabled"))
+	}
+
+	healthy, health := queryInternalHealth(port, baseurl, fqdn)
+	i2pState := "disabled"
+	i2pProvider, i2pAddress := "none", ""
+	if health != nil {
+		i2pState = health.Features.I2P.State
+		i2pProvider = health.Features.I2P.Provider
+		i2pAddress = health.Features.I2P.Hostname
+	}
+	for _, line := range formatI2PStatusLines(i2pEnabled, i2pState, i2pProvider, i2pAddress) {
+		fmt.Println(line)
 	}
 
 	// Per AI.md PART 8: healthy means running AND responding, and PART 13
 	// defines "the internal health request made by --status" — query the
 	// server's /server/healthz over loopback and exit on the response.
-	healthy := queryInternalHealth(port, baseurl, fqdn)
 	if healthy {
-		fmt.Println("Health: Healthy")
+		fmt.Println(serverCLIText("server_cli.status.health_healthy"))
 		exitFunc(0)
 	} else {
-		fmt.Println("Health: Not Responding")
+		fmt.Println(serverCLIText("server_cli.status.health_not_responding"))
 		exitFunc(1)
+	}
+}
+
+func formatI2PStatusLines(enabled bool, state, provider, address string) []string {
+	if state == "" {
+		if enabled {
+			state = "no_provider"
+		} else {
+			state = "disabled"
+		}
+	}
+	switch state {
+	case "running":
+		lines := []string{serverCLITf("server_cli.status.i2p_running", "provider", provider)}
+		if address != "" {
+			lines = append(lines, serverCLITf("server_cli.status.i2p_address", "address", address))
+		}
+		return lines
+	case "disabled":
+		return []string{serverCLIText("server_cli.status.i2p_disabled")}
+	case "no_provider":
+		return []string{serverCLIText("server_cli.status.i2p_no_provider")}
+	case "starting", "building":
+		return []string{serverCLIText("server_cli.status.i2p_starting")}
+	default:
+		return []string{serverCLIText("server_cli.status.i2p_error")}
 	}
 }
 
@@ -1044,34 +1000,55 @@ func showStatus() {
 // error means the TLS server answered, which satisfies "running and
 // responding" per AI.md PART 8. A successful poll writes no server log
 // entry (PART 13 log suppression).
-func queryInternalHealth(port int, baseurl, fqdn string) bool {
+type internalHealthStatus struct {
+	Features struct {
+		I2P struct {
+			State    string `json:"state"`
+			Provider string `json:"provider"`
+			Hostname string `json:"hostname"`
+		} `json:"i2p"`
+	} `json:"features"`
+}
+
+func queryInternalHealth(port int, baseurl, fqdn string) (bool, *internalHealthStatus) {
 	url := func(scheme string) string {
 		return fmt.Sprintf("%s://127.0.0.1:%d%s/server/healthz", scheme, port, baseurl)
 	}
-	poll := func(client *http.Client, scheme string) (healthy, alive bool) {
-		resp, err := client.Get(url(scheme))
+	poll := func(client *http.Client, scheme string) (healthy, alive bool, status *internalHealthStatus) {
+		req, err := http.NewRequest(http.MethodGet, url(scheme), nil)
+		if err != nil {
+			return false, false, nil
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Accept-Language", serverCLILanguage())
+		resp, err := client.Do(req)
 		if err != nil {
 			// A certificate-verification error is proof the TLS server is
 			// listening and completed a handshake with us.
 			if strings.Contains(err.Error(), "certificate") ||
 				strings.Contains(err.Error(), "x509") {
-				return false, true
+				return false, true, nil
 			}
-			return false, false
+			return false, false, nil
 		}
-		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-			slog.Debug("failed to drain server health response", "error", err)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if readErr != nil {
+			slog.Debug("failed to read server health response", "error", readErr)
 		}
 		closeutil.Close(resp.Body)
-		return resp.StatusCode >= 200 && resp.StatusCode < 300, true
+		var result internalHealthStatus
+		if readErr == nil && json.Unmarshal(body, &result) == nil {
+			status = &result
+		}
+		return resp.StatusCode >= 200 && resp.StatusCode < 300, true, status
 	}
 
 	// Plain HTTP first: dual-port mode always binds it, and non-SSL installs
 	// have only it.
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	healthy, alive := poll(httpClient, "http")
+	healthy, alive, status := poll(httpClient, "http")
 	if healthy || alive {
-		return healthy
+		return healthy, status
 	}
 
 	// HTTPS with real verification against the FQDN.
@@ -1081,11 +1058,11 @@ func queryInternalHealth(port int, baseurl, fqdn string) bool {
 			TLSClientConfig: &tls.Config{ServerName: fqdn, MinVersion: tls.VersionTLS12},
 		},
 	}
-	healthy, alive = poll(tlsClient, "https")
+	healthy, alive, status = poll(tlsClient, "https")
 	if healthy {
-		return true
+		return true, status
 	}
-	return alive
+	return alive, status
 }
 
 // isProcessRunning checks if a process with given PID exists
@@ -1175,12 +1152,12 @@ func formatUptime(d time.Duration) string {
 }
 
 func runService(action string) {
-	fmt.Printf(display.Emoji("🔧", "[*]")+" Service Management: %s\n\n", action)
+	fmt.Print(display.Emoji("🔧", "[*]") + " " + serverCLITf("server_cli.main.service_heading", "action", action) + "\n\n")
 
 	// Load configuration
 	cfg, err := config.Initialize()
 	if err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_load_config", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -1197,36 +1174,40 @@ func runService(action string) {
 		// or no escalation is available; execElevated replaces the process, so
 		// a returned error means the elevation attempt itself failed.
 		if !config.IsPrivileged() {
-			fmt.Printf("Installing service for %s...\n", runtime.GOOS)
+			fmt.Println(serverCLITf("server_cli.main.installing_service", "os", runtime.GOOS))
 			if err := service.HandleEscalation(); err != nil {
-				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Privilege escalation failed: %v\n", err)
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.privilege_escalation_failed", "error", err))
 				exitFunc(1)
 				return
 			}
 			if !config.IsPrivileged() {
-				fmt.Println("Installing user service (no admin privileges)...")
+				fmt.Println(serverCLIText("server_cli.main.installing_user_service"))
 				if err := sm.InstallUserService(); err != nil {
-					fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to install user service: %v\n", err)
+					fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_install_user_service", "error", err))
 					exitFunc(1)
 					return
 				}
 				if err := sm.StartAllServices(); err != nil {
-					fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to start user service: %v\n", err)
+					fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_start_user_service", "error", err))
+					exitFunc(1)
+					return
 				}
-				fmt.Println(display.Emoji("✅", "[OK]") + " User service installed and started")
+				fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.user_service_installed"))
 				return
 			}
 		}
-		fmt.Printf("Installing service for %s...\n", runtime.GOOS)
+		fmt.Println(serverCLITf("server_cli.main.installing_service", "os", runtime.GOOS))
 		if err := sm.Install(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to install service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_install_service", "error", err))
 			exitFunc(1)
 			return
 		}
 		if err := sm.StartAllServices(); err != nil {
-			fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Failed to start service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_start_service", "error", err))
+			exitFunc(1)
+			return
 		}
-		fmt.Println(display.Emoji("✅", "[OK]") + " Service installed and started")
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_installed"))
 
 	case "--uninstall":
 		// Per AI.md PART 23 Service Uninstall Logic: stop, disable, remove the
@@ -1234,7 +1215,7 @@ func runService(action string) {
 		// delete the system user and group, then point the operator at the
 		// binary. Confirmation is required before the destructive action.
 		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.main.requires_elevated_privileges"))
 			exitFunc(1)
 			return
 		}
@@ -1248,9 +1229,9 @@ func runService(action string) {
 			fmt.Println(i18n.TDefault("service.uninstall_cancelled"))
 			return
 		}
-		fmt.Println("Uninstalling service...")
+		fmt.Println(serverCLIText("server_cli.main.uninstalling_service"))
 		if err := sm.Uninstall(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to uninstall service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_uninstall_service", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -1258,7 +1239,7 @@ func runService(action string) {
 		// remove an app-created service account before deleting that directory.
 		var cleanupErrors []error
 		if err := service.DeleteSystemUser(config.InternalName); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("delete system user: %w", err))
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("%s: %w", serverCLIText("server_cli.main.delete_system_user"), err))
 		}
 		// Step 4: delete all data directories and the PID file.
 		for _, dir := range []string{
@@ -1267,110 +1248,97 @@ func runService(action string) {
 		} {
 			if dir != "" {
 				if err := os.RemoveAll(dir); err != nil {
-					cleanupErrors = append(cleanupErrors, fmt.Errorf("remove directory %s: %w", dir, err))
+					cleanupErrors = append(cleanupErrors, fmt.Errorf("%s: %w", serverCLITf("server_cli.main.remove_directory", "path", dir), err))
 				}
 			}
 		}
 		if pidFile := config.GetPIDFile(); pidFile != "" {
 			if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
-				cleanupErrors = append(cleanupErrors, fmt.Errorf("remove PID file %s: %w", pidFile, err))
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("%s: %w", serverCLITf("server_cli.main.remove_pid_file", "path", pidFile), err))
 			}
 		}
 		if err := errors.Join(cleanupErrors...); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Service uninstall incomplete: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.service_uninstall_incomplete", "error", err))
 			exitFunc(1)
 			return
 		}
 		fmt.Println(i18n.TDefault("service.uninstalled_remove_binary", config.GetBinaryPath()))
 
 	case "start":
-		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			exitFunc(1)
-		}
-		fmt.Println("Starting service...")
+		fmt.Println(serverCLIText("server_cli.main.starting_service"))
 		if err := sm.StartAllServices(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to start service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_start_service", "error", err))
 			exitFunc(1)
 		}
-		fmt.Println(display.Emoji("✅", "[OK]") + " Service started successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_started"))
 
 	case "stop":
-		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			exitFunc(1)
-		}
-		fmt.Println("Stopping service...")
+		fmt.Println(serverCLIText("server_cli.main.stopping_service"))
 		if err := sm.StopAllServices(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to stop service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_stop_service", "error", err))
 			exitFunc(1)
 		}
-		fmt.Println(display.Emoji("✅", "[OK]") + " Service stopped successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_stopped"))
 
 	case "status":
 		status, err := sm.Status()
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to get service status: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_service_status", "error", err))
 			exitFunc(1)
 		}
-		fmt.Printf("Service status: %s\n", status)
+		fmt.Println(serverCLITf("server_cli.main.service_status", "status", status))
 
 	case "restart":
-		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			exitFunc(1)
-		}
-		fmt.Println("Restarting service...")
+		fmt.Println(serverCLIText("server_cli.main.restarting_service"))
 		if err := sm.RestartAllServices(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to restart service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_restart_service", "error", err))
 			exitFunc(1)
 		}
-		fmt.Println(display.Emoji("✅", "[OK]") + " Service restarted successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_restarted"))
 
 	case "reload":
-		fmt.Println("Reloading service configuration...")
+		fmt.Println(serverCLIText("server_cli.main.reloading_service"))
 		if err := sm.Reload(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to reload service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_reload_service", "error", err))
 			exitFunc(1)
 		}
-		fmt.Println(display.Emoji("✅", "[OK]") + " Service configuration reloaded")
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_reloaded"))
 
 	case "--disable":
-		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+		status, err := sm.Status()
+		if err != nil {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_service_status", "error", err))
 			exitFunc(1)
+			return
 		}
-		fmt.Println("Disabling service autostart...")
+		if status == "active" || status == "running" || status == "started" {
+			fmt.Println(serverCLIText("server_cli.main.stopping_service"))
+			if err := sm.StopAllServices(); err != nil {
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_stop_service", "error", err))
+				exitFunc(1)
+				return
+			}
+		}
+		fmt.Println(serverCLIText("server_cli.main.disabling_service"))
 		if err := sm.Disable(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to disable service: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_disable_service", "error", err))
 			exitFunc(1)
 		}
-		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart disabled")
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_disabled"))
 
 	case "--help":
 		printServiceHelp()
 
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
-		fmt.Println("Valid actions: start, stop, restart, reload, status, --install, --uninstall, --disable, --help")
+		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.unknown_service_action", "action", action))
+		fmt.Println(serverCLIText("server_cli.main.valid_service_actions"))
 	}
 }
 
 func printServiceHelp() {
 	// Per AI.md PART 23 "Service Help Output": --install is what re-enables
 	// a disabled service, so there is no separate --enable action.
-	fmt.Println("Service management commands:")
-	fmt.Println()
-	fmt.Println("  start         Start the service")
-	fmt.Println("  stop          Stop the service")
-	fmt.Println("  restart       Restart the service")
-	fmt.Println("  reload        Reload configuration without restart")
-	fmt.Println("  status        Show service status")
-	fmt.Println()
-	fmt.Println("  --install     Install, enable, and start service")
-	fmt.Println("  --disable     Stop and disable service (keeps data)")
-	fmt.Println("  --uninstall   Stop, disable, and remove everything (keeps binary)")
-	fmt.Println("  --help        Show this help")
+	fmt.Println(serverCLIText("server_cli.main.service_help"))
 }
 
 // authorizeRestore implements the AI.md PART 21 restore authorization tiers:
@@ -1398,15 +1366,20 @@ func authorizeRestore(isFirstRun, isRoot, isServiceUser bool, expectedToken, pre
 	}
 }
 
-// readBackupPassword resolves the backup encryption password for CLI use.
-// Per AI.md PART 21: the CLI has no password flag (a flag would leak the
-// password via shell history and process lists) — BACKUP_PASSWORD remains
-// honored for scripted/non-interactive use, and the CLI otherwise falls back
-// to the documented interactive masked prompt ("Enter backup password:").
+// readBackupPassword resolves an interactive restore password. Backup creation
+// uses the configured secret and never prompts.
+func printBackupEncryptionWarning() {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  ⚠️  BACKUP ENCRYPTION NOT CONFIGURED                               │")
+	fmt.Println("│                                                                      │")
+	fmt.Println("│  Your backups are NOT encrypted. If someone gains access to your    │")
+	fmt.Println("│  backup files, they can read all data including server configuration.│")
+	fmt.Println("│                                                                      │")
+	fmt.Println("│  Set server.backup.encryption_password in secrets.yml to fix this.  │")
+	fmt.Println("└─────────────────────────────────────────────────────────────────────┘")
+}
+
 func readBackupPassword(prompt string) string {
-	if password := os.Getenv("BACKUP_PASSWORD"); password != "" {
-		return password
-	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return ""
 	}
@@ -1428,24 +1401,57 @@ func maintenanceArg(i int) string {
 	return ""
 }
 
+func maintenanceArgs(start int) []string {
+	if len(os.Args) <= start {
+		return nil
+	}
+	return append([]string(nil), os.Args[start:]...)
+}
+
 func runMaintenance(action string) {
-	fmt.Printf(display.Emoji("🔧", "[*]")+" Maintenance: %s\n\n", action)
+	if action != "data" || !maintenanceDataWritesStdout(maintenanceArgs(4)) {
+		fmt.Printf(display.Emoji("🔧", "[*]")+" Maintenance: %s\n\n", action)
+	}
 
 	bm := backup.NewManager()
 
 	switch action {
 	case "backup":
-		filename := ""
-		if len(os.Args) > 3 {
-			filename = os.Args[3]
+		backupArgs := maintenanceArgs(3)
+		if len(backupArgs) > 0 && backupArgs[0] == "test" {
+			if len(backupArgs) > 2 || (len(backupArgs) == 2 && strings.HasPrefix(backupArgs[1], "-")) {
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " Usage: search --maintenance backup test [backup-file]")
+				exitFunc(1)
+				return
+			}
+			filename := maintenanceArg(4)
+			if err := runMaintenanceBackupTest(filename); err != nil {
+				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup test failed: %v\n", err)
+				exitFunc(1)
+				return
+			}
+			fmt.Println(display.Emoji("✅", "[OK]") + " Backup test passed")
+			return
 		}
+		backupOptions, optionsErr := parseMaintenanceBackupOptions(backupArgs)
+		if optionsErr != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" %v\n", optionsErr)
+			fmt.Println("Usage: search --maintenance backup [filename] [--include-ssl] [--include-data]")
+			exitFunc(1)
+			return
+		}
+		backupOptions.IncludeSSL = backupOptions.IncludeSSL || flagBackupIncludeSSL
+		backupOptions.IncludeData = backupOptions.IncludeData || flagBackupIncludeData
+		filename := backupOptions.Filename
 
-		// Per AI.md PART 21: encryption is required under compliance mode and
-		// otherwise applies only if a backup password was configured during
-		// setup (server.backup.encryption.enabled) — the password itself is
-		// never stored and is resolved via BACKUP_PASSWORD or an interactive
-		// prompt.
-		cfg, cfgErr := config.Initialize()
+		// Per AI.md PART 21: configured backup key material enables encryption;
+		// backup creation never prompts.
+		cfg, cfgErr := maintenanceBackupConfig(config.Initialize)
+		if cfgErr != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not load configuration for backup: %v\n", cfgErr)
+			exitFunc(1)
+			return
+		}
 		dbMgr, dbErr := database.NewDatabaseManager(&database.Config{
 			Driver:   "sqlite",
 			DataDir:  config.GetDatabaseDir(),
@@ -1469,24 +1475,22 @@ func runMaintenance(action string) {
 			return
 		}
 		bm.SetServerDatabaseSnapshotter(dbMgr.ServerDB())
-		complianceEnabled := cfgErr == nil && cfg.Server.Compliance.Enabled
-		encryptionEnabled := (cfgErr == nil && cfg.Server.Backup.Encryption.Enabled) || complianceEnabled
-
-		var password string
-		if encryptionEnabled {
-			password = readBackupPassword("Enter backup password: ")
-			if password == "" && complianceEnabled {
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " Compliance mode requires backup encryption")
-				fmt.Println("   Set BACKUP_PASSWORD or enter a password when prompted, and try again.")
-				exitFunc(1)
-				return
-			}
+		bm.SetIncludeSSL(backupOptions.IncludeSSL)
+		bm.SetIncludeData(backupOptions.IncludeData)
+		complianceEnabled := cfg.Server.Compliance.AnyEnabled()
+		password := cfg.Server.Backup.EncryptionPassword
+		if complianceEnabled && password == "" {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Compliance mode requires backup encryption")
+			fmt.Println("   Set server.backup.encryption_password in secrets.yml, and try again.")
+			exitFunc(1)
+			return
 		}
 		if password != "" {
 			fmt.Println(display.Emoji("🔐", "[ENCRYPTED]") + " Backup encryption: ENABLED")
 			bm.SetPassword(password)
 		} else {
-			fmt.Println(display.Emoji("🔓", "[PLAIN]") + " Backup encryption: DISABLED (set BACKUP_PASSWORD to enable)")
+			fmt.Println(display.Emoji("🔓", "[PLAIN]") + " Backup encryption: DISABLED")
+			printBackupEncryptionWarning()
 		}
 
 		fmt.Println("Creating backup...")
@@ -1582,15 +1586,15 @@ func runMaintenance(action string) {
 
 		fmt.Printf("Restoring from: %s\n", filename)
 
-		// Per AI.md PART 21: the CLI prompts "Enter backup password:" when the
-		// backup is encrypted and no password was provided via BACKUP_PASSWORD.
+		// Per AI.md PART 21: restore prompts for an encrypted archive password;
+		// the configured backup password is never used to restore.
 		isEncryptedFile := backup.IsEncrypted(filename)
 		var password string
 		if isEncryptedFile {
 			password = readBackupPassword("Enter backup password: ")
 			if password == "" {
 				fmt.Println(display.Emoji("❌", "[ERROR]") + " This backup is encrypted — a password is required")
-				fmt.Println("   Set BACKUP_PASSWORD or enter a password when prompted, and try again.")
+				fmt.Println("   Enter the backup password when prompted, and try again.")
 				exitFunc(1)
 				return
 			}
@@ -1706,13 +1710,24 @@ func runMaintenance(action string) {
 	case "token":
 		runMaintenanceToken(maintenanceArg(3), maintenanceArg(4))
 
-	// Per AI.md PART 12 GDPR/CCPA: --maintenance data export|delete <subject>
+	// Per AI.md PART 12: owner-scoped data export and deletion use --owner.
 	case "data":
-		runMaintenanceData(maintenanceArg(3), maintenanceArg(4))
+		runMaintenanceData(maintenanceArg(3), maintenanceArgs(4))
 
 	// Per AI.md PART 12 "Compliance Routes": --maintenance compliance report
 	case "compliance":
 		runMaintenanceCompliance(maintenanceArg(3))
+
+	case "security":
+		runMaintenanceSecurity(maintenanceArg(3), maintenanceArgs(4))
+
+	case "email":
+		runMaintenanceEmail(maintenanceArg(3), maintenanceArgs(4))
+
+	case "scheduler":
+		runMaintenanceScheduler(maintenanceArg(3), maintenanceArg(4))
+	case "tor":
+		runTor(maintenanceArgs(3))
 
 	case "setup":
 		// Per AI.md PART 8: --maintenance setup resets server configuration to defaults
@@ -1803,8 +1818,8 @@ func runMaintenance(action string) {
 			case "private":
 				runPGPExportPrivate(exportPath)
 			default:
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify key type: public or private")
-				fmt.Println("Usage: search --maintenance pgp export <public|private> [path]")
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.export_key_type_required"))
+				fmt.Println(serverCLITf("server_cli.pgp.export_usage", "project", config.ProjectName))
 			}
 
 		case "import":
@@ -1818,22 +1833,11 @@ func runMaintenance(action string) {
 			runPGPDelete()
 
 		case "help", "--help", "":
-			fmt.Println("PGP Keypair Management:")
-			fmt.Println()
-			fmt.Println("  generate              Generate a new Ed25519/Curve25519 keypair")
-			fmt.Println("  rotate                Rotate keypair (signs new with old)")
-			fmt.Println("  publish               Publish public key to configured keyservers")
-			fmt.Println("  export public [path]  Export public key to stdout or file")
-			fmt.Println("  export private <path> Export private key (requires confirmation)")
-			fmt.Println("  import <file>         Import existing keypair from file")
-			fmt.Println("  delete                Delete keypair (requires confirmation)")
-			fmt.Println()
-			fmt.Println("Keys are stored in: " + config.GetConfigDir() + "/security/")
-			fmt.Println("Public key served at: /.well-known/pgp-key.asc")
+			fmt.Println(serverCLITf("server_cli.pgp.help", "project", config.ProjectName, "config_dir", config.GetConfigDir()))
 
 		default:
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown PGP action: %s\n", pgpAction)
-			fmt.Println("Valid actions: generate, rotate, publish, export, import, delete, help")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.unknown_action", "action", pgpAction))
+			fmt.Println(serverCLIText("server_cli.pgp.valid_actions"))
 		}
 
 	// Help text follows AI.md PART 8 "Maintenance Help Output" (AI.md:31554)
@@ -1843,7 +1847,8 @@ func runMaintenance(action string) {
 		binaryName := filepath.Base(os.Args[0])
 		fmt.Println("Maintenance commands:")
 		fmt.Println()
-		fmt.Println("backup [file]                         - Create backup of all data")
+		fmt.Println("backup [file] [--include-ssl] [--include-data] - Create a backup")
+		fmt.Println("                                        Optional: include config SSL files and data files")
 		fmt.Println("                                        Default: " + config.GetBackupDir() + "/" + binaryName + "_backup_YYYY-MM-DD_HHMMSS.tar.gz")
 		fmt.Println()
 		fmt.Println("restore <file>                        - Restore from backup file")
@@ -1862,16 +1867,23 @@ func runMaintenance(action string) {
 		fmt.Println()
 		fmt.Println("pgp <action>                          - PGP keypair management (run 'pgp help' for details)")
 		fmt.Println()
+		fmt.Println("security list|show|export|update       - Manage coordinated-disclosure reports")
+		fmt.Println()
 		fmt.Println("secret rotate <name>                  - Rotate installation_secret or encryption_key")
 		fmt.Println()
 		fmt.Println("token list|revoke <prefix>            - List or revoke API tokens")
 		fmt.Println()
-		fmt.Println("data export|delete <subject>          - GDPR/CCPA personal data export or erasure")
+		fmt.Println("data export --owner <prefix> [--output FILE] - Export one owner's data")
+		fmt.Println("data delete --owner <prefix> [--yes]   - Delete one owner and its resources")
 		fmt.Println()
 		fmt.Println("compliance report                     - Print a compliance summary")
+		fmt.Println("email test [--to ADDRESS] [--dry-run]  - Send or preview email templates")
+		fmt.Println("scheduler list|show|run|enable|disable|history - Manage scheduled tasks")
+		fmt.Println("tor <action>                           - Manage Tor hidden service")
 		fmt.Println()
 		fmt.Println("Examples:")
 		fmt.Println("  " + binaryName + " --maintenance backup")
+		fmt.Println("  " + binaryName + " --maintenance backup --include-ssl --include-data")
 		fmt.Println("  " + binaryName + " --maintenance backup /path/to/backup.tar.gz")
 		fmt.Println("  " + binaryName + " --maintenance restore /path/to/backup.tar.gz")
 		fmt.Println("  " + binaryName + " --maintenance update check")
@@ -1881,7 +1893,7 @@ func runMaintenance(action string) {
 
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
-		fmt.Println("Valid actions: backup, restore, update, mode, setup, pgp, secret, token, data, compliance, help")
+		fmt.Println("Valid actions: backup, restore, update, mode, setup, pgp, security, secret, token, data, compliance, email, scheduler, tor, help")
 	}
 }
 
@@ -2255,21 +2267,49 @@ _%s_completions() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
+    if [[ "${COMP_WORDS[1]}" == "--maintenance" ]]; then
+        case "${COMP_WORDS[2]}" in
+            email)
+                case "${prev}" in
+                    email) COMPREPLY=( $(compgen -W "test" -- "${cur}") ); return 0 ;;
+                    test) COMPREPLY=( $(compgen -W "--to --dry-run" -- "${cur}") ); return 0 ;;
+                esac
+                ;;
+            backup)
+                COMPREPLY=( $(compgen -W "--include-ssl --include-data test" -- "${cur}") )
+                return 0
+                ;;
+            scheduler)
+                if [[ "${prev}" == "scheduler" ]]; then
+                    COMPREPLY=( $(compgen -W "list show run enable disable history" -- "${cur}") ); return 0
+                fi
+                ;;
+            security)
+                case "${prev}" in
+                    security) COMPREPLY=( $(compgen -W "list show export update" -- "${cur}") ); return 0 ;;
+                    list) COMPREPLY=( $(compgen -W "--status" -- "${cur}") ); return 0 ;;
+                    export) COMPREPLY=( $(compgen -W "--output" -- "${cur}") ); return 0 ;;
+                    update) COMPREPLY=( $(compgen -W "--status --comment --disclosure-date --severity" -- "${cur}") ); return 0 ;;
+                    --status) COMPREPLY=( $(compgen -W "received triaged confirmed patching disclosed wont_fix" -- "${cur}") ); return 0 ;;
+                    --severity) COMPREPLY=( $(compgen -W "critical high medium low informational" -- "${cur}") ); return 0 ;;
+                esac
+                ;;
+            tor)
+                case "${prev}" in
+                    tor) COMPREPLY=( $(compgen -W "status validate restart regenerate vanity import-keys --help" -- "${cur}") ); return 0 ;;
+                    vanity) COMPREPLY=( $(compgen -W "start stop apply" -- "${cur}") ); return 0 ;;
+                esac
+                ;;
+        esac
+    fi
+
     opts="--help --version --status --daemon --debug --i2p"
     opts="$opts --mode --config --data --cache --log --backup --pid --address --port"
-    opts="$opts --service --maintenance --update --shell tor email"
+    opts="$opts --service --maintenance --update --shell"
 
     case "${prev}" in
-        tor)
-            COMPREPLY=( $(compgen -W "status validate restart regenerate vanity import-keys" -- ${cur}) )
-            return 0
-            ;;
         vanity)
             COMPREPLY=( $(compgen -W "start apply" -- ${cur}) )
-            return 0
-            ;;
-        email)
-            COMPREPLY=( $(compgen -W "test" -- ${cur}) )
             return 0
             ;;
         --service)
@@ -2277,7 +2317,7 @@ _%s_completions() {
             return 0
             ;;
         --maintenance)
-            COMPREPLY=( $(compgen -W "backup restore update mode setup pgp secret token data compliance help" -- ${cur}) )
+            COMPREPLY=( $(compgen -W "backup restore update mode setup pgp secret token data compliance email scheduler tor help" -- ${cur}) )
             return 0
             ;;
         --update)
@@ -2333,14 +2373,36 @@ _%s() {
         '--pid[PID file]:file:_files'
         '--address[Listen address]:address:'
         '--port[Listen port(s), HTTP or HTTP,HTTPS]:port:'
-        '--i2p[Enable the I2P eepsite]'
+        '--i2p[Enable the I2P eepsite (default on in application containers)]'
         '--service[Service management]:action:(start stop restart reload status --install --uninstall --disable --help)'
-        '--maintenance[Maintenance]:action:(backup restore update mode setup pgp secret token data compliance help)'
+        '--maintenance[Maintenance]:action:(backup restore update mode setup pgp security secret token data compliance email scheduler tor help)'
         '--update[Update management]:action:(check yes branch)'
         '--shell[Shell integration]:subcommand:(completions init --help)'
-        'tor[Tor hidden service management]:subcommand:(status validate restart regenerate vanity import-keys)'
-        'email[Email management]:subcommand:(test)'
     )
+
+    if [[ $words[2] == --maintenance && $words[3] == backup ]]; then
+        opts+=( '--include-ssl[Include config SSL files]' '--include-data[Include data files]' 'test[Verify a backup without restoring]' )
+    elif [[ $words[2] == tor && $words[3] == vanity ]]; then
+        opts+=( 'start[Start vanity search]' 'stop[Stop vanity search]' 'apply[Apply a found candidate]' )
+    elif [[ $words[2] == tor ]]; then
+        opts+=(
+            'status[View Tor hidden service status]'
+            'validate[Validate Tor configuration]'
+            'restart[Restart the Tor process]'
+            'regenerate[Regenerate the .onion address]'
+            'vanity[Manage vanity address search]'
+            'import-keys[Import an existing Tor key directory]'
+            '--help[Show Tor maintenance help]'
+        )
+    elif [[ $words[2] == --maintenance && $words[3] == security && $words[4] == list ]]; then
+        opts+=( '--status[Filter by status]:status:(received triaged confirmed patching disclosed wont_fix)' )
+    elif [[ $words[2] == --maintenance && $words[3] == security && $words[4] == export ]]; then
+        opts+=( '--output[Output path or - for stdout]:file:_files' )
+    elif [[ $words[2] == --maintenance && $words[3] == security && $words[4] == update ]]; then
+        opts+=( '--status[Set status]:status:(received triaged confirmed patching disclosed wont_fix)' '--comment[Set researcher-visible comment]:comment:' '--disclosure-date[Set expected disclosure date]:date:' '--severity[Set severity]:severity:(critical high medium low informational)' )
+    elif [[ $words[2] == --maintenance && $words[3] == security ]]; then
+		opts+=( 'list[List coordinated-disclosure reports]' 'show[Show report metadata]' 'export[Export encrypted report]' 'update[Update report triage]' )
+    fi
 
     _arguments -s $opts
 }
@@ -2349,7 +2411,7 @@ compdef _%s %s
 `, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName)
 
 	case "fish":
-		fmt.Printf(`# Fish completions for %s
+		fmt.Print(strings.ReplaceAll(`# Fish completions for %s
 # Add to ~/.config/fish/config.fish: %s --shell init fish | source
 
 complete -c %s -f
@@ -2367,26 +2429,29 @@ complete -c %s -l backup -d 'Backup directory' -xa '(__fish_complete_directories
 complete -c %s -l pid -d 'PID file'
 complete -c %s -l address -d 'Listen address'
 complete -c %s -l port -d 'Listen port(s), HTTP or HTTP,HTTPS'
-complete -c %s -l i2p -d 'Enable the I2P eepsite'
+complete -c %s -l i2p -d 'Enable the I2P eepsite (default on in application containers)'
 complete -c %s -l service -d 'Service management' -xa 'start stop restart reload status --install --uninstall --disable --help'
-complete -c %s -l maintenance -d 'Maintenance' -xa 'backup restore update mode setup pgp secret token data compliance help'
+complete -c %s -l maintenance -d 'Maintenance' -xa 'backup restore update mode setup pgp security secret token data compliance email scheduler tor help'
+complete -c %s -n '__fish_seen_subcommand_from backup' -l include-ssl -d 'Include optional config SSL files'
+complete -c %s -n '__fish_seen_subcommand_from backup' -l include-data -d 'Include optional data files'
 complete -c %s -l update -d 'Update management' -xa 'check yes branch'
 complete -c %s -l shell -d 'Shell integration' -xa 'completions init --help'
-complete -c %s -n '__fish_use_subcommand' -a 'tor' -d 'Tor hidden service management' -xa 'status validate restart regenerate vanity import-keys'
-complete -c %s -n '__fish_use_subcommand' -a 'email' -d 'Email management' -xa 'test'
-`, binaryName, binaryName,
-			binaryName, binaryName, binaryName, binaryName, binaryName,
-			binaryName, binaryName, binaryName, binaryName, binaryName,
-			binaryName, binaryName, binaryName, binaryName, binaryName,
-			binaryName, binaryName, binaryName, binaryName, binaryName,
-			binaryName, binaryName)
+complete -c %s -n '__fish_seen_subcommand_from tor' -a 'status validate restart regenerate vanity import-keys --help' -d 'Tor maintenance action'
+complete -c %s -n '__fish_seen_subcommand_from vanity' -a 'start stop apply' -d 'Tor vanity action'
+complete -c %s -n '__fish_seen_subcommand_from security' -a 'list show export update' -d 'Security report action'
+complete -c %s -n '__fish_seen_subcommand_from security' -l status -d 'Filter or set report status' -xa 'received triaged confirmed patching disclosed wont_fix'
+complete -c %s -n '__fish_seen_subcommand_from security' -l output -d 'Encrypted report output path'
+complete -c %s -n '__fish_seen_subcommand_from security' -l comment -d 'Researcher-visible report comment'
+complete -c %s -n '__fish_seen_subcommand_from security' -l disclosure-date -d 'Expected disclosure date'
+complete -c %s -n '__fish_seen_subcommand_from security' -l severity -d 'Report severity' -xa 'critical high medium low informational'
+`, "%s", binaryName))
 
 	case "powershell", "pwsh":
 		fmt.Printf(`# PowerShell completions for %s
 # Add to $PROFILE: Invoke-Expression (&%s --shell init powershell)
 
 Register-ArgumentCompleter -CommandName %s -ScriptBlock {
-    param($commandName, $wordToComplete, $cursorPosition)
+    param($commandName, $wordToComplete, $cursorPosition, $commandAst, $fakeBoundParameters)
 
     $commands = @(
         @{Name='--help'; Description='Show help message'}
@@ -2405,14 +2470,36 @@ Register-ArgumentCompleter -CommandName %s -ScriptBlock {
         @{Name='--pid'; Description='PID file'}
         @{Name='--address'; Description='Listen address'}
         @{Name='--port'; Description='Listen port(s), HTTP or HTTP,HTTPS'}
-        @{Name='--i2p'; Description='Enable the I2P eepsite'}
+        @{Name='--i2p'; Description='Enable the I2P eepsite (default on in application containers)'}
         @{Name='--service'; Description='Service management'}
         @{Name='--maintenance'; Description='Maintenance'}
         @{Name='--update'; Description='Update management'}
         @{Name='--shell'; Description='Shell integration'}
-        @{Name='tor'; Description='Tor hidden service management'}
-        @{Name='email'; Description='Email management'}
     )
+
+    if ($commandAst.ToString() -match '--maintenance backup\\s*$') {
+        $commands = @(
+            @{Name='--include-ssl'; Description='Include optional config SSL files'}
+            @{Name='--include-data'; Description='Include optional data files'}
+            @{Name='test'; Description='Verify a backup without restoring it'}
+        )
+    } elseif ($commandAst.ToString() -match '--maintenance tor vanity\\s*$') {
+        $commands = @(
+            @{Name='start'; Description='Start vanity address search'}
+            @{Name='stop'; Description='Stop vanity address search'}
+            @{Name='apply'; Description='Apply a found vanity candidate'}
+        )
+    } elseif ($commandAst.ToString() -match '--maintenance tor\\s*$') {
+        $commands = @(
+            @{Name='status'; Description='View Tor hidden service status'}
+            @{Name='validate'; Description='Validate Tor configuration'}
+            @{Name='restart'; Description='Restart the Tor process'}
+            @{Name='regenerate'; Description='Regenerate the .onion address'}
+            @{Name='vanity'; Description='Manage vanity address search'}
+            @{Name='import-keys'; Description='Import a Tor key directory'}
+            @{Name='--help'; Description='Show Tor maintenance help'}
+        )
+    }
 
     $commands | Where-Object { $_.Name -like "$wordToComplete*" } | ForEach-Object {
         [System.Management.Automation.CompletionResult]::new($_.Name, $_.Name, 'ParameterValue', $_.Description)

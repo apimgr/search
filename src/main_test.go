@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"os"
 	"runtime"
@@ -10,6 +11,51 @@ import (
 
 	"github.com/apimgr/search/src/config"
 )
+
+func TestMaintenanceBackupConfigRejectsInitializationFailure(t *testing.T) {
+	wantErr := errors.New("invalid server.yml")
+	cfg, err := maintenanceBackupConfig(func() (*config.Config, error) {
+		return nil, wantErr
+	})
+	if cfg != nil {
+		t.Fatal("maintenanceBackupConfig() returned config after initialization failure")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("maintenanceBackupConfig() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+func TestMaintenanceBackupConfigRejectsNilConfiguration(t *testing.T) {
+	cfg, err := maintenanceBackupConfig(func() (*config.Config, error) { return nil, nil })
+	if cfg != nil || err == nil {
+		t.Fatalf("maintenanceBackupConfig() = (%v, %v), want (nil, error)", cfg, err)
+	}
+}
+
+func TestParseMaintenanceBackupOptions(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    maintenanceBackupOptions
+		wantErr bool
+	}{
+		{name: "defaults", args: nil, want: maintenanceBackupOptions{}},
+		{name: "optional contents", args: []string{"snapshot", "--include-ssl", "--include-data"}, want: maintenanceBackupOptions{Filename: "snapshot", IncludeSSL: true, IncludeData: true}},
+		{name: "unknown option", args: []string{"--other"}, wantErr: true},
+		{name: "multiple filenames", args: []string{"first", "second"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseMaintenanceBackupOptions(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseMaintenanceBackupOptions() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && got != tt.want {
+				t.Fatalf("parseMaintenanceBackupOptions() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
 
 // TestRunServerStartsBodyOnRegularProcess ensures non-service invocations
 // enter the long-running server path instead of returning successfully.
@@ -390,6 +436,8 @@ func resetFlagVars() {
 	flagBaseURL = ""
 	flagColor = ""
 	flagLang = ""
+	flagBackupIncludeSSL = false
+	flagBackupIncludeData = false
 	flagDebug = false
 	flagI2P = false
 }

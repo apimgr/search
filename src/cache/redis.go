@@ -2,10 +2,19 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // RedisCache implements Cache interface using Valkey/Redis
@@ -30,6 +39,10 @@ type RedisConfig struct {
 	Port     int
 	Password string
 	DB       int
+	TLS      bool
+	TLSSkipVerify bool
+	TLSCA, TLSCert, TLSKey string
+	SSLDir string
 
 	// Pool settings
 	PoolSize int
@@ -56,11 +69,21 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 
 	var client redis.UniversalClient
 
+	var tlsEnabled bool
+	var skipVerify = cfg.TLSSkipVerify
 	if cfg.URL != "" {
 		// URL-based connection
-		opts, err := redis.ParseURL(cfg.URL)
+		connectionURL, enabled, skipOverride, err := parseRedisConnectionURL(cfg.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+			return nil, fmt.Errorf("failed to parse cache URL: %w", err)
+		}
+		tlsEnabled = enabled
+		if skipOverride != nil {
+			skipVerify = *skipOverride
+		}
+		opts, err := redis.ParseURL(connectionURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse cache URL: %w", err)
 		}
 		if cfg.PoolSize > 0 {
 			opts.PoolSize = cfg.PoolSize
@@ -68,11 +91,22 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 		if cfg.MinIdle > 0 {
 			opts.MinIdleConns = cfg.MinIdle
 		}
-		client = redis.NewClient(opts)
+		if !tlsEnabled {
+			opts.TLSConfig = nil
+		}
+		if tlsEnabled {
+			opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: skipVerify}
+		}
+		newClient, err := newRedisClient(opts, cfg)
+		if err != nil {
+			return nil, err
+		}
+		client = newClient
 	} else {
 		// Host/port based connection
 		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-		client = redis.NewClient(&redis.Options{
+		tlsEnabled = cfg.TLS || cfg.TLSCA != "" || cfg.TLSCert != "" || cfg.TLSKey != ""
+		opts := &redis.Options{
 			Addr:         addr,
 			Password:     cfg.Password,
 			DB:           cfg.DB,
@@ -81,7 +115,15 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 			DialTimeout:  cfg.Timeout,
 			ReadTimeout:  cfg.Timeout,
 			WriteTimeout: cfg.Timeout,
-		})
+		}
+		if tlsEnabled {
+			opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: skipVerify}
+		}
+		newClient, err := newRedisClient(opts, cfg)
+		if err != nil {
+			return nil, err
+		}
+		client = newClient
 	}
 
 	// Test connection
@@ -89,7 +131,7 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
+		return nil, fmt.Errorf("failed to connect to cache: %w", errors.Join(err, client.Close()))
 	}
 
 	return &RedisCache{
@@ -97,6 +139,107 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 		prefix: cfg.Prefix,
 		stats:  Stats{Backend: cfg.Type, Connected: true},
 	}, nil
+}
+
+func parseRedisConnectionURL(raw string) (string, bool, *bool, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false, nil, err
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "valkey":
+		u.Scheme = "redis"
+	case "valkeys":
+		u.Scheme = "rediss"
+	case "redis", "rediss":
+	default:
+		return "", false, nil, fmt.Errorf("unsupported cache URL scheme %q", u.Scheme)
+	}
+	enabled := u.Scheme == "rediss"
+	query := u.Query()
+	if values, exists := query["tls"]; exists {
+		if len(values) != 1 {
+			return "", false, nil, fmt.Errorf("cache URL tls option must appear once")
+		}
+		var parseErr error
+		enabled, parseErr = config.ParseBool(values[0], enabled)
+		if parseErr != nil {
+			return "", false, nil, fmt.Errorf("invalid cache URL tls option: %w", parseErr)
+		}
+		query.Del("tls")
+	}
+	var skipOverride *bool
+	if values, exists := query["skip_verify"]; exists {
+		if len(values) != 1 {
+			return "", false, nil, fmt.Errorf("cache URL skip_verify option must appear once")
+		}
+		value, parseErr := config.ParseBool(values[0], false)
+		if parseErr != nil {
+			return "", false, nil, fmt.Errorf("invalid cache URL skip_verify option: %w", parseErr)
+		}
+		skipOverride = &value
+		query.Del("skip_verify")
+	}
+	u.RawQuery = query.Encode()
+	return u.String(), enabled, skipOverride, nil
+}
+
+func newRedisClient(opts *redis.Options, cfg *RedisConfig) (redis.UniversalClient, error) {
+	if opts.TLSConfig != nil {
+		if cfg.TLSCA != "" {
+			// A configured private CA is an explicit verify-full request.
+			opts.TLSConfig.InsecureSkipVerify = false
+			path, err := resolveSSLPath(cfg.SSLDir, cfg.TLSCA)
+			if err != nil {
+				return nil, err
+			}
+			pem, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("read cache TLS CA file: %w", err)
+			}
+			pool, err := x509.SystemCertPool()
+			if err != nil || pool == nil {
+				pool = x509.NewCertPool()
+			}
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, fmt.Errorf("cache TLS CA file contains no certificates")
+			}
+			opts.TLSConfig.RootCAs = pool
+		}
+		if cfg.TLSCert != "" || cfg.TLSKey != "" {
+			if cfg.TLSCert == "" || cfg.TLSKey == "" {
+				return nil, fmt.Errorf("cache TLS client certificate requires both tls_cert and tls_key")
+			}
+			certPath, err := resolveSSLPath(cfg.SSLDir, cfg.TLSCert)
+			if err != nil {
+				return nil, err
+			}
+			keyPath, err := resolveSSLPath(cfg.SSLDir, cfg.TLSKey)
+			if err != nil {
+				return nil, err
+			}
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			if err != nil {
+				return nil, fmt.Errorf("load cache TLS client certificate: %w", err)
+			}
+			opts.TLSConfig.Certificates = []tls.Certificate{cert}
+		}
+	}
+	return redis.NewClient(opts), nil
+}
+
+func resolveSSLPath(sslDir, value string) (string, error) {
+	if filepath.IsAbs(value) {
+		return value, nil
+	}
+	if strings.TrimSpace(sslDir) == "" {
+		return "", fmt.Errorf("cache TLS file %q requires the config SSL directory", value)
+	}
+	clean := filepath.Clean(value)
+	if clean == "." || clean == ".." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("cache TLS file path %q must stay inside the config SSL directory", value)
+	}
+	return filepath.Join(sslDir, clean), nil
 }
 
 // prefixKey adds the configured prefix to a key

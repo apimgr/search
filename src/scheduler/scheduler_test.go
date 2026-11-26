@@ -25,6 +25,7 @@ func TestTaskIDConstants(t *testing.T) {
 		{TaskLogRotation, "log_rotation"},
 		{TaskBackupDaily, "backup_daily"},
 		{TaskBackupHourly, "backup_hourly"},
+		{TaskDatabaseCheck, "database_check"},
 		{TaskHealthcheckSelf, "healthcheck_self"},
 		{TaskTorHealth, "tor_health"},
 	}
@@ -775,32 +776,41 @@ func TestRegisterBuiltinTasksAllHandlers(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
 	handlers := &TaskHandlers{
-		SSLRenewal:        func(ctx context.Context) error { return nil },
-		SecurityCleanup:   func(ctx context.Context) error { return nil },
-		GeoIPUpdate:       func(ctx context.Context) error { return nil },
-		BlocklistUpdate:   func(ctx context.Context) error { return nil },
-		CVEUpdate:         func(ctx context.Context) error { return nil },
-		TokenCleanup:      func(ctx context.Context) error { return nil },
-		LogRotation:       func(ctx context.Context) error { return nil },
-		BackupDaily:       func(ctx context.Context) error { return nil },
-		BackupHourly:      func(ctx context.Context) error { return nil },
-		DiskCheck:         func(ctx context.Context) error { return nil },
-		DiskCheckSchedule: "@every 5m",
-		HealthcheckSelf:   func(ctx context.Context) error { return nil },
-		TorHealth:         func(ctx context.Context) error { return nil },
+		SSLRenewal:            func(ctx context.Context) error { return nil },
+		SecurityCleanup:       func(ctx context.Context) error { return nil },
+		KeyserverRetry:        func(ctx context.Context) error { return nil },
+		GeoIPUpdate:           func(ctx context.Context) error { return nil },
+		BlocklistUpdate:       func(ctx context.Context) error { return nil },
+		CVEUpdate:             func(ctx context.Context) error { return nil },
+		TokenCleanup:          func(ctx context.Context) error { return nil },
+		LogRotation:           func(ctx context.Context) error { return nil },
+		BackupDaily:           func(ctx context.Context) error { return nil },
+		BackupHourly:          func(ctx context.Context) error { return nil },
+		DiskCheck:             func(ctx context.Context) error { return nil },
+		DiskCheckSchedule:     "@every 5m",
+		DatabaseCheck:         func(ctx context.Context) error { return nil },
+		DatabaseCheckSchedule: "@every 1m",
+		HealthcheckSelf:       func(ctx context.Context) error { return nil },
+		TorHealth:             func(ctx context.Context) error { return nil },
 	}
 
 	s.RegisterBuiltinTasks(handlers)
 
 	tasks := s.GetTasks()
-	if len(tasks) != 12 {
-		t.Errorf("Expected 12 builtin tasks, got %d", len(tasks))
+	if len(tasks) != 14 {
+		t.Errorf("Expected 14 builtin tasks, got %d", len(tasks))
 	}
 	if _, err := s.GetTask(TaskSecurityCleanup); err != nil {
 		t.Fatalf("Security cleanup task not found: %v", err)
 	}
 	if task, err := s.GetTask(TaskDiskCheck); err != nil || task.Schedule != "@every 5m" {
 		t.Fatalf("Disk check task = %#v, %v; want @every 5m", task, err)
+	}
+	if task, err := s.GetTask(TaskDatabaseCheck); err != nil || task.Schedule != "@every 1m" || !task.Skippable {
+		t.Fatalf("Database check task = %#v, %v; want enabled skippable task at @every 1m", task, err)
+	}
+	if task, err := s.GetTask(TaskKeyserverRetry); err != nil || task.Schedule != "@every 15m" || task.Skippable {
+		t.Fatalf("Keyserver retry task = %#v, %v; want required task at @every 15m", task, err)
 	}
 
 	// Check BackupHourly is disabled by default

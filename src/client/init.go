@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/apimgr/search/src/client/path"
+	"github.com/apimgr/search/src/client/surface"
 )
 
 // InitCLI initializes the CLI environment.
@@ -18,14 +19,14 @@ import (
 func InitCLI() error {
 	// Step 1: Create directories with correct permissions
 	if err := path.EnsureDirs(); err != nil {
-		return fmt.Errorf("init directories: %w", err)
+		return fmt.Errorf("%s: %w", surface.Text("client.init.directories_failed"), err)
 	}
 
 	// Step 2: Initialize logging with configuration
 	// Per AI.md PART 32 lines 42749-42755: Comprehensive logging
 	if err := InitLogging(); err != nil {
 		// Non-fatal - log to stderr if file fails
-		fmt.Fprintf(os.Stderr, "Warning: could not initialize log file: %v\n", err)
+		fmt.Fprintln(os.Stderr, surface.Text("client.init.log_warning", err))
 	}
 
 	// Step 3: Initialize cache

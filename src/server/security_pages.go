@@ -95,36 +95,22 @@ func (s *Server) SecurityThanks(ctx context.Context) (interface{}, error) {
 	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
 		return entries, nil
 	}
-	table := database.ServerTableName(s.dbManager.ServerDB(), "security_reports")
+	table := database.ServerTableName(s.dbManager.ServerDB(), "security_thanks")
 	rows, err := s.dbManager.ServerDB().Query(ctx, fmt.Sprintf(
-		`SELECT credit_preference, credit_name, credit_handle, created_at, severity FROM %s WHERE status = ? ORDER BY created_at`, table), "disclosed")
+		`SELECT credit, disclosed_on, severity FROM %s ORDER BY disclosed_on DESC, tracking_id`, table))
 	if err != nil {
 		return nil, err
 	}
-	anonymous := 0
 	for rows.Next() {
-		var preference, name, handle, created, severity sql.NullString
-		if err := rows.Scan(&preference, &name, &handle, &created, &severity); err != nil {
+		var credit, disclosedOn, severity sql.NullString
+		if err := rows.Scan(&credit, &disclosedOn, &severity); err != nil {
 			return nil, err
 		}
-		credit := ""
-		switch preference.String {
-		case "real_name":
-			credit = name.String
-		case "handle":
-			credit = handle.String
-		case "anonymous":
-			anonymous++
-			credit = fmt.Sprintf("Anonymous Researcher #%d", anonymous)
-		}
-		if credit == "" {
-			continue
-		}
-		date := created.String
+		date := disclosedOn.String
 		if len(date) >= 4 {
 			date = date[:4]
 		}
-		entries = append(entries, SecurityAcknowledgment{Credit: credit, Date: date, Severity: severity.String})
+		entries = append(entries, SecurityAcknowledgment{Credit: credit.String, Date: date, Severity: severity.String})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

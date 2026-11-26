@@ -67,8 +67,8 @@ func (sm *ServiceManager) ensureSystemUser() error {
 	return err
 }
 
-// rcdTemplate is the BSD rc.d service script.
-// Per AI.md PART 25 EXACT MATCH.
+// rcdTemplate is the BSD rc.d service script. The daemon process supervises
+// and restarts the foreground server after staged updates.
 const rcdTemplate = `#!/bin/sh
 
 # PROVIDE: search
@@ -79,7 +79,16 @@ const rcdTemplate = `#!/bin/sh
 
 name="search"
 rcvar="search_enable"
-command="/usr/local/bin/search"
+# daemon(8)'s supervisor PID file is separate from the server's own PID file.
+pidfile="/var/run/apimgr-search.pid"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -r -f /usr/local/bin/search"
+start_precmd="search_prestart"
+
+search_prestart()
+{
+    install -d -m 0755 /var/run/apimgr/search /var/log/apimgr/search
+}
 
 load_rc_config $name
 run_rc_command "$1"

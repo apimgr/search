@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -199,15 +200,15 @@ func versionString() string {
 	serverAddr, _ := resolveServerAddress()
 	sb.WriteString("\n")
 	if serverAddr == "" {
-		sb.WriteString("Server: not configured\n")
+		sb.WriteString(localizedCLIText("Server: not configured") + "\n")
 	} else {
-		fmt.Fprintf(&sb, "Server: %s\n", serverAddr)
-		fmt.Fprintf(&sb, "Server Version: %s\n", serverVersionLine(serverAddr))
+		sb.WriteString(localizedCLITextf("Server: {address}", "address", serverAddr) + "\n")
+		sb.WriteString(localizedCLITextf("Server Version: {version}", "version", serverVersionLine(serverAddr)) + "\n")
 	}
 
-	sb.WriteString("\nBuild Info:\n")
-	fmt.Fprintf(&sb, "  Go: %s\n", runtime.Version())
-	fmt.Fprintf(&sb, "  OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	sb.WriteString("\n" + localizedCLIText("Build Info:") + "\n")
+	sb.WriteString("  " + localizedCLITextf("Go: {version}", "version", runtime.Version()) + "\n")
+	sb.WriteString("  " + localizedCLITextf("OS/Arch: {os}/{arch}", "os", runtime.GOOS, "arch", runtime.GOARCH) + "\n")
 	return sb.String()
 }
 
@@ -222,7 +223,7 @@ func serverVersionLine(serverAddr string) string {
 	if err != nil || remote == "" {
 		return "unavailable"
 	}
-	return fmt.Sprintf("%s (%s)", remote, compatibilityVerdict(Version, remote))
+	return localizedCLITextf("{version} ({compatibility})", "version", remote, "compatibility", compatibilityVerdict(Version, remote))
 }
 
 // versionProbeTimeout bounds the --version server lookup in seconds so the
@@ -275,33 +276,33 @@ func runInteractive() error {
 	case "tui":
 		mode = display.ModeTUI
 	default:
-		return fmt.Errorf("invalid display.mode %q in cli.yml; use auto, gui, or tui", override)
+		return fmt.Errorf("%s", localizedCLITextf("invalid display.mode {mode} in cli.yml; use auto, gui, or tui", "mode", override))
 	}
 	switch mode {
 	case display.ModeGUI:
 		if !env.HasDisplay || env.IsSSH || env.IsMosh {
-			return fmt.Errorf("GUI mode requires a local display")
+		return fmt.Errorf("%s", localizedCLIText("GUI mode requires a local display"))
 		}
 		if gui.Available() {
 			return runGUI()
 		}
 		if override == "gui" {
-			return fmt.Errorf("GUI mode is not included in this build")
+			return fmt.Errorf("%s", localizedCLIText("GUI mode is not included in this build"))
 		}
 		if env.IsTerminal {
 			return runTUI()
 		}
-		return fmt.Errorf("native GUI support is not included in this build")
+		return fmt.Errorf("%s", localizedCLIText("native GUI support is not included in this build"))
 	case display.ModeTUI:
 		if !env.IsTerminal {
-			return fmt.Errorf("TUI mode requires an interactive terminal")
+			return fmt.Errorf("%s", localizedCLIText("TUI mode requires an interactive terminal"))
 		}
 		if !clicfg.GetBool("tui.enabled") {
-			return fmt.Errorf("TUI mode is disabled by tui.enabled in cli.yml")
+			return fmt.Errorf("%s", localizedCLIText("TUI mode is disabled by tui.enabled in cli.yml"))
 		}
 		return runTUI()
 	default:
-		return fmt.Errorf("no search query provided")
+		return fmt.Errorf("%s", localizedCLIText("no search query provided"))
 	}
 }
 
@@ -435,13 +436,13 @@ func runClientUpdate(action string) error {
 		return fmt.Errorf("no client update is available for %s", api.CurrentPlatform())
 	}
 	if !versionLessThan(Version, latest.Version) {
-		if _, err := fmt.Fprintf(os.Stdout, "%s is up to date (%s).\n", getBinaryName(), Version); err != nil {
+		if _, err := fmt.Fprintln(os.Stdout, localizedCLITextf("{binary} is up to date ({version}).", "binary", getBinaryName(), "version", Version)); err != nil {
 			return fmt.Errorf("write client update status: %w", err)
 		}
 		return nil
 	}
 	if action == "check" {
-		if _, err := fmt.Fprintf(os.Stdout, "Update available: %s → %s\n", Version, latest.Version); err != nil {
+		if _, err := fmt.Fprintln(os.Stdout, localizedCLITextf("Update available: {current} → {latest}", "current", Version, "latest", latest.Version)); err != nil {
 			return fmt.Errorf("write client update status: %w", err)
 		}
 		return nil
@@ -459,14 +460,14 @@ func installClientUpdate(latest api.CLIBinaryInfo, quiet bool) error {
 		assetName += ".exe"
 	}
 	if !quiet {
-		fmt.Fprintf(os.Stderr, "Updating %s from %s to %s…\n", getBinaryName(), Version, latest.Version)
+		fmt.Fprintln(os.Stderr, localizedCLITextf("Updating {binary} from {current} to {latest}…", "binary", getBinaryName(), "current", Version, "latest", latest.Version))
 	}
 	installedPath, err := clientupdate.DownloadAndInstall(context.Background(), apiClient.HTTPClient, apiClient.BaseURL, apiClient.Token, assetName, latest.SHA256)
 	if err != nil {
 		return err
 	}
 	if !quiet {
-		fmt.Fprintf(os.Stderr, "Client update installed; restarting %s.\n", getBinaryName())
+		fmt.Fprintln(os.Stderr, localizedCLITextf("Client update installed; restarting {binary}.", "binary", getBinaryName()))
 	}
 	return clientupdate.Restart(installedPath)
 }
@@ -530,8 +531,8 @@ func backgroundAutodiscover() error {
 	// Per AI.md PART 32: check cli_min_version — refuse further requests if too old
 	if info.CLIMinVersion != "" && Version != "dev" {
 		if versionLessThan(Version, info.CLIMinVersion) {
-			msg := fmt.Sprintf("this CLI is too old; the server requires %s — run '%s --update yes' to upgrade.",
-				info.CLIMinVersion, getBinaryName())
+			msg := localizedCLITextf("this CLI is too old; the server requires {version} — run '{binary} --update yes' to upgrade.",
+				"version", info.CLIMinVersion, "binary", getBinaryName())
 			return fmt.Errorf("%w: %s", ErrClientUpdateRequired, msg)
 		}
 	}
@@ -543,10 +544,10 @@ func backgroundAutodiscover() error {
 	platformKey := api.CurrentPlatform()
 	if latest, ok := info.CLIVersions[platformKey]; ok {
 		if versionLessThan(Version, latest.Version) {
-			fmt.Fprintf(os.Stderr, "A newer version of %s is available: %s (you have %s). Run '%s --update yes' to upgrade.\n",
-				getBinaryName(), latest.Version, Version, getBinaryName())
+			fmt.Fprintln(os.Stderr, localizedCLITextf("A newer version of {binary} is available: {latest} (you have {current}). Run '{binary} --update yes' to upgrade.",
+				"binary", getBinaryName(), "latest", latest.Version, "current", Version))
 			if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd())) {
-				fmt.Fprintf(os.Stderr, "Install this update now? [y/N] ")
+				fmt.Fprint(os.Stderr, localizedCLIText("Install this update now? [y/N] "))
 				answer, readErr := bufio.NewReader(os.Stdin).ReadString('\n')
 				if readErr != nil && len(answer) == 0 {
 					return fmt.Errorf("read update confirmation: %w", readErr)
@@ -627,6 +628,13 @@ func ExecuteClientCLI() error {
 // executeArgs runs the command tree against the provided argument slice.
 // It is separated from ExecuteClientCLI so behavior can be exercised in tests.
 func executeArgs(args []string) error {
+	for index, arg := range args {
+		if arg == "--lang" && index+1 < len(args) {
+			langFlag = args[index+1]
+		} else if strings.HasPrefix(arg, "--lang=") {
+			langFlag = strings.TrimPrefix(arg, "--lang=")
+		}
+	}
 	// Detect -h/--help and -v/--version before flag parsing so they work in any
 	// position, mirroring the previous cobra short-flag handling.
 	for _, a := range args {
@@ -670,13 +678,27 @@ func executeArgs(args []string) error {
 
 // printRootHelp prints the root command usage and flag descriptions.
 func printRootHelp() {
-	fmt.Printf("%s\n\n%s\n\nUsage:\n  %s\n\nFlags:\n", rootCmd.Short, rootCmd.Long, rootCmd.Use)
+	fmt.Printf("%s\n\n%s\n\n%s\n  %s\n\n%s:\n", localizedCLIText(rootCmd.Short), localizedCLIText(rootCmd.Long), localizedCLIText("Usage:"), rootCmd.Use, localizedCLIText("Flags"))
 	rootCmd.flags.SetOutput(os.Stdout)
+	originalUsage := make(map[*flag.Flag]string)
+	rootCmd.flags.VisitAll(func(flag *flag.Flag) {
+		originalUsage[flag] = flag.Usage
+		flag.Usage = localizedCLIText(flag.Usage)
+	})
 	rootCmd.flags.PrintDefaults()
+	rootCmd.flags.VisitAll(func(flag *flag.Flag) {
+		flag.Usage = originalUsage[flag]
+	})
 	if len(rootCmd.subcommands) > 0 {
-		fmt.Printf("\nCommands:\n")
-		for name, sub := range rootCmd.subcommands {
-			fmt.Printf("  %-12s %s\n", name, sub.Short)
+		fmt.Printf("\n%s:\n", localizedCLIText("Commands"))
+		names := make([]string, 0, len(rootCmd.subcommands))
+		for name := range rootCmd.subcommands {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			sub := rootCmd.subcommands[name]
+			fmt.Printf("  %-12s %s\n", name, localizedCLIText(sub.Short))
 		}
 	}
 }
@@ -686,7 +708,7 @@ func printRootHelp() {
 func initConfig() {
 	// Ensure all CLI directories exist with correct permissions.
 	if err := path.EnsureDirs(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to create CLI directories: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s %v\n", localizedCLIText("Warning: failed to create CLI directories:"), err)
 	}
 
 	// Per AI.md PART 8: apply --lang flag (set env so i18n layer picks it up).
@@ -703,7 +725,7 @@ func initConfig() {
 		// Resolve config path (handles relative/absolute paths and extensions).
 		resolvedPath, err := path.ResolveConfigPath(cfgFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: invalid config path: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s %v\n", localizedCLIText("Warning: invalid config path:"), err)
 		} else {
 			clicfg.SetConfigFile(resolvedPath)
 		}

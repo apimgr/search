@@ -60,9 +60,8 @@ func TestHandleMCPHelpReturnsLiveToolsAndRequestURL(t *testing.T) {
 	t.Fatalf("live MCP tool list omitted getApiV1Search: %s", response.Body.String())
 }
 
-func TestHandleMCPHelpRemainsAvailableWhenRemovedSwitchIsFalse(t *testing.T) {
+func TestHandleMCPHelpIsAlwaysAvailable(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.MCP.Enabled = false
 	handler := NewHandler(cfg, nil, nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/server/help/mcp", nil)
 	response := httptest.NewRecorder()

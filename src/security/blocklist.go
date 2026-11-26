@@ -131,6 +131,9 @@ func (m *BlocklistManager) sourceSnapshot() []BlocklistSource {
 func (m *BlocklistManager) IsBlocked(ip string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if parsed := net.ParseIP(ip); alwaysTrustedBlocklistIP(parsed) {
+		return false
+	}
 
 	// Check exact IP match
 	if m.blockedIPs[ip] {
@@ -415,6 +418,7 @@ func normalizeBlocklistDomain(host string) string {
 func (m *BlocklistManager) parseBlocklist(r io.Reader, listType string) (map[string]bool, []*net.IPNet, error) {
 	ips := make(map[string]bool)
 	var nets []*net.IPNet
+	skipped := 0
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -431,12 +435,20 @@ func (m *BlocklistManager) parseBlocklist(r io.Reader, listType string) (map[str
 			if strings.Contains(line, "/") {
 				_, cidr, err := net.ParseCIDR(line)
 				if err == nil {
-					nets = append(nets, cidr)
+					if blocklistRangeAllowed(cidr) {
+						nets = append(nets, cidr)
+					} else {
+						skipped++
+					}
 				}
 			} else {
 				// Single IP in CIDR file
 				if ip := net.ParseIP(line); ip != nil {
-					ips[ip.String()] = true
+					if !alwaysTrustedBlocklistIP(ip) {
+						ips[ip.String()] = true
+					} else {
+						skipped++
+					}
 				}
 			}
 		case "ip":
@@ -445,13 +457,54 @@ func (m *BlocklistManager) parseBlocklist(r io.Reader, listType string) (map[str
 			if len(parts) > 0 {
 				ipStr := parts[0]
 				if ip := net.ParseIP(ipStr); ip != nil {
-					ips[ip.String()] = true
+					if !alwaysTrustedBlocklistIP(ip) {
+						ips[ip.String()] = true
+					} else {
+						skipped++
+					}
 				}
 			}
 		}
 	}
+	if skipped > 0 {
+		slog.Info("blocklist entries skipped because they overlap always-trusted networks", "count", skipped)
+	}
 
 	return ips, nets, scanner.Err()
+}
+
+func blocklistRangeAllowed(candidate *net.IPNet) bool {
+	if candidate == nil {
+		return false
+	}
+	for _, raw := range []string{
+		"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+		"169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "::1/128",
+		"fc00::/7", "fe80::/10",
+	} {
+		_, trusted, _ := net.ParseCIDR(raw)
+		if trusted != nil && (candidate.Contains(trusted.IP) || trusted.Contains(candidate.IP)) {
+			return false
+		}
+	}
+	return true
+}
+
+func alwaysTrustedBlocklistIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, raw := range []string{
+		"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+		"169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "::1/128",
+		"fc00::/7", "fe80::/10",
+	} {
+		_, trusted, _ := net.ParseCIDR(raw)
+		if trusted != nil && trusted.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadFromDisk loads blocklists from previously downloaded files.

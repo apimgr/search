@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/common/display"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/model"
@@ -189,7 +191,7 @@ func TestCheckPIDFile_NoFile(t *testing.T) {
 func TestCheckPIDFile_CorruptContent(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "corrupt.pid")
-	if err := os.WriteFile(pidPath, []byte("notanumber\n"), 0644); err != nil {
+	if err := os.WriteFile(pidPath, []byte("notanumber\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -211,7 +213,7 @@ func TestCheckPIDFile_StalePID(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "stale.pid")
 	// PID 99999999 is almost certainly dead
-	if err := os.WriteFile(pidPath, []byte("99999999\n"), 0644); err != nil {
+	if err := os.WriteFile(pidPath, []byte("99999999\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -249,7 +251,7 @@ func newTestServer(t *testing.T) *Server {
 func newProjectTempDir(t *testing.T) string {
 	t.Helper()
 	parent := filepath.Join(os.TempDir(), config.ProjectOrg)
-	if err := os.MkdirAll(parent, 0700); err != nil {
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	directory, err := os.MkdirTemp(parent, config.InternalName+"-")
@@ -478,10 +480,10 @@ func TestBlocklistMiddleware(t *testing.T) {
 	t.Run("downloaded domain blocklist blocks exact and subdomain hosts", func(t *testing.T) {
 		dataDir := newProjectTempDir(t)
 		blocklistDir := filepath.Join(dataDir, "security", "blocklists")
-		if err := os.MkdirAll(blocklistDir, 0700); err != nil {
+		if err := os.MkdirAll(blocklistDir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(blocklistDir, "domains.txt"), []byte("bad.example\n"), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(blocklistDir, "domains.txt"), []byte("bad.example\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		manager := security.NewBlocklistManager(dataDir, []security.BlocklistSource{{Name: "domains", Type: "domain", Enabled: true}})
@@ -766,7 +768,6 @@ func TestExtractContextFromPath_Extra(t *testing.T) {
 		{"/search", TargetPublic},
 		{"/api/v1/search", TargetPublic},
 		{"/server/healthz", TargetServerPages},
-		{"/server/status", TargetServerPages},
 		{"/api/v1/server/healthz", TargetServerPages},
 	}
 	for _, tt := range tests {
@@ -1163,7 +1164,7 @@ func TestRespondHealthText_TorFields(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.respondHealthText(rec, health)
 	body := rec.Body.String()
-	if !strings.Contains(body, "healthy - abc.onion") {
+	if !strings.Contains(body, "Healthy - abc.onion") {
 		t.Errorf("expected tor fields in text output; got:\n%s", body)
 	}
 	if !strings.Contains(body, "GeoIP:   Enabled") {
@@ -1444,7 +1445,7 @@ func TestHasValidCertificate_CertExistsKeyMissing(t *testing.T) {
 	certPath := filepath.Join(dir, "cert.pem")
 	keyPath := filepath.Join(dir, "key.pem")
 
-	if err := os.WriteFile(certPath, []byte("placeholder"), 0644); err != nil {
+	if err := os.WriteFile(certPath, []byte("placeholder"), 0o644); err != nil {
 		t.Fatalf("writing cert file: %v", err)
 	}
 
@@ -1465,10 +1466,10 @@ func TestHasValidCertificate_BothExistInvalidContent(t *testing.T) {
 	certPath := filepath.Join(dir, "cert.pem")
 	keyPath := filepath.Join(dir, "key.pem")
 
-	if err := os.WriteFile(certPath, []byte("not-a-cert"), 0644); err != nil {
+	if err := os.WriteFile(certPath, []byte("not-a-cert"), 0o644); err != nil {
 		t.Fatalf("writing cert file: %v", err)
 	}
-	if err := os.WriteFile(keyPath, []byte("not-a-key"), 0644); err != nil {
+	if err := os.WriteFile(keyPath, []byte("not-a-key"), 0o644); err != nil {
 		t.Fatalf("writing key file: %v", err)
 	}
 
@@ -1858,6 +1859,15 @@ func TestHandleHealthz_JSONFormat(t *testing.T) {
 	if rec.Code != http.StatusOK && rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("handleHealthz status = %d, want 200 or 503", rec.Code)
 	}
+	var response HealthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode health JSON: %v", err)
+	}
+	switch response.Features.Tor.State {
+	case "disabled", "no_provider", "starting", "building", "running", "error":
+	default:
+		t.Fatalf("health JSON has invalid features.tor.state %q", response.Features.Tor.State)
+	}
 	ct := rec.Header().Get("Content-Type")
 	if !strings.Contains(ct, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", ct)
@@ -2214,6 +2224,11 @@ func TestNewServer_AccessLogFormats(t *testing.T) {
 func TestMaintenanceModeMiddleware_Mode2_Serves503(t *testing.T) {
 	cfg := config.DefaultConfig()
 	mw := NewMiddleware(cfg, nil)
+	manager, err := i18n.DefaultManager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw.SetTemplateRenderer(NewTemplateRenderer(cfg, manager))
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -2227,6 +2242,35 @@ func TestMaintenanceModeMiddleware_Mode2_Serves503(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("maintenance mode 2 status = %d, want 503", rec.Code)
+	}
+}
+
+func TestMaintenanceModeUsesLocalizedSharedErrorTemplate(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mw := NewMiddleware(cfg, nil)
+	manager, err := i18n.DefaultManager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw.SetTemplateRenderer(NewTemplateRenderer(cfg, manager))
+	handler := mw.MaintenanceMode(&fakeMaintenanceHandler{mode: 2, message: "<script>alert(1)</script>"})(http.NotFoundHandler())
+	req := httptest.NewRequest(http.MethodGet, "/search?lang=de", nil)
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "light"})
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	for _, want := range []string{`lang="de"`, `class="theme-light`, "Wartung", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("maintenance body missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "<style") || strings.Contains(body, "<script>alert(1)</script>") {
+		t.Fatalf("maintenance page contains inline styling or unescaped content: %s", body)
 	}
 }
 
@@ -2651,6 +2695,12 @@ func TestHandleHealthz_HTML(t *testing.T) {
 	if !strings.Contains(ct, "text/html") {
 		t.Errorf("handleHealthz HTML: Content-Type = %q, want text/html", ct)
 	}
+	if !strings.Contains(rec.Body.String(), "Lifecycle state:") {
+		t.Error("health HTML omitted localized overlay lifecycle state")
+	}
+	if !strings.Contains(rec.Body.String(), "feature-disabled") {
+		t.Error("health HTML did not mark a disabled overlay with the disabled feature class")
+	}
 }
 
 // ---------- pages.go: respondHealthText ----------
@@ -2665,6 +2715,7 @@ func TestRespondHealthText_AllFields(t *testing.T) {
 		Uptime:    "3h",
 		GoVersion: "go1.22",
 		Build:     BuildInfo{Commit: "deadbeef"},
+		Features:  FeaturesInfo{I2P: I2PInfo{Status: "healthy", Hostname: "site.b32.i2p"}},
 		Checks: ChecksInfo{
 			Database: "ok",
 			Disk:     "ok",
@@ -2678,6 +2729,9 @@ func TestRespondHealthText_AllFields(t *testing.T) {
 	}
 	if !strings.Contains(body, "development") {
 		t.Errorf("respondHealthText missing mode: %s", body)
+	}
+	if !strings.Contains(body, "I2P:     Healthy - site.b32.i2p") {
+		t.Errorf("respondHealthText missing localized I2P status: %s", body)
 	}
 }
 
@@ -2797,14 +2851,15 @@ func TestLogAuditEvent_NilDB(t *testing.T) {
 	s.logAuditEvent("test.event", "test details")
 }
 
-// TestPerformScheduledBackup_ComplianceModeNoPassword returns error when compliance
-// is enabled but BACKUP_PASSWORD env var is not set.
+// TestPerformScheduledBackup_ComplianceModeNoPassword returns an error when
+// compliance is enabled without the configured backup secret, even when the
+// legacy BACKUP_PASSWORD environment variable is present.
 func TestPerformScheduledBackup_ComplianceModeNoPassword(t *testing.T) {
 	s := newTestServer(t)
-	origCompliance := s.config.Server.Compliance.Enabled
-	s.config.Server.Compliance.Enabled = true
-	t.Cleanup(func() { s.config.Server.Compliance.Enabled = origCompliance })
-	t.Setenv("BACKUP_PASSWORD", "")
+	origCompliance := s.config.Server.Compliance.SOC2
+	s.config.Server.Compliance.SOC2 = true
+	t.Cleanup(func() { s.config.Server.Compliance.SOC2 = origCompliance })
+	t.Setenv("BACKUP_PASSWORD", "legacy-env-only-test-value")
 	err := s.performScheduledBackup(context.Background(), "daily")
 	if err == nil {
 		t.Error("performScheduledBackup with compliance+no password should return error")
@@ -3304,8 +3359,9 @@ func TestRenderDirectAnswer_BasicStructure(t *testing.T) {
 
 // ---------- server.go: renderSearchResultsInline ----------
 
-// TestRenderSearchResultsInline_WritesHTML confirms inline fallback writes HTML to w.
-func TestRenderSearchResultsInline_WritesHTML(t *testing.T) {
+// TestRenderSearchResultsInline_UsesRecoveryPage confirms the legacy fallback
+// entry point emits the standard recovery response instead of bespoke markup.
+func TestRenderSearchResultsInline_UsesRecoveryPage(t *testing.T) {
 	s := newTestServer(t)
 	results := model.NewSearchResults("golang", model.CategoryGeneral)
 	results.TotalResults = 1
@@ -3318,11 +3374,42 @@ func TestRenderSearchResultsInline_WritesHTML(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.renderSearchResultsInline(rec, req, "golang", results, "general")
 
-	if rec.Body.Len() == 0 {
-		t.Error("renderSearchResultsInline wrote empty body")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
-	if !strings.Contains(rec.Body.String(), "golang") {
-		t.Error("renderSearchResultsInline body missing query")
+	if !strings.Contains(rec.Body.String(), "Something went wrong") {
+		t.Fatalf("recovery response missing expected message: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "golang") {
+		t.Fatalf("recovery response leaked search query: %s", rec.Body.String())
+	}
+}
+
+func TestRenderPageTemplateDiscardsPartialOutputOnFailure(t *testing.T) {
+	s := &Server{
+		renderer: &TemplateRenderer{
+			templates: map[string]map[string]*template.Template{
+				"en": {
+					"search": template.Must(template.New("public").Funcs(template.FuncMap{
+						"fail": func() (string, error) { return "", fmt.Errorf("template failure") },
+					}).Parse("partial-output{{fail}}")),
+				},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/search", nil)
+	rec := httptest.NewRecorder()
+
+	s.renderPageTemplate(rec, req, "search", map[string]string{})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if strings.Contains(rec.Body.String(), "partial-output") {
+		t.Fatalf("failed template leaked partial output: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Something went wrong") {
+		t.Fatalf("recovery response missing expected message: %s", rec.Body.String())
 	}
 }
 
@@ -3669,7 +3756,7 @@ func TestCreatePIDFile_WritesFile(t *testing.T) {
 
 	// Write the PID file directly (bypasses config.GetDataDir path determination).
 	pid := fmt.Sprintf("%d", os.Getpid())
-	if err := os.WriteFile(s.pidFile, []byte(pid), 0644); err != nil {
+	if err := os.WriteFile(s.pidFile, []byte(pid), 0o644); err != nil {
 		t.Fatalf("writing test PID file: %v", err)
 	}
 
@@ -3742,12 +3829,32 @@ func TestRegisterDebugRoutes_DebugEnabled(t *testing.T) {
 	s := &Server{config: cfg}
 	r := chi.NewRouter()
 	s.registerDebugRoutes(r)
-	req := httptest.NewRequest(http.MethodGet, "/debug/vars", nil)
+	unauthorized := httptest.NewRecorder()
+	r.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/debug/config", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Errorf("debug route without a bearer token returned %d, want 401", unauthorized.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/debug/config", nil)
 	req.Header.Set("Authorization", "Bearer debug-test-token")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-	if rec.Code == http.StatusNotFound {
-		t.Errorf("registerDebugRoutes with DEBUG=true: /debug/vars returned 404 — routes not registered")
+	if rec.Code != http.StatusOK {
+		t.Errorf("debug route with operator token returned %d, want 200", rec.Code)
+	}
+
+	errorRequest := httptest.NewRequest(http.MethodGet, "/debug/error500", nil)
+	errorRequest.Header.Set("Authorization", "Bearer debug-test-token")
+	errorResponse := httptest.NewRecorder()
+	r.ServeHTTP(errorResponse, errorRequest)
+	if errorResponse.Code != http.StatusInternalServerError {
+		t.Errorf("debug error trigger returned %d, want 500", errorResponse.Code)
+	}
+	if !strings.Contains(errorResponse.Body.String(), "Internal Server Error") {
+		t.Errorf("debug error trigger did not use the standard localized error response: %q", errorResponse.Body.String())
+	}
+	if strings.Contains(errorResponse.Body.String(), "/debug/error500") {
+		t.Error("debug error trigger exposed its request path")
 	}
 }
 

@@ -85,6 +85,13 @@ func (sm *ServiceManager) Uninstall() error {
 
 // Status returns the service status on Linux.
 func (sm *ServiceManager) Status() (string, error) {
+	if !config.IsPrivileged() {
+		out, err := exec.Command("systemctl", systemdUserArgs("is-active")...).Output()
+		if err != nil {
+			return "inactive", nil
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		return sm.statusRunit()
@@ -101,6 +108,9 @@ func (sm *ServiceManager) Status() (string, error) {
 
 // StartAllServices starts the service on Linux.
 func (sm *ServiceManager) StartAllServices() error {
+	if !config.IsPrivileged() {
+	return runCommand("systemctl", systemdUserArgs("start")...)
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		return runCommand("sv", "start", "search")
@@ -117,6 +127,9 @@ func (sm *ServiceManager) StartAllServices() error {
 
 // StopAllServices stops the service on Linux.
 func (sm *ServiceManager) StopAllServices() error {
+	if !config.IsPrivileged() {
+	return runCommand("systemctl", systemdUserArgs("stop")...)
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		return runCommand("sv", "stop", "search")
@@ -133,6 +146,9 @@ func (sm *ServiceManager) StopAllServices() error {
 
 // RestartAllServices restarts the service on Linux.
 func (sm *ServiceManager) RestartAllServices() error {
+	if !config.IsPrivileged() {
+	return runCommand("systemctl", systemdUserArgs("restart")...)
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		return runCommand("sv", "restart", "search")
@@ -151,6 +167,9 @@ func (sm *ServiceManager) RestartAllServices() error {
 
 // Reload reloads the service configuration on Linux.
 func (sm *ServiceManager) Reload() error {
+	if !config.IsPrivileged() {
+	return runCommand("systemctl", systemdUserArgs("restart")...)
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		return runCommand("sv", "hup", "search")
@@ -169,6 +188,9 @@ func (sm *ServiceManager) Reload() error {
 
 // Enable enables the service to start on boot on Linux.
 func (sm *ServiceManager) Enable() error {
+	if !config.IsPrivileged() {
+	return runCommand("systemctl", systemdUserArgs("enable")...)
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		serviceDir := sm.getRunitServiceDir()
@@ -191,6 +213,9 @@ func (sm *ServiceManager) Enable() error {
 
 // Disable disables the service from starting on boot on Linux.
 func (sm *ServiceManager) Disable() error {
+	if !config.IsPrivileged() {
+	return runCommand("systemctl", systemdUserArgs("disable")...)
+	}
 	switch sm.detectInitSystem() {
 	case initRunit:
 		activeDir := sm.getRunitActiveDir()
@@ -210,6 +235,10 @@ func (sm *ServiceManager) Disable() error {
 // Per AI.md PART 23: Fallback when user cannot or declines to escalate.
 func (sm *ServiceManager) InstallUserService() error {
 	return sm.installSystemdUserService()
+}
+
+func systemdUserArgs(action string) []string {
+	return []string{"--user", action, "search"}
 }
 
 // hasRunit checks if runit is the init system.
@@ -306,7 +335,8 @@ func (sm *ServiceManager) getRunitActiveDir() string {
 	return "/var/service"
 }
 
-// systemdTemplate per AI.md PART 25 — EXACT MATCH to spec.
+// systemdTemplate follows AI.md PART 24 so startup can create the service
+// account before dropping privileges.
 // Service starts as root, binary drops to search user after port binding.
 const systemdTemplate = `[Unit]
 Description=search service
@@ -323,10 +353,9 @@ StandardOutput=journal
 StandardError=journal
 
 # Security hardening (binary drops privileges after port binding)
-ProtectSystem=strict
+ProtectSystem=true
 ProtectHome=yes
 PrivateTmp=yes
-NoNewPrivileges=true
 ExecStartPre=+/usr/bin/install -d -m 0755 /etc/apimgr/search /var/lib/apimgr/search /var/cache/apimgr/search /var/log/apimgr/search /var/run/apimgr/search
 ReadWritePaths=-/etc/apimgr/search
 ReadWritePaths=-/var/lib/apimgr/search
@@ -635,17 +664,19 @@ const sysVInitTemplate = `#!/bin/sh
 
 NAME=search
 DAEMON=/usr/local/bin/search
-DAEMON_USER=search
-PIDFILE=/var/run/apimgr/search/search.pid
+# The supervisor's pid file is separate from the server's own PID file.
+PIDFILE=/var/run/apimgr-search.pid
 LOGFILE=/var/log/apimgr/search/server.log
 
 case "$1" in
     start)
         echo "Starting $NAME..."
-        mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
-        chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
+        # The supervisor owns its PID file; only the app log directory is handed to the service user.
+        mkdir -p $(dirname $LOGFILE)
+        chown -R search:search $(dirname $LOGFILE)
+        # The binary binds configured ports before dropping privileges itself.
         start-stop-daemon --start --quiet --background --make-pidfile \
-            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
+            --pidfile $PIDFILE --exec $DAEMON \
             --no-close >> $LOGFILE 2>&1
         ;;
     stop)
@@ -668,8 +699,8 @@ case "$1" in
         fi
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status}"
-        exit 1
+        echo "Usage: $0 {start|stop|restart|status}" >&2
+        exit 2
         ;;
 esac
 exit 0

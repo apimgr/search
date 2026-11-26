@@ -1,4 +1,6 @@
 {{define "scripts"}}
 {{/* Per AI.md PART 17: Single consolidated app.js with event delegation */}}
 <script src="{{asset "/static/js/app.js"}}"></script>
+{{if eq .Page "swagger"}}<script src="{{asset "/static/vendor/swagger-ui/swagger-ui-bundle.js"}}"></script><script src="{{asset "/static/vendor/swagger-ui/swagger-ui-standalone-preset.js"}}"></script><script src="{{asset "/static/js/swagger.js"}}"></script>{{end}}
+{{if eq .Page "graphql"}}<script src="{{asset "/static/js/docs-graphql.js"}}"></script><script src="{{asset "/static/vendor/graphiql/graphiql.js"}}"></script>{{end}}
 {{end}}

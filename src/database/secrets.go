@@ -27,6 +27,14 @@ const SecretCSRFToken = "csrf_token_secret"
 // successful DNS-01 certificate issuance or renewal.
 const SecretDNSValidatedAt = "dns_validated_at"
 
+// Encryption-key grace rows are wrapped with the active AES key and stored in
+// app_secrets rather than in server.yml or secrets.yml.
+const (
+	SecretEncryptionKeyPrevious      = "encryption_key_previous"
+	SecretEncryptionKeyPreviousUntil = "encryption_key_previous_until"
+	SecretEncryptionKeyRotationPending = "encryption_key_rotation_pending"
+)
+
 // secretLength is the mandated size of every app_secrets value: 32 bytes
 // (256 bits) of crypto/rand, stored base64-encoded.
 const secretLength = 32

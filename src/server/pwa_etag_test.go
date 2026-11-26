@@ -60,6 +60,50 @@ func TestHTMLCacheMiddlewareLeavesNonHTMLResponsesAlone(t *testing.T) {
 	}
 }
 
+func TestHTMLOfflineCacheHeaderOnlyMarksPublicInformationalPages(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		path      string
+		cookie    *http.Cookie
+		language  string
+		wantCache bool
+	}{
+		{name: "public about page", path: "/server/about", wantCache: true},
+		{name: "csrf cookie is permitted", path: "/server/about", cookie: &http.Cookie{Name: "csrf_token", Value: "csrf"}, wantCache: true},
+		{name: "build marker is permitted", path: "/server/about", cookie: &http.Cookie{Name: "search_build", Value: "build"}, wantCache: true},
+		{name: "language cookie varies body", path: "/server/about", cookie: &http.Cookie{Name: "lang", Value: "fr"}},
+		{name: "theme cookie varies body", path: "/server/about", cookie: &http.Cookie{Name: "theme", Value: "light"}},
+		{name: "font preference varies body", path: "/server/about", cookie: &http.Cookie{Name: "search_pref_font_size", Value: "large"}},
+		{name: "consent cookie varies body", path: "/server/about", cookie: &http.Cookie{Name: "cookie_consent", Value: "accepted"}},
+		{name: "ccpa cookie varies body", path: "/server/privacy", cookie: &http.Cookie{Name: "ccpa_opt_out", Value: "true"}},
+		{name: "language header varies body", path: "/server/about", language: "fr,en;q=0.8"},
+		{name: "search form page", path: "/search"},
+		{name: "contact form page", path: "/server/contact"},
+		{name: "owner token page", path: "/server/about", cookie: &http.Cookie{Name: ownerTokenCookie, Value: "owner-token"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := HTMLCacheHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = w.Write([]byte("<!doctype html><html><body>page</body></html>"))
+			}))
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Accept", "text/html")
+			if tc.language != "" {
+				req.Header.Set("Accept-Language", tc.language)
+			}
+			if tc.cookie != nil {
+				req.AddCookie(tc.cookie)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+			got := response.Header().Get("X-Offline-Cache") == "public"
+			if got != tc.wantCache {
+				t.Errorf("X-Offline-Cache public = %v, want %v", got, tc.wantCache)
+			}
+		})
+	}
+}
+
 func TestHTMLBuildStampCookiePurgesOnlyTopLevelStaleNavigation(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

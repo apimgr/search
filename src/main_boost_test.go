@@ -416,7 +416,7 @@ func TestRunUpdateListIsRejected(t *testing.T) {
 }
 
 // ============================================================
-// runMaintenance backup — with BACKUP_PASSWORD set
+// runMaintenance backup — legacy BACKUP_PASSWORD is ignored
 // ============================================================
 
 func TestRunMaintenanceBackupWithPassword(t *testing.T) {
@@ -435,7 +435,10 @@ func TestRunMaintenanceBackupWithPassword(t *testing.T) {
 
 	out := captureStdout(t, func() { runMaintenance("backup") })
 	if strings.TrimSpace(out) == "" {
-		t.Error("runMaintenance(backup) with BACKUP_PASSWORD produced no output")
+		t.Error("runMaintenance(backup) with legacy BACKUP_PASSWORD produced no output")
+	}
+	if !strings.Contains(out, "Backup encryption: DISABLED") {
+		t.Errorf("legacy BACKUP_PASSWORD enabled backup encryption without the configured secret: %q", out)
 	}
 }
 

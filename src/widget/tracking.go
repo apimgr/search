@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/search/src/common/closeutil"
 	"unicode"
+
+	"github.com/apimgr/search/src/common/closeutil"
 )
 
 // TrackingFetcher fetches package tracking info

@@ -584,8 +584,7 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 
 	results, err := m.aggregator.Search(ctx, query)
 	if err != nil && !errors.Is(err, model.ErrNoResults) {
-		_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
-		return err
+		return m.recordAlertFailure(ctx, alert.ID, err)
 	}
 
 	if results != nil {
@@ -607,13 +606,14 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 		}
 		if len(pendingEmail) > 0 {
 			if err := m.sendDigestEmail(ctx, alert, pendingEmail); err != nil {
-				_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
-				return err
+				return m.recordAlertFailure(ctx, alert.ID, err)
 			}
 			if err := m.markResultsDelivered(ctx, pendingEmail, "notified_email_at"); err != nil {
 				return err
 			}
-			_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, now, alert.ID)
+			if err := m.recordAlertSent(ctx, alert.ID, now); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -624,17 +624,32 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 		}
 		if len(pendingWebhook) > 0 {
 			if err := m.sendWebhook(ctx, alert, pendingWebhook); err != nil {
-				_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, err.Error(), alert.ID)
-				return err
+				return m.recordAlertFailure(ctx, alert.ID, err)
 			}
 			if err := m.markResultsDelivered(ctx, pendingWebhook, "notified_webhook_at"); err != nil {
 				return err
 			}
-			_, _ = m.execWrite(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, now, alert.ID)
+			if err := m.recordAlertSent(ctx, alert.ID, now); err != nil {
+				return err
+			}
 		}
 	}
 
 	return m.CleanupResults(ctx)
+}
+
+func (m *Manager) recordAlertFailure(ctx context.Context, alertID string, cause error) error {
+	if _, err := m.execWrite(ctx, `UPDATE search_alerts SET last_error = ? WHERE id = ?`, cause.Error(), alertID); err != nil {
+		return errors.Join(cause, fmt.Errorf("record alert failure: %w", err))
+	}
+	return cause
+}
+
+func (m *Manager) recordAlertSent(ctx context.Context, alertID string, sentAt time.Time) error {
+	if _, err := m.execWrite(ctx, `UPDATE search_alerts SET last_sent_at = ? WHERE id = ?`, sentAt, alertID); err != nil {
+		return fmt.Errorf("record alert delivery time: %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) sendDigestEmail(ctx context.Context, alert *Alert, results []AlertResult) error {
@@ -792,6 +807,41 @@ func (m *Manager) ListAll(ctx context.Context) ([]*Alert, error) {
 	return alerts, rows.Err()
 }
 
+// ListByOwner returns the API-shaped alerts belonging to one anonymous owner.
+func (m *Manager) ListByOwner(ctx context.Context, ownerID string) ([]*Alert, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return nil, errors.New("owner id is required")
+	}
+	table := "search_alerts"
+	if m.writer != nil {
+		table = database.ServerTableName(m.writer, table)
+	}
+	rows, err := m.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
+		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
+		       status, base_url, last_checked_at, last_sent_at,
+		       last_error, created_from_ip, created_at, paused_at
+		FROM %s
+		WHERE owner_id = ?
+		ORDER BY created_at DESC
+	`, table), ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("list owner alerts: %w", err)
+	}
+	defer closeutil.Close(rows)
+
+	alerts := make([]*Alert, 0)
+	for rows.Next() {
+		item, err := scanAlert(rows)
+		if err != nil {
+			return nil, err
+		}
+		item.OwnerID = ownerID
+		alerts = append(alerts, item)
+	}
+	return alerts, rows.Err()
+}
+
 func (m *Manager) getAlertByTokenHash(ctx context.Context, column, tokenHash string) (*Alert, error) {
 	query := fmt.Sprintf(`
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
@@ -942,7 +992,8 @@ func (m *Manager) alertToken(ctx context.Context, alertID, column string) (strin
 
 func scanAlert(scanner interface {
 	Scan(dest ...interface{}) error
-}) (*Alert, error) {
+},
+) (*Alert, error) {
 	var (
 		alert                                    Alert
 		frequency, enginesJSON                   string
@@ -1063,7 +1114,8 @@ func unmarshalAlertEngines(raw string) []string {
 
 func scanAlertResult(scanner interface {
 	Scan(dest ...interface{}) error
-}) (*AlertResult, error) {
+},
+) (*AlertResult, error) {
 	var (
 		result                                      AlertResult
 		publishedAt, notifiedEmail, notifiedWebhook sql.NullTime

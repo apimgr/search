@@ -21,6 +21,7 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN go run ./src/apigen
+RUN go generate ./src/swagger/...
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -buildvcs=false -trimpath \
     -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/version.Version=${VERSION}' -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'" \
@@ -54,7 +55,9 @@ RUN apk add --no-cache \
     bash \
     tini \
     tor \
-    shadow
+    i2pd \
+    tzdata \
+    ca-certificates
 
 # NO directory creation - binary handles ALL setup based on env vars
 # This allows users to override CONFIG_DIR, DATA_DIR, etc.

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -18,6 +19,7 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -59,6 +61,8 @@ const APIVersion = version.APIVersion
 
 // APIPrefix is the versioned API base path (e.g. "/api/v1"). Derived from version.APIPrefix.
 const APIPrefix = version.APIPrefix
+
+var errOwnerTokenCannotAuthorizeOperator = errors.New("owner token cannot authorize operator route")
 
 // APIBasePath returns the versioned API base path (e.g. "/api/v1").
 // Always use this or APIPrefix in code — never hardcode "v1" directly.
@@ -156,6 +160,9 @@ type Handler struct {
 	securityPages     SecurityPagesProvider
 	alertManager      *alert.Manager
 	ownerManager      *owner.Manager
+	strictMu          sync.Mutex
+	strictAttempts    map[string][]time.Time
+	mcpOriginAllowed  func(*http.Request, *url.URL) bool
 	apiRoutes         http.Handler
 	thumbnailRewriter func(string) string
 	// scheduler backs the /server/scheduler/* endpoints per AI.md PART 18
@@ -184,6 +191,12 @@ const (
 
 // SetOwnerManager connects anonymous resource-token management to the server database.
 func (h *Handler) SetOwnerManager(manager *owner.Manager) { h.ownerManager = manager }
+
+// SetMCPOriginAllowlist shares the server's fully resolved CORS/public-origin
+// policy with the MCP DNS-rebinding guard.
+func (h *Handler) SetMCPOriginAllowlist(check func(*http.Request, *url.URL) bool) {
+	h.mcpOriginAllowed = check
+}
 
 // SetScheduler sets the scheduler for the API handler (PART 18 endpoints)
 func (h *Handler) SetScheduler(s *scheduler.Scheduler) {
@@ -299,8 +312,12 @@ func (h *Handler) SetGeoIPLookup(g *geoip.Lookup) {
 // RegisterRoutes registers API routes
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	h.apiRoutes = r
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "method not allowed", req.Method, req)
+	})
 	// Autodiscover - non-versioned per AI.md PART 32 line 38077-38157
 	r.Get("/api/autodiscover", h.handleAutodiscover)
+	r.Get("/cli/binaries/{filename}", h.handleCLIBinary)
 
 	// Health and info - Per AI.md PART 13/14
 	// Canonical API route: /api/v1/server/healthz (JSON default, text via .txt or Accept header)
@@ -358,11 +375,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/mcp", h.handleMCP)
 	r.Post("/mcp", h.handleMCP)
 	r.Get(APIPrefix+"/server/preferences/tokens", h.ownerTokensList)
-	r.Post(APIPrefix+"/server/preferences/tokens/primary/reveal", h.ownerPrimaryReveal)
-	r.Post(APIPrefix+"/server/preferences/tokens/primary/rotate", h.ownerPrimaryRotate)
 	r.Post(APIPrefix+"/server/preferences/tokens", h.ownerLinkedCreate)
-	r.Post(APIPrefix+"/server/preferences/tokens/{id}/reveal", h.ownerLinkedReveal)
-	r.Post(APIPrefix+"/server/preferences/tokens/{id}/rotate", h.ownerLinkedRotate)
 	r.Patch(APIPrefix+"/server/preferences/tokens/{id}", h.ownerLinkedUpdate)
 	r.Delete(APIPrefix+"/server/preferences/tokens/{id}", h.ownerLinkedRevoke)
 
@@ -394,22 +407,27 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get(APIPrefix+"/server/geoip/presets/{name}", h.requireOperator(h.handleGeoIPPreset))
 	r.Delete(APIPrefix+"/server/geoip/presets/{name}", h.requireOperator(h.handleGeoIPPresetDelete))
 
-	// Scheduler — per AI.md PART 18: the scheduler is always running, task
-	// visibility and external triggering go through these endpoints (operator
-	// gated; manual runs are audit events per the PART 11 audit table).
+	// Scheduler status is read-only; manual runs are operator-triggered and audited.
 	r.Get(APIPrefix+"/server/scheduler/tasks", h.requireOperator(h.handleSchedulerTasks))
 	r.Get(APIPrefix+"/server/scheduler/tasks/{task}", h.requireOperator(h.handleSchedulerTask))
 	r.Get(APIPrefix+"/server/scheduler/tasks/{task}/history", h.requireOperator(h.handleSchedulerTaskHistory))
 	r.Post(APIPrefix+"/server/scheduler/tasks/{task}/run", h.requireOperator(h.handleSchedulerTaskRun))
-	r.Post(APIPrefix+"/server/scheduler/tasks/{task}/enable", h.requireOperator(h.handleSchedulerTaskEnable))
-	r.Post(APIPrefix+"/server/scheduler/tasks/{task}/disable", h.requireOperator(h.handleSchedulerTaskDisable))
+
+	// Owner-token issue/reveal/rotate/revoke operations consume the strict limiter,
+	// including attempts that fail authentication or confirmation.
+	r.Post(APIPrefix+"/server/preferences/tokens/primary", h.strictOwnerAction(h.ownerPrimaryIssue))
+	r.Post(APIPrefix+"/server/preferences/tokens/primary/reveal", h.strictOwnerAction(h.ownerPrimaryReveal))
+	r.Post(APIPrefix+"/server/preferences/tokens/primary/rotate", h.strictOwnerAction(h.ownerPrimaryRotate))
+	r.Delete(APIPrefix+"/server/preferences/tokens/primary", h.strictOwnerAction(h.ownerPrimaryRevoke))
+	r.Post(APIPrefix+"/server/preferences/tokens/{id}/reveal", h.strictOwnerAction(h.ownerLinkedReveal))
+	r.Post(APIPrefix+"/server/preferences/tokens/{id}/rotate", h.strictOwnerAction(h.ownerLinkedRotate))
 }
 
 // handleSchedulerTasks handles GET /api/v1/server/scheduler/tasks.
 // Returns all registered tasks with their last/next run status per docs/api.md.
 func (h *Handler) handleSchedulerTasks(w http.ResponseWriter, r *http.Request) {
 	if h.scheduler == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running", r)
 		return
 	}
 	tasks := h.scheduler.GetTasks()
@@ -422,12 +440,12 @@ func (h *Handler) handleSchedulerTasks(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerTask returns details for one scheduled task.
 func (h *Handler) handleSchedulerTask(w http.ResponseWriter, r *http.Request) {
 	if h.scheduler == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running", r)
 		return
 	}
 	task, err := h.scheduler.GetTask(scheduler.TaskID(chi.URLParam(r, "task")))
 	if err != nil {
-		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error(), r)
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: task})
@@ -436,17 +454,17 @@ func (h *Handler) handleSchedulerTask(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerTaskHistory returns recent persisted runs for one task.
 func (h *Handler) handleSchedulerTaskHistory(w http.ResponseWriter, r *http.Request) {
 	if h.scheduler == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running", r)
 		return
 	}
 	taskID := scheduler.TaskID(chi.URLParam(r, "task"))
 	if _, err := h.scheduler.GetTask(taskID); err != nil {
-		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error(), r)
 		return
 	}
 	history, err := h.scheduler.GetHistory(taskID, 20)
 	if err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "HISTORY_UNAVAILABLE", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "HISTORY_UNAVAILABLE", err.Error(), r)
 		return
 	}
 	if history == nil {
@@ -455,52 +473,20 @@ func (h *Handler) handleSchedulerTaskHistory(w http.ResponseWriter, r *http.Requ
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]interface{}{"history": history}})
 }
 
-func (h *Handler) handleSchedulerTaskEnable(w http.ResponseWriter, r *http.Request) {
-	h.setSchedulerTaskEnabled(w, r, true)
-}
-
-func (h *Handler) handleSchedulerTaskDisable(w http.ResponseWriter, r *http.Request) {
-	h.setSchedulerTaskEnabled(w, r, false)
-}
-
-func (h *Handler) setSchedulerTaskEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
-	if h.scheduler == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
-		return
-	}
-	taskID := scheduler.TaskID(chi.URLParam(r, "task"))
-	var err error
-	if enabled {
-		err = h.scheduler.Enable(taskID)
-	} else {
-		err = h.scheduler.Disable(taskID)
-	}
-	if err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "TASK_STATE_REJECTED", err.Error())
-		return
-	}
-	task, err := h.scheduler.GetTask(taskID)
-	if err != nil {
-		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
-		return
-	}
-	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: task})
-}
-
 // handleSchedulerTaskRun handles POST /api/v1/server/scheduler/tasks/{task}/run.
 // Triggers an immediate run of the named task, per docs/api.md.
 func (h *Handler) handleSchedulerTaskRun(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "task")
 	if taskID == "" {
-		h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "missing task id")
+		h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "missing task id", r)
 		return
 	}
 	if h.scheduler == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running")
+		h.errorResponse(w, http.StatusServiceUnavailable, "SCHEDULER_UNAVAILABLE", "scheduler is not running", r)
 		return
 	}
 	if err := h.scheduler.RunNow(scheduler.TaskID(taskID)); err != nil {
-		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", fmt.Sprintf("task %q cannot be run: %v", taskID, err))
+		h.errorResponse(w, http.StatusNotFound, "NOT_FOUND", fmt.Sprintf("task %q cannot be run: %v", taskID, err), r)
 		return
 	}
 	// Per AI.md PART 11 audit table: a manual run is audit event
@@ -570,16 +556,13 @@ type HealthResponse struct {
 	// current UTC time ISO 8601
 	Timestamp string `json:"timestamp"`
 
-	// 5. Cluster state is always present, including single-instance deployments.
-	Cluster ClusterInfo `json:"cluster"`
-
-	// 6. Features - PUBLIC only (PARTS 20, 32)
+	// 5. Features - PUBLIC only (PARTS 19, 31)
 	Features FeaturesInfo `json:"features"`
 
-	// 7. Component health checks (per AI.md PART 13)
+	// 6. Component health checks (per AI.md PART 13)
 	Checks ChecksInfo `json:"checks"`
 
-	// 8. Statistics (public-safe aggregates)
+	// 7. Statistics (public-safe aggregates)
 	Stats StatsInfo `json:"stats"`
 }
 
@@ -587,11 +570,6 @@ type HealthResponse struct {
 func (health HealthResponse) MarshalJSON() ([]byte, error) {
 	type orderedHealth HealthResponse
 	return json.Marshal(orderedHealth(health))
-}
-
-// ClusterInfo reports whether this server participates in a cluster.
-type ClusterInfo struct {
-	Enabled bool `json:"enabled"`
 }
 
 // ProjectInfo represents project identification per AI.md PART 13
@@ -684,6 +662,8 @@ type TorInfo struct {
 	Enabled bool `json:"enabled"`
 	// Hidden service active
 	Running bool `json:"running"`
+	// Full operator lifecycle state per AI.md PART 13 / PART 31.1.
+	State string `json:"state"`
 	// "healthy", "starting", "error"
 	Status string `json:"status"`
 	// "abc123...xyz.onion" (56 chars, v3)
@@ -715,24 +695,19 @@ type CLIBinaryInfo struct {
 }
 
 type AutodiscoverResponse struct {
-	Server struct {
-		Name     string `json:"name"`
-		Version  string `json:"version"`
-		URL      string `json:"url"`
-		Features struct {
-			Auth     bool `json:"auth"`
-			Search   bool `json:"search"`
-			Register bool `json:"register"`
-		} `json:"features"`
-	} `json:"server"`
-	API struct {
-		Version  string `json:"version"`
-		BasePath string `json:"base_path"`
-	} `json:"api"`
-	// Per AI.md PART 32: CLI version info for auto-update checks.
-	// Keys are "{os}-{arch}" e.g. "linux-amd64".
+	Name          string                   `json:"name"`
+	Version       string                   `json:"version"`
+	API           AutodiscoverAPIInfo      `json:"api"`
+	URLs          []string                 `json:"urls"`
+	Onion         string                   `json:"onion,omitempty"`
+	I2P           string                   `json:"i2p,omitempty"`
 	CLIVersions   map[string]CLIBinaryInfo `json:"cli_versions"`
 	CLIMinVersion string                   `json:"cli_min_version"`
+}
+
+// AutodiscoverAPIInfo describes the version prefix served by the API.
+type AutodiscoverAPIInfo struct {
+	CurrentVersion string `json:"current_version"`
 }
 
 // InfoResponse represents server info response
@@ -865,9 +840,9 @@ func formatHealthText(health HealthResponse) string {
 			fmt.Fprintf(&text, "restart_reason: %s\n", reason)
 		}
 	}
-	fmt.Fprintf(&text, "version: %s\ngo_version: %s\nbuild.commit: %s\nbuild.date: %s\nuptime: %s\nmode: %s\ntimestamp: %s\ncluster.enabled: %t\nfeatures.tor: %s\nfeatures.i2p: %s\nfeatures.geoip: %s\nchecks.database: %s\nchecks.cache: %s\nchecks.disk: %s\nchecks.scheduler: %s\n",
+	fmt.Fprintf(&text, "version: %s\ngo_version: %s\nbuild.commit: %s\nbuild.date: %s\nuptime: %s\nmode: %s\ntimestamp: %s\nfeatures.tor: %s\nfeatures.i2p: %s\nfeatures.geoip: %s\nchecks.database: %s\nchecks.cache: %s\nchecks.disk: %s\nchecks.scheduler: %s\n",
 		health.Version, health.GoVersion, health.Build.Commit, health.Build.Date, health.Uptime,
-		health.Mode, health.Timestamp, health.Cluster.Enabled,
+		health.Mode, health.Timestamp,
 		healthFeatureText(health.Features.Tor.Status, health.Features.Tor.Hostname),
 		healthFeatureText(health.Features.I2P.Status, health.Features.I2P.Hostname),
 		map[bool]string{true: "enabled", false: "disabled"}[health.Features.GeoIP], health.Checks.Database,
@@ -910,15 +885,19 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 	torStatus := "disabled"
 	torHostname := ""
 	torCheck := ""
+	torState := health.TorState(false, false, false, "")
 
 	// Check actual Tor service status per AI.md PART 32
 	if torEnabled {
-		torState := health.TorState(true, h.torService != nil && h.torService.IsStarting(), h.torService != nil && h.torService.IsRunning(), func() string {
-			if h.torService != nil {
-				return h.torService.GetOnionAddress()
+		torStarting := h.torService != nil && h.torService.IsStarting()
+		actualRunning, hostname := false, ""
+		if h.torService != nil && !torStarting {
+			actualRunning = h.torService.IsRunning()
+			if actualRunning {
+				hostname = h.torService.GetOnionAddress()
 			}
-			return ""
-		}())
+		}
+		torState = health.TorState(true, torStarting, actualRunning, hostname)
 		torEnabled, torRunning, torStatus, torHostname = torState.Enabled, torState.Running, torState.Status, torState.Hostname
 		if torStatus == "unavailable" {
 			torCheck = "degraded"
@@ -934,11 +913,17 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 		Status:   "disabled",
 		State:    "disabled",
 		Hostname: "",
-		Provider: "",
+		Provider: "none",
 	}
 	i2pCheck := ""
-	if h.config.Server.I2P.Enabled && h.i2pManager != nil {
-		i2pState := health.I2PState(h.i2pManager.LifecycleState(), h.i2pManager.ProviderName(), h.i2pManager.EepsiteAddress())
+	if h.config.I2PEnabled() && h.i2pManager != nil {
+		lifecycle := h.i2pManager.LifecycleState()
+		provider, hostname := "", ""
+		if lifecycle != "starting" && lifecycle != "building" {
+			provider = h.i2pManager.ProviderName()
+			hostname = h.i2pManager.EepsiteAddress()
+		}
+		i2pState := health.I2PState(lifecycle, provider, hostname)
 		i2pInfo = I2PInfo{Enabled: i2pState.Enabled, Running: i2pState.Running, Status: i2pState.Status, State: i2pState.State, Hostname: i2pState.Hostname, Provider: i2pState.Provider}
 		if i2pInfo.Enabled && i2pInfo.Status == "unavailable" {
 			i2pCheck = "degraded"
@@ -976,12 +961,12 @@ func (h *Handler) buildHealthResponse() HealthResponse {
 		Uptime:    h.formatDuration(time.Since(h.startTime)),
 		Mode:      h.config.Server.Mode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Cluster:   ClusterInfo{Enabled: false},
-		// 6. Features per AI.md PART 13
+		// 5. Features per AI.md PART 13
 		Features: FeaturesInfo{
 			Tor: TorInfo{
 				Enabled:  torEnabled,
 				Running:  torRunning,
+				State:    torState.State,
 				Status:   torStatus,
 				Hostname: torHostname,
 			},
@@ -1044,38 +1029,187 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build server URL from request
-	scheme := "https"
-	if r.TLS == nil {
-		scheme = "http"
+	serverConfig := h.config.Get()
+	resp := AutodiscoverResponse{
+		Name:          config.ProjectName,
+		Version:       config.Version,
+		API:           AutodiscoverAPIInfo{CurrentVersion: APIVersion},
+		URLs:          []string{httputil.BuildURL(r, "")},
+		CLIVersions:   h.cliBinaryVersions(),
+		CLIMinVersion: serverConfig.Update.CLIMinVersion,
 	}
-	serverURL := fmt.Sprintf("%s://%s", scheme, r.Host)
-
-	var resp AutodiscoverResponse
-
-	// Server info
-	resp.Server.Name = h.config.Server.Title
-	resp.Server.Version = config.Version
-	resp.Server.URL = serverURL
-	// PART 32 is the CLIENT spec. Regular-user accounts are not part of this project.
-	resp.Server.Features.Auth = false
-	resp.Server.Features.Search = true
-	resp.Server.Features.Register = false
-
-	// API info
-	resp.API.Version = APIVersion
-	resp.API.BasePath = APIPrefix
-
-	// Per AI.md PART 32: include CLI version info for auto-update checks.
-	// The map is populated when CLI binaries are published alongside the server release.
-	// An empty map signals "no CLI binary available via this server" (CLI uses GitHub Releases).
-	resp.CLIVersions = map[string]CLIBinaryInfo{}
-	resp.CLIMinVersion = ""
+	if serverConfig.Tor.Expose && h.torService != nil {
+		resp.Onion = h.torService.GetOnionAddress()
+	}
+	if serverConfig.I2P.Expose && h.config.I2PEnabled() && h.i2pManager != nil {
+		resp.I2P = h.i2pManager.EepsiteAddressFromDisk()
+	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK:   true,
 		Data: resp,
 	})
+}
+
+func (h *Handler) cliBinaryDirectory() string {
+	dir := strings.TrimSpace(h.config.CLI.BinaryDownload.Dir)
+	if dir == "" {
+		return filepath.Join(config.GetDataDir(), "cli")
+	}
+	return filepath.Clean(strings.ReplaceAll(dir, "{data_dir}", config.GetDataDir()))
+}
+
+func (h *Handler) cliBinaryVersions() map[string]CLIBinaryInfo {
+	versions := make(map[string]CLIBinaryInfo)
+	dir := h.cliBinaryDirectory()
+	version, checksums, err := readCLIReleaseMetadata(dir)
+	if err != nil {
+		return versions
+	}
+	for _, platform := range []string{"linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "windows-arm64", "freebsd-amd64", "freebsd-arm64"} {
+		filename := cliBinaryFilename(platform)
+		file, _, digest, err := openVerifiedCLIBinary(dir, filename, checksums)
+		if err != nil {
+			if errors.Is(err, errCLIBinaryChecksumMismatch) {
+				slog.Warn("CLI binary checksum does not match release metadata", "filename", filename)
+			}
+			continue
+		}
+		if err := file.Close(); err != nil {
+			continue
+		}
+		versions[platform] = CLIBinaryInfo{Version: version, SHA256: digest}
+	}
+	return versions
+}
+
+var errCLIBinaryChecksumMismatch = errors.New("CLI binary checksum mismatch")
+
+func cliBinaryFilename(platform string) string {
+	filename := "search-cli-" + platform
+	if strings.HasPrefix(platform, "windows-") {
+		filename += ".exe"
+	}
+	return filename
+}
+
+func readCLIReleaseMetadata(dir string) (string, map[string]string, error) {
+	versionBytes, err := os.ReadFile(filepath.Join(dir, "version.txt"))
+	if err != nil {
+		return "", nil, err
+	}
+	versionFields := strings.Fields(string(versionBytes))
+	if len(versionFields) != 1 {
+		return "", nil, errors.New("invalid CLI version metadata")
+	}
+	checksums, err := readCLIChecksums(filepath.Join(dir, "sha256.txt"))
+	if err != nil {
+		return "", nil, err
+	}
+	return versionFields[0], checksums, nil
+}
+
+func openVerifiedCLIBinary(dir, filename string, checksums map[string]string) (*os.File, os.FileInfo, string, error) {
+	file, err := os.Open(filepath.Join(dir, filename))
+	if err != nil {
+		return nil, nil, "", err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return nil, nil, "", errors.Join(err, file.Close())
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil, "", errors.Join(errors.New("CLI binary is not a regular file"), file.Close())
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return nil, nil, "", errors.Join(err, file.Close())
+	}
+	digest := hex.EncodeToString(hash.Sum(nil))
+	if !strings.EqualFold(checksums[filename], digest) {
+		return nil, nil, "", errors.Join(errCLIBinaryChecksumMismatch, file.Close())
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, nil, "", errors.Join(err, file.Close())
+	}
+	return file, info, digest, nil
+}
+
+func readCLIChecksums(path string) (map[string]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer closeutil.Close(file)
+	checksums := make(map[string]string)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 || len(fields[0]) != sha256.Size*2 {
+			continue
+		}
+		filename := filepath.Base(fields[len(fields)-1])
+		if filename == fields[len(fields)-1] {
+			checksums[filename] = fields[0]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return checksums, nil
+}
+
+func (h *Handler) handleCLIBinary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "method not allowed", "", r)
+		return
+	}
+	if h.config.CLI.BinaryDownload.RequireAuth {
+		if err := h.operatorAuthError(r); err != nil {
+			h.writeOperatorAuthError(w, r, err)
+			return
+		}
+	}
+	filename := chi.URLParam(r, "filename")
+	if strings.Contains(filename, "/") || strings.Contains(filename, `\\`) {
+		h.errorResponse(w, http.StatusNotFound, "not found", "", r)
+		return
+	}
+	platformKey := ""
+	for _, platform := range []string{"linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "windows-arm64", "freebsd-amd64", "freebsd-arm64"} {
+		if filename == cliBinaryFilename(platform) {
+			platformKey = platform
+			break
+		}
+	}
+	if platformKey == "" {
+		h.errorResponse(w, http.StatusNotFound, "not found", "", r)
+		return
+	}
+	dir := h.cliBinaryDirectory()
+	version, checksums, err := readCLIReleaseMetadata(dir)
+	if err != nil {
+		h.errorResponse(w, http.StatusNotFound, "not found", "", r)
+		return
+	}
+	file, info, digest, err := openVerifiedCLIBinary(dir, filename, checksums)
+	if err != nil {
+		if errors.Is(err, errCLIBinaryChecksumMismatch) {
+			slog.Warn("CLI binary checksum does not match release metadata", "filename", filename)
+		}
+		h.errorResponse(w, http.StatusNotFound, "not found", "", r)
+		return
+	}
+	defer closeutil.Close(file)
+	if h.auditLogger != nil {
+		h.auditLogger.LogEventQuiet(logging.AuditAction("cli.update_started"), logging.AuditCategorySystem, logging.AuditSeverityInfo,
+			logging.AuditActor{Type: "anonymous", IP: httputil.GetClientIP(r)}, &logging.AuditTarget{Type: "cli_binary", ID: filename}, "success",
+			map[string]interface{}{"platform": platformKey, "version": version, "sha256": digest}, "")
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, filename, info.ModTime(), file)
 }
 
 func (h *Handler) Info() InfoResponse {
@@ -1115,7 +1249,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
+			h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error(), r)
 			return
 		}
 		// Trim query from JSON body
@@ -1145,11 +1279,11 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// Validate all request fields per AI.md PART 3 using go-playground/validator
 	if err := h.validate.Struct(req); err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error())
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error(), r)
 		return
 	}
 	if err := validateSearchDateRange(req); err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error())
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error(), r)
 		return
 	}
 
@@ -1191,11 +1325,11 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		// local failure mode at this point.
 		switch {
 		case errors.Is(err, model.ErrEmptyQuery), errors.Is(err, model.ErrInvalidCategory):
-			h.errorResponse(w, http.StatusBadRequest, "Search failed", err.Error())
+			h.errorResponse(w, http.StatusBadRequest, "Search failed", err.Error(), r)
 		case errors.Is(err, model.ErrNoEngines):
-			h.errorResponse(w, http.StatusServiceUnavailable, "Search failed", err.Error())
+			h.errorResponse(w, http.StatusServiceUnavailable, "Search failed", err.Error(), r)
 		default:
-			h.errorResponse(w, http.StatusBadGateway, "Search failed", err.Error())
+			h.errorResponse(w, http.StatusBadGateway, "Search failed", err.Error(), r)
 		}
 		return
 	}
@@ -1544,7 +1678,7 @@ func (h *Handler) handleEngineByID(w http.ResponseWriter, r *http.Request) {
 
 	engine, err := h.registry.Get(id)
 	if err != nil {
-		h.errorResponse(w, http.StatusNotFound, "Engine not found", fmt.Sprintf("No engine with ID: %s", id))
+		h.errorResponse(w, http.StatusNotFound, "Engine not found", fmt.Sprintf("No engine with ID: %s", id), r)
 		return
 	}
 
@@ -1673,7 +1807,7 @@ func stripTxtExtension(path string) string {
 // errorResponse sends a unified error response per AI.md PART 16
 // Error format: {"ok": false, "error": "ERROR_CODE", "message": "Human readable message"}
 // Per AI.md PART 7-9: RequestID must be included in error response meta
-func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, detail string) {
+func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, detail string, r *http.Request) {
 	// Get request ID from response header (set by middleware)
 	requestID := w.Header().Get("X-Request-ID")
 
@@ -1683,15 +1817,75 @@ func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, deta
 		slog.Error("API error", "request_id", requestID, "message", message, "detail", detail)
 	}
 
+	localizedMessage := i18n.RequestString(r, apiErrorTranslationKey(status, message))
+
 	h.jsonResponse(w, status, &APIResponse{
 		OK:      false,
 		Error:   model.ErrorCodeFromHTTP(status),
-		Message: message,
+		Message: localizedMessage,
 		Meta: &APIMeta{
 			RequestID: requestID,
 			Version:   APIVersion,
 		},
 	})
+}
+
+func apiErrorTranslationKey(status int, messages ...string) string {
+	if len(messages) > 0 {
+		message := strings.TrimSpace(messages[0])
+		code := strings.ToUpper(message)
+		switch code {
+		case "VALIDATION_FAILED":
+			return "errors.validation_failed"
+		case "REQUEST_TOO_LARGE":
+			return "errors.request_too_large"
+		case "SCHEDULER_UNAVAILABLE":
+			return "errors.scheduler_unavailable"
+		case "HISTORY_UNAVAILABLE":
+			return "errors.history_unavailable"
+		case "OWNER_TOKENS_UNAVAILABLE":
+			return "errors.owner_tokens_unavailable"
+		case "TOKEN_LIMIT":
+			return "errors.token_limit"
+		case "DUPLICATE":
+			return "errors.duplicate"
+		case "DELIVERY_UNAVAILABLE":
+			return "errors.delivery_unavailable"
+		}
+		switch strings.ToLower(message) {
+		case "search failed":
+			return "search.error_message"
+		case "invalid credentials":
+			return "errors.invalid_credentials"
+		case "widget type required", "query parameter is required", "term is required":
+			return "errors.required"
+		case "widget not available", "engine not found", "preset not found", "not found", "token not found":
+			return "errors.not_found"
+		case "method not allowed":
+			return "errors.method_not_allowed"
+		case "invalid ip address":
+			return "errors.bad_request"
+		case "too many contact submissions":
+			return "errors.rate_limit"
+		}
+	}
+
+	switch status {
+	case http.StatusUnauthorized:
+		return "errors.unauthorized"
+	case http.StatusForbidden:
+		return "errors.forbidden"
+	case http.StatusNotFound, http.StatusGone:
+		return "errors.not_found"
+	case http.StatusMethodNotAllowed:
+		return "errors.method_not_allowed"
+	case http.StatusTooManyRequests:
+		return "errors.rate_limit"
+	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return "errors.server_error_message"
+	default:
+		return "errors.bad_request"
+	}
 }
 
 func (h *Handler) formatDuration(d time.Duration) string {
@@ -1932,7 +2126,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
-		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "")
+		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "", r)
 		return
 	}
 
@@ -1975,7 +2169,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 
 	answer, err := h.instantManager.Process(ctx, query)
 	if err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Failed to process instant answer", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to process instant answer", err.Error(), r)
 		return
 	}
 
@@ -2033,7 +2227,7 @@ func (h *Handler) handleDirectAnswer(w http.ResponseWriter, r *http.Request) {
 
 	// Only allow GET requests
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET requests are supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET requests are supported", r)
 		return
 	}
 
@@ -2041,7 +2235,7 @@ func (h *Handler) handleDirectAnswer(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, APIPrefix+"/direct/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "URL format: /api/v1/direct/{type}/{term}")
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "URL format: /api/v1/direct/{type}/{term}", r)
 		return
 	}
 
@@ -2053,7 +2247,7 @@ func (h *Handler) handleDirectAnswer(w http.ResponseWriter, r *http.Request) {
 	term = strings.TrimSpace(term)
 
 	if term == "" {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "Term is required")
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "Term is required", r)
 		return
 	}
 
@@ -2079,7 +2273,7 @@ func (h *Handler) handleDirectAnswer(w http.ResponseWriter, r *http.Request) {
 
 	answer, err := h.directManager.ProcessType(ctx, answerType, term)
 	if err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Failed to process direct answer", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to process direct answer", err.Error(), r)
 		return
 	}
 
@@ -2139,7 +2333,7 @@ func (h *Handler) handleRelatedSearches(w http.ResponseWriter, r *http.Request) 
 
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
-		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "")
+		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "", r)
 		return
 	}
 
@@ -2173,7 +2367,7 @@ func (h *Handler) handleRelatedSearches(w http.ResponseWriter, r *http.Request) 
 
 	suggestions, err := h.relatedSearches.GetRelated(ctx, query, limit)
 	if err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Failed to fetch related searches", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to fetch related searches", err.Error(), r)
 		return
 	}
 
@@ -2230,7 +2424,7 @@ type ServerDPOResponse struct {
 // the general public contact address and never exposing the admin address.
 func (h *Handler) handleServerDPO(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 	name := strings.TrimSpace(h.config.Server.Contact.DPO.Name)
@@ -2260,7 +2454,7 @@ type PageSection struct {
 // Per AI.md PART 16: Returns about page info as JSON
 func (h *Handler) handleServerAbout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 
@@ -2321,7 +2515,7 @@ func (h *Handler) handleServerAbout(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 16: Returns privacy policy as JSON
 func (h *Handler) handleServerPrivacy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 
@@ -2333,41 +2527,41 @@ func (h *Handler) handleServerPrivacy(w http.ResponseWriter, r *http.Request) {
 	sections := []PageSection{
 		{
 			ID:      "data_collection",
-			Title:   "Data Collection",
-			Content: appName + " is designed with privacy as a core principle. We minimize data collection to what is strictly necessary for the service to function. Search queries are sent to upstream search engines but are not stored on our servers. We do not log IP addresses or use them for tracking.",
+			Title:   i18n.RequestString(r, "privacy.data_collection_heading"),
+			Content: i18n.RequestFormat(r, "privacy.data_collection_description", "app_name", appName) + " " + i18n.RequestString(r, "privacy.search_queries_description") + " " + i18n.RequestString(r, "privacy.ip_addresses_description"),
 		},
 		{
 			ID:      "data_usage",
-			Title:   "Data Usage",
-			Content: "Any data that is temporarily processed is used only to forward your search query to upstream search engines, aggregate and display results to you, and remember your preferences (theme, language).",
+			Title:   i18n.RequestString(r, "privacy.data_usage_heading"),
+			Content: i18n.RequestString(r, "privacy.data_usage_description") + " " + i18n.RequestString(r, "privacy.data_usage_item_forward") + "; " + i18n.RequestString(r, "privacy.data_usage_item_aggregate") + "; " + i18n.RequestString(r, "privacy.data_usage_item_preferences") + ".",
 		},
 		{
 			ID:      "data_retention",
-			Title:   "Data Retention",
-			Content: "We do not retain search queries or personal data. Session data is temporary and is deleted when you close your browser or your session expires.",
+			Title:   i18n.RequestString(r, "privacy.data_retention_heading"),
+			Content: i18n.RequestString(r, "privacy.data_retention_description"),
 		},
 		{
 			ID:      "cookies",
-			Title:   "Cookies",
-			Content: "We use only essential cookies for session management and preference storage. We do not use tracking cookies, analytics cookies, or advertising cookies.",
+			Title:   i18n.RequestString(r, "privacy.cookies_heading"),
+			Content: i18n.RequestString(r, "privacy.cookies_intro") + " " + i18n.RequestString(r, "privacy.session_cookie_description") + "; " + i18n.RequestString(r, "privacy.preference_cookie_description") + ". " + i18n.RequestString(r, "privacy.cookies_followup"),
 		},
 		{
 			ID:      "third_parties",
-			Title:   "Third Parties",
-			Content: "Your search queries are forwarded to upstream search engines to retrieve results. We do not share any other data with third parties.",
+			Title:   i18n.RequestString(r, "privacy.third_parties_heading"),
+			Content: i18n.RequestString(r, "privacy.third_parties_description") + " " + i18n.RequestString(r, "privacy.third_parties_followup"),
 		},
 		{
 			ID:      "your_rights",
-			Title:   "Your Rights",
-			Content: "Since we don't store personal data, there is no data to access, modify, or delete. Your privacy is protected by design.",
+			Title:   i18n.RequestString(r, "privacy.your_rights_heading"),
+			Content: i18n.RequestString(r, "privacy.your_rights_description"),
 		},
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: ServerPageResponse{
-			Title:       "Privacy Policy",
-			Description: "Privacy policy for " + appName,
+			Title:       i18n.RequestString(r, "footer.privacy_policy"),
+			Description: i18n.RequestFormat(r, "privacy.data_collection_description", "app_name", appName),
 			Content:     h.config.Server.Pages.Privacy.Content,
 			Sections:    sections,
 		},
@@ -2379,7 +2573,7 @@ func (h *Handler) handleServerPrivacy(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 16: Returns help documentation as JSON
 func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 
@@ -2391,46 +2585,59 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 	sections := []PageSection{
 		{
 			ID:      "getting_started",
-			Title:   "Getting Started",
-			Content: appName + " is a privacy-respecting metasearch engine. Type a query in the search box, refine it with category tabs, or use bang shortcuts and direct answers for targeted lookups.",
+			Title:   i18n.RequestString(r, "help.getting_started.heading"),
+			Content: i18n.RequestFormat(r, "help.getting_started.intro_prefix", "app_name", appName) + " Enter " + i18n.RequestString(r, "help.getting_started.intro_suffix"),
 		},
 		{
-			ID:      "categories",
-			Title:   "Search Categories",
-			Content: "Available categories are general, images, videos, news, maps, files, it, science, and social. Each category narrows the enabled engines and result types for the query.",
+			ID:    "categories",
+			Title: i18n.RequestString(r, "help.categories.heading"),
+			Content: i18n.RequestString(r, "help.categories.intro") + " " + strings.Join([]string{
+				i18n.RequestString(r, "common.categories.general"),
+				i18n.RequestString(r, "common.categories.images"),
+				i18n.RequestString(r, "common.categories.videos"),
+				i18n.RequestString(r, "common.categories.news"),
+				i18n.RequestString(r, "common.categories.maps"),
+				i18n.RequestString(r, "common.categories.files"),
+				i18n.RequestString(r, "common.categories.it"),
+				i18n.RequestString(r, "common.categories.science"),
+				i18n.RequestString(r, "common.categories.social"),
+			}, ", ") + ".",
 		},
 		{
 			ID:      "bangs",
-			Title:   "Bang Commands",
-			Content: "Bang commands send searches directly to another site. Use !shortcut terms or terms !shortcut. Examples include !g, !ddg, !b, !br, !sp, !w, !yt, !gh, !so, !rd, !az, !gm, !osm, !wa, !mdn, !npm, !pypi, !gopkg, !scholar, !arxiv, !archive, and !spot.",
+			Title:   i18n.RequestString(r, "help.toc.bang_commands"),
+			Content: i18n.RequestString(r, "help.bangs.intro_prefix") + " `!shortcut terms` " + i18n.RequestString(r, "help.bangs.intro_or") + " `terms !shortcut`" + i18n.RequestString(r, "help.bangs.intro_suffix"),
 		},
 		{
 			ID:      "answers",
-			Title:   "Instant and Direct Answers",
-			Content: "Direct answers use the type:term format and open as full-page results, for example dns:example.com, whois:example.com, http:404, regex:[a-z]+, jwt:decode token, useragent:my, and rule:34. Instant answers also work from the normal search box for queries such as 2 + 2, convert 10 km to miles, time in tokyo, what is my ip, or #ff5733.",
+			Title:   i18n.RequestString(r, "help.direct.heading"),
+			Content: i18n.RequestString(r, "help.direct.intro_da_label") + " " + i18n.RequestString(r, "help.direct.intro_da_text_prefix") + " `type:term` " + i18n.RequestString(r, "help.direct.intro_da_text_suffix") + ". " + i18n.RequestString(r, "help.direct.intro_ia_label") + " " + i18n.RequestString(r, "help.direct.intro_ia_text"),
 		},
 		{
 			ID:      "search_tips",
-			Title:   "Search Tips",
-			Content: "Use quotes for exact phrases, minus to exclude terms, OR and AND for boolean searches, wildcards with *, and filters such as site:, -site:, filetype:, intitle:, inurl:, intext:, related:, cache:, info:, before:, after:, define:, weather:, stocks:, map:, movie:, and source:.",
+			Title:   i18n.RequestString(r, "help.operators.heading"),
+			Content: i18n.RequestString(r, "help.operators.intro") + " `\"phrase\"`, `-term`, `OR`, `AND`, `*`, `site:`, `-site:`, `filetype:`, `intitle:`, `inurl:`, `intext:`, `related:`, `cache:`, `info:`, `before:`, `after:`, `define:`, `weather:`, `stocks:`, `map:`, `movie:`, `source:`.",
 		},
 		{
 			ID:      "keyboard_shortcuts",
-			Title:   "Keyboard Shortcuts",
-			Content: "Use / to focus the search box, Escape to clear or close dialogs, t to cycle theme (dark, light, auto), ? to show shortcuts, j and k to move through results, Enter or o/O to open a result, h/l or the arrow keys to change pages, gg or G to jump, and 1-9 to open a specific result.",
+			Title:   i18n.RequestString(r, "help.shortcuts.heading"),
+			Content: i18n.RequestString(r, "help.shortcuts.intro") + " `/`, `Escape`, `t`, `?`, `j`, `k`, `Enter`, `o`, `h`, `l`, `gg`, `G`, `1-9`.",
 		},
 		{
-			ID:      "api_documentation",
-			Title:   "API Documentation",
-			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/widgets, /api/v1/server/help, /api/v1/server/about, /api/v1/server/privacy, /api/v1/server/dpo, /api/v1/server/contact, /api/v1/server/terms, /api/graphql, /server/docs/graphql, /server/docs/swagger (Swagger UI), and /api/swagger (OpenAPI spec).",
+			ID:    "api_documentation",
+			Title: i18n.RequestString(r, "help.toc.api_docs"),
+			Content: i18n.RequestString(r, "about.api_docs_description") + " " + strings.Join([]string{
+				"`" + APIPrefix + "/search`", "`" + APIPrefix + "/instant`", "`" + APIPrefix + "/direct/{type}/{term}`",
+				"`" + APIPrefix + "/server/help`", "`" + APIPrefix + "/server/about`", "`/api/graphql`", "`/api/swagger`",
+			}, ", ") + ".",
 		},
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: ServerPageResponse{
-			Title:       "Help & Documentation",
-			Description: "Help and documentation for " + appName,
+			Title:       i18n.RequestString(r, "help.title"),
+			Description: i18n.RequestFormat(r, "help.subtitle", "app_name", appName),
 			Content:     h.config.Server.Pages.Help.Content,
 			Sections:    sections,
 			Pages:       helpPageLinks(),
@@ -2443,7 +2650,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 16: Returns terms of service as JSON
 func (h *Handler) handleServerTerms(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 
@@ -2619,7 +2826,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			h.config.Server.Contact.Abuse.Email != "" || h.config.Server.Contact.DPO.Email != "" ||
 			notify.HasConfiguredWebhook(h.config.Server.Contact, "general") || notify.HasConfiguredWebhook(h.config.Server.Contact, "abuse"))
 	if !h.config.Server.Pages.Contact.Enabled {
-		h.errorResponse(w, http.StatusNotFound, "Contact form is not enabled", "")
+		h.errorResponse(w, http.StatusNotFound, "Contact form is not enabled", "", r)
 		return
 	}
 
@@ -2685,11 +2892,11 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method, r)
 		return
 	}
 	if !contactEnabled {
-		h.errorResponse(w, http.StatusNotFound, "Contact form is not enabled", "")
+		h.errorResponse(w, http.StatusNotFound, "Contact form is not enabled", "", r)
 		return
 	}
 	var body struct {
@@ -2731,25 +2938,25 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 	requestBody, readErr := io.ReadAll(r.Body)
 	if readErr != nil || !utf8.Valid(requestBody) {
 		h.recordContactBlock("shape", r)
-		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+		h.writeError(w, r, "BAD_REQUEST", i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), http.StatusBadRequest)
 		return
 	}
 	var suppliedFields map[string]json.RawMessage
 	if err := json.Unmarshal(requestBody, &suppliedFields); err != nil {
 		h.recordContactBlock("shape", r)
-		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+		h.writeError(w, r, "BAD_REQUEST", i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), http.StatusBadRequest)
 		return
 	}
 	allowedFields := map[string]bool{"name": true, "email": true, "subject": true, "message": true, "type": true, "reported_url": true, "reason": true, "copyrighted_work": true, "good_faith_statement": true, "accuracy_statement": true, "signature": true, "request_kind": true, "step": true, "review_token": true, "confirmed": true, "form_token": true, "captcha_id": true, "captcha_answer": true, "captcha_response": true, "g-recaptcha-response": true, "h-captcha-response": true, "security_id": true, "researcher_gpg": true, "affected_component": true, "affected_endpoint": true, "severity": true, "summary": true, "steps_to_reproduce": true, "impact": true, "suggested_fix": true, "cve_requested": true, "disclosure_days": true, "credit_preference": true, "credit_handle": true, "agreed_to_disclosure": true}
 	for name := range suppliedFields {
 		if !allowedFields[name] {
 			h.recordContactBlock("shape", r)
-			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Unknown contact field", Details: map[string]interface{}{"field": name, "rule": "unknown"}})
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": name, "rule": "unknown"}})
 			return
 		}
 	}
 	if err := json.Unmarshal(requestBody, &body); err != nil {
-		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+		h.writeError(w, r, "BAD_REQUEST", i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), http.StatusBadRequest)
 		return
 	}
 	body.Name = strings.TrimSpace(body.Name)
@@ -2782,7 +2989,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		step = "submit"
 	}
 	if step != "submit" && step != "confirm" {
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Invalid contact step"})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED"))})
 		return
 	}
 	formValues := make(url.Values)
@@ -2800,11 +3007,11 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			if blocked, ok := h.contactSubmitter.(interface{ RecordContactBlock(string, *http.Request) }); ok {
 				blocked.RecordContactBlock(reason, r)
 			}
-			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "A required contact field is invalid", Details: map[string]interface{}{"field": "contact", "rule": reason}})
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "contact", "rule": reason}})
 			return
 		}
 	} else if body.Name == "" || body.Email == "" || body.FormToken == "" || (!securityMode && (body.Subject == "" || body.Message == "")) {
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "A required contact field is invalid", Details: map[string]interface{}{"field": "contact", "rule": "required"}})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "contact", "rule": "required"}})
 		return
 	}
 	if !securityMode {
@@ -2812,7 +3019,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			ValidateContactReport(*http.Request, url.Values) bool
 		}); ok && !validator.ValidateContactReport(r, formValues) {
 			h.recordContactBlock("content", r)
-			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Your message could not be sent", Details: map[string]interface{}{"field": "contact", "rule": "invalid"}})
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "contact", "rule": "invalid"}})
 			return
 		}
 	}
@@ -2828,7 +3035,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			}); ok {
 				reviewToken = provider.ContactReviewToken(formValues, "")
 			}
-			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Please read the details and confirm", Data: map[string]interface{}{"review": map[string]string{"type": body.Type, "email": body.Email, "subject": body.Subject}, "review_token": reviewToken}})
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Data: map[string]interface{}{"review": map[string]string{"type": body.Type, "email": body.Email, "subject": body.Subject}, "review_token": reviewToken}})
 			return
 		}
 	} else if !h.validateContactFormToken(r, body.FormToken) {
@@ -2837,7 +3044,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			reason = provider.ContactTokenFailureReason(body.FormToken)
 		}
 		h.recordContactBlock(reason, r)
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Please wait a moment and submit again", Details: map[string]interface{}{"field": "form_token", "rule": "invalid", "form_token": h.contactFormToken(r)}})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "form_token", "rule": "invalid", "form_token": h.contactFormToken(r)}})
 		return
 	}
 	providerProof := strings.TrimSpace(body.CaptchaResponse)
@@ -2934,22 +3141,22 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		if field == "researcher_gpg" && strings.HasPrefix(strings.ToLower(body.ResearcherGPG), "https://") {
 			rule = "url_max_length"
 		}
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Field exceeds maximum length", Details: map[string]interface{}{"field": field, "rule": rule, "max_length": maxLength}})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": field, "rule": rule, "max_length": maxLength}})
 		return
 	}
 	if body.Name == "" || err != nil || address.Address != body.Email || (!securityMode && (body.Subject == "" || body.Message == "")) {
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "A required contact field is invalid", Details: map[string]interface{}{"field": "contact", "rule": "required_or_format"}})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "contact", "rule": "required_or_format"}})
 		return
 	}
 	if securityMode && body.CreditPreference == "handle" && body.CreditHandle == "" {
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Credit handle is required for handle attribution", Details: map[string]interface{}{"field": "credit_handle", "rule": "required"}})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "credit_handle", "rule": "required"}})
 		return
 	}
 	if securityMode {
 		validSeverity := map[string]bool{"critical": true, "high": true, "medium": true, "low": true, "informational": true}
 		validCredit := map[string]bool{"real_name": true, "handle": true, "no": true, "anonymous": true}
 		if !validSeverity[body.Severity] || !validCredit[body.CreditPreference] || body.AffectedComponent == "" || body.Summary == "" || body.StepsToReproduce == "" || body.Impact == "" || !body.AgreedToDisclosure || body.DisclosureDays < 0 {
-			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "A required security report field is invalid", Details: map[string]interface{}{"field": "security_report", "rule": "required_or_format"}})
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")), Details: map[string]interface{}{"field": "security_report", "rule": "required_or_format"}})
 			return
 		}
 		if body.DisclosureDays == 0 {
@@ -2961,7 +3168,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			}); ok {
 				if reason, retryAfter := checker.CheckContactSubmissionLimit(r, httputil.GetClientIP(r), address.Address); reason != "" {
 					w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
-					h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: "Too many contact submissions"})
+					h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusTooManyRequests))})
 					return
 				}
 			}
@@ -2994,22 +3201,22 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 			}
 			if retryAfter > 0 {
 				w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
-				h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: "Too many contact submissions"})
+				h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusTooManyRequests))})
 				return
 			}
-			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Your message could not be sent", Details: map[string]interface{}{"field": "contact", "rule": reason}})
+			h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.validation_failed"), Details: map[string]interface{}{"field": "contact", "rule": reason}})
 			return
 		}
 		trackingID, submitErr := h.securityContact.SubmitSecurityContact(r, SecurityContactMessage{SecurityID: body.SecurityID, Name: body.Name, Email: address.Address, ResearcherGPG: body.ResearcherGPG, AffectedComponent: body.AffectedComponent, AffectedEndpoint: body.AffectedEndpoint, Severity: body.Severity, Summary: body.Summary, StepsToReproduce: body.StepsToReproduce, Impact: body.Impact, SuggestedFix: body.SuggestedFix, CVERequested: body.CVERequested, DisclosureDays: body.DisclosureDays, CreditPreference: body.CreditPreference, CreditHandle: body.CreditHandle, AgreedToDisclosure: body.AgreedToDisclosure})
 		if submitErr != nil {
-			h.writeError(w, "DELIVERY_UNAVAILABLE", "Security report could not be submitted", http.StatusServiceUnavailable)
+			h.writeError(w, r, "DELIVERY_UNAVAILABLE", i18n.RequestString(r, apiErrorTranslationKey(http.StatusServiceUnavailable)), http.StatusServiceUnavailable)
 			return
 		}
 		h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"tracking_id": trackingID}})
 		return
 	}
 	if h.contactSubmitter == nil {
-		h.writeError(w, "NOT_AVAILABLE", "Contact delivery is unavailable", http.StatusServiceUnavailable)
+		h.writeError(w, r, "NOT_AVAILABLE", i18n.RequestString(r, apiErrorTranslationKey(http.StatusServiceUnavailable)), http.StatusServiceUnavailable)
 		return
 	}
 	if step == "submit" {
@@ -3018,7 +3225,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		}); ok {
 			if reason, retryAfter := checker.CheckContactSubmissionLimit(r, httputil.GetClientIP(r), address.Address); reason != "" {
 				w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
-				h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: "Too many contact submissions"})
+				h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusTooManyRequests))})
 				return
 			}
 		}
@@ -3046,10 +3253,10 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		}
 		if retryAfter > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
-			h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: "Too many contact submissions"})
+			h.jsonResponse(w, http.StatusTooManyRequests, &APIResponse{OK: false, Error: "RATE_LIMITED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusTooManyRequests))})
 			return
 		}
-		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Your message could not be sent", Details: map[string]interface{}{"field": "contact", "rule": reason}})
+		h.jsonResponse(w, http.StatusBadRequest, &APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.validation_failed"), Details: map[string]interface{}{"field": "contact", "rule": reason}})
 		return
 	}
 	if err := h.contactSubmitter.SubmitContact(r.Context(), ContactMessage{
@@ -3059,7 +3266,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		Signature: body.Signature, RequestKind: body.RequestKind, SourceIP: httputil.GetClientIP(r),
 	}); err != nil {
 		h.forgetContactSubmission(r, address.Address, body.Name, body.Subject, body.Message, false)
-		h.writeError(w, "DELIVERY_UNAVAILABLE", "Contact message could not be delivered", http.StatusServiceUnavailable)
+		h.writeError(w, r, "DELIVERY_UNAVAILABLE", i18n.RequestString(r, apiErrorTranslationKey(http.StatusServiceUnavailable)), http.StatusServiceUnavailable)
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"status": "received"}})
@@ -3086,7 +3293,7 @@ func (h *Handler) contactCaptchaInfo(r *http.Request) map[string]interface{} {
 
 func (h *Handler) contactCaptchaFailure(w http.ResponseWriter, r *http.Request) {
 	h.jsonResponse(w, http.StatusBadRequest, &APIResponse{
-		OK: false, Error: "VALIDATION_FAILED", Message: "Captcha challenge is invalid or expired",
+		OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusBadRequest, "VALIDATION_FAILED")),
 		Details: map[string]interface{}{
 			"field": "captcha", "rule": "invalid", "form_token": h.contactFormToken(r), "captcha": h.contactCaptchaInfo(r),
 		},
@@ -3175,7 +3382,7 @@ func (h *Handler) forgetContactSubmission(r *http.Request, email, name, subject,
 
 func (h *Handler) handleServerSecurity(w http.ResponseWriter, r *http.Request) {
 	if h.securityPages == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "Security page unavailable", "Security page data is not initialized")
+		h.errorResponse(w, http.StatusServiceUnavailable, "Security page unavailable", "Security page data is not initialized", r)
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.securityPages.SecurityOverview(r), Meta: &APIMeta{Version: APIVersion}})
@@ -3183,7 +3390,7 @@ func (h *Handler) handleServerSecurity(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleServerSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 	if h.securityPages == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "Security policy unavailable", "Security page data is not initialized")
+		h.errorResponse(w, http.StatusServiceUnavailable, "Security policy unavailable", "Security page data is not initialized", r)
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.securityPages.SecurityPolicy(r), Meta: &APIMeta{Version: APIVersion}})
@@ -3191,12 +3398,12 @@ func (h *Handler) handleServerSecurityPolicy(w http.ResponseWriter, r *http.Requ
 
 func (h *Handler) handleServerSecurityThanks(w http.ResponseWriter, r *http.Request) {
 	if h.securityPages == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "Security acknowledgments unavailable", "Security page data is not initialized")
+		h.errorResponse(w, http.StatusServiceUnavailable, "Security acknowledgments unavailable", "Security page data is not initialized", r)
 		return
 	}
 	data, err := h.securityPages.SecurityThanks(r.Context())
 	if err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Security acknowledgments unavailable", "Security acknowledgment data could not be loaded")
+		h.errorResponse(w, http.StatusInternalServerError, "Security acknowledgments unavailable", "Security acknowledgment data could not be loaded", r)
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: data, Meta: &APIMeta{Version: APIVersion}})
@@ -3224,7 +3431,7 @@ func (h *Handler) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if kind == "" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="server"`)
-		h.jsonResponse(w, http.StatusUnauthorized, &APIResponse{OK: false, Error: "UNAUTHORIZED", Message: "Invalid credentials"})
+		h.jsonResponse(w, http.StatusUnauthorized, &APIResponse{OK: false, Error: "UNAUTHORIZED", Message: i18n.RequestString(r, apiErrorTranslationKey(http.StatusUnauthorized))})
 		return
 	}
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: map[string]string{"kind": kind}})
@@ -3263,7 +3470,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 			var input map[string]json.RawMessage
 			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
-				h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "invalid JSON body")
+				h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "invalid JSON body", r)
 				return
 			}
 			for key, raw := range input {
@@ -3278,7 +3485,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if err := r.ParseForm(); err != nil {
-				h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "invalid form body")
+				h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "invalid form body", r)
 				return
 			}
 			values = r.Form
@@ -3291,7 +3498,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		manager := h.syncI18nManager()
 		result := prefsync.Import(clone, "search", manager.DetectLanguage(r), manager.SupportedLanguageCodes())
 		if len(result.Applied) == 0 {
-			h.errorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "no valid preferences were supplied")
+			h.errorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "no valid preferences were supplied", r)
 			return
 		}
 		prefsync.Apply(w, r, "search", result)
@@ -3299,7 +3506,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
+	h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method, r)
 }
 
 // syncI18nManager returns an i18n manager sufficient for language-code
@@ -3321,7 +3528,7 @@ func (h *Handler) syncI18nManager() *i18n.Manager {
 // the same state. Stateless - nothing is written or looked up server-side.
 func (h *Handler) handleServerPreferencesExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 
@@ -3346,7 +3553,7 @@ func (h *Handler) handleServerPreferencesExport(w http.ResponseWriter, r *http.R
 // JSON body back.
 func (h *Handler) handleServerPreferencesImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported", r)
 		return
 	}
 
@@ -3375,29 +3582,32 @@ func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 // Token comparison is constant-time over SHA-256 digests to prevent timing leaks.
 func (h *Handler) operatorAuthError(r *http.Request) error {
 	started := time.Now()
-	fail := func(reason string) error {
+	finishFailure := func(reason string, cause error) error {
 		slog.Debug("operator authentication rejected", "reason", reason)
 		if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
 			time.Sleep(100*time.Millisecond - elapsed)
 		}
-		return errors.New("operator authorization required")
-	}
-	expected := h.config.Get().Token
-	if expected == "" {
-		return fail("not_configured")
+		return cause
 	}
 	hdr := r.Header.Get("Authorization")
 	const prefix = "Bearer "
 	if len(hdr) <= len(prefix) || !strings.EqualFold(hdr[:len(prefix)], prefix) {
-		return fail("missing_token")
+		return finishFailure("missing_token", errors.New("operator authorization required"))
 	}
 	presented := strings.TrimSpace(hdr[len(prefix):])
-	expectedSum := sha256.Sum256([]byte(expected))
-	presentedSum := sha256.Sum256([]byte(presented))
-	if subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
-		return fail("invalid_token")
+	if expected := h.config.Get().Token; expected != "" {
+		expectedSum := sha256.Sum256([]byte(expected))
+		presentedSum := sha256.Sum256([]byte(presented))
+		if subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) == 1 {
+			return nil
+		}
 	}
-	return nil
+	if h.ownerManager != nil {
+		if _, err := h.ownerManager.Resolve(r.Context(), presented); err == nil {
+			return finishFailure("owner_token_insufficient_scope", errOwnerTokenCannotAuthorizeOperator)
+		}
+	}
+	return finishFailure("invalid_token", errors.New("operator authorization required"))
 }
 
 // OperatorServerStatus and OperatorServerConfig preserve the REST operator-token requirement for GraphQL fields.
@@ -3414,10 +3624,14 @@ func (h *Handler) serverStatusData() map[string]interface{} {
 	if cfg.MaintenanceMode {
 		status = "maintenance"
 	}
+	torRunning := false
+	if h.torService != nil && !h.torService.IsStarting() {
+		torRunning = h.torService.IsRunning()
+	}
 	return map[string]interface{}{
 		"status": status, "version": APIVersion, "mode": cfg.Mode,
 		"uptime": h.formatDuration(time.Since(h.startTime)), "go_version": runtime.Version(),
-		"tor": map[string]interface{}{"enabled": cfg.Tor.Enabled, "running": h.torService != nil && h.torService.IsRunning()},
+		"tor": map[string]interface{}{"enabled": cfg.Tor.Enabled, "running": torRunning},
 	}
 }
 
@@ -3440,21 +3654,26 @@ func (h *Handler) serverConfigData() map[string]interface{} {
 
 func (h *Handler) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authStarted := time.Now()
 		if err := h.operatorAuthError(r); err != nil {
-			if delay := 100*time.Millisecond - time.Since(authStarted); delay > 0 {
-				time.Sleep(delay)
-			}
-			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
-			h.errorResponse(w, http.StatusUnauthorized, "Invalid credentials", "")
+			h.writeOperatorAuthError(w, r, err)
 			return
 		}
 		next(w, r)
 	}
 }
 
+func (h *Handler) writeOperatorAuthError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errOwnerTokenCannotAuthorizeOperator) {
+		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+		h.errorResponse(w, http.StatusForbidden, "Insufficient permissions", "", r)
+		return
+	}
+	w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
+	h.errorResponse(w, http.StatusUnauthorized, "Invalid credentials", "", r)
+}
+
 // handleServerStatus handles GET /api/v1/server/status (operator token required).
-// Per AI.md PART 14: operator-gated JSON status endpoint mirrors /server/status HTML page.
+// Per AI.md PART 14: operator-gated machine-only JSON status endpoint.
 func (h *Handler) handleServerStatus(w http.ResponseWriter, _ *http.Request) {
 	h.jsonResponse(w, http.StatusOK, &APIResponse{OK: true, Data: h.serverStatusData()})
 }
@@ -3523,10 +3742,10 @@ func (h *Handler) handleGeoIPLookup(w http.ResponseWriter, r *http.Request) {
 	payload, err := h.LookupGeoIP(target)
 	if err != nil {
 		if h.geoipLookup == nil || !h.geoipLookup.IsLoaded() {
-			h.errorResponse(w, http.StatusServiceUnavailable, "GeoIP database is not available", "")
+			h.errorResponse(w, http.StatusServiceUnavailable, "GeoIP database is not available", "", r)
 			return
 		}
-		h.errorResponse(w, http.StatusBadRequest, "Invalid IP address", "")
+		h.errorResponse(w, http.StatusBadRequest, "Invalid IP address", "", r)
 		return
 	}
 
@@ -3604,7 +3823,7 @@ func (h *Handler) handleGeoIPPreset(w http.ResponseWriter, r *http.Request) {
 	cfg := h.config.Get()
 	codes, ok := cfg.GeoIP.Preset(name)
 	if !ok {
-		h.errorResponse(w, http.StatusNotFound, "Preset not found", "")
+		h.errorResponse(w, http.StatusNotFound, "Preset not found", "", r)
 		return
 	}
 
@@ -3621,13 +3840,13 @@ func (h *Handler) handleGeoIPPreset(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGeoIPPresetSave(w http.ResponseWriter, r *http.Request) {
 	var req geoIPPresetRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 64*1024)).Decode(&req); err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
+		h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error(), r)
 		return
 	}
 
 	name := strings.ToLower(strings.TrimSpace(req.Name))
 	if !config.IsValidPresetName(name) {
-		h.errorResponse(w, http.StatusBadRequest, "Invalid preset name (a-z, 0-9, hyphen, underscore)", "")
+		h.errorResponse(w, http.StatusBadRequest, "Invalid preset name (a-z, 0-9, hyphen, underscore)", "", r)
 		return
 	}
 
@@ -3640,13 +3859,13 @@ func (h *Handler) handleGeoIPPresetSave(w http.ResponseWriter, r *http.Request) 
 		codes = cfg.GeoIP.AllowedCountries
 	case "":
 	default:
-		h.errorResponse(w, http.StatusBadRequest, "Invalid from value (deny_countries or allow_countries)", "")
+		h.errorResponse(w, http.StatusBadRequest, "Invalid from value (deny_countries or allow_countries)", "", r)
 		return
 	}
 
 	normalized := config.NormalizeCountryCodes(codes)
 	if len(normalized) == 0 {
-		h.errorResponse(w, http.StatusBadRequest, "No valid ISO 3166-1 alpha-2 country codes supplied", "")
+		h.errorResponse(w, http.StatusBadRequest, "No valid ISO 3166-1 alpha-2 country codes supplied", "", r)
 		return
 	}
 
@@ -3654,7 +3873,7 @@ func (h *Handler) handleGeoIPPresetSave(w http.ResponseWriter, r *http.Request) 
 		s.GeoIP.SetPreset(name, normalized)
 	})
 	if err := h.saveConfig(); err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Failed to persist preset", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to persist preset", err.Error(), r)
 		return
 	}
 
@@ -3675,11 +3894,11 @@ func (h *Handler) handleGeoIPPresetDelete(w http.ResponseWriter, r *http.Request
 		removed = s.GeoIP.DeletePreset(name)
 	})
 	if !removed {
-		h.errorResponse(w, http.StatusNotFound, "Preset not found", "")
+		h.errorResponse(w, http.StatusNotFound, "Preset not found", "", r)
 		return
 	}
 	if err := h.saveConfig(); err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Failed to persist preset removal", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to persist preset removal", err.Error(), r)
 		return
 	}
 
@@ -3744,27 +3963,6 @@ func (h *Handler) SchedulerHistoryForGraphQL(r *http.Request, id string) ([]*sch
 		history = []*scheduler.TaskHistoryEntry{}
 	}
 	return history, nil
-}
-
-// SetSchedulerTaskEnabledForGraphQL applies the REST enable/disable operation.
-func (h *Handler) SetSchedulerTaskEnabledForGraphQL(r *http.Request, id string, enabled bool) (*scheduler.TaskInfo, error) {
-	if err := h.operatorAuthError(r); err != nil {
-		return nil, err
-	}
-	if h.scheduler == nil {
-		return nil, errors.New("scheduler is unavailable")
-	}
-	taskID := scheduler.TaskID(id)
-	var err error
-	if enabled {
-		err = h.scheduler.Enable(taskID)
-	} else {
-		err = h.scheduler.Disable(taskID)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return h.scheduler.GetTask(taskID)
 }
 
 // RunSchedulerTaskForGraphQL triggers and audits the same manual operation as REST.

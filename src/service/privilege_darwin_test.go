@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+func TestDarwinServiceAccountUsesInternalName(t *testing.T) {
+	const internalName = "search"
+	if got := GetServiceUser(internalName); got != internalName {
+		t.Fatalf("GetServiceUser(%q) = %q, want the exact internal name", internalName, got)
+	}
+	if got := GetServiceGroup(internalName); got != internalName {
+		t.Fatalf("GetServiceGroup(%q) = %q, want the exact internal name", internalName, got)
+	}
+}
+
 // Test findAvailableMacOSSystemID directly
 func TestFindAvailableMacOSSystemID(t *testing.T) {
 	id, err := findAvailableMacOSSystemID()

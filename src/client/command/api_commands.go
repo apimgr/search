@@ -558,7 +558,7 @@ func runPreferencesSet(args []string) error {
 		if err := c.SetPreferences(prefs); err != nil {
 			return err
 		}
-		fmt.Println("Preferences updated")
+		fmt.Println(localizedCLIText("Preferences updated"))
 		return nil
 	})
 }
@@ -596,18 +596,19 @@ Examples:
 
 // alertFields collects key=value pairs shared by alert create and update.
 type alertFields struct {
-	Query          string
-	Category       string
-	Language       string
-	Region         string
-	Engines        []string
-	SafeSearch     int
-	Frequency      string
-	Email          string
-	DeliverEmail   bool
-	DeliverRSS     bool
-	DeliverWebhook bool
-	WebhookURL     string
+	Query                     string
+	Category                  string
+	Language                  string
+	Region                    string
+	Engines                   []string
+	SafeSearch                int
+	Frequency                 string
+	Email                     string
+	DeliverEmail              bool
+	DeliverRSS                bool
+	DeliverWebhook            bool
+	DeliveryChannelsSpecified bool
+	WebhookURL                string
 }
 
 // parseAlertFields converts key=value arguments into alert fields.
@@ -649,10 +650,13 @@ func parseAlertFields(args []string) (*alertFields, error) {
 			}
 			switch key {
 			case "deliver_email":
+				f.DeliveryChannelsSpecified = true
 				f.DeliverEmail = b
 			case "deliver_rss":
+				f.DeliveryChannelsSpecified = true
 				f.DeliverRSS = b
 			case "deliver_webhook":
+				f.DeliveryChannelsSpecified = true
 				f.DeliverWebhook = b
 			}
 		default:
@@ -660,6 +664,15 @@ func parseAlertFields(args []string) (*alertFields, error) {
 		}
 	}
 	return f, nil
+}
+
+func (f *alertFields) applyCreateDefaults() {
+	if f.Frequency == "" {
+		f.Frequency = "daily"
+	}
+	if f.Email != "" && !f.DeliveryChannelsSpecified {
+		f.DeliverEmail = true
+	}
 }
 
 // renderAlert prints an alert in the active output format.
@@ -690,12 +703,7 @@ func runAlertCreate(args []string) error {
 	if f.Query == "" {
 		return fmt.Errorf("%w: query= is required to create an alert", ErrUsage)
 	}
-	if f.Frequency == "" {
-		f.Frequency = "daily"
-	}
-	if f.Email != "" && !f.DeliverEmail {
-		f.DeliverEmail = true
-	}
+	f.applyCreateDefaults()
 	return withClient(func(c *api.Client) error {
 		alert, err := c.CreateAlert(&api.CreateAlertRequest{
 			Query:          f.Query,
@@ -768,7 +776,7 @@ func runAlertDelete(args []string) error {
 		if err := c.DeleteAlert(args[0]); err != nil {
 			return err
 		}
-		fmt.Println("Alert deleted")
+		fmt.Println(localizedCLIText("Alert deleted"))
 		return nil
 	})
 }
@@ -831,7 +839,7 @@ func newAutodiscoverCommand() *command {
 	return &command{
 		Use:   "autodiscover",
 		Short: "Show the server autodiscover document",
-		Long: `Show the /api/autodiscover document, including the API base path and
+		Long: `Show the /api/autodiscover document, including the API version and
 the CLI binary versions published for each platform.`,
 		run: func(args []string) error {
 			return withClient(func(c *api.Client) error {
@@ -840,15 +848,19 @@ the CLI binary versions published for each platform.`,
 					return err
 				}
 				rows := [][]string{
-					{"server.name", info.Server.Name},
-					{"server.version", info.Server.Version},
-					{"server.url", info.Server.URL},
-					{"server.features.auth", boolCell(info.Server.Features.Auth)},
-					{"server.features.search", boolCell(info.Server.Features.Search)},
-					{"server.features.register", boolCell(info.Server.Features.Register)},
-					{"api.version", info.API.Version},
-					{"api.base_path", info.API.BasePath},
+					{"name", info.Name},
+					{"version", info.Version},
+					{"api.current_version", info.API.CurrentVersion},
 					{"cli_min_version", info.CLIMinVersion},
+				}
+				for i, publicURL := range info.URLs {
+					rows = append(rows, []string{fmt.Sprintf("urls.%d", i), publicURL})
+				}
+				if info.Onion != "" {
+					rows = append(rows, []string{"onion", info.Onion})
+				}
+				if info.I2P != "" {
+					rows = append(rows, []string{"i2p", info.I2P})
 				}
 				platforms := make([]string, 0, len(info.CLIVersions))
 				for k := range info.CLIVersions {
@@ -875,9 +887,9 @@ the CLI binary versions published for each platform.`,
 
 func newSchedulerCommand() *command {
 	return &command{
-		Use:   "scheduler <list|show|run|enable|disable|history> [task]",
-		Short: "Inspect and control scheduled tasks",
-		Long:  "List scheduler tasks, inspect history, and trigger or toggle skippable tasks. Requires an operator token.",
+		Use:   "scheduler <list|show|run|history> [task]",
+		Short: "Inspect scheduled tasks and trigger runs",
+		Long:  "List scheduler tasks, inspect history, and trigger a task run. Requires an operator token.",
 		run: func(args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("%w: scheduler action is required", ErrUsage)
@@ -924,11 +936,6 @@ func newSchedulerCommand() *command {
 						return err
 					}
 					return render(getOutputFormat(), view{Data: map[string]interface{}{"task": taskID, "triggered": true}, Rows: [][]string{{"task", taskID}, {"triggered", "true"}}, Headers: []string{"FIELD", "VALUE"}})
-				case "enable", "disable":
-					if err := c.SetSchedulerTaskEnabled(taskID, action == "enable"); err != nil {
-						return err
-					}
-					return render(getOutputFormat(), view{Data: map[string]interface{}{"task": taskID, "enabled": action == "enable"}, Rows: [][]string{{"task", taskID}, {"enabled", action}}, Headers: []string{"FIELD", "VALUE"}})
 				default:
 					return fmt.Errorf("%w: unknown scheduler action %q", ErrUsage, action)
 				}

@@ -10,7 +10,7 @@ import (
 // TestHandleServerStatus verifies the 0% handler returns 200 with ok=true and status=healthy.
 func TestHandleServerStatus(t *testing.T) {
 	handler := newTestHandler()
-	req := httptest.NewRequest(http.MethodGet, "/server/status", nil)
+	req := httptest.NewRequest(http.MethodGet, APIPrefix+"/server/status", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleServerStatus(w, req)
@@ -43,7 +43,7 @@ func TestHandleServerStatusMaintenance(t *testing.T) {
 	handler := newTestHandler()
 	handler.config.Server.MaintenanceMode = true
 
-	req := httptest.NewRequest(http.MethodGet, "/server/status", nil)
+	req := httptest.NewRequest(http.MethodGet, APIPrefix+"/server/status", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleServerStatus(w, req)
@@ -64,7 +64,7 @@ func TestHandleServerStatusMaintenance(t *testing.T) {
 // TestHandleServerConfig verifies the 0% handler returns 200 with ok=true and expected config fields.
 func TestHandleServerConfig(t *testing.T) {
 	handler := newTestHandler()
-	req := httptest.NewRequest(http.MethodGet, "/server/config", nil)
+	req := httptest.NewRequest(http.MethodGet, APIPrefix+"/server/config", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleServerConfig(w, req)
@@ -141,9 +141,6 @@ func TestHandleHealthzTorEnabledNilService(t *testing.T) {
 	}
 	if resp.Checks.Tor != "degraded" || resp.Status != "degraded" {
 		t.Errorf("unavailable Tor must produce degraded check and overall status; got check=%q status=%q", resp.Checks.Tor, resp.Status)
-	}
-	if resp.Cluster.Enabled {
-		t.Error("single-instance health response must report cluster.enabled=false")
 	}
 	if !resp.Features.Tor.Enabled {
 		t.Errorf("tor.enabled = %v, want true", resp.Features.Tor.Enabled)

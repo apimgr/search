@@ -14,12 +14,22 @@ const maxHTMLResponseBuffer = 8 << 20
 // rendered response a build-scoped validator. The body hash keeps dynamic or
 // authenticated pages from sharing a validator when their content changes.
 func HTMLCacheHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return HTMLCacheHeadersWithCSRF("csrf_token")(next)
+}
+
+// HTMLCacheHeadersWithCSRF applies HTML validators and the service-worker
+// public-copy eligibility rules with the configured CSRF cookie name.
+func HTMLCacheHeadersWithCSRF(csrfCookieName string) func(http.Handler) http.Handler {
+	if csrfCookieName == "" {
+		csrfCookieName = "csrf_token"
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || !strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") {
 			next.ServeHTTP(w, r)
 			return
 		}
-		capture := &htmlResponseCapture{header: make(http.Header), writer: w, request: r}
+		capture := &htmlResponseCapture{header: make(http.Header), writer: w, request: r, csrfCookieName: csrfCookieName}
 		next.ServeHTTP(capture, r)
 		if capture.passthrough {
 			return
@@ -61,6 +71,10 @@ func HTMLCacheHeaders(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
+		capture.header.Del("X-Offline-Cache")
+		if isOfflineCachePublicPage(r, status, csrfCookieName) {
+			capture.header.Set("X-Offline-Cache", "public")
+		}
 		applyBuildStampCookie(capture.header, r, status)
 		copyHeader(w.Header(), capture.header)
 		if status == http.StatusOK && htmlETagMatches(r.Header.Values("If-None-Match"), capture.header.Get("ETag")) {
@@ -72,7 +86,8 @@ func HTMLCacheHeaders(next http.Handler) http.Handler {
 		if r.Method != http.MethodHead {
 			_, _ = w.Write(capture.body.Bytes())
 		}
-	})
+		})
+	}
 }
 
 type htmlResponseCapture struct {
@@ -82,6 +97,7 @@ type htmlResponseCapture struct {
 	passthrough bool
 	writer      http.ResponseWriter
 	request     *http.Request
+	csrfCookieName string
 }
 
 func (c *htmlResponseCapture) Header() http.Header { return c.header }
@@ -132,6 +148,10 @@ func (c *htmlResponseCapture) flushToWriter() {
 		if c.header.Get("ETag") == "" {
 			c.header.Set("ETag", fmt.Sprintf("\"html-%s\"", buildAssetStamp()))
 		}
+		c.header.Del("X-Offline-Cache")
+		if isOfflineCachePublicPage(c.request, status, c.csrfCookieName) {
+			c.header.Set("X-Offline-Cache", "public")
+		}
 		applyBuildStampCookie(c.header, c.request, status)
 	}
 	copyHeader(c.writer.Header(), c.header)
@@ -139,6 +159,29 @@ func (c *htmlResponseCapture) flushToWriter() {
 	_, _ = c.writer.Write(c.body.Bytes())
 	c.body.Reset()
 	c.passthrough = true
+}
+
+// isOfflineCachePublicPage limits offline copies to static informational pages
+// with no page-owned forms or visitor-specific state. Shared theme and consent
+// forms in the common shell are intentionally excluded from this test.
+func isOfflineCachePublicPage(r *http.Request, status int, csrfCookieName string) bool {
+	if r == nil || r.Method != http.MethodGet || status != http.StatusOK || r.Header.Get("Authorization") != "" {
+		return false
+	}
+	if r.Header.Get("Accept-Language") != "" {
+		return false
+	}
+	for _, cookie := range r.Cookies() {
+		if cookie.Name != csrfCookieName && cookie.Name != "search_build" {
+			return false
+		}
+	}
+	switch r.URL.Path {
+	case "/server/about", "/server/privacy", "/server/help", "/server/help/mcp", "/server/terms", "/server/security/policy":
+		return true
+	default:
+		return false
+	}
 }
 
 func htmlETagMatches(values []string, etag string) bool {

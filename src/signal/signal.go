@@ -41,8 +41,8 @@ type ShutdownConfig struct {
 }
 
 var (
-	shuttingDown bool
-	shutdownMu   sync.RWMutex
+	shuttingDown     bool
+	shutdownMu       sync.RWMutex
 	shutdownExitCode atomic.Int32
 )
 

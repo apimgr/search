@@ -12,6 +12,7 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -50,13 +51,13 @@ type alertPauseRequest struct {
 
 var errAlertStorageUnavailable = errors.New("alert storage is unavailable")
 
-func (h *Handler) writeAlertJSONDecodeError(w http.ResponseWriter, err error) {
+func (h *Handler) writeAlertJSONDecodeError(w http.ResponseWriter, r *http.Request, err error) {
 	var maxBytesError *http.MaxBytesError
 	if errors.As(err, &maxBytesError) {
-		h.writeError(w, "REQUEST_TOO_LARGE", "Request body exceeds the configured limit", http.StatusRequestEntityTooLarge)
+		h.writeError(w, r, "REQUEST_TOO_LARGE", "Request body exceeds the configured limit", http.StatusRequestEntityTooLarge)
 		return
 	}
-	h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
+	h.writeError(w, r, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)
 }
 
 // AlertCreateForGraphQL creates an alert with the same request metadata and response fields as REST.
@@ -157,7 +158,7 @@ func (h *Handler) AlertFeedForGraphQL(ctx context.Context, token string) (*alert
 
 func (h *Handler) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	if h.alertManager == nil {
-		h.writeError(w, "NOT_AVAILABLE", "Alert storage is unavailable", http.StatusServiceUnavailable)
+		h.writeError(w, r, "NOT_AVAILABLE", "Alert storage is unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	switch r.Method {
@@ -167,7 +168,7 @@ func (h *Handler) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		h.handleCreateAlert(w, r)
 	default:
-		h.writeError(w, "METHOD_NOT_ALLOWED", "Method not allowed", http.StatusMethodNotAllowed)
+		h.writeError(w, r, "METHOD_NOT_ALLOWED", "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -175,7 +176,7 @@ func (h *Handler) handleAlerts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 	alerts, err := h.alertManager.ListAll(r.Context())
 	if err != nil {
-		h.writeError(w, "INTERNAL_ERROR", "Failed to list alerts", http.StatusInternalServerError)
+		h.writeError(w, r, "INTERNAL_ERROR", "Failed to list alerts", http.StatusInternalServerError)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, APIResponse{
@@ -188,12 +189,12 @@ func (h *Handler) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 	var req alertCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeAlertJSONDecodeError(w, err)
+		h.writeAlertJSONDecodeError(w, r, err)
 		return
 	}
 
 	if h.ownerManager == nil {
-		h.writeError(w, "OWNER_TOKENS_UNAVAILABLE", "Owner token service is unavailable", http.StatusServiceUnavailable)
+		h.writeError(w, r, "OWNER_TOKENS_UNAVAILABLE", "Owner token service is unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	createRequest := alert.CreateRequest{
@@ -213,7 +214,7 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 		CreatedFromIP:  clientIPForAPI(r),
 	}
 	if err := h.alertManager.ValidateCreate(createRequest); err != nil {
-		h.writeAlertError(w, err)
+		h.writeAlertError(w, r, err)
 		return
 	}
 	ownerToken := ""
@@ -222,13 +223,13 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 	}
 	identity, issuedToken, err := h.ownerManager.IssueOrResolve(r.Context(), ownerToken)
 	if err != nil {
-		h.writeError(w, "INTERNAL_ERROR", "Owner identity could not be created", http.StatusInternalServerError)
+		h.writeError(w, r, "INTERNAL_ERROR", "Owner identity could not be created", http.StatusInternalServerError)
 		return
 	}
 	createRequest.OwnerID = identity.OwnerID
 	created, err := h.alertManager.Create(r.Context(), createRequest)
 	if err != nil {
-		h.writeAlertError(w, err)
+		h.writeAlertError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -254,7 +255,7 @@ func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 	if h.alertManager == nil {
-		h.writeError(w, "NOT_AVAILABLE", "Alert storage is unavailable", http.StatusServiceUnavailable)
+		h.writeError(w, r, "NOT_AVAILABLE", "Alert storage is unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, APIPrefix+"/alerts/")
@@ -263,11 +264,11 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimSuffix(path, "/pause")
 		paused, err := decodeAlertPauseState(r)
 		if err != nil {
-			h.writeError(w, "BAD_REQUEST", "Invalid request body", http.StatusBadRequest)
+			h.writeError(w, r, "BAD_REQUEST", "Invalid request body", http.StatusBadRequest)
 			return
 		}
 		if err := h.alertManager.SetPaused(r.Context(), token, paused); err != nil {
-			h.writeAlertError(w, err)
+			h.writeAlertError(w, r, err)
 			return
 		}
 		h.writeJSON(w, http.StatusOK, APIResponse{OK: true, Data: map[string]bool{"paused": paused}})
@@ -275,7 +276,7 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimSuffix(path, "/rss")
 		xmlData, err := h.alertManager.FeedXML(r.Context(), token, 50)
 		if err != nil {
-			h.writeAlertError(w, err)
+			h.writeAlertError(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
@@ -289,12 +290,12 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			alertInfo, err := h.alertManager.GetByManageToken(r.Context(), token)
 			if err != nil {
-				h.writeAlertError(w, err)
+				h.writeAlertError(w, r, err)
 				return
 			}
 			data, err := alertManageResponseData(h, r, token, alertInfo)
 			if err != nil {
-				h.writeAlertError(w, err)
+				h.writeAlertError(w, r, err)
 				return
 			}
 			w.Header().Set("Cache-Control", "no-store")
@@ -302,7 +303,7 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPatch:
 			var req alertUpdateRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				h.writeAlertJSONDecodeError(w, err)
+				h.writeAlertJSONDecodeError(w, r, err)
 				return
 			}
 			alertInfo, err := h.alertManager.Update(r.Context(), token, alert.UpdateRequest{
@@ -319,24 +320,24 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 				WebhookURL:     req.WebhookURL,
 			})
 			if err != nil {
-				h.writeAlertError(w, err)
+				h.writeAlertError(w, r, err)
 				return
 			}
 			data, err := alertManageResponseData(h, r, token, alertInfo)
 			if err != nil {
-				h.writeAlertError(w, err)
+				h.writeAlertError(w, r, err)
 				return
 			}
 			w.Header().Set("Cache-Control", "no-store")
 			h.writeJSON(w, http.StatusOK, APIResponse{OK: true, Data: data})
 		case http.MethodDelete:
 			if err := h.alertManager.Delete(r.Context(), token); err != nil {
-				h.writeAlertError(w, err)
+				h.writeAlertError(w, r, err)
 				return
 			}
 			h.writeJSON(w, http.StatusOK, APIResponse{OK: true, Data: map[string]bool{"deleted": true}})
 		default:
-			h.writeError(w, "METHOD_NOT_ALLOWED", "Method not allowed", http.StatusMethodNotAllowed)
+			h.writeError(w, r, "METHOD_NOT_ALLOWED", "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	}
 }
@@ -347,11 +348,11 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, payload APIRespon
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, code, message string, status int) {
+func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, code, message string, status int) {
 	h.writeJSON(w, status, APIResponse{
 		OK:      false,
 		Error:   code,
-		Message: message,
+		Message: i18n.RequestString(r, apiErrorTranslationKey(status, code)),
 	})
 }
 
@@ -361,15 +362,15 @@ func (h *Handler) writeError(w http.ResponseWriter, code, message string, status
 // (DB failures, etc.) is never exposed to the client — it is logged and the
 // client receives a generic SERVER_ERROR, per AI.md PART 11: error messages
 // must never leak Go error strings, stack traces, or internal paths.
-func (h *Handler) writeAlertError(w http.ResponseWriter, err error) {
+func (h *Handler) writeAlertError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, alert.ErrNotFound):
-		h.writeError(w, "NOT_FOUND", "Alert not found", http.StatusNotFound)
+		h.writeError(w, r, "NOT_FOUND", "Alert not found", http.StatusNotFound)
 	case errors.Is(err, alert.ErrInvalidInput), errors.Is(err, alert.ErrEmailRequired):
-		h.writeError(w, "VALIDATION_FAILED", err.Error(), http.StatusBadRequest)
+		h.writeError(w, r, "VALIDATION_FAILED", err.Error(), http.StatusBadRequest)
 	default:
 		slog.Error("alert API error", "error", err)
-		h.writeError(w, "SERVER_ERROR", "Internal server error", http.StatusInternalServerError)
+		h.writeError(w, r, "SERVER_ERROR", "Internal server error", http.StatusInternalServerError)
 	}
 }
 

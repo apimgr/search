@@ -15,13 +15,13 @@ type OverlayState struct {
 func TorState(enabled, starting, running bool, hostname string) OverlayState {
 	switch {
 	case running:
-		return OverlayState{Enabled: true, Running: true, Status: "healthy", Hostname: hostname}
+		return OverlayState{Enabled: true, Running: true, State: "running", Status: "healthy", Hostname: hostname}
 	case starting:
-		return OverlayState{Enabled: true, Status: "starting"}
+		return OverlayState{Enabled: true, State: "starting", Status: "starting"}
 	case enabled:
-		return OverlayState{Enabled: true, Status: "unavailable"}
+		return OverlayState{Enabled: true, State: "error", Status: "unavailable"}
 	default:
-		return OverlayState{Status: "disabled"}
+		return OverlayState{State: "disabled", Status: "disabled"}
 	}
 }
 
@@ -29,7 +29,7 @@ func TorState(enabled, starting, running bool, hostname string) OverlayState {
 func I2PState(state, provider, hostname string) OverlayState {
 	switch state {
 	case "no_provider":
-		return OverlayState{Status: "disabled", State: state}
+		return OverlayState{Status: "disabled", State: state, Provider: "none"}
 	case "starting", "building":
 		return OverlayState{Enabled: true, Status: "starting", State: state, Provider: safeProvider(provider)}
 	case "running":
@@ -37,7 +37,7 @@ func I2PState(state, provider, hostname string) OverlayState {
 	case "error":
 		return OverlayState{Enabled: true, Status: "unavailable", State: state, Provider: safeProvider(provider)}
 	default:
-		return OverlayState{Status: "disabled", State: "disabled"}
+		return OverlayState{Status: "disabled", State: "disabled", Provider: "none"}
 	}
 }
 

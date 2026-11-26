@@ -18,6 +18,10 @@ func (h *Handler) ContentNegotiationMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if isJSONProtocolRoute(stripTxtExtension(r.URL.Path)) {
+			next.ServeHTTP(w, r)
+			return
+		}
 
 		addAPIVaryHeaders(w.Header())
 		format := httputil.GetPreferredFormat(r)
@@ -56,6 +60,17 @@ func (h *Handler) ContentNegotiationMiddleware(next http.Handler) http.Handler {
 		w.WriteHeader(capture.statusCode())
 		_, _ = w.Write(textBody)
 	})
+}
+
+func isJSONProtocolRoute(path string) bool {
+	switch path {
+	case APIPrefix + "/server/swagger", "/api/swagger",
+		APIPrefix + "/server/graphql", "/api/graphql",
+		APIPrefix + "/server/mcp", "/api/mcp":
+		return true
+	default:
+		return false
+	}
 }
 
 type apiResponseCapture struct {

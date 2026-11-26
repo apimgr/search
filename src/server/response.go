@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,9 +30,21 @@ func writeResponseFormatted(w io.Writer, format string, args ...any) {
 // respondJSON writes a JSON response with the given status code.
 // Per AI.md PART 6: used by debug endpoint handlers.
 func respondJSON(w http.ResponseWriter, status int, v any) {
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(v); err != nil {
+		slog.Error("failed to encode HTTP JSON response", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if _, writeErr := io.WriteString(w, `{"ok":false,"error":"SERVER_ERROR","message":"failed to encode response","details":{}}`+"\n"); writeErr != nil {
+			slog.Debug("failed to write HTTP JSON error response", "error", writeErr)
+		}
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if _, err := w.Write(body.Bytes()); err != nil {
+		slog.Debug("failed to write HTTP JSON response", "error", err)
+	}
 }
 
 // mapHTTPStatusToCode returns the canonical machine-readable error code for an HTTP status.

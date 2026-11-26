@@ -139,7 +139,7 @@ func NewMailer(cfg *Config) *Mailer {
 // server.yml config, resolving the same from-address/from-name/language
 // defaults and admin recipient (AI.md PART 12 "Contact Configuration":
 // server.contact.admin.email) used by every mailer construction site in
-// this project (the running server, the `search email test` CLI
+// this project (the running server, the `search --maintenance email test` CLI
 // subcommand, and the `search --update yes` self-update completion
 // notification). Returns (nil, false) when SMTP is not configured, per
 // AI.md PART 17: "Email-dependent features disabled until SMTP configured."
@@ -194,6 +194,7 @@ func NewMailerFromConfig(cfg *config.Config) (*Mailer, bool) {
 		AppTitle:     fromName,
 		FQDN:         cfg.Server.FQDN,
 		AppURL:       cfg.Server.BaseURL,
+		ReplyTo:      cfg.Server.Notifications.Email.ReplyTo,
 		Lang:         emailLang,
 		AdminEmails:  adminEmails,
 		Events:       cfg.Server.Notifications.Email.Events,
@@ -687,7 +688,7 @@ func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
 	vars["heading"] = i18n.T(lang, "email.security_alert.heading")
 	vars["label_source_ip"] = i18n.T(lang, "email.security_alert.label_source_ip")
 	vars["label_details"] = i18n.T(lang, "email.security_alert.label_details")
-	subject, body, err := NewEmailTemplate().Render(TemplateSecurityAlert, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateSecurityAlert, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -722,7 +723,7 @@ func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, r
 	vars["label_release_date"] = i18n.T(lang, "email.update_available.label_release_date")
 	vars["label_release_notes"] = i18n.T(lang, "email.update_available.label_release_notes")
 	vars["label_view_update"] = i18n.T(lang, "email.update_available.label_view_update")
-	subject, body, err := NewEmailTemplate().Render(TemplateUpdateAvailable, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateUpdateAvailable, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -742,7 +743,23 @@ func (ml *Mailer) SendUpdateInstalled(previousVersion, newVersion string) error 
 	vars := ml.baseVars()
 	vars["previous_version"] = previousVersion
 	vars["new_version"] = newVersion
-	subject, body, err := NewEmailTemplate().Render(TemplateUpdateInstalled, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateUpdateInstalled, ml.lang(), vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendToAdmins(subject, body)
+}
+
+// SendUpdateFailed notifies admins that a staged update failed and the old
+// binary remains active.
+func (ml *Mailer) SendUpdateFailed(version, reason string) error {
+	if !ml.CanSend() || !ml.config.Events.UpdateFailed {
+		return nil
+	}
+	vars := ml.baseVars()
+	vars["version"] = version
+	vars["error"] = reason
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateUpdateFailed, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -759,7 +776,7 @@ func (ml *Mailer) SendStartup(hostname, version, mode string) error {
 	vars["hostname"] = hostname
 	vars["version"] = version
 	vars["mode"] = mode
-	subject, body, err := NewEmailTemplate().Render(TemplateStartup, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateStartup, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -777,7 +794,7 @@ func (ml *Mailer) SendShutdown(hostname, version, mode, reason string) error {
 	vars["version"] = version
 	vars["mode"] = mode
 	vars["reason"] = reason
-	subject, body, err := NewEmailTemplate().Render(TemplateShutdown, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateShutdown, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -795,7 +812,7 @@ func (ml *Mailer) SendDiskLow(path string, usedPercent float64, free string, thr
 	vars["used_percent"] = fmt.Sprintf("%.1f", usedPercent)
 	vars["free"] = free
 	vars["threshold_percent"] = fmt.Sprintf("%d", thresholdPercent)
-	subject, body, err := NewEmailTemplate().Render(TemplateDiskLow, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateDiskLow, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -811,7 +828,7 @@ func (ml *Mailer) SendDatabaseError(problem error, since time.Time) error {
 	vars := ml.baseVars()
 	vars["error"] = sanitizeDatabaseError(problem.Error())
 	vars["since"] = since.UTC().Format("2006-01-02 15:04:05 UTC")
-	subject, body, err := NewEmailTemplate().Render(TemplateDatabaseError, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateDatabaseError, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -834,7 +851,7 @@ func (ml *Mailer) SendBackupCompleted(filename, size string) error {
 	vars := ml.baseVars()
 	vars["filename"] = filename
 	vars["size"] = size
-	subject, body, err := NewEmailTemplate().Render(TemplateBackupCompleted, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateBackupCompleted, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -852,7 +869,7 @@ func (ml *Mailer) SendBackupFailed(filename, errMsg string) error {
 	vars := ml.baseVars()
 	vars["filename"] = filename
 	vars["error"] = errMsg
-	subject, body, err := NewEmailTemplate().Render(TemplateBackupFailed, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateBackupFailed, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -873,7 +890,7 @@ func (ml *Mailer) SendSSLExpiring(domain, expiresIn, expiryDate string) error {
 	vars["domain"] = domain
 	vars["expires_in"] = expiresIn
 	vars["expiry_date"] = expiryDate
-	subject, body, err := NewEmailTemplate().Render(TemplateSSLExpiring, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateSSLExpiring, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -893,7 +910,7 @@ func (ml *Mailer) SendSSLRenewed(domain, validUntil string) error {
 	vars["fqdn"] = domain
 	vars["domain"] = domain
 	vars["valid_until"] = validUntil
-	subject, body, err := NewEmailTemplate().Render(TemplateSSLRenewed, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateSSLRenewed, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -922,7 +939,7 @@ func (ml *Mailer) SendSSLRenewalFailed(domain, errMsg string, daysLeft int, next
 	vars["expires_in"] = fmt.Sprintf("%d days", daysLeft)
 	vars["expiry_date"] = time.Now().AddDate(0, 0, daysLeft).Format("2006-01-02")
 	vars["next_retry"] = nextRetry
-	subject, body, err := NewEmailTemplate().Render(TemplateSSLRenewalFailed, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateSSLRenewalFailed, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -942,7 +959,7 @@ func (ml *Mailer) SendSchedulerError(taskName, errMsg, nextRun string) error {
 	vars["task_name"] = taskName
 	vars["error"] = errMsg
 	vars["next_run"] = nextRun
-	subject, body, err := NewEmailTemplate().Render(TemplateSchedulerError, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateSchedulerError, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -951,7 +968,7 @@ func (ml *Mailer) SendSchedulerError(taskName, errMsg, nextRun string) error {
 
 // SendTest sends a test email to a specific recipient (not the admin list).
 // Per AI.md PART 17 "Send Test Email": the operator-facing test action (and
-// the `{project_name} email test` CLI command) targets a chosen recipient
+// the `{project_name} --maintenance email test` CLI command) targets a chosen recipient
 // rather than every configured admin.
 func (ml *Mailer) SendTest(to string) error {
 	if to == "" {
@@ -959,7 +976,7 @@ func (ml *Mailer) SendTest(to string) error {
 	}
 	vars := ml.baseVars()
 	vars["sent_at"] = vars["timestamp"]
-	subject, body, err := NewEmailTemplate().Render(TemplateTest, vars)
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateTest, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -989,7 +1006,7 @@ func (ml *Mailer) SendTemplateTest(to string, templateType TemplateType) error {
 	if appName == "" {
 		appName = i18n.TDefault("common.app_name")
 	}
-	subject, body, err := NewEmailTemplate().PreviewTemplate(templateType, appName, ml.config.AppURL)
+	subject, body, err := NewEmailTemplate().PreviewTemplateLocalized(templateType, ml.lang(), appName, ml.config.AppURL, ml.config.ReplyTo)
 	if err != nil {
 		return err
 	}

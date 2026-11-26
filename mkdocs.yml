@@ -104,6 +104,7 @@ nav:
     - Configuration: configuration.md
   - Usage:
     - Search: search.md
+    - Client GUI and TUI: client-ui.md
     - API Reference: api.md
     - CLI Reference: cli.md
     - Integrations: integrations.md

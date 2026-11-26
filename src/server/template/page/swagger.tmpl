@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="container container-lg">
+    <header class="page-header">
+        <h1 class="page-title">{{t "help.api.heading"}}</h1>
+        <p class="page-lead">{{t "help.api.openapi_desc"}}</p>
+    </header>
+
+    <section class="section-card" aria-labelledby="swagger-explorer-heading">
+        <h2 id="swagger-explorer-heading">{{t "help.api.openapi_heading"}}</h2>
+        <p><a href="{{index .Data "SpecURL"}}">{{t "help.api.openapi_heading"}} (JSON)</a></p>
+        <noscript><p>{{t "help.api.openapi_desc"}} <a href="{{index .Data "SpecURL"}}">{{t "help.api.openapi_heading"}} (JSON)</a></p></noscript>
+        <div id="swagger-ui" data-spec-url="{{index .Data "SpecURL"}}" aria-live="polite">
+            <p>{{t "common.loading"}}</p>
+        </div>
+    </section>
+</div>
+{{end}}

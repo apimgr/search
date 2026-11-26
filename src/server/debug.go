@@ -1,9 +1,13 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"expvar"
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/go-chi/chi/v5"
@@ -25,20 +29,20 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 			})
 		})
 
-		r.HandleFunc("/pprof/", pprof.Index)
-		r.HandleFunc("/pprof/cmdline", pprof.Cmdline)
-		r.HandleFunc("/pprof/profile", pprof.Profile)
-		r.HandleFunc("/pprof/symbol", pprof.Symbol)
-		r.HandleFunc("/pprof/trace", pprof.Trace)
-		r.Handle("/pprof/heap", pprof.Handler("heap"))
-		r.Handle("/pprof/goroutine", pprof.Handler("goroutine"))
-		r.Handle("/pprof/allocs", pprof.Handler("allocs"))
-		r.Handle("/pprof/block", pprof.Handler("block"))
-		r.Handle("/pprof/mutex", pprof.Handler("mutex"))
-		r.Handle("/pprof/threadcreate", pprof.Handler("threadcreate"))
+		r.Get("/pprof", pprof.Index)
+		r.Get("/pprof/cmdline", s.handleDebugCommandLine)
+		r.Get("/pprof/profile", pprof.Profile)
+		r.Get("/pprof/symbol", pprof.Symbol)
+		r.Get("/pprof/trace", pprof.Trace)
+		r.Get("/pprof/heap", pprof.Handler("heap").ServeHTTP)
+		r.Get("/pprof/goroutine", pprof.Handler("goroutine").ServeHTTP)
+		r.Get("/pprof/allocs", pprof.Handler("allocs").ServeHTTP)
+		r.Get("/pprof/block", pprof.Handler("block").ServeHTTP)
+		r.Get("/pprof/mutex", pprof.Handler("mutex").ServeHTTP)
+		r.Get("/pprof/threadcreate", pprof.Handler("threadcreate").ServeHTTP)
 
-		// expvar
-		r.Handle("/vars", expvar.Handler())
+		// expvar with its command-line value redacted to the executable name.
+		r.Get("/vars", s.handleDebugVars)
 
 		// Custom debug endpoints
 		r.Get("/config", s.handleDebugConfig)
@@ -48,7 +52,59 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 		r.Get("/scheduler", s.handleDebugScheduler)
 		r.Get("/memory", s.handleDebugMemory)
 		r.Get("/goroutines", s.handleDebugGoroutines)
+		r.Get("/error500", func(w http.ResponseWriter, r *http.Request) {
+			manager := s.getI18nManager()
+			lang := manager.DetectLanguage(r)
+			s.handleError(w, r, http.StatusInternalServerError,
+				manager.T(lang, "errors.server_error_title"),
+				manager.T(lang, "errors.server_error_message"))
+		})
 	})
+}
+
+// processBinaryName returns only the executable's base name for diagnostic
+// output; process arguments may contain credentials and are never exposed.
+func processBinaryName() string {
+	if len(os.Args) == 0 {
+		return "search"
+	}
+	name := filepath.Base(os.Args[0])
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return "search"
+	}
+	return name
+}
+
+func (s *Server) handleDebugCommandLine(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	writeResponseText(w, processBinaryName()+"\n")
+}
+
+func (s *Server) handleDebugVars(w http.ResponseWriter, _ *http.Request) {
+	values := make(map[string]any)
+	expvar.Do(func(value expvar.KeyValue) {
+		if value.Key == "cmdline" {
+			values[value.Key] = []string{processBinaryName()}
+			return
+		}
+		var decoded any
+		if err := json.Unmarshal([]byte(value.Value.String()), &decoded); err != nil {
+			values[value.Key] = value.Value.String()
+			return
+		}
+		values[value.Key] = decoded
+	})
+
+	var body bytes.Buffer
+	encoder := json.NewEncoder(&body)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(values); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to encode runtime variables")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	writeResponseBytes(w, body.Bytes())
 }
 
 // handleDebugConfig returns sanitized configuration

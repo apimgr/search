@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/rand"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/closeutil"
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/email"
@@ -53,6 +55,7 @@ func isAllowlisted(ctx context.Context) bool {
 // Middleware wraps an http.Handler to add common functionality
 type Middleware struct {
 	config           *config.Config
+	renderer         *TemplateRenderer
 	logManager       *logging.Manager
 	blocklistManager *security.BlocklistManager
 	notifyManager    *notify.Manager
@@ -67,6 +70,10 @@ func NewMiddleware(cfg *config.Config, logMgr *logging.Manager) *Middleware {
 
 func (m *Middleware) SetBlocklistManager(manager *security.BlocklistManager) {
 	m.blocklistManager = manager
+}
+
+func (m *Middleware) SetTemplateRenderer(renderer *TemplateRenderer) {
+	m.renderer = renderer
 }
 
 func (m *Middleware) SetNotificationManager(manager *notify.Manager) {
@@ -232,7 +239,7 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 			if host == "" {
 				host = m.config.Server.BaseURL
 			}
-			reportsURL := fmt.Sprintf("%s://%s/api/v1/server/reports/default", scheme, host)
+			reportsURL := fmt.Sprintf("%s://%s%s/server/reports/default", scheme, host, api.APIBasePath())
 			w.Header().Set("Reporting-Endpoints", fmt.Sprintf(`default="%s"`, reportsURL))
 			w.Header().Set("Report-To", fmt.Sprintf(
 				`{"group":"default","max_age":%d,"endpoints":[{"url":"%s"}]}`,
@@ -362,6 +369,27 @@ func (m *Middleware) resolvedCORSOrigins() (origins []string, legacyPolicy bool,
 		origins = []string{"*"}
 	}
 	return origins, legacyPolicy, false
+}
+
+func (m *Middleware) mcpOriginAllowed(_ *http.Request, origin *url.URL) bool {
+	origins, _, disabled := m.resolvedCORSOrigins()
+	if disabled {
+		return false
+	}
+	for _, value := range origins {
+		value = strings.TrimSpace(value)
+		if value == "" || value == "*" {
+			continue
+		}
+		allowed, err := url.Parse(value)
+		if err != nil || allowed.Scheme == "" || allowed.Host == "" || allowed.User != nil || allowed.Path != "" && allowed.Path != "/" || allowed.RawQuery != "" || allowed.Fragment != "" {
+			continue
+		}
+		if strings.EqualFold(origin.Scheme, allowed.Scheme) && strings.EqualFold(origin.Host, allowed.Host) {
+			return true
+		}
+	}
+	return false
 }
 
 func trustedForwardedHost(r *http.Request, additional []string) string {
@@ -791,43 +819,7 @@ func getClientIP(r *http.Request, additionalTrustedProxies []string) string {
 // isTrustedProxy checks if the given IP string is a trusted proxy.
 // Always trusts: loopback, RFC1918, link-local. Also checks the additional list.
 func isTrustedProxy(ipStr string, additional []string) bool {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return false
-	}
-	// Always-trusted private/loopback ranges
-	alwaysTrusted := []string{
-		"127.0.0.0/8", "::1/128",
-		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-		"fc00::/7",
-		"169.254.0.0/16", "fe80::/10",
-	}
-	for _, cidr := range alwaysTrusted {
-		_, ipNet, err := net.ParseCIDR(cidr)
-		if err == nil && ipNet.Contains(ip) {
-			return true
-		}
-	}
-	// Additional configured proxies
-	for _, entry := range additional {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		_, ipNet, err := net.ParseCIDR(entry)
-		if err != nil {
-			// Try plain IP comparison
-			entryIP := net.ParseIP(entry)
-			if entryIP != nil && entryIP.Equal(ip) {
-				return true
-			}
-			continue
-		}
-		if ipNet.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return httputil.IsTrustedProxyWithAdditional(ipStr, additional)
 }
 
 // CSRF middleware handles Cross-Site Request Forgery protection.
@@ -1238,11 +1230,30 @@ func acceptsJSONError(r *http.Request) bool {
 }
 
 func writeRecoveryHTML(w http.ResponseWriter, r *http.Request) {
+	writeRecoveryHTMLStatus(w, r, http.StatusInternalServerError)
+}
+
+func writeRecoveryHTMLStatus(w http.ResponseWriter, r *http.Request, status int) {
 	theme := GetTheme(r)
 	className := GetThemeClass(theme)
+	lang := i18n.RequestLanguage(r)
+	dir := "ltr"
+	if language, ok := i18n.GetLanguage(lang); ok && language.RTL {
+		dir = "rtl"
+	}
+	text := func(key string) string {
+		return html.EscapeString(i18n.T(lang, key))
+	}
+	page := fmt.Sprintf(`<!doctype html><html lang="%s" dir="%s" class="%s" data-theme-mode="%s"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title><link rel="stylesheet" href="/static/css/common.css"><link rel="stylesheet" href="/static/css/public.css"></head><body><header><nav><a href="/">Search</a> <a href="/server/about">%s</a></nav></header><main class="error-page"><h1>%s</h1><p>%d %s</p><p>%s</p><a href="/">%s</a></main></body></html>`,
+		html.EscapeString(lang), dir, html.EscapeString(className), html.EscapeString(theme),
+		text("errors.recovery_title"), text("nav.about"), text("errors.recovery_heading"),
+		status, html.EscapeString(http.StatusText(status)), text("errors.recovery_message"), text("errors.recovery_search"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusInternalServerError)
-	_, _ = io.WriteString(w, `<!doctype html><html lang="en" class="`+className+`" data-theme-mode="`+theme+`"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Internal Server Error</title><link rel="stylesheet" href="/static/css/common.css"><link rel="stylesheet" href="/static/css/public.css"></head><body><header><nav><a href="/">Search</a> <a href="/server/about">About</a></nav></header><main class="error-page"><h1>Something went wrong</h1><p>The server could not complete this request. Please try again.</p><a href="/">Return to search</a></main></body></html>`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	if _, err := io.WriteString(w, page); err != nil {
+		slog.Warn("failed to write recovery response", "error", err)
+	}
 }
 
 // RequestID middleware adds a unique request ID (UUID v4 per AI.md)
@@ -1429,10 +1440,10 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 				return
 			}
 
-			// Always allow static assets and PWA root files (service worker,
-			// manifest, offline page) so the installed app keeps working
+			// Always allow static assets and PWA root files (service worker and
+			// manifest) so the installed app keeps working.
 			if strings.HasPrefix(path, "/static/") ||
-				path == "/sw.js" || path == "/manifest.json" || path == "/offline.html" {
+				path == "/sw.js" || path == "/manifest.json" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -1442,57 +1453,42 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 				m.logManager.Security().LogBlocked("-", path, "maintenance")
 			}
 
-			// Return maintenance page
-			// Per AI.md PART 5 line 5488-5492: Maintenance mode headers
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			// Preserve the maintenance response headers while rendering through the
+			// shared public error page, including its theme and locale handling.
 			w.Header().Set("Retry-After", "30")
 			w.Header().Set("X-Maintenance-Mode", "true")
 			w.Header().Set("X-Maintenance-Reason", "maintenance")
-			w.WriteHeader(http.StatusServiceUnavailable)
 
+			if m.config == nil || m.renderer == nil {
+				writeRecoveryHTMLStatus(w, r, http.StatusServiceUnavailable)
+				return
+			}
+
+			server := &Server{config: m.config, renderer: m.renderer}
+			if m.renderer.i18nManager != nil {
+				server.i18nManager = m.renderer.i18nManager
+			}
+			data := server.newPageData(w, r, server.getI18nManager().T(i18n.RequestLanguage(r), "admin.maintenance_page.title"), "error")
 			message := handler.GetMessage()
 			if message == "" {
-				message = "The system is currently undergoing maintenance. Please try again later."
+				message = server.getI18nManager().T(data.Lang, "errors.server_error_message")
 			}
-			lang, dir := i18n.DetectRequestLocale(r)
-
-			// Simple maintenance page
-			maintenanceHTML := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="%s" dir="%s">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maintenance</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a2e;
-            color: #eee;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-        }
-        .container {
-            text-align: center;
-            padding: 2rem;
-            max-width: 600px;
-        }
-        h1 { color: #bd93f9; margin-bottom: 1rem; }
-        p { color: #999; line-height: 1.6; }
-        .icon { font-size: 4rem; margin-bottom: 1rem; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="icon">🔧</div>
-        <h1>System Maintenance</h1>
-        <p>%s</p>
-    </div>
-</body>
-</html>`, lang, dir, html.EscapeString(message))
-			if _, err := w.Write([]byte(maintenanceHTML)); err != nil {
+			page := ErrorPageData{
+				PageData:   *data,
+				StatusCode: http.StatusServiceUnavailable,
+				StatusText: server.getI18nManager().T(data.Lang, "admin.maintenance_page.title"),
+				Message:    message,
+			}
+			var body bytes.Buffer
+			if err := m.renderer.Render(&body, "error", page); err != nil {
+				slog.Error("failed to render maintenance page", "error", err)
+				server.renderTemplateFailure(w, r, http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if _, err := w.Write(body.Bytes()); err != nil {
 				slog.Debug("failed to write maintenance response", "error", err)
 			}
 		})

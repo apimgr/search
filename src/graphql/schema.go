@@ -1,8 +1,13 @@
 package graphql
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strconv"
+	"strings"
+	"sync"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 )
@@ -10,13 +15,68 @@ import (
 // Schema represents the GraphQL schema
 var Schema graphql.Schema
 
-var jsonScalar = graphql.NewScalar(graphql.ScalarConfig{
-	Name:         "JSON",
-	Description:  "Arbitrary JSON object returned by the REST API",
-	Serialize:    func(value interface{}) interface{} { return value },
-	ParseValue:   func(value interface{}) interface{} { return value },
-	ParseLiteral: parseJSONLiteral,
-})
+var localizedSchemas = struct {
+	sync.RWMutex
+	values map[string]graphql.Schema
+}{values: make(map[string]graphql.Schema)}
+
+func initSchemaImpl() error { return initSchemaLanguage("en") }
+
+func initSchemaLanguage(lang string) error {
+	_, err := buildSchema(lang)
+	return err
+}
+
+func schemaForLanguage(lang string) graphql.Schema {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if lang == "" {
+		lang = "en"
+	}
+	localizedSchemas.RLock()
+	schema, ok := localizedSchemas.values[lang]
+	localizedSchemas.RUnlock()
+	if ok {
+		return schema
+	}
+	schema, err := buildSchema(lang)
+	if err != nil {
+		return Schema
+	}
+	localizedSchemas.Lock()
+	if existing, exists := localizedSchemas.values[lang]; exists {
+		schema = existing
+	} else {
+		localizedSchemas.values[lang] = schema
+	}
+	localizedSchemas.Unlock()
+	return schema
+}
+
+func graphQLDescription(lang, english string) string {
+	var slug strings.Builder
+	lastUnderscore := false
+	for _, char := range strings.ToLower(english) {
+		if slug.Len() >= 48 {
+			break
+		}
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+			slug.WriteRune(char)
+			lastUnderscore = false
+			continue
+		}
+		if slug.Len() > 0 && !lastUnderscore {
+			slug.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	prefix := strings.Trim(slug.String(), "_")
+	if prefix == "" {
+		prefix = "text"
+	}
+	digest := sha256.Sum256([]byte(english))
+	key := "graphql.descriptions." + prefix + "_" + hex.EncodeToString(digest[:6])
+	return i18n.T(lang, key)
+}
 
 func parseJSONLiteral(value ast.Value) interface{} {
 	switch value := value.(type) {
@@ -69,80 +129,88 @@ func InitSchema() error {
 
 // initSchemaImpl is the actual schema initialization implementation
 // Per AI.md PART 19: GraphQL must be in sync with REST API
-func initSchemaImpl() error {
+func buildSchema(lang string) (graphql.Schema, error) {
+	jsonScalar := graphql.NewScalar(graphql.ScalarConfig{
+		Name:         "JSON",
+		Description:  graphQLDescription(lang, "Arbitrary JSON object returned by the REST API"),
+		Serialize:    func(value interface{}) interface{} { return value },
+		ParseValue:   func(value interface{}) interface{} { return value },
+		ParseLiteral: parseJSONLiteral,
+	})
+
 	// Define the SearchResult type
 	searchResultType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "SearchResult",
-		Description: "A single search result from an engine",
+		Description: graphQLDescription(lang, "A single search result from an engine"),
 		Fields: graphql.Fields{
 			"title": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Result title",
+				Description: graphQLDescription(lang, "Result title"),
 			},
 			"url": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Result URL",
+				Description: graphQLDescription(lang, "Result URL"),
 			},
 			"content": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Result content/description",
+				Description: graphQLDescription(lang, "Result content/description"),
 			},
 			"engine": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Source engine name",
+				Description: graphQLDescription(lang, "Source engine name"),
 			},
 			"score": &graphql.Field{
 				Type:        graphql.Float,
-				Description: "Relevance score",
+				Description: graphQLDescription(lang, "Relevance score"),
 			},
 			"imageUrl": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Image URL (for image results)",
+				Description: graphQLDescription(lang, "Image URL (for image results)"),
 			},
 			"thumbnail": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Thumbnail URL",
+				Description: graphQLDescription(lang, "Thumbnail URL"),
 			},
-			"imageWidth":  &graphql.Field{Type: graphql.Int, Description: "Full image width in pixels"},
-			"imageHeight": &graphql.Field{Type: graphql.Int, Description: "Full image height in pixels"},
-			"imageFormat": &graphql.Field{Type: graphql.String, Description: "Image format when known"},
-			"fileSize":    &graphql.Field{Type: graphql.Int, Description: "Image file size in bytes when known"},
-			"duration":    &graphql.Field{Type: graphql.Int, Description: "Video duration in seconds when known"},
-			"viewCount":   &graphql.Field{Type: graphql.Float, Description: "Video view count when known"},
-			"published":   &graphql.Field{Type: graphql.String, Description: "Publication date in RFC3339 format"},
-			"author":      &graphql.Field{Type: graphql.String, Description: "Result author or video channel"},
-			"embedUrl":    &graphql.Field{Type: graphql.String, Description: "Provider embed URL for video results when available"},
-			"domain":      &graphql.Field{Type: graphql.String, Description: "Result domain"},
-			"category":    &graphql.Field{Type: graphql.String, Description: "Result category"},
+			"imageWidth":  &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Full image width in pixels")},
+			"imageHeight": &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Full image height in pixels")},
+			"imageFormat": &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Image format when known")},
+			"fileSize":    &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Image file size in bytes when known")},
+			"duration":    &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Video duration in seconds when known")},
+			"viewCount":   &graphql.Field{Type: graphql.Float, Description: graphQLDescription(lang, "Video view count when known")},
+			"published":   &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Publication date in RFC3339 format")},
+			"author":      &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Result author or video channel")},
+			"embedUrl":    &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Provider embed URL for video results when available")},
+			"domain":      &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Result domain")},
+			"category":    &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Result category")},
 		},
 	})
 
 	// Define the SearchResponse type
 	searchResponseType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "SearchResponse",
-		Description: "Search query response",
+		Description: graphQLDescription(lang, "Search query response"),
 		Fields: graphql.Fields{
-			"query":       &graphql.Field{Type: graphql.String, Description: "The search query"},
-			"category":    &graphql.Field{Type: graphql.String, Description: "Resolved search category"},
-			"page":        &graphql.Field{Type: graphql.Int, Description: "Current result page"},
-			"perPage":     &graphql.Field{Type: graphql.Int, Description: "Results per page"},
-			"totalPages":  &graphql.Field{Type: graphql.Int, Description: "Number of result pages"},
-			"suggestions": &graphql.Field{Type: graphql.NewList(graphql.String), Description: "Related search suggestions"},
+			"query":       &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "The search query")},
+			"category":    &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "Resolved search category")},
+			"page":        &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Current result page")},
+			"perPage":     &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Results per page")},
+			"totalPages":  &graphql.Field{Type: graphql.Int, Description: graphQLDescription(lang, "Number of result pages")},
+			"suggestions": &graphql.Field{Type: graphql.NewList(graphql.String), Description: graphQLDescription(lang, "Related search suggestions")},
 			"results": &graphql.Field{
 				Type:        graphql.NewList(searchResultType),
-				Description: "Search results",
+				Description: graphQLDescription(lang, "Search results"),
 			},
 			"totalResults": &graphql.Field{
 				Type:        graphql.Int,
-				Description: "Total number of results",
+				Description: graphQLDescription(lang, "Total number of results"),
 			},
 			"searchTime": &graphql.Field{
 				Type:        graphql.Float,
-				Description: "Search duration in seconds",
+				Description: graphQLDescription(lang, "Search duration in seconds"),
 			},
 			"engines": &graphql.Field{
 				Type:        graphql.NewList(graphql.String),
-				Description: "Engines used for this search",
+				Description: graphQLDescription(lang, "Engines used for this search"),
 			},
 		},
 	})
@@ -196,16 +264,12 @@ func initSchemaImpl() error {
 			"activeConns": &graphql.Field{Type: graphql.Int},
 		},
 	})
-	clusterInfoType := graphql.NewObject(graphql.ObjectConfig{
-		Name:   "HealthClusterInfo",
-		Fields: graphql.Fields{"enabled": &graphql.Field{Type: graphql.Boolean}},
-	})
 	healthResponseType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "HealthResponse",
-		Description: "Public server health response per AI.md PART 13",
+		Description: graphQLDescription(lang, "Public server health response per AI.md PART 13"),
 		Fields: graphql.Fields{
-			"project":        &graphql.Field{Type: projectInfoType, Description: "Public project identification"},
-			"status":         &graphql.Field{Type: graphql.String, Description: "healthy, degraded, restart_required, unhealthy, maintenance, or shutting_down"},
+			"project":        &graphql.Field{Type: projectInfoType, Description: graphQLDescription(lang, "Public project identification")},
+			"status":         &graphql.Field{Type: graphql.String, Description: graphQLDescription(lang, "healthy, degraded, restart_required, unhealthy, maintenance, or shutting_down")},
 			"pendingRestart": &graphql.Field{Type: graphql.Boolean},
 			"restartReason":  &graphql.Field{Type: graphql.NewList(graphql.String)},
 			"version":        &graphql.Field{Type: graphql.String},
@@ -214,7 +278,6 @@ func initSchemaImpl() error {
 			"uptime":         &graphql.Field{Type: graphql.String},
 			"mode":           &graphql.Field{Type: graphql.String},
 			"timestamp":      &graphql.Field{Type: graphql.String},
-			"cluster":        &graphql.Field{Type: clusterInfoType},
 			"features":       &graphql.Field{Type: featuresInfoType},
 			"checks":         &graphql.Field{Type: checksInfoType},
 			"stats":          &graphql.Field{Type: statsInfoType},
@@ -224,57 +287,57 @@ func initSchemaImpl() error {
 	// Define the DirectAnswerData type
 	directAnswerDataType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "DirectAnswerData",
-		Description: "Direct answer data payload",
+		Description: graphQLDescription(lang, "Direct answer data payload"),
 		Fields: graphql.Fields{
 			"type": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)",
+				Description: graphQLDescription(lang, "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)"),
 			},
 			"term": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Term that was looked up",
+				Description: graphQLDescription(lang, "Term that was looked up"),
 			},
 			"title": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Title of the answer",
+				Description: graphQLDescription(lang, "Title of the answer"),
 			},
 			"description": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Brief description",
+				Description: graphQLDescription(lang, "Brief description"),
 			},
 			"content": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Main content (HTML or text)",
+				Description: graphQLDescription(lang, "Main content (HTML or text)"),
 			},
 			"source": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Source of the information",
+				Description: graphQLDescription(lang, "Source of the information"),
 			},
 			"sourceUrl": &graphql.Field{
 				Type:        graphql.String,
-				Description: "URL to the source",
+				Description: graphQLDescription(lang, "URL to the source"),
 			},
 			"cacheTtlSeconds": &graphql.Field{
 				Type:        graphql.Int,
-				Description: "Cache TTL in seconds",
+				Description: graphQLDescription(lang, "Cache TTL in seconds"),
 			},
-			"found":   &graphql.Field{Type: graphql.Boolean, Description: "Whether the answer was found"},
-			"details": &graphql.Field{Type: jsonScalar, Description: "Type-specific answer fields matching the REST API data object"},
+			"found":   &graphql.Field{Type: graphql.Boolean, Description: graphQLDescription(lang, "Whether the answer was found")},
+			"details": &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Type-specific answer fields matching the REST API data object")},
 		},
 	})
 
 	// Define the DirectAnswer type
 	directAnswerType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "DirectAnswer",
-		Description: "Direct answer response",
+		Description: graphQLDescription(lang, "Direct answer response"),
 		Fields: graphql.Fields{
 			"ok": &graphql.Field{
 				Type:        graphql.Boolean,
-				Description: "Whether the request was successful",
+				Description: graphQLDescription(lang, "Whether the request was successful"),
 			},
 			"data": &graphql.Field{
 				Type:        directAnswerDataType,
-				Description: "Answer data",
+				Description: graphQLDescription(lang, "Answer data"),
 			},
 		},
 	})
@@ -282,45 +345,45 @@ func initSchemaImpl() error {
 	// Define the InstantAnswerData type
 	instantAnswerDataType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "InstantAnswerData",
-		Description: "Instant answer data payload",
+		Description: graphQLDescription(lang, "Instant answer data payload"),
 		Fields: graphql.Fields{
 			"query": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Original query",
+				Description: graphQLDescription(lang, "Original query"),
 			},
 			"type": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Answer type (calculator, converter, dictionary, etc.)",
+				Description: graphQLDescription(lang, "Answer type (calculator, converter, dictionary, etc.)"),
 			},
 			"title": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Title of the answer",
+				Description: graphQLDescription(lang, "Title of the answer"),
 			},
 			"content": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Main content",
+				Description: graphQLDescription(lang, "Main content"),
 			},
 			"source": &graphql.Field{
 				Type:        graphql.String,
-				Description: "Source of the information",
+				Description: graphQLDescription(lang, "Source of the information"),
 			},
-			"found":   &graphql.Field{Type: graphql.Boolean, Description: "Whether an instant answer was found"},
-			"details": &graphql.Field{Type: jsonScalar, Description: "Type-specific answer fields matching the REST API data object"},
+			"found":   &graphql.Field{Type: graphql.Boolean, Description: graphQLDescription(lang, "Whether an instant answer was found")},
+			"details": &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Type-specific answer fields matching the REST API data object")},
 		},
 	})
 
 	// Define the InstantAnswer type
 	instantAnswerType := graphql.NewObject(graphql.ObjectConfig{
 		Name:        "InstantAnswer",
-		Description: "Instant answer response",
+		Description: graphQLDescription(lang, "Instant answer response"),
 		Fields: graphql.Fields{
 			"ok": &graphql.Field{
 				Type:        graphql.Boolean,
-				Description: "Whether the request was successful",
+				Description: graphQLDescription(lang, "Whether the request was successful"),
 			},
 			"data": &graphql.Field{
 				Type:        instantAnswerDataType,
-				Description: "Answer data",
+				Description: graphQLDescription(lang, "Answer data"),
 			},
 		},
 	})
@@ -416,100 +479,100 @@ func initSchemaImpl() error {
 			},
 			"search": &graphql.Field{
 				Type:        searchResponseType,
-				Description: "Perform a search query",
+				Description: graphQLDescription(lang, "Perform a search query"),
 				Args: graphql.FieldConfigArgument{
 					"q": &graphql.ArgumentConfig{
 						Type:        graphql.NewNonNull(graphql.String),
-						Description: "Search query",
+						Description: graphQLDescription(lang, "Search query"),
 					},
 					"category": &graphql.ArgumentConfig{
 						Type:        graphql.String,
-						Description: "Search category (general, images, videos, news, files)",
+						Description: graphQLDescription(lang, "Search category (general, images, videos, news, files)"),
 					},
 					"page": &graphql.ArgumentConfig{
 						Type:        graphql.Int,
-						Description: "Page number",
+						Description: graphQLDescription(lang, "Page number"),
 					},
 					"lang": &graphql.ArgumentConfig{
 						Type:        graphql.String,
-						Description: "Language code (e.g., en, es, fr)",
+						Description: graphQLDescription(lang, "Language code (e.g., en, es, fr)"),
 					},
-					"limit":      &graphql.ArgumentConfig{Type: graphql.Int, Description: "Results per page (1-100)"},
-					"safeSearch": &graphql.ArgumentConfig{Type: graphql.Int, Description: "Safe search level (0 off, 1 moderate, 2 strict)"},
-					"timeRange":  &graphql.ArgumentConfig{Type: graphql.String, Description: "Time range filter (any, hour, day, week, month, year, custom)"},
-					"timeFrom":   &graphql.ArgumentConfig{Type: graphql.String, Description: "Start date for custom range (YYYY-MM-DD)"},
-					"timeTo":     &graphql.ArgumentConfig{Type: graphql.String, Description: "End date for custom range (YYYY-MM-DD)"},
-					"region":     &graphql.ArgumentConfig{Type: graphql.String, Description: "Two-letter region code"},
-					"engines":    &graphql.ArgumentConfig{Type: graphql.NewList(graphql.String), Description: "Limit search to the named engines"},
+					"limit":      &graphql.ArgumentConfig{Type: graphql.Int, Description: graphQLDescription(lang, "Results per page (1-100)")},
+					"safeSearch": &graphql.ArgumentConfig{Type: graphql.Int, Description: graphQLDescription(lang, "Safe search level (0 off, 1 moderate, 2 strict)")},
+					"timeRange":  &graphql.ArgumentConfig{Type: graphql.String, Description: graphQLDescription(lang, "Time range filter (any, hour, day, week, month, year, custom)")},
+					"timeFrom":   &graphql.ArgumentConfig{Type: graphql.String, Description: graphQLDescription(lang, "Start date for custom range (YYYY-MM-DD)")},
+					"timeTo":     &graphql.ArgumentConfig{Type: graphql.String, Description: graphQLDescription(lang, "End date for custom range (YYYY-MM-DD)")},
+					"region":     &graphql.ArgumentConfig{Type: graphql.String, Description: graphQLDescription(lang, "Two-letter region code")},
+					"engines":    &graphql.ArgumentConfig{Type: graphql.NewList(graphql.String), Description: graphQLDescription(lang, "Limit search to the named engines")},
 				},
 				Resolve: resolveSearch,
 			},
 			"autocomplete": &graphql.Field{
 				Type:        graphql.NewList(graphql.String),
-				Description: "Get autocomplete suggestions",
+				Description: graphQLDescription(lang, "Get autocomplete suggestions"),
 				Args: graphql.FieldConfigArgument{
 					"q": &graphql.ArgumentConfig{
 						Type:        graphql.NewNonNull(graphql.String),
-						Description: "Partial query",
+						Description: graphQLDescription(lang, "Partial query"),
 					},
 				},
 				Resolve: resolveAutocomplete,
 			},
 			"relatedSearches": &graphql.Field{
 				Type:        graphql.NewList(graphql.String),
-				Description: "Get related search suggestions",
+				Description: graphQLDescription(lang, "Get related search suggestions"),
 				Args: graphql.FieldConfigArgument{
-					"q":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String), Description: "Search query"},
-					"limit": &graphql.ArgumentConfig{Type: graphql.Int, Description: "Maximum suggestions (1-20; default 8)"},
+					"q":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String), Description: graphQLDescription(lang, "Search query")},
+					"limit": &graphql.ArgumentConfig{Type: graphql.Int, Description: graphQLDescription(lang, "Maximum suggestions (1-20; default 8)")},
 				},
 				Resolve: resolveRelatedSearches,
 			},
-			"serverStatus":      &graphql.Field{Type: jsonScalar, Description: "Operator-only status matching GET /api/v1/server/status", Resolve: resolveOperatorStatus},
-			"serverConfig":      &graphql.Field{Type: jsonScalar, Description: "Operator-only redacted config matching GET /api/v1/server/config", Resolve: resolveOperatorConfig},
-			"preferences":       &graphql.Field{Type: jsonScalar, Description: "Client-side preference schema matching GET /api/v1/server/preferences", Resolve: resolvePreferences},
-			"ownerTokens":       &graphql.Field{Type: jsonScalar, Description: "Primary-token-only owner token inventory matching GET /api/v1/server/preferences/tokens", Resolve: resolveOwnerTokens},
-			"preferencesExport": &graphql.Field{Type: jsonScalar, Description: "Export current preferences using the REST export handler", Resolve: resolveExportPreferences},
-			"geoIPLookup":       &graphql.Field{Type: jsonScalar, Description: "Look up an IP using the public REST GeoIP service; omit ip to look up the caller", Args: graphql.FieldConfigArgument{"ip": &graphql.ArgumentConfig{Type: graphql.String}}, Resolve: resolveGeoIPLookup},
-			"geoIPPresets":      &graphql.Field{Type: graphql.NewList(jsonScalar), Description: "Operator-only saved GeoIP country-list presets", Resolve: resolveGeoIPPresets},
-			"geoIPPreset":       &graphql.Field{Type: jsonScalar, Description: "Operator-only saved GeoIP country-list preset", Args: graphql.FieldConfigArgument{"name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveGeoIPPreset},
-			"serverInfo":        &graphql.Field{Type: jsonScalar, Description: "Public runtime information matching GET /api/v1/info", Resolve: resolveServerInfo},
-			"autodiscover":      &graphql.Field{Type: jsonScalar, Description: "Versionless service discovery matching GET /api/autodiscover", Resolve: resolveAutodiscover},
-			"serverPage":        &graphql.Field{Type: jsonScalar, Description: "About, privacy, help, or terms page data from the matching REST handler", Args: graphql.FieldConfigArgument{"name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveServerPage},
-			"contactInfo":       &graphql.Field{Type: jsonScalar, Description: "Public contact form availability matching GET /api/v1/server/contact", Resolve: resolveContactInfo},
-			"favicon":           &graphql.Field{Type: jsonScalar, Description: "Privacy-preserving proxied favicon as base64", Args: graphql.FieldConfigArgument{"url": &graphql.ArgumentConfig{Type: graphql.String}}, Resolve: resolveFavicon},
-			"alerts":            &graphql.Field{Type: graphql.NewList(jsonScalar), Description: "Operator-only alert inventory matching GET /api/v1/alerts", Resolve: resolveAlerts},
-			"alert":             &graphql.Field{Type: jsonScalar, Description: "Read an alert using its private manage token", Args: graphql.FieldConfigArgument{"manageToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveAlert},
-			"alertFeed":         &graphql.Field{Type: jsonScalar, Description: "Read a private alert feed using its RSS token", Args: graphql.FieldConfigArgument{"rssToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveAlertFeed},
-			"schedulerTasks":    &graphql.Field{Type: graphql.NewList(jsonScalar), Description: "Operator-only scheduler task inventory", Resolve: resolveSchedulerTasks},
-			"schedulerTask":     &graphql.Field{Type: jsonScalar, Description: "Operator-only scheduler task detail", Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveSchedulerTask},
-			"schedulerHistory":  &graphql.Field{Type: graphql.NewList(jsonScalar), Description: "Operator-only recent task history", Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveSchedulerHistory},
+			"serverStatus":      &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Operator-only status matching GET /api/v1/server/status"), Resolve: resolveOperatorStatus},
+			"serverConfig":      &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Operator-only redacted config matching GET /api/v1/server/config"), Resolve: resolveOperatorConfig},
+			"preferences":       &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Client-side preference schema matching GET /api/v1/server/preferences"), Resolve: resolvePreferences},
+			"ownerTokens":       &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Primary-token-only owner token inventory matching GET /api/v1/server/preferences/tokens"), Resolve: resolveOwnerTokens},
+			"preferencesExport": &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Export current preferences using the REST export handler"), Resolve: resolveExportPreferences},
+			"geoIPLookup":       &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Look up an IP using the public REST GeoIP service; omit ip to look up the caller"), Args: graphql.FieldConfigArgument{"ip": &graphql.ArgumentConfig{Type: graphql.String}}, Resolve: resolveGeoIPLookup},
+			"geoIPPresets":      &graphql.Field{Type: graphql.NewList(jsonScalar), Description: graphQLDescription(lang, "Operator-only saved GeoIP country-list presets"), Resolve: resolveGeoIPPresets},
+			"geoIPPreset":       &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Operator-only saved GeoIP country-list preset"), Args: graphql.FieldConfigArgument{"name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveGeoIPPreset},
+			"serverInfo":        &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Public runtime information matching GET /api/v1/info"), Resolve: resolveServerInfo},
+			"autodiscover":      &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Versionless service discovery matching GET /api/autodiscover"), Resolve: resolveAutodiscover},
+			"serverPage":        &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "About, privacy, help, or terms page data from the matching REST handler"), Args: graphql.FieldConfigArgument{"name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveServerPage},
+			"contactInfo":       &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Public contact form availability matching GET /api/v1/server/contact"), Resolve: resolveContactInfo},
+			"favicon":           &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Privacy-preserving proxied favicon as base64"), Args: graphql.FieldConfigArgument{"url": &graphql.ArgumentConfig{Type: graphql.String}}, Resolve: resolveFavicon},
+			"alerts":            &graphql.Field{Type: graphql.NewList(jsonScalar), Description: graphQLDescription(lang, "Operator-only alert inventory matching GET /api/v1/alerts"), Resolve: resolveAlerts},
+			"alert":             &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Read an alert using its private manage token"), Args: graphql.FieldConfigArgument{"manageToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveAlert},
+			"alertFeed":         &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Read a private alert feed using its RSS token"), Args: graphql.FieldConfigArgument{"rssToken": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveAlertFeed},
+			"schedulerTasks":    &graphql.Field{Type: graphql.NewList(jsonScalar), Description: graphQLDescription(lang, "Operator-only scheduler task inventory"), Resolve: resolveSchedulerTasks},
+			"schedulerTask":     &graphql.Field{Type: jsonScalar, Description: graphQLDescription(lang, "Operator-only scheduler task detail"), Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveSchedulerTask},
+			"schedulerHistory":  &graphql.Field{Type: graphql.NewList(jsonScalar), Description: graphQLDescription(lang, "Operator-only recent task history"), Args: graphql.FieldConfigArgument{"task": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}}, Resolve: resolveSchedulerHistory},
 			"health": &graphql.Field{
 				Type:        healthResponseType,
-				Description: "Get server health status",
+				Description: graphQLDescription(lang, "Get server health status"),
 				Resolve:     resolveHealth,
 			},
 			"directAnswer": &graphql.Field{
 				Type:        directAnswerType,
-				Description: "Get a direct answer for a specific type and term (e.g., tldr:git, dns:example.com, http:404)",
+				Description: graphQLDescription(lang, "Get a direct answer for a specific type and term (e.g., tldr:git, dns:example.com, http:404)"),
 				Args: graphql.FieldConfigArgument{
 					"type": &graphql.ArgumentConfig{
 						Type:        graphql.NewNonNull(graphql.String),
-						Description: "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)",
+						Description: graphQLDescription(lang, "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)"),
 					},
 					"term": &graphql.ArgumentConfig{
 						Type:        graphql.NewNonNull(graphql.String),
-						Description: "Term to look up",
+						Description: graphQLDescription(lang, "Term to look up"),
 					},
 				},
 				Resolve: resolveDirectAnswer,
 			},
 			"instant": &graphql.Field{
 				Type:        instantAnswerType,
-				Description: "Get an instant answer widget for a query (calculator, converter, dictionary, etc.)",
+				Description: graphQLDescription(lang, "Get an instant answer widget for a query (calculator, converter, dictionary, etc.)"),
 				Args: graphql.FieldConfigArgument{
 					"q": &graphql.ArgumentConfig{
 						Type:        graphql.NewNonNull(graphql.String),
-						Description: "Query to process for instant answer",
+						Description: graphQLDescription(lang, "Query to process for instant answer"),
 					},
 				},
 				Resolve: resolveInstant,
@@ -519,9 +582,17 @@ func initSchemaImpl() error {
 
 	// Create schema
 	var err error
-	Schema, err = graphql.NewSchema(graphql.SchemaConfig{
+	schema, err := graphql.NewSchema(graphql.SchemaConfig{
 		Query: rootQuery,
 	})
-
-	return err
+	if err != nil {
+		return graphql.Schema{}, err
+	}
+	if lang == "en" {
+		Schema = schema
+	}
+	localizedSchemas.Lock()
+	localizedSchemas.values[lang] = schema
+	localizedSchemas.Unlock()
+	return schema, nil
 }

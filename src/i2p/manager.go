@@ -25,20 +25,31 @@ type I2PManager struct {
 	config   *I2PConfig
 	dataDir  string
 	// Loopback address of the clearnet HTTP listener eepsite traffic relays to
-	clearnetAddr string
-	ctx          context.Context
-	lifecycle    atomic.Value
+	clearnetAddr  string
+	ctx           context.Context
+	cancel        context.CancelFunc
+	lifecycle     atomic.Value
+	addressLogged atomic.Bool
+	retryDelay    time.Duration
+	nextRetry     time.Time
+	retryNeeded   bool
+	nextSAMProbe  time.Time
 }
 
 // NewI2PManager creates a new I2P manager with the given configuration.
 // clearnetAddr is the app's own loopback listener address (127.0.0.1:{port}),
 // which the dedicated plain backend listener relays eepsite traffic to.
 func NewI2PManager(ctx context.Context, cfg *I2PConfig, clearnetAddr string) *I2PManager {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(ctx)
 	manager := &I2PManager{
 		config:       cfg,
 		dataDir:      filepath.Join(config.GetDataDir(), "i2p"),
 		clearnetAddr: clearnetAddr,
 		ctx:          ctx,
+		cancel:       cancel,
 	}
 	if cfg == nil || !cfg.Enabled {
 		manager.lifecycle.Store("disabled")
@@ -63,9 +74,12 @@ func (im *I2PManager) Start() error {
 			im.lifecycle.Store("no_provider")
 		} else {
 			im.lifecycle.Store("error")
+			im.scheduleRetryForErrorLocked(err)
 		}
-		return err
+		slog.Warn("I2P eepsite start failed; server will continue", "error", err)
+		return nil
 	}
+	im.clearRetryLocked()
 	im.lifecycle.Store("running")
 	return nil
 }
@@ -80,12 +94,14 @@ func (im *I2PManager) startLocked() error {
 		return err
 	}
 	im.service = service
+	if service != nil && service.provider == I2PProviderSAM {
+		im.nextSAMProbe = time.Now().Add(30 * time.Second)
+	}
 	return nil
 }
 
-// UpdateConfig applies new settings and restarts I2P. startLocked ->
-// startDedicatedI2P regenerates tunnels.conf (with a freshly allocated backend
-// port) from the new config, so no separate tunnels.conf write is needed here.
+// UpdateConfig applies new settings and restarts I2P. startLocked regenerates
+// the private i2pd.conf and empty tunnel inputs for the selected provider.
 func (im *I2PManager) UpdateConfig(cfg *I2PConfig) error {
 	if cfg != nil && cfg.Enabled {
 		im.lifecycle.Store("starting")
@@ -102,8 +118,9 @@ func (im *I2PManager) UpdateConfig(cfg *I2PConfig) error {
 	}
 	// If the new config disables I2P, startDedicatedI2P returns early and the
 	// eepsite stays down - opt-in respected.
-	if !cfg.Enabled {
+	if cfg == nil || !cfg.Enabled {
 		im.provider = I2PProviderNone
+		im.clearRetryLocked()
 		return closeErr
 	}
 	startErr := im.startLocked()
@@ -112,8 +129,10 @@ func (im *I2PManager) UpdateConfig(cfg *I2PConfig) error {
 			im.lifecycle.Store("no_provider")
 		} else {
 			im.lifecycle.Store("error")
+			im.scheduleRetryForErrorLocked(startErr)
 		}
 	} else {
+		im.clearRetryLocked()
 		im.lifecycle.Store("running")
 	}
 	return errors.Join(closeErr, startErr)
@@ -142,12 +161,46 @@ func (im *I2PManager) RegenerateAddress() (string, error) {
 
 // EepsiteAddress returns the current .b32.i2p address (empty if not running).
 func (im *I2PManager) EepsiteAddress() string {
+	if state := im.LifecycleState(); state == "starting" || state == "building" {
+		return im.EepsiteAddressFromDisk()
+	}
 	im.mu.Lock()
 	defer im.mu.Unlock()
 	if im.service != nil {
 		return im.service.EepsiteAddress()
 	}
 	return ""
+}
+
+// EepsiteAddressFromDisk reads the persisted destination without taking the
+// lifecycle lock, so startup pages and the banner never wait for bootstrap.
+func (im *I2PManager) EepsiteAddressFromDisk() string {
+	if im == nil {
+		return ""
+	}
+	keys, err := readSAMKeys(filepath.Join(im.dataDir, "site", "site-keys.dat"))
+	if err != nil {
+		return ""
+	}
+	destination, err := destinationFromKeys(keys)
+	if err != nil {
+		return ""
+	}
+	return b32Address(destination)
+}
+
+// MarkAddressDisplayed records that the startup banner already showed the address.
+func (im *I2PManager) MarkAddressDisplayed() {
+	if im != nil {
+		im.addressLogged.Store(true)
+	}
+}
+
+// LogAddressOnce records a newly available address unless the banner showed it.
+func (im *I2PManager) LogAddressOnce(address string) {
+	if im != nil && address != "" && im.addressLogged.CompareAndSwap(false, true) {
+		slog.Info("I2P eepsite address available", "hostname", address)
+	}
 }
 
 // ProviderName returns the active provider ("i2pd", "sam", or "none") for the
@@ -259,7 +312,7 @@ func (im *I2PManager) IsEepsiteConn(remoteAddr string) bool {
 // until the manager's context is cancelled otherwise, so callers run it in a
 // goroutine.
 func (im *I2PManager) Monitor() {
-	im.monitorWithInterval(30 * time.Second)
+	im.monitorWithInterval(time.Second)
 }
 
 func (im *I2PManager) monitorWithInterval(interval time.Duration) {
@@ -273,32 +326,100 @@ func (im *I2PManager) monitorWithInterval(interval time.Duration) {
 		case <-im.ctx.Done():
 			return
 		case <-ticker.C:
-			im.mu.Lock()
-			needsRestart := im.service != nil && !i2pProviderHealthy(im.service)
-			if needsRestart {
-				slog.Warn("I2P provider unresponsive, restarting")
-				if err := im.service.Close(); err != nil {
-					slog.Warn("failed to stop unhealthy I2P service", "error", err)
-				}
-				im.service = nil
-				if err := im.startLocked(); err != nil {
-					if im.provider == I2PProviderNone {
-						im.lifecycle.Store("no_provider")
-					} else {
-						im.lifecycle.Store("error")
-					}
-					slog.Error("Failed to restart I2P", "err", err)
-				} else {
-					im.lifecycle.Store("running")
-				}
+			if err := im.CheckAndRestart(); err != nil {
+				slog.Error("I2P health check failed", "err", err)
 			}
-			im.mu.Unlock()
 		}
 	}
 }
 
+// CheckAndRestart validates the active provider and restarts it when unhealthy.
+func (im *I2PManager) CheckAndRestart() error {
+	if im == nil || !im.Enabled() {
+		return nil
+	}
+	im.mu.Lock()
+	defer im.mu.Unlock()
+	if im.service == nil {
+		if !im.retryNeeded || time.Now().Before(im.nextRetry) {
+			return nil
+		}
+		if err := im.startLocked(); err != nil {
+			im.lifecycle.Store("error")
+			im.scheduleRetryForErrorLocked(err)
+			return err
+		}
+		im.clearRetryLocked()
+		im.lifecycle.Store("running")
+		return nil
+	}
+	if im.service.provider == I2PProviderSAM {
+		if !time.Now().Before(im.nextSAMProbe) {
+			im.nextSAMProbe = time.Now().Add(30 * time.Second)
+			if err := probeSAMBridge(im.service.samAddress); err != nil {
+				im.service.samProbeFailures++
+				slog.Debug("I2P SAM liveness probe failed", "consecutive_failures", im.service.samProbeFailures, "error", err)
+				if im.service.samProbeFailures >= 3 {
+					im.service.samProbeFailed = true
+				}
+			} else {
+				im.service.samProbeFailures = 0
+				im.service.samProbeFailed = false
+			}
+		}
+	}
+	if i2pProviderHealthy(im.service) {
+		return nil
+	}
+	slog.Warn("I2P provider unresponsive; scheduling restart")
+	if err := im.service.Close(); err != nil {
+		slog.Warn("failed to stop unhealthy I2P service", "error", err)
+	}
+	im.service = nil
+	im.lifecycle.Store("error")
+	im.scheduleRetryLocked()
+	return nil
+}
+
+func (im *I2PManager) scheduleRetryLocked() {
+	if im.retryDelay == 0 {
+		im.retryDelay = 5 * time.Second
+	} else if im.retryDelay < 300*time.Second {
+		im.retryDelay *= 2
+		if im.retryDelay > 300*time.Second {
+			im.retryDelay = 300 * time.Second
+		}
+	}
+	im.nextRetry = time.Now().Add(im.retryDelay)
+	im.retryNeeded = true
+}
+
+func (im *I2PManager) scheduleRetryForErrorLocked(err error) {
+	if errors.Is(err, errSAMInvalidKey) {
+		im.nextRetry = time.Time{}
+		im.retryNeeded = false
+		return
+	}
+	if errors.Is(err, errSAMDuplicatedDest) {
+		im.retryDelay = 60 * time.Second
+		im.nextRetry = time.Now().Add(im.retryDelay)
+		im.retryNeeded = true
+		return
+	}
+	im.scheduleRetryLocked()
+}
+
+func (im *I2PManager) clearRetryLocked() {
+	im.retryDelay = 0
+	im.nextRetry = time.Time{}
+	im.retryNeeded = false
+}
+
 // Close shuts down the provider.
 func (im *I2PManager) Close() error {
+	if im.cancel != nil {
+		im.cancel()
+	}
 	im.mu.Lock()
 	defer im.mu.Unlock()
 	if im.service != nil {
@@ -307,4 +428,12 @@ func (im *I2PManager) Close() error {
 		return err
 	}
 	return nil
+}
+
+// Done reports when the manager is shutting down.
+func (im *I2PManager) Done() <-chan struct{} {
+	if im == nil || im.ctx == nil {
+		return nil
+	}
+	return im.ctx.Done()
 }

@@ -19,6 +19,13 @@ func TestLoadFromEnv(t *testing.T) {
 	// The function returns a valid EnvConfig pointer
 }
 
+func TestLoadFromEnvReadsI2POverride(t *testing.T) {
+	t.Setenv("I2P_ENABLED", "false")
+	if got := LoadFromEnv().I2PEnabled; got != "false" {
+		t.Fatalf("I2P_ENABLED = %q, want false", got)
+	}
+}
+
 func TestTrimmedFormValue(t *testing.T) {
 	tests := []struct {
 		name  string

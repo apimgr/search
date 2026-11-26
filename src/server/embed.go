@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/common/theme"
 	"github.com/apimgr/search/src/config"
@@ -128,7 +129,7 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 			return loadOperatorHTML(name, resolvedLanguage, pageDataValue(data))
 		},
 		"operatorHTMLExists": func(name string, data interface{}) bool {
-			return operatorHTMLExists(name, resolvedLanguage)
+			return operatorHTMLExists(name, resolvedLanguage, pageDataValue(data))
 		},
 		"split": strings.Split,
 		"default": func(def, val interface{}) interface{} {
@@ -597,6 +598,7 @@ func GetStaticFile(path string) ([]byte, error) {
 type PageData struct {
 	Title              string
 	Description        string
+	APIBasePath        string
 	Page               string
 	Theme              string
 	ThemeMode          string
@@ -669,6 +671,8 @@ type SEOPageData struct {
 	TitleSeparator    string
 	OpenGraphEnabled  bool
 	AccentCSSEnabled  bool
+	CustomCSSEnabled  bool
+	CustomCSSVersion  string
 	OpenGraphType     string
 	OpenGraphSiteName string
 	OpenGraphImage    string
@@ -679,8 +683,8 @@ type SEOPageData struct {
 	MetaTags          []SEOMetaTag
 }
 
-// GeneralPrefs holds the general-settings preference values (theme, units,
-// default search category, safe search, results per page, and UI toggles)
+// GeneralPrefs holds server-rendered appearance, search, and UI preferences,
+// including the user's bounded custom stylesheet.
 // resolved from server-side cookies, so the preferences page can render the
 // correct selected/checked state without requiring JavaScript.
 type GeneralPrefs struct {
@@ -688,6 +692,7 @@ type GeneralPrefs struct {
 	FontSize          string
 	ResultsDensity    string
 	AccentColor       string
+	CustomCSS         string
 	DefaultCategory   string
 	SafeSearch        string
 	Units             string
@@ -756,13 +761,11 @@ type HealthResponse struct {
 	Uptime    string `json:"uptime"`
 	Mode      string `json:"mode"`
 	Timestamp string `json:"timestamp"`
-	// 5. Cluster state is always present, including single-instance deployments.
-	Cluster ClusterInfo `json:"cluster"`
-	// 6. Features - PUBLIC only (PARTS 20, 32)
+	// 5. Features - PUBLIC only (PARTS 19, 31)
 	Features FeaturesInfo `json:"features"`
-	// 7. Component health checks
+	// 6. Component health checks
 	Checks ChecksInfo `json:"checks"`
-	// 8. Statistics (public-safe aggregates)
+	// 7. Statistics (public-safe aggregates)
 	Stats StatsInfo `json:"stats"`
 }
 
@@ -770,11 +773,6 @@ type HealthResponse struct {
 func (health HealthResponse) MarshalJSON() ([]byte, error) {
 	type orderedHealth HealthResponse
 	return json.Marshal(orderedHealth(health))
-}
-
-// ClusterInfo reports whether this server participates in a cluster.
-type ClusterInfo struct {
-	Enabled bool `json:"enabled"`
 }
 
 // ProjectInfo represents project identification per AI.md PART 13.
@@ -805,6 +803,7 @@ type FeaturesInfo struct {
 type TorInfo struct {
 	Enabled  bool   `json:"enabled"`
 	Running  bool   `json:"running"`
+	State    string `json:"state"`
 	Status   string `json:"status"`
 	Hostname string `json:"hostname"`
 }
@@ -970,6 +969,7 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 	pd := &PageData{
 		Title:       title,
 		Description: cfg.Server.Description,
+		APIBasePath: api.APIBasePath(),
 		Page:        page,
 		Theme:       "dark",
 		Lang:        "en",

@@ -24,6 +24,8 @@ type EnvConfig struct {
 	SMTPFromName   string // Sender name (default: app title)
 	SMTPFromEmail  string // Sender email (default: no-reply@{fqdn})
 	SMTPTLS        string // TLS mode: auto, starttls, tls, none
+	// I2P_ENABLED overrides the configured and container-derived value.
+	I2PEnabled string
 
 	// Init-Only Variables (First Run Only) - per AI.md PART 5
 	ConfigDir          string // Configuration directory
@@ -57,6 +59,7 @@ func LoadFromEnv() *EnvConfig {
 	cfg.SMTPFromName = os.Getenv("SMTP_FROM_NAME")
 	cfg.SMTPFromEmail = os.Getenv("SMTP_FROM_EMAIL")
 	cfg.SMTPTLS = os.Getenv("SMTP_TLS")
+	cfg.I2PEnabled = os.Getenv("I2P_ENABLED")
 
 	// Init-Only Variables (First Run Only) - per AI.md PART 5
 	cfg.ConfigDir = os.Getenv("CONFIG_DIR")

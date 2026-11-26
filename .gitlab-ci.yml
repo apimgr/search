@@ -30,6 +30,7 @@ stages:
     # in casjaysdev/go:latest — never `apk add` or `go install` inside a CI job.
     - go mod download
     - go run ./src/apigen
+    - go generate ./src/swagger/...
     - if [ -f release.txt ]; then export VERSION="$(cat release.txt)"; else export VERSION="${CI_COMMIT_TAG#v}"; fi
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
@@ -199,7 +200,7 @@ test:
     - THRESHOLD=60
     - PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
     - if [ "$PCT" -lt "$THRESHOLD" ]; then echo "coverage ${PCT}% is below threshold ${THRESHOLD}%"; exit 1; fi
-    - echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
+    - 'echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"'
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -221,9 +222,18 @@ lint:
 
 secret-scan:
   stage: security
-  image: ghcr.io/trufflesecurity/trufflehog:3.99.0
+  image:
+    name: trufflesecurity/trufflehog:latest
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
   script:
-    - trufflehog git file://. --no-update --results=verified,unknown
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ -z "$CI_COMMIT_BEFORE_SHA" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+      else
+        trufflehog git file://. --since-commit "$CI_COMMIT_BEFORE_SHA" --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+      fi
   rules:
     - when: always
 
@@ -350,6 +360,7 @@ build:beta:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
     - go mod download
     - go run ./src/apigen
+    - go generate ./src/swagger/...
     - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
@@ -407,6 +418,7 @@ build:devel:
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
     - go mod download
     - go run ./src/apigen
+    - go generate ./src/swagger/...
     - export SERVER_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/version.Version=${VERSION}' -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
     - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
   script:
@@ -674,6 +686,7 @@ docker:build:
       fi
       BUILD_EPOCH="$(date -u +%s)"
       BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
+      if [ -f site.txt ]; then OFFICIAL_SITE="$(cat site.txt)"; else OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
     - |
       # Build multi-arch with OCI labels and manifest annotations
       docker buildx build \
@@ -683,33 +696,44 @@ docker:build:
         --build-arg COMMIT_ID="${CI_COMMIT_SHA:0:7}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
         --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
+        --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
+        --label "maintainer=casjay <casjay@yahoo.com>" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}" \
         --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
-        --label "org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
+        --label "org.opencontainers.image.description=${PROJECT_NAME} - Privacy-respecting self-hosted metasearch engine" \
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
+        --label "org.opencontainers.image.schema-version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
         --label "org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
+        --label "org.opencontainers.image.vcs-type=Git" \
+        --label "com.github.containers.toolbox=false" \
+        --annotation "manifest:maintainer=casjay <casjay@yahoo.com>" \
         --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
         --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}" \
         --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
-        --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
+        --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - Privacy-respecting self-hosted metasearch engine" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
+        --annotation "manifest:org.opencontainers.image.schema-version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
         --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --annotation "manifest:org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
+        --annotation "manifest:org.opencontainers.image.vcs-type=Git" \
+        --annotation "manifest:com.github.containers.toolbox=false" \
         $TAGS \
         --push \
         .
+    - docker pull "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+    - bash tests/docker-image-check.sh "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
@@ -738,6 +762,7 @@ docker:devel:
     - |
       BUILD_EPOCH="$(date -u +%s)"
       BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
+      if [ -f site.txt ]; then OFFICIAL_SITE="$(cat site.txt)"; else OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
     - |
       docker buildx build \
         -f docker/Dockerfile.dev \
@@ -745,31 +770,44 @@ docker:devel:
         --build-arg COMMIT_ID="${CI_COMMIT_SHA:0:7}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
         --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
+        --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
+        --label "maintainer=casjay <casjay@yahoo.com>" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}" \
         --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
-        --label "org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
+        --label "org.opencontainers.image.description=${PROJECT_NAME} - Privacy-respecting self-hosted metasearch engine" \
         --label "org.opencontainers.image.licenses=MIT" \
+        --label "org.opencontainers.image.version=devel" \
+        --label "org.opencontainers.image.schema-version=devel" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
         --label "org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
+        --label "org.opencontainers.image.vcs-type=Git" \
+        --label "com.github.containers.toolbox=false" \
+        --annotation "manifest:maintainer=casjay <casjay@yahoo.com>" \
         --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
         --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}" \
         --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
-        --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
+        --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - Privacy-respecting self-hosted metasearch engine" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
+        --annotation "manifest:org.opencontainers.image.version=devel" \
+        --annotation "manifest:org.opencontainers.image.schema-version=devel" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
         --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --annotation "manifest:org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
+        --annotation "manifest:org.opencontainers.image.vcs-type=Git" \
+        --annotation "manifest:com.github.containers.toolbox=false" \
         -t $CI_REGISTRY_IMAGE:devel \
         --push \
         .
+    - docker pull "$CI_REGISTRY_IMAGE:devel"
+    - bash tests/docker-image-check.sh "$CI_REGISTRY_IMAGE:devel"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG

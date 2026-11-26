@@ -75,7 +75,7 @@ func TestBlocklistManager_Update_Success(t *testing.T) {
 // TestBlocklistManager_Update_CIDR verifies that CIDR-type blocklists are loaded
 // correctly and that range membership checks work after an update.
 func TestBlocklistManager_Update_CIDR(t *testing.T) {
-	cidrBody := "10.0.0.0/8\n192.168.0.0/16\n# ignore\n172.16.0.1\n"
+	cidrBody := "8.8.8.0/24\n203.0.113.1\n# ignore\n10.0.0.1\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(cidrBody))
@@ -95,9 +95,9 @@ func TestBlocklistManager_Update_CIDR(t *testing.T) {
 		ip   string
 		want bool
 	}{
-		{"10.1.2.3", true},
-		{"192.168.100.5", true},
-		{"172.16.0.1", true},
+		{"8.8.8.3", true},
+		{"203.0.113.1", true},
+		{"10.0.0.1", false},
 		{"11.0.0.1", false},
 	}
 	for _, tt := range tests {
@@ -396,14 +396,14 @@ func TestBlocklistManager_ParseBlocklist_InvalidIP(t *testing.T) {
 // strings in a "cidr"-type list are silently skipped.
 func TestBlocklistManager_ParseBlocklist_InvalidCIDR(t *testing.T) {
 	m := NewBlocklistManager("", nil)
-	input := "not-cidr/32\n10.0.0.0/8\n999.0.0.0/24\n"
+	input := "not-cidr/32\n8.8.8.0/24\n999.0.0.0/24\n"
 
 	_, nets, err := m.parseBlocklist(strings.NewReader(input), "cidr")
 	if err != nil {
 		t.Fatalf("parseBlocklist() error = %v", err)
 	}
 	if len(nets) != 1 {
-		t.Errorf("len(nets) = %d, want 1 (only 10.0.0.0/8 is valid)", len(nets))
+		t.Errorf("len(nets) = %d, want 1 (only 8.8.8.0/24 is valid)", len(nets))
 	}
 }
 

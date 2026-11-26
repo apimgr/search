@@ -1,9 +1,10 @@
 {{define "content"}}
-<div class="static-page security-policy-page">
+<div class="container container-md">
     <header class="page-header">
-        <h1>{{t "security.policy_title"}}</h1>
+        <nav class="breadcrumb" aria-label="{{t "accessibility.breadcrumb"}}"><a href="/server/security">← {{t "security.overview_title"}}</a></nav>
+        <h1 class="page-title">{{t "security.policy_title"}}</h1>
     </header>
 
-    <div class="page-content markdown">{{.PolicyMarkdown | markdownToHTML}}</div>
+    <section class="section-card markdown" aria-labelledby="security-policy-content-heading"><h2 id="security-policy-content-heading">{{t "security.policy_title"}}</h2>{{.PolicyMarkdown | markdownToHTML}}</section>
 </div>
 {{end}}

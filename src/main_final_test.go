@@ -310,8 +310,8 @@ func TestAuthorizeRestore(t *testing.T) {
 // ============================================================
 
 // TestRunMaintenanceRestoreFileCancelNoPassword covers the restore path when
-// a filename is provided and no BACKUP_PASSWORD is set; user inputs "no".
-// New stmts: filename assign, "Restoring from:" printf, getenv, if-password check,
+// an unencrypted backup is provided and the operator inputs "no".
+// New statements: filename assignment, "Restoring from:" printf,
 // "Continue?" print, fmt.Scanln, if-cancel check, "Restore cancelled." println.
 func TestRunMaintenanceRestoreFileCancelNoPassword(t *testing.T) {
 	withExitFunc(t)
@@ -335,12 +335,10 @@ func TestRunMaintenanceRestoreFileCancelNoPassword(t *testing.T) {
 	}
 }
 
-// TestRunMaintenanceRestoreFileWithPasswordCancel covers the "no" cancellation
-// path for an unencrypted backup. BACKUP_PASSWORD is set in the environment but
-// the backup created for this test is unencrypted, so the encrypted-notice
-// println and bm.SetPassword call are NOT exercised here — BACKUP_PASSWORD is
-// only consulted when backup.IsEncrypted(filename) is true.
-func TestRunMaintenanceRestoreFileWithPasswordCancel(t *testing.T) {
+// TestRunMaintenanceRestoreFileWithLegacyEnvCancel covers the "no" cancellation
+// path for an unencrypted backup. BACKUP_PASSWORD does not supply the configured
+// backup secret and is irrelevant to restoring this file.
+func TestRunMaintenanceRestoreFileWithLegacyEnvCancel(t *testing.T) {
 	withExitFunc(t)
 	restore := saveEnvKeys("BACKUP_PASSWORD")
 	t.Cleanup(restore)
@@ -348,8 +346,7 @@ func TestRunMaintenanceRestoreFileWithPasswordCancel(t *testing.T) {
 
 	// Restore now verifies the backup (per AI.md PART 21) before prompting to
 	// confirm, so the cancel prompt is only reached for a backup that passes
-	// the full verification checklist. The backup itself is created
-	// unencrypted; BACKUP_PASSWORD is only consulted for encrypted files.
+	// the full verification checklist. The backup itself is created unencrypted.
 	backupPath, err := backup.NewManager().Create("")
 	if err != nil {
 		t.Fatalf("failed to create real backup for test: %v", err)
@@ -691,5 +688,37 @@ func TestBindPrivilegedListenersSkipsUnprivilegedPort(t *testing.T) {
 func TestBindPrivilegedListenersRequiresConfig(t *testing.T) {
 	if _, _, err := bindPrivilegedListeners(nil); err == nil {
 		t.Fatal("bindPrivilegedListeners(nil) succeeded")
+	}
+}
+
+func TestFormatI2PStatusLines(t *testing.T) {
+	previousLang := flagLang
+	flagLang = "en"
+	t.Cleanup(func() { flagLang = previousLang })
+	tests := []struct {
+		name, state, provider, address string
+		enabled                        bool
+		want                           []string
+	}{
+		{name: "running", enabled: true, state: "running", provider: "i2pd", address: "site.b32.i2p", want: []string{"I2P Eepsite: Running (i2pd)", "  Address: site.b32.i2p"}},
+		{name: "disabled", state: "disabled", want: []string{"I2P Eepsite: Disabled"}},
+		{name: "no provider", enabled: true, state: "no_provider", want: []string{"I2P Eepsite: No Provider"}},
+		{name: "starting", enabled: true, state: "starting", want: []string{"I2P Eepsite: Starting"}},
+		{name: "error", enabled: true, state: "error", want: []string{"I2P Eepsite: Error"}},
+		{name: "empty enabled fallback", enabled: true, want: []string{"I2P Eepsite: No Provider"}},
+		{name: "empty disabled fallback", want: []string{"I2P Eepsite: Disabled"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := formatI2PStatusLines(test.enabled, test.state, test.provider, test.address)
+			if len(got) != len(test.want) {
+				t.Fatalf("formatI2PStatusLines() = %#v, want %#v", got, test.want)
+			}
+			for i := range got {
+				if got[i] != test.want[i] {
+					t.Errorf("line %d = %q, want %q", i, got[i], test.want[i])
+				}
+			}
+		})
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 )
 
 // newBrowserContext launches one headless Chromium tab for the test and
@@ -82,6 +84,10 @@ func newBrowserContextWithTimeout(t *testing.T, timeout time.Duration) context.C
 
 func clickAndWaitForMainFrameNavigation(ctx context.Context, selector string) error {
 	navigated := make(chan struct{}, 1)
+	var startURL string
+	if err := chromedp.Run(ctx, chromedp.Location(&startURL)); err != nil {
+		return err
+	}
 	chromedp.ListenTarget(ctx, func(event interface{}) {
 		frameEvent, ok := event.(*page.EventFrameNavigated)
 		if !ok || frameEvent.Frame.ParentID != "" {
@@ -92,7 +98,12 @@ func clickAndWaitForMainFrameNavigation(ctx context.Context, selector string) er
 		default:
 		}
 	})
-	clickErr := chromedp.Run(ctx, chromedp.Click(selector, chromedp.ByQuery))
+	clickErr := chromedp.Run(ctx,
+		chromedp.WaitVisible(selector, chromedp.ByQuery),
+		chromedp.ScrollIntoView(selector, chromedp.ByQuery),
+		waitForClickTarget(selector),
+		chromedp.Click(selector, chromedp.ByQuery),
+	)
 	select {
 	case <-navigated:
 		return nil
@@ -100,7 +111,62 @@ func clickAndWaitForMainFrameNavigation(ctx context.Context, selector string) er
 		if clickErr != nil {
 			return clickErr
 		}
-		return fmt.Errorf("click %q did not navigate the main frame", selector)
+		var currentURL string
+		if err := chromedp.Run(ctx, chromedp.Location(&currentURL)); err == nil && currentURL != startURL {
+			return nil
+		}
+		var state string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({url:location.href, forms:Array.from(document.forms).map(form => ({action:form.action, valid:form.checkValidity()})), submitButtons:Array.from(document.querySelectorAll('form[method="post"] button[type="submit"]')).map(button => { const rect = button.getBoundingClientRect(); const point = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2); return {text:button.textContent.trim(), disabled:button.disabled, width:rect.width, height:rect.height, action:button.form?.action, top:point?.tagName + '.' + point?.className}; }), openDetails:Array.from(document.querySelectorAll('details')).map(details => details.open)})`, &state))
+		return fmt.Errorf("click %q did not navigate the main frame from %q (page state %s)", selector, startURL, state)
+	}
+}
+
+func waitForClickTarget(selector string) chromedp.Action {
+	return chromedp.Poll(fmt.Sprintf(`(() => {
+		const element = document.querySelector(%s);
+		if (!element) return false;
+		const rect = element.getBoundingClientRect();
+		if (rect.width <= 0 || rect.height <= 0 || rect.top < 0 || rect.bottom > innerHeight) return false;
+		const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+		return target === element || element.contains(target);
+	})()`, strconv.Quote(selector)), nil,
+		chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second))
+}
+
+func pressEnterAndWaitForMainFrameNavigation(ctx context.Context, selector string) error {
+	navigated := make(chan struct{}, 1)
+	var startURL string
+	if err := chromedp.Run(ctx, chromedp.Location(&startURL)); err != nil {
+		return err
+	}
+	chromedp.ListenTarget(ctx, func(event interface{}) {
+		frameEvent, ok := event.(*page.EventFrameNavigated)
+		if !ok || frameEvent.Frame.ParentID != "" {
+			return
+		}
+		select {
+		case navigated <- struct{}{}:
+		default:
+		}
+	})
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(selector, chromedp.ByQuery),
+		chromedp.ScrollIntoView(selector, chromedp.ByQuery),
+		waitForClickTarget(selector),
+		chromedp.Focus(selector, chromedp.ByQuery),
+		chromedp.KeyEvent(kb.Enter),
+	); err != nil {
+		return err
+	}
+	select {
+	case <-navigated:
+		return nil
+	case <-time.After(5 * time.Second):
+		var currentURL string
+		if err := chromedp.Run(ctx, chromedp.Location(&currentURL)); err == nil && currentURL != startURL {
+			return nil
+		}
+		return fmt.Errorf("press Enter on %q did not navigate the main frame from %q", selector, startURL)
 	}
 }
 
@@ -179,7 +245,11 @@ func watchForFailures(ctx context.Context) *pageFailures {
 				pf.addFailedLoad(fmt.Sprintf("%s (%s)", url, e.ErrorText))
 			}
 		case *runtime.EventExceptionThrown:
-			pf.addConsole(e.ExceptionDetails.Text)
+			message := e.ExceptionDetails.Text
+			if e.ExceptionDetails.Exception != nil && e.ExceptionDetails.Exception.Description != "" {
+				message += ": " + e.ExceptionDetails.Exception.Description
+			}
+			pf.addConsole(message)
 		case *runtime.EventConsoleAPICalled:
 			if e.Type == "error" {
 				parts := make([]string, 0, len(e.Args))

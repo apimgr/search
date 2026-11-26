@@ -1,15 +1,3 @@
-Subject: Server Started - {app_name}
+Subject: {subject}
 ---
-SERVER STARTED
-
-From: {app_name} ({fqdn})
-Host: {hostname}
-Version: {version}
-Mode: {mode}
-Time: {timestamp}
-
-The server completed startup and is ready to accept requests.
-
---
-{app_name}
-{app_url}
+{body}

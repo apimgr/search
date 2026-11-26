@@ -127,7 +127,30 @@ func TestIsRunningInContainer(t *testing.T) {
 	_ = result
 }
 
+func TestIsRunningInContainerHonorsExplicitContainerIndicators(t *testing.T) {
+	oldOverride := containerDetectionOverride
+	containerDetectionOverride = nil
+	t.Cleanup(func() { containerDetectionOverride = oldOverride })
+	t.Setenv("INVOCATION_ID", "test-service")
+	t.Setenv("container", "docker")
+	if IsRunningInContainer() {
+		t.Fatal("systemd service context must take precedence over generic container indicators")
+	}
+
+	t.Setenv("INVOCATION_ID", "")
+	if !IsRunningInContainer() {
+		t.Fatal("container environment must be detected when no systemd service context exists")
+	}
+}
+
 func TestGetSSLDir(t *testing.T) {
+	SetConfigDirOverride("/test/config")
+	defer SetConfigDirOverride("")
+	want := filepath.Join("/test/config", "ssl")
+	if got := GetSSLDir(); got != want {
+		t.Fatalf("GetSSLDir() with config override = %q, want %q", got, want)
+	}
+	SetConfigDirOverride("")
 	got := GetSSLDir()
 	if got == "" {
 		t.Error("GetSSLDir() should not be empty")
@@ -203,9 +226,51 @@ func TestGetDirectoryPermissions(t *testing.T) {
 		t.Error("GetDirectoryPermissions() should not be 0")
 	}
 	// Should be 0755 or 0750
-	if got != 0755 && got != 0750 {
+	if got != 0o755 && got != 0o750 {
 		t.Errorf("GetDirectoryPermissions() = %o, want 0755 or 0750", got)
 	}
+}
+
+func TestDirectoryPathsUseStartupPrivilegeMode(t *testing.T) {
+	oldStartedElevated := startedElevated
+	oldContainerOverride := containerDetectionOverride
+	t.Cleanup(func() {
+		startedElevated = oldStartedElevated
+		containerDetectionOverride = oldContainerOverride
+	})
+	containerDetectionOverride = boolPointer(false)
+	SetConfigDirOverride("")
+	SetDataDirOverride("")
+	SetLogDirOverride("")
+	SetCacheDirOverride("")
+	t.Setenv("CONFIG_DIR", "")
+	t.Setenv("DATA_DIR", "")
+	t.Setenv("LOG_DIR", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("ProgramData", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
+	t.Setenv("LocalAppData", t.TempDir())
+	SetBackupDirOverride("")
+
+	startedElevated = false
+	userPaths := []string{GetConfigDir(), GetDataDir(), GetLogDir(), GetCacheDir()}
+	userPerm := GetDirectoryPermissions()
+	startedElevated = true
+	systemPaths := []string{GetConfigDir(), GetDataDir(), GetLogDir(), GetCacheDir()}
+	systemPerm := GetDirectoryPermissions()
+	startedElevated = false
+	if userPerm != 0o700 || systemPerm != 0o755 {
+		t.Fatalf("directory permissions did not follow startup mode: user=%o system=%o", userPerm, systemPerm)
+	}
+	for i, userPath := range userPaths {
+		if userPath == systemPaths[i] {
+			t.Errorf("directory path %d did not change between user and system startup modes: %q", i, userPath)
+		}
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func TestGetSensitiveDirectoryPermissions(t *testing.T) {
@@ -214,7 +279,7 @@ func TestGetSensitiveDirectoryPermissions(t *testing.T) {
 		t.Error("GetSensitiveDirectoryPermissions() should not be 0")
 	}
 	// Should be 0700
-	if got != 0700 {
+	if got != 0o700 {
 		t.Errorf("GetSensitiveDirectoryPermissions() = %o, want 0700", got)
 	}
 }
@@ -225,7 +290,7 @@ func TestGetSensitiveFilePermissions(t *testing.T) {
 		t.Error("GetSensitiveFilePermissions() should not be 0")
 	}
 	// Should be 0600
-	if got != 0600 {
+	if got != 0o600 {
 		t.Errorf("GetSensitiveFilePermissions() = %o, want 0600", got)
 	}
 }
@@ -353,7 +418,7 @@ func TestEnsureSensitiveFile(t *testing.T) {
 	testFile := tmpDir + "/secret.key"
 
 	// Create the file first
-	if err := os.WriteFile(testFile, []byte("secret"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("secret"), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -367,7 +432,7 @@ func TestEnsureSensitiveFile(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		info, _ := os.Stat(testFile)
 		perm := info.Mode().Perm()
-		if perm != 0600 {
+		if perm != 0o600 {
 			t.Errorf("File permissions = %o, want 0600", perm)
 		}
 	}
@@ -466,7 +531,7 @@ func TestEnsureDir(t *testing.T) {
 
 	newDir := tmpDir + "/newdir/subdir"
 
-	err = ensureDir(newDir, 0755)
+	err = ensureDir(newDir, 0o755)
 	if err != nil {
 		t.Errorf("ensureDir() error = %v", err)
 	}
@@ -483,7 +548,7 @@ func TestEnsureDir(t *testing.T) {
 	// Verify permissions (Unix only)
 	if runtime.GOOS != "windows" {
 		perm := info.Mode().Perm()
-		if perm != 0755 {
+		if perm != 0o755 {
 			t.Errorf("Directory permissions = %o, want 0755", perm)
 		}
 	}
@@ -498,12 +563,12 @@ func TestEnsureDirAlreadyExists(t *testing.T) {
 
 	// Create directory with different permissions
 	existingDir := tmpDir + "/existing"
-	if err := os.Mkdir(existingDir, 0777); err != nil {
+	if err := os.Mkdir(existingDir, 0o777); err != nil {
 		t.Fatalf("Failed to create existing dir: %v", err)
 	}
 
 	// ensureDir should fix permissions
-	err = ensureDir(existingDir, 0755)
+	err = ensureDir(existingDir, 0o755)
 	if err != nil {
 		t.Errorf("ensureDir() on existing dir error = %v", err)
 	}
@@ -512,7 +577,7 @@ func TestEnsureDirAlreadyExists(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		info, _ := os.Stat(existingDir)
 		perm := info.Mode().Perm()
-		if perm != 0755 {
+		if perm != 0o755 {
 			t.Errorf("Directory permissions = %o, want 0755", perm)
 		}
 	}
@@ -522,7 +587,7 @@ func TestGetDirectoryPermissionsNonRoot(t *testing.T) {
 	// When not running as root, should return 0700
 	if runtime.GOOS != "windows" && !IsPrivileged() {
 		got := GetDirectoryPermissions()
-		if got != 0700 {
+		if got != 0o700 {
 			t.Errorf("GetDirectoryPermissions() for non-root = %o, want 0700", got)
 		}
 	}

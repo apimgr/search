@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/apimgr/search/src/config"
 )
 
@@ -73,6 +75,8 @@ type Manager struct {
 	configDir   string
 	dataDir     string
 	databaseDir string
+	includeSSL  bool
+	includeData bool
 	serverDB    interface {
 		SnapshotTo(context.Context, string) error
 	}
@@ -83,6 +87,12 @@ type Manager struct {
 	createdBy     string
 	restoreLimits RestoreLimits
 }
+
+// SetIncludeSSL controls whether the optional config/ssl directory is archived.
+func (m *Manager) SetIncludeSSL(include bool) { m.includeSSL = include }
+
+// SetIncludeData controls whether optional data files are archived.
+func (m *Manager) SetIncludeData(include bool) { m.includeData = include }
 
 // RestoreLimits bounds compressed archives and their cumulative extraction.
 type RestoreLimits struct {
@@ -170,9 +180,11 @@ func (m *Manager) effectiveRestoreLimits() RestoreLimits {
 	return limits
 }
 
-var ErrNoFullBackup = errors.New("no full backup is available as an incremental base")
-var ErrBaseMissing = errors.New("ERR_BASE_MISSING")
-var ErrBaseCorrupt = errors.New("ERR_BASE_CORRUPT")
+var (
+	ErrNoFullBackup = errors.New("no full backup is available as an incremental base")
+	ErrBaseMissing  = errors.New("ERR_BASE_MISSING")
+	ErrBaseCorrupt  = errors.New("ERR_BASE_CORRUPT")
+)
 
 // cachedBackupDir holds the backup directory resolved once at server
 // startup, per AI.md PART 21: "Never re-resolve the path at cleanup time."
@@ -227,7 +239,8 @@ func NewManager() *Manager {
 // handle so backups use SQLite's online snapshot operation.
 func (m *Manager) SetServerDatabaseSnapshotter(db interface {
 	SnapshotTo(context.Context, string) error
-}) {
+},
+) {
 	m.serverDB = db
 }
 
@@ -277,7 +290,7 @@ func (m *Manager) complianceRequiresEncryption() bool {
 	if err != nil || cfg == nil {
 		return false
 	}
-	return cfg.Server.Compliance.Enabled
+	return cfg.Server.Compliance.AnyEnabled()
 }
 
 // writeFileAtomic writes data to path crash-safely: the bytes land in a temp
@@ -342,7 +355,7 @@ func (m *Manager) CreateAt(filename string, snapshotAt time.Time) (string, error
 	}
 
 	// Ensure backup directory exists
-	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+	if err := os.MkdirAll(m.backupDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -354,7 +367,7 @@ func (m *Manager) CreateAt(filename string, snapshotAt time.Time) (string, error
 		return "", err
 	}
 
-	if err := writeFileAtomic(backupPath, archive, 0600); err != nil {
+	if err := writeFileAtomic(backupPath, archive, 0o600); err != nil {
 		return "", fmt.Errorf("failed to write backup file: %w", err)
 	}
 
@@ -374,7 +387,7 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 	databaseSnapshot := ""
 	if m.serverDB != nil {
 		base := filepath.Join(os.TempDir(), config.InternalOrg)
-		if err := os.MkdirAll(base, 0700); err != nil {
+		if err := os.MkdirAll(base, 0o700); err != nil {
 			return nil, fmt.Errorf("create backup snapshot temp root: %w", err)
 		}
 		snapshotDir, err := os.MkdirTemp(base, config.InternalName+"-")
@@ -395,7 +408,18 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 		}
 	}
 
-	// Backup config directory
+	// Load configuration so referenced TLS files and external manual server
+	// certificates can be included even when the optional SSL directory is not.
+	cfg := config.DefaultConfig()
+	loadedConfig, err := config.Load(filepath.Join(m.configDir, "server.yml"))
+	if err == nil {
+		cfg = loadedConfig
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load configuration for backup contents: %w", err)
+	}
+
+	// Backup config directory. The SSL directory is opt-in; individually
+	// referenced connection TLS files are added below.
 	configFiles, configSize, configChecksums, err := m.addDirectoryToTar(tarWriter, m.configDir, "config")
 	if err != nil {
 		return nil, fmt.Errorf("failed to backup config: %w", err)
@@ -406,15 +430,21 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 		checksums[k] = v
 	}
 
-	// Backup data directory (excluding logs and cache)
-	dataFiles, dataSize, dataChecksums, err := m.addDirectoryToTar(tarWriter, m.dataDir, "data")
-	if err != nil {
-		return nil, fmt.Errorf("failed to backup data: %w", err)
+	// Data files are optional; the database snapshot above remains included.
+	if m.includeData {
+		dataFiles, dataSize, dataChecksums, err := m.addDirectoryToTar(tarWriter, m.dataDir, "data")
+		if err != nil {
+			return nil, fmt.Errorf("failed to backup data: %w", err)
+		}
+		files = append(files, dataFiles...)
+		totalSize += dataSize
+		for k, v := range dataChecksums {
+			checksums[k] = v
+		}
 	}
-	files = append(files, dataFiles...)
-	totalSize += dataSize
-	for k, v := range dataChecksums {
-		checksums[k] = v
+	extraSources := make(map[string]string)
+	if err := m.addReferencedSSLFiles(tarWriter, cfg, &files, checksums, &totalSize, extraSources); err != nil {
+		return nil, fmt.Errorf("backup referenced TLS files: %w", err)
 	}
 	if databaseSnapshot != "" {
 		archiveName := m.databaseArchivePath()
@@ -427,12 +457,8 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 		checksums[name] = checksum
 	}
 
-	// Load config for metadata
-	cfg, _ := config.Load(filepath.Join(m.configDir, "server.yml"))
 	serverTitle := "Search"
-	if cfg != nil {
-		serverTitle = cfg.Server.Title
-	}
+	serverTitle = cfg.Server.Title
 
 	// Determine created_by (per AI.md PART 25)
 	createdBy := m.createdBy
@@ -444,7 +470,7 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 	// Calculate overall checksum from individual file checksums (per AI.md PART 25)
 	// This provides a single verification value for the entire backup
 	overallChecksum := computeOverallChecksum(checksums)
-	fileManifest, err := m.fileManifest(files, checksums, databaseSnapshot)
+	fileManifest, err := m.fileManifest(files, checksums, databaseSnapshot, extraSources)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build file manifest: %w", err)
 	}
@@ -484,7 +510,7 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 	metaHeader := &tar.Header{
 		Name:    "manifest.json",
 		Size:    int64(len(metaJSON)),
-		Mode:    0644,
+		Mode:    0o644,
 		ModTime: snapshotAt,
 	}
 	if err := tarWriter.WriteHeader(metaHeader); err != nil {
@@ -506,7 +532,7 @@ func (m *Manager) buildArchiveAt(snapshotAt time.Time) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (m *Manager) fileManifest(files []string, checksums map[string]string, databaseSnapshot string) ([]BackupFileMetadata, error) {
+func (m *Manager) fileManifest(files []string, checksums map[string]string, databaseSnapshot string, extraSources map[string]string) ([]BackupFileMetadata, error) {
 	manifest := make([]BackupFileMetadata, 0, len(files))
 	for _, name := range files {
 		var sourcePath string
@@ -515,6 +541,8 @@ func (m *Manager) fileManifest(files []string, checksums map[string]string, data
 			sourcePath = filepath.Join(m.configDir, filepath.FromSlash(strings.TrimPrefix(name, "config/")))
 		case databaseSnapshot != "" && filepath.ToSlash(name) == m.databaseArchivePath():
 			sourcePath = databaseSnapshot
+		case extraSources[name] != "":
+			sourcePath = extraSources[name]
 		case strings.HasPrefix(name, "data/"):
 			sourcePath = filepath.Join(m.dataDir, filepath.FromSlash(strings.TrimPrefix(name, "data/")))
 		default:
@@ -535,6 +563,124 @@ func (m *Manager) fileManifest(files []string, checksums map[string]string, data
 	return manifest, nil
 }
 
+func (m *Manager) addReferencedSSLFiles(tw *tar.Writer, cfg *config.Config, files *[]string, checksums map[string]string, totalSize *int64, extraSources map[string]string) error {
+	sslRoot, err := filepath.Abs(filepath.Join(m.configDir, "ssl"))
+	if err != nil {
+		return err
+	}
+	addReferenced := func(path, archiveName string, private bool) error {
+		if _, exists := checksums[filepath.ToSlash(archiveName)]; exists {
+			return nil
+		}
+		if strings.TrimSpace(path) == "" {
+			return nil
+		}
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(sslRoot, path)
+		}
+		resolved, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		name, size, digest, err := addFileToTarWithMode(tw, resolved, archiveName, private)
+		if err != nil {
+			return fmt.Errorf("include %s: %w", archiveName, err)
+		}
+		*files = append(*files, name)
+		checksums[name] = digest
+		*totalSize += size
+		extraSources[name] = resolved
+		return nil
+	}
+
+	// Connection TLS files are always included when referenced, independent of
+	// the optional whole-SSL-directory flag.
+	for _, path := range []string{cfg.Server.Cache.TLSCA, cfg.Server.Cache.TLSCert, cfg.Server.Cache.TLSKey} {
+		if path == "" {
+			continue
+		}
+		resolved := path
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(sslRoot, resolved)
+		}
+		rel, relErr := filepath.Rel(sslRoot, resolved)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+			return fmt.Errorf("connection TLS file %q must be inside config ssl directory", path)
+		}
+		if err := addReferenced(path, filepath.ToSlash(filepath.Join("config", "ssl", rel)), false); err != nil {
+			return err
+		}
+	}
+
+	certPath, keyPath := cfg.Server.SSL.CertFile, cfg.Server.SSL.KeyFile
+	if certPath == "" && keyPath == "" {
+		return nil
+	}
+	if certPath == "" || keyPath == "" {
+		return fmt.Errorf("server.ssl.cert and server.ssl.key must be configured together")
+	}
+	resolveServerSSL := func(path string) string {
+		if filepath.IsAbs(path) {
+			return path
+		}
+		return filepath.Join(m.configDir, path)
+	}
+	certResolved, err := filepath.Abs(resolveServerSSL(certPath))
+	if err != nil {
+		return err
+	}
+	keyResolved, err := filepath.Abs(resolveServerSSL(keyPath))
+	if err != nil {
+		return err
+	}
+	certRel, certErr := filepath.Rel(sslRoot, certResolved)
+	keyRel, keyErr := filepath.Rel(sslRoot, keyResolved)
+	certInside := certErr == nil && certRel != ".." && !strings.HasPrefix(certRel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(certRel)
+	keyInside := keyErr == nil && keyRel != ".." && !strings.HasPrefix(keyRel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(keyRel)
+	if certInside && keyInside {
+		return nil
+	}
+	if err := addReferenced(certResolved, "ssl-external/server.crt", false); err != nil {
+		return err
+	}
+	if err := addReferenced(keyResolved, "ssl-external/server.key", true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func addFileToTarWithMode(tw *tar.Writer, sourcePath, archivePath string, private bool) (string, int64, string, error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", 0, "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", 0, "", fmt.Errorf("not a regular file")
+	}
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return "", 0, "", err
+	}
+	header.Name = filepath.ToSlash(archivePath)
+	if private {
+		header.Mode = 0o600
+	}
+	if err := tw.WriteHeader(header); err != nil {
+		return "", 0, "", err
+	}
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return "", 0, "", err
+	}
+	hash := sha256.New()
+	written, copyErr := io.CopyN(io.MultiWriter(tw, hash), file, header.Size)
+	closeErr := file.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return "", written, "", err
+	}
+	return header.Name, written, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 // CreateIncrementalAt writes a cumulative differential against the newest full backup.
 func (m *Manager) CreateIncrementalAt(filename string, snapshotAt time.Time) (string, error) {
 	if m.password == "" && m.complianceRequiresEncryption() {
@@ -553,12 +699,12 @@ func (m *Manager) CreateIncrementalAt(filename string, snapshotAt time.Time) (st
 		return "", err
 	}
 	_ = metadata
-	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+	if err := os.MkdirAll(m.backupDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 	filename = normalizeBackupFilename(filename)
 	path := filepath.Join(m.backupDir, filename)
-	if err := writeFileAtomic(path, archive, 0600); err != nil {
+	if err := writeFileAtomic(path, archive, 0o600); err != nil {
 		return "", fmt.Errorf("failed to write incremental backup: %w", err)
 	}
 	return path, nil
@@ -572,7 +718,7 @@ func (m *Manager) CreateIncremental(filename string) (string, error) {
 // CreateEncryptedIncrementalAt writes an encrypted cumulative differential.
 func (m *Manager) CreateEncryptedIncrementalAt(filename string, snapshotAt time.Time) (string, error) {
 	if m.password == "" {
-		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
+		return "", fmt.Errorf("encryption password not set; configure server.backup.encryption_password")
 	}
 	basePath, base, err := m.latestFullBackup()
 	if err != nil {
@@ -596,11 +742,11 @@ func (m *Manager) CreateEncryptedIncrementalAt(filename string, snapshotAt time.
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt incremental backup: %w", err)
 	}
-	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+	if err := os.MkdirAll(m.backupDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 	path := filepath.Join(m.backupDir, normalizeBackupFilename(filename)+".enc")
-	if err := writeFileAtomic(path, encrypted, 0600); err != nil {
+	if err := writeFileAtomic(path, encrypted, 0o600); err != nil {
 		return "", fmt.Errorf("failed to write encrypted incremental backup: %w", err)
 	}
 	return path, nil
@@ -730,7 +876,7 @@ func replaceArchiveManifest(data []byte, metadata *BackupMetadata, included map[
 	if err != nil {
 		return nil, err
 	}
-	if err := tarOut.WriteHeader(&tar.Header{Name: "manifest.json", Size: int64(len(manifest)), Mode: 0644, ModTime: metadata.SnapshotAt}); err != nil {
+	if err := tarOut.WriteHeader(&tar.Header{Name: "manifest.json", Size: int64(len(manifest)), Mode: 0o644, ModTime: metadata.SnapshotAt}); err != nil {
 		return nil, err
 	}
 	if _, err := tarOut.Write(manifest); err != nil {
@@ -783,6 +929,9 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 
 		// Skip directories we don't want to backup
 		if info.IsDir() {
+			if prefix == "config" && filepath.Clean(path) == filepath.Join(filepath.Clean(srcDir), "ssl") && !m.includeSSL {
+				return filepath.SkipDir
+			}
 			if prefix == "data" && filepath.Clean(path) != filepath.Clean(srcDir) && filepath.Clean(path) == filepath.Clean(m.databaseDir) {
 				return filepath.SkipDir
 			}
@@ -1056,7 +1205,7 @@ func (m *Manager) restoreFromLayers(archives [][]byte, deleted []string) error {
 	// Restore stages begin empty so a full archive replaces the prior state.
 	for prefix, dir := range targets {
 		stage := fmt.Sprintf("%s.restore-%s", dir, stamp)
-		if err := os.MkdirAll(stage, 0700); err != nil {
+		if err := os.MkdirAll(stage, 0o700); err != nil {
 			removeAll(staging)
 			return fmt.Errorf("failed to create %s restore staging directory: %w", prefix, err)
 		}
@@ -1068,6 +1217,10 @@ func (m *Manager) restoreFromLayers(archives [][]byte, deleted []string) error {
 			removeAll(staging)
 			return err
 		}
+	}
+	if err := m.restoreExternalSSLFiles(staging["config"]); err != nil {
+		removeAll(staging)
+		return err
 	}
 	for _, name := range deleted {
 		var root, rel string
@@ -1187,6 +1340,9 @@ func (m *Manager) applyArchiveToStaging(data []byte, staging map[string]string) 
 		case strings.HasPrefix(header.Name, "config/"):
 			stageRoot = staging["config"]
 			relPath = strings.TrimPrefix(header.Name, "config/")
+		case strings.HasPrefix(header.Name, "ssl-external/"):
+			stageRoot = staging["config"]
+			relPath = filepath.Join(".__restore_external_ssl", strings.TrimPrefix(header.Name, "ssl-external/"))
 		case strings.HasPrefix(header.Name, "data/"):
 			stageRoot = staging["data"]
 			relPath = strings.TrimPrefix(header.Name, "data/")
@@ -1207,7 +1363,7 @@ func (m *Manager) applyArchiveToStaging(data []byte, staging map[string]string) 
 		}
 
 		// Create parent directories
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
@@ -1232,6 +1388,126 @@ func (m *Manager) applyArchiveToStaging(data []byte, staging map[string]string) 
 	}
 
 	return nil
+}
+
+func (m *Manager) restoreExternalSSLFiles(configStage string) error {
+	externalDir := filepath.Join(configStage, ".__restore_external_ssl")
+	certPath := filepath.Join(externalDir, "server.crt")
+	keyPath := filepath.Join(externalDir, "server.key")
+	_, certErr := os.Stat(certPath)
+	_, keyErr := os.Stat(keyPath)
+	if os.IsNotExist(certErr) && os.IsNotExist(keyErr) {
+		return nil
+	}
+	if certErr != nil || keyErr != nil {
+		return fmt.Errorf("backup contains an incomplete external TLS certificate pair")
+	}
+	sslDir := filepath.Join(configStage, "ssl")
+	if err := os.MkdirAll(sslDir, 0o700); err != nil {
+		return fmt.Errorf("create restored SSL directory: %w", err)
+	}
+	certData, err := os.ReadFile(certPath)
+	if err != nil {
+		return fmt.Errorf("read archived external TLS certificate: %w", err)
+	}
+	keyData, err := os.ReadFile(keyPath)
+	if err != nil {
+		return fmt.Errorf("read archived external TLS key: %w", err)
+	}
+	certTarget := filepath.Join(sslDir, "server.crt")
+	keyTarget := filepath.Join(sslDir, "server.key")
+	if err := writeFileAtomic(certTarget, certData, 0o644); err != nil {
+		return fmt.Errorf("restore external TLS certificate: %w", err)
+	}
+	if err := writeFileAtomic(keyTarget, keyData, 0o600); err != nil {
+		return fmt.Errorf("restore external TLS key: %w", err)
+	}
+	certTarget = filepath.Join(m.configDir, "ssl", "server.crt")
+	keyTarget = filepath.Join(m.configDir, "ssl", "server.key")
+	var certUpdated, keyUpdated bool
+	err = filepath.WalkDir(configStage, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || filepath.Ext(path) != ".yml" {
+			return nil
+		}
+		configData, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		var document yaml.Node
+		if parseErr := yaml.Unmarshal(configData, &document); parseErr != nil {
+			return fmt.Errorf("parse restored %s for TLS path update: %w", filepath.Base(path), parseErr)
+		}
+		root := &document
+		if root.Kind == yaml.DocumentNode && len(root.Content) == 1 {
+			root = root.Content[0]
+		}
+		sslNode := mappingValue(mappingValue(root, "server"), "ssl")
+		if sslNode == nil {
+			return nil
+		}
+		changed := false
+		if mappingValue(sslNode, "cert") != nil {
+			if err := setMappingScalar(sslNode, "cert", certTarget); err != nil {
+				return err
+			}
+			certUpdated, changed = true, true
+		}
+		if mappingValue(sslNode, "key") != nil {
+			if err := setMappingScalar(sslNode, "key", keyTarget); err != nil {
+				return err
+			}
+			keyUpdated, changed = true, true
+		}
+		if !changed {
+			return nil
+		}
+		updated, marshalErr := yaml.Marshal(&document)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if writeErr := writeFileAtomic(path, updated, 0o600); writeErr != nil {
+			return writeErr
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("rewrite restored server TLS paths: %w", err)
+	}
+	if !certUpdated || !keyUpdated {
+		return fmt.Errorf("restored configuration does not contain server.ssl.cert and server.ssl.key mappings")
+	}
+	if err := os.RemoveAll(externalDir); err != nil {
+		return fmt.Errorf("remove temporary external TLS restore files: %w", err)
+	}
+	return nil
+}
+
+func mappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func setMappingScalar(node *yaml.Node, key, value string) error {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping for %s", key)
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			node.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+			return nil
+		}
+	}
+	return fmt.Errorf("mapping key %s not found", key)
 }
 
 // rollbackSwap undoes directory swaps already performed by a failed restore,
@@ -1721,11 +1997,11 @@ func (m *Manager) CreateEncrypted(filename string) (string, error) {
 // CreateEncryptedAt creates an encrypted full archive representing snapshotAt.
 func (m *Manager) CreateEncryptedAt(filename string, snapshotAt time.Time) (string, error) {
 	if m.password == "" {
-		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
+		return "", fmt.Errorf("encryption password not set; configure server.backup.encryption_password")
 	}
 
 	// Ensure backup directory exists
-	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+	if err := os.MkdirAll(m.backupDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -1753,7 +2029,7 @@ func (m *Manager) CreateEncryptedAt(filename string, snapshotAt time.Time) (stri
 
 	// Create encrypted file with .enc extension per AI.md PART 21
 	encryptedPath := filepath.Join(m.backupDir, normalizeBackupFilename(filename)) + ".enc"
-	if err := writeFileAtomic(encryptedPath, encrypted, 0600); err != nil {
+	if err := writeFileAtomic(encryptedPath, encrypted, 0o600); err != nil {
 		return "", fmt.Errorf("failed to write encrypted backup: %w", err)
 	}
 
@@ -1764,7 +2040,7 @@ func (m *Manager) CreateEncryptedAt(filename string, snapshotAt time.Time) (stri
 // Per AI.md PART 21: .enc extension for encrypted backups
 func (m *Manager) RestoreEncrypted(backupPath string) error {
 	if m.password == "" {
-		return fmt.Errorf("decryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
+		return fmt.Errorf("decryption password not set; supply the encrypted backup password")
 	}
 
 	// Verify backup file exists
@@ -2032,11 +2308,11 @@ func (m *Manager) verifyContentAndDatabase(data []byte) (contentValid bool, data
 	contentValid = true
 	databaseValid = true
 
-	base := filepath.Join(os.TempDir(), "apimgr")
-	if err := os.MkdirAll(base, 0755); err != nil {
+	base := filepath.Join(os.TempDir(), config.ProjectOrg)
+	if err := os.MkdirAll(base, 0o700); err != nil {
 		return false, true, []string{fmt.Sprintf("content extraction failed: %v", err)}
 	}
-	extractDir, err := os.MkdirTemp(base, "search-verify-")
+	extractDir, err := os.MkdirTemp(base, config.InternalName+"-verify-")
 	if err != nil {
 		return false, true, []string{fmt.Sprintf("content extraction failed: %v", err)}
 	}
@@ -2080,17 +2356,17 @@ func (m *Manager) verifyContentAndDatabase(data []byte) (contentValid bool, data
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
+			if err := os.MkdirAll(targetPath, 0o755); err != nil {
 				contentValid = false
 				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				contentValid = false
 				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
 				continue
 			}
-			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 			if err != nil {
 				contentValid = false
 				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
@@ -2252,6 +2528,7 @@ func (m *Manager) CreateDailyPairAndVerify(incrementalName, fullName string, sna
 	}
 	var incrementalPath string
 	var incrementalVerify *VerificationResult
+	var incrementalStage, incrementalTarget string
 	if !skipIncremental {
 		baseSHA, hashErr := hashFile(basePath)
 		if hashErr != nil {
@@ -2261,46 +2538,159 @@ func (m *Manager) CreateDailyPairAndVerify(incrementalName, fullName string, sna
 		if buildErr != nil {
 			return "", "", nil, nil, false, buildErr
 		}
-		incrementalPath, incrementalVerify, err = m.writeAndVerifyArchive(incrementalName, incrementalArchive)
+		incrementalStage, incrementalTarget, incrementalVerify, err = m.stageVerifiedArchive(incrementalName, incrementalArchive)
 		if err != nil {
 			return "", "", incrementalVerify, nil, false, err
 		}
 	}
-	fullPath, fullVerify, err := m.writeAndVerifyArchive(fullName, fullArchive)
+	fullStage, fullPath, fullVerify, err := m.stageVerifiedArchive(fullName, fullArchive)
 	if err != nil {
-		return incrementalPath, "", incrementalVerify, fullVerify, skipIncremental, err
+		if incrementalStage != "" {
+			if removeErr := os.Remove(incrementalStage); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("remove staged incremental backup: %w", removeErr))
+			}
+		}
+		return "", "", incrementalVerify, fullVerify, skipIncremental, err
+	}
+	pair := []verifiedBackup{{stagePath: fullStage, targetPath: fullPath}}
+	if incrementalStage != "" {
+		pair = append(pair, verifiedBackup{stagePath: incrementalStage, targetPath: incrementalTarget})
+	}
+	if err := publishVerifiedBackupPair(pair); err != nil {
+		for _, staged := range pair {
+			if removeErr := os.Remove(staged.stagePath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("remove staged backup: %w", removeErr))
+			}
+		}
+		return "", "", incrementalVerify, fullVerify, skipIncremental, err
+	}
+	if incrementalStage != "" {
+		incrementalPath = incrementalTarget
 	}
 	return incrementalPath, fullPath, incrementalVerify, fullVerify, skipIncremental, nil
 }
 
-func (m *Manager) writeAndVerifyArchive(filename string, archive []byte) (string, *VerificationResult, error) {
-	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
-		return "", nil, fmt.Errorf("failed to create backup directory: %w", err)
+func (m *Manager) stageVerifiedArchive(filename string, archive []byte) (string, string, *VerificationResult, error) {
+	if err := os.MkdirAll(m.backupDir, 0o755); err != nil {
+		return "", "", nil, fmt.Errorf("failed to create backup directory: %w", err)
 	}
 	if m.password != "" {
 		metadata, err := m.verifyManifestFromData(archive)
 		if err != nil {
-			return "", nil, err
+			return "", "", nil, err
 		}
 		metadata.Encrypted = true
 		metadata.EncryptionMethod = "AES-256-GCM"
 		archive, err = replaceArchiveManifest(archive, metadata, nil)
 		if err != nil {
-			return "", nil, err
+			return "", "", nil, err
 		}
 		archive, err = EncryptBackup(archive, m.password)
 		if err != nil {
-			return "", nil, err
+			return "", "", nil, err
 		}
 		filename = normalizeBackupFilename(filename) + ".enc"
 	} else {
 		filename = normalizeBackupFilename(filename)
 	}
-	path := filepath.Join(m.backupDir, filename)
-	if err := writeFileAtomic(path, archive, 0600); err != nil {
-		return "", nil, err
+	targetPath := filepath.Join(m.backupDir, filename)
+	extension := filepath.Ext(filename)
+	stage, err := os.CreateTemp(m.backupDir, ".backup-stage-*"+extension)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("create staged backup: %w", err)
 	}
-	return m.verifyCreated(path)
+	stagePath := stage.Name()
+	cleanup := func() {
+		if removeErr := os.Remove(stagePath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			slog.Warn("failed to remove staged backup", "path", stagePath, "err", removeErr)
+		}
+	}
+	if _, err := stage.Write(archive); err != nil {
+		closeErr := stage.Close()
+		cleanup()
+		return "", "", nil, errors.Join(fmt.Errorf("write staged backup: %w", err), closeErr)
+	}
+	if err := stage.Sync(); err != nil {
+		closeErr := stage.Close()
+		cleanup()
+		return "", "", nil, errors.Join(fmt.Errorf("sync staged backup: %w", err), closeErr)
+	}
+	if err := stage.Close(); err != nil {
+		cleanup()
+		return "", "", nil, fmt.Errorf("close staged backup: %w", err)
+	}
+	result, err := m.verifyBackup(stagePath, false)
+	if err != nil {
+		cleanup()
+		return "", "", result, fmt.Errorf("verify staged backup: %w", err)
+	}
+	if result == nil || !result.AllPassed {
+		cleanup()
+		if result == nil {
+			return "", "", nil, fmt.Errorf("staged backup verification returned no result")
+		}
+		return "", "", result, fmt.Errorf("staged backup verification failed: %s", strings.Join(result.Errors, "; "))
+	}
+	return stagePath, targetPath, result, nil
+}
+
+type verifiedBackup struct {
+	stagePath  string
+	targetPath string
+	previous   string
+	published  bool
+}
+
+func publishVerifiedBackupPair(backups []verifiedBackup) error {
+	for i := range backups {
+		if _, err := os.Stat(backups[i].targetPath); err == nil {
+			placeholder, createErr := os.CreateTemp(filepath.Dir(backups[i].targetPath), ".backup-previous-*")
+			if createErr != nil {
+				return rollbackBackupPair(backups[:i], fmt.Errorf("reserve previous backup path: %w", createErr))
+			}
+			backups[i].previous = placeholder.Name()
+			if closeErr := placeholder.Close(); closeErr != nil {
+				_ = os.Remove(backups[i].previous)
+				return rollbackBackupPair(backups[:i], fmt.Errorf("close previous backup placeholder: %w", closeErr))
+			}
+			if err := os.Remove(backups[i].previous); err != nil {
+				return rollbackBackupPair(backups[:i], fmt.Errorf("remove previous backup placeholder: %w", err))
+			}
+			if err := os.Rename(backups[i].targetPath, backups[i].previous); err != nil {
+				return rollbackBackupPair(backups[:i], fmt.Errorf("preserve previous backup: %w", err))
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return rollbackBackupPair(backups[:i], fmt.Errorf("inspect backup target: %w", err))
+		}
+		if err := os.Rename(backups[i].stagePath, backups[i].targetPath); err != nil {
+			return rollbackBackupPair(backups[:i+1], fmt.Errorf("publish verified backup: %w", err))
+		}
+		backups[i].published = true
+	}
+	for i := range backups {
+		if backups[i].previous != "" {
+			if err := os.Remove(backups[i].previous); err != nil {
+				slog.Warn("failed to remove replaced backup after successful publish", "path", backups[i].previous, "err", err)
+			}
+		}
+	}
+	return nil
+}
+
+func rollbackBackupPair(backups []verifiedBackup, cause error) error {
+	for i := len(backups) - 1; i >= 0; i-- {
+		if backups[i].published {
+			if err := os.Remove(backups[i].targetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cause = errors.Join(cause, fmt.Errorf("remove failed new backup %s: %w", backups[i].targetPath, err))
+			}
+		}
+		if backups[i].previous != "" {
+			if err := os.Rename(backups[i].previous, backups[i].targetPath); err != nil {
+				cause = errors.Join(cause, fmt.Errorf("restore previous backup %s: %w", backups[i].targetPath, err))
+			}
+		}
+	}
+	return cause
 }
 
 func (m *Manager) verifyCreated(path string) (string, *VerificationResult, error) {

@@ -1,0 +1,8 @@
+#swagger-ui {
+  min-height: 60vh;
+}
+
+#swagger-ui .wrapper {
+  max-width: none;
+  padding-inline: 0;
+}

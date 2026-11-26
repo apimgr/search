@@ -1,10 +1,12 @@
 package httputil
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/apimgr/search/src/config"
 )
@@ -249,8 +251,20 @@ func GetPreferredFormat(r *http.Request) string {
 // Set once at startup via SetAdditionalTrustedProxies.
 var (
 	additionalTrustedProxies   []*net.IPNet
+	additionalTrustedProxyNames []string
 	additionalTrustedProxiesMu sync.RWMutex
+	trustedProxyDNSMu sync.Mutex
+	trustedProxyDNSCache = map[string]trustedProxyDNSResult{}
+	trustedProxyLookupIP = func(ctx context.Context, host string) ([]net.IP, error) { return net.DefaultResolver.LookupIP(ctx, "ip", host) }
+	trustedProxyNow = time.Now
 )
+
+type trustedProxyDNSResult struct {
+	nets []*net.IPNet
+	updated time.Time
+}
+
+const trustedProxyDNSRefresh = 5 * time.Minute
 
 // alwaysTrustedCIDRs lists private and loopback ranges that are always trusted.
 // Per AI.md PART 12: loopback, RFC1918, fc00::/7, link-local always trusted.
@@ -280,6 +294,7 @@ var alwaysTrustedCIDRs = func() []*net.IPNet {
 // Plain IPs are auto-expanded to /32 (IPv4) or /128 (IPv6).
 func SetAdditionalTrustedProxies(additional []string) {
 	parsed := make([]*net.IPNet, 0, len(additional))
+	names := make([]string, 0, len(additional))
 	for _, s := range additional {
 		s = strings.TrimSpace(s)
 		if s == "" {
@@ -294,6 +309,8 @@ func SetAdditionalTrustedProxies(additional []string) {
 		// Try as plain IP, expand to /32 (IPv4) or /128 (IPv6)
 		ip := net.ParseIP(s)
 		if ip == nil {
+			if strings.ContainsAny(s, "/:@[] \t\r\n") { continue }
+			names = append(names, strings.TrimSuffix(strings.ToLower(s), "."))
 			continue
 		}
 		cidr := s + "/32"
@@ -307,7 +324,9 @@ func SetAdditionalTrustedProxies(additional []string) {
 	}
 	additionalTrustedProxiesMu.Lock()
 	additionalTrustedProxies = parsed
+	additionalTrustedProxyNames = names
 	additionalTrustedProxiesMu.Unlock()
+	refreshTrustedProxyNames(names)
 }
 
 // isTrustedProxy returns true if remoteAddr is in the always-trusted private ranges
@@ -338,7 +357,65 @@ func isTrustedProxy(remoteAddr string) bool {
 			return true
 		}
 	}
+	additionalTrustedProxiesMu.RLock()
+	names := append([]string(nil), additionalTrustedProxyNames...)
+	additionalTrustedProxiesMu.RUnlock()
+	return trustedProxyNameMatches(ip, names)
+}
+
+// IsTrustedProxyWithAdditional reports whether an address is in an always-
+// trusted network or a configured IP, CIDR, or DNS-name proxy entry.
+func IsTrustedProxyWithAdditional(ipAddress string, additional []string) bool {
+	ip := net.ParseIP(strings.TrimSpace(ipAddress))
+	if ip == nil { return false }
+	for _, cidr := range alwaysTrustedCIDRs { if cidr.Contains(ip) { return true } }
+	var names []string
+	for _, entry := range additional {
+		entry = strings.TrimSpace(entry)
+		if entry == "" { continue }
+		if _, network, err := net.ParseCIDR(entry); err == nil { if network.Contains(ip) { return true }; continue }
+		if parsed := net.ParseIP(entry); parsed != nil { if parsed.Equal(ip) { return true }; continue }
+		if !strings.ContainsAny(entry, "/:@[] \t\r\n") { names = append(names, strings.TrimSuffix(strings.ToLower(entry), ".")) }
+	}
+	return trustedProxyNameMatches(ip, names)
+}
+
+func trustedProxyNameMatches(ip net.IP, names []string) bool {
+	for _, name := range names {
+		for _, network := range resolveTrustedProxyName(name) { if network.Contains(ip) { return true } }
+	}
 	return false
+}
+
+func resolveTrustedProxyName(name string) []*net.IPNet {
+	trustedProxyDNSMu.Lock()
+	entry, exists := trustedProxyDNSCache[name]
+	if exists && trustedProxyNow().Sub(entry.updated) < trustedProxyDNSRefresh {
+		trustedProxyDNSMu.Unlock()
+		return entry.nets
+	}
+	trustedProxyDNSMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	addresses, err := trustedProxyLookupIP(ctx, name)
+	var networks []*net.IPNet
+	if err == nil {
+		for _, ip := range addresses {
+			bits := 128
+			if ip.To4() != nil { bits = 32 }
+			mask := net.CIDRMask(bits, bits)
+			networks = append(networks, &net.IPNet{IP: ip, Mask: mask})
+		}
+	}
+	trustedProxyDNSMu.Lock()
+	trustedProxyDNSCache[name] = trustedProxyDNSResult{nets: networks, updated: trustedProxyNow()}
+	trustedProxyDNSMu.Unlock()
+	if err != nil { return nil }
+	return networks
+}
+
+func refreshTrustedProxyNames(names []string) {
+	for _, name := range names { _ = resolveTrustedProxyName(name) }
 }
 
 // GetClientIP extracts the real client IP from the request.

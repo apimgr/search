@@ -266,20 +266,20 @@ func TestPrintCompletions(t *testing.T) {
 	}{
 		{
 			shell:    "bash",
-			mustHave: []string{"COMPREPLY", "--service", "--maintenance", "--update"},
+			mustHave: []string{"COMPREPLY", "--service", "--maintenance", "--update", "tor"},
 		},
 		{
 			shell:    "zsh",
-			mustHave: []string{"_arguments", "--service", "--update"},
+			mustHave: []string{"_arguments", "--service", "--update", "scheduler tor"},
 		},
 		{
 			// fish uses -l <name> (no leading --) for long option names
 			shell:    "fish",
-			mustHave: []string{"complete", "-l service", "-l update"},
+			mustHave: []string{"complete", "-l service", "-l update", "scheduler tor"},
 		},
 		{
 			shell:    "powershell",
-			mustHave: []string{"Register-ArgumentCompleter", "--service", "--update"},
+			mustHave: []string{"Register-ArgumentCompleter", "--service", "--update", "--maintenance tor"},
 		},
 	}
 	for _, tt := range tests {
@@ -292,7 +292,20 @@ func TestPrintCompletions(t *testing.T) {
 					t.Errorf("printCompletions(%q) missing %q", tt.shell, kw)
 				}
 			}
+			if strings.Contains(out, "'tor[Tor hidden service management]") || strings.Contains(out, "-a 'tor' -d 'Tor hidden service") {
+				t.Errorf("printCompletions(%q) exposes Tor as a top-level command", tt.shell)
+			}
 		})
+	}
+}
+
+func TestMaintenanceTorHelpDispatch(t *testing.T) {
+	oldArgs := os.Args
+	os.Args = []string{"search", "--maintenance", "tor", "--help"}
+	t.Cleanup(func() { os.Args = oldArgs })
+	out := captureStdout(t, func() { runMaintenance("tor") })
+	if !strings.Contains(out, "Usage: search --maintenance tor <subcommand>") {
+		t.Fatalf("Tor maintenance dispatch help = %q", out)
 	}
 }
 

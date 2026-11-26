@@ -49,10 +49,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set build info
+        env:
+          OFFICIAL_SITE_SECRET: ${{ secrets.OFFICIAL_SITE }}
         run: |
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           echo "YYMM=$(date +"%y%m")" >> "$GITHUB_ENV"
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
             echo "VERSION=${VERSION#v}" >> "$GITHUB_ENV"
             echo "IS_TAG=true" >> "$GITHUB_ENV"
@@ -63,6 +65,8 @@ jobs:
           EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${EPOCH}" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date -u -d @"${EPOCH}" +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_ENV"
+          if [[ -f site.txt ]]; then OFFICIAL_SITE="$(cat site.txt)"; else OFFICIAL_SITE="${OFFICIAL_SITE_SECRET:-}"; fi
+          echo "OFFICIAL_SITE=${OFFICIAL_SITE}" >> "$GITHUB_ENV"
 
       - name: Determine tags
         id: tags
@@ -93,7 +97,7 @@ jobs:
             org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
-            org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
+            org.opencontainers.image.description=search - Privacy-respecting self-hosted metasearch engine
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.schema-version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -121,13 +125,14 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
+            OFFICIAL_SITE=${{ env.OFFICIAL_SITE }}
           labels: |
             maintainer=casjay <casjay@yahoo.com>
             org.opencontainers.image.vendor=apimgr
             org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
-            org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
+            org.opencontainers.image.description=search - Privacy-respecting self-hosted metasearch engine
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.schema-version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -138,6 +143,12 @@ jobs:
             org.opencontainers.image.vcs-type=Git
             org.opencontainers.image.licenses=MIT
             com.github.containers.toolbox=false
+
+      - name: Verify production image runtime and Tor health
+        if: steps.tags.outputs.prod_tags != ''
+        run: |
+          docker pull "${REGISTRY}/${IMAGE_NAME}:${COMMIT_ID}"
+          bash tests/docker-image-check.sh "${REGISTRY}/${IMAGE_NAME}:${COMMIT_ID}"
 
   build-devel:
     name: Build and push devel image
@@ -163,10 +174,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set build info
+        env:
+          OFFICIAL_SITE_SECRET: ${{ secrets.OFFICIAL_SITE }}
         run: |
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           echo "YYMM=$(date +"%y%m")" >> "$GITHUB_ENV"
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
             echo "VERSION=${VERSION#v}" >> "$GITHUB_ENV"
             echo "IS_TAG=true" >> "$GITHUB_ENV"
@@ -177,6 +190,8 @@ jobs:
           EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${EPOCH}" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date -u -d @"${EPOCH}" +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_ENV"
+          if [[ -f site.txt ]]; then OFFICIAL_SITE="$(cat site.txt)"; else OFFICIAL_SITE="${OFFICIAL_SITE_SECRET:-}"; fi
+          echo "OFFICIAL_SITE=${OFFICIAL_SITE}" >> "$GITHUB_ENV"
 
       - name: Determine tags
         id: tags
@@ -207,7 +222,7 @@ jobs:
             org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
-            org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
+            org.opencontainers.image.description=search - Privacy-respecting self-hosted metasearch engine
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.schema-version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -235,13 +250,14 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
+            OFFICIAL_SITE=${{ env.OFFICIAL_SITE }}
           labels: |
             maintainer=casjay <casjay@yahoo.com>
             org.opencontainers.image.vendor=apimgr
             org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
-            org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
+            org.opencontainers.image.description=search - Privacy-respecting self-hosted metasearch engine
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.schema-version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -252,3 +268,9 @@ jobs:
             org.opencontainers.image.vcs-type=Git
             org.opencontainers.image.licenses=MIT
             com.github.containers.toolbox=false
+
+      - name: Verify devel image runtime and Tor health
+        if: steps.tags.outputs.dev_tags != ''
+        run: |
+          docker pull "${REGISTRY}/${IMAGE_NAME}:devel"
+          bash tests/docker-image-check.sh "${REGISTRY}/${IMAGE_NAME}:devel"

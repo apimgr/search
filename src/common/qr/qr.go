@@ -5,15 +5,17 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"golang.org/x/image/draw"
 	"image"
 	"image/color"
 	"image/png"
 	"regexp"
 	"strings"
 
-	qrcode "github.com/skip2/go-qrcode"
+	"golang.org/x/image/draw"
+
 	_ "image/jpeg"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 var colorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -376,9 +377,9 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 	if !s.ValidateContactOrigin(r) {
 		s.RecordContactBlock("origin", r)
 		if strings.Contains(r.Header.Get("Accept"), "application/json") {
-			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Please submit the form from this site"})
+			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_origin_rejected")})
 		} else {
-			http.Error(w, "Please submit the form from this site", http.StatusBadRequest)
+			http.Error(w, i18n.RequestString(r, "errors.contact_origin_rejected"), http.StatusBadRequest)
 		}
 		return
 	}
@@ -497,7 +498,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if strings.Contains(r.Header.Get("Accept"), "application/json") {
-			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Field exceeds maximum length", Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
+			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_field_too_long"), Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
 		} else {
 			s.markContactCaptchaRequired(w, r)
 			s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
@@ -523,7 +524,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		if reason == "content" {
 			if strings.Contains(r.Header.Get("Accept"), "application/json") {
-				respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Your message could not be sent", Details: map[string]interface{}{"field": "contact", "rule": "invalid"}})
+				respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_send_failed"), Details: map[string]interface{}{"field": "contact", "rule": "invalid"}})
 			} else {
 				s.markContactCaptchaRequired(w, r)
 				s.renderContactForm(w, r, "", false, "Your message could not be sent")
@@ -824,6 +825,10 @@ func (s *Server) dispatchExactNotification(event notify.Event) {
 // handleSecurityReportSubmit implements AI.md PART 11's 7-step coordinated-
 // disclosure Submission Flow.
 func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Request, securityID string) {
+	if s.securityReportsRecoveryFailed {
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
 	accepted := false
 	defer func() {
 		if !accepted {
@@ -886,7 +891,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 		if strings.Contains(r.Header.Get("Accept"), "application/json") {
-			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: "Field exceeds maximum length", Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
+			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_field_too_long"), Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
 		} else {
 			s.markContactCaptchaRequired(w, r)
 			s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "errors.bad_request"))
@@ -899,6 +904,16 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 		s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"))
 		return
 	}
+	reportLock, err := security.LockReportMutation(config.GetConfigDir())
+	if err != nil {
+		s.handleInternalError(w, r, "lock security report mutation", err)
+		return
+	}
+	defer func() {
+		if err := reportLock.Unlock(); err != nil {
+			slog.Error("unlock security report mutation", "error", err)
+		}
+	}()
 
 	// Step 2: allocate the tracking id.
 	trackingID, err := security.GenerateTrackingID()
@@ -915,7 +930,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 
 	plaintextBody := composeSecurityReportBody(s.notificationLang(), trackingID, affectedComponent,
 		affectedEndpoint, severity, summary, stepsToReproduce, impact, suggestedFix,
-		researcherEmail, researcherGPG, creditPreference, creditName, disclosureDays, cveRequested,
+		"", "", creditPreference, creditName, disclosureDays, cveRequested,
 		researcherName, config.Version, config.CommitID, time.Now().UTC().Format(time.RFC3339), r.UserAgent())
 
 	// Step 3: encrypt the report body at rest — PGP if a project keypair
@@ -926,22 +941,48 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 		s.handleInternalError(w, r, "encrypt security report", err)
 		return
 	}
+	contactPayload, err := json.Marshal(struct {
+		Email        string `json:"email"`
+		ResearcherGPG string `json:"researcher_gpg,omitempty"`
+	}{Email: researcherEmail, ResearcherGPG: researcherGPG})
+	if err != nil {
+		s.handleInternalError(w, r, "encode security report contact", err)
+		return
+	}
+	contactEncrypted, err := security.EncryptAESGCM(s.config.Server.Security.EncryptionKey, contactPayload)
+	if err != nil {
+		s.handleInternalError(w, r, "encrypt security report contact", err)
+		return
+	}
+	idWindow, valid := security.SecurityIDWindow(s.config.Server.Security.InstallationSecret, securityID, time.Now().Unix())
+	if !valid {
+		s.handleInternalError(w, r, "validate security report id window", errors.New("security id is no longer valid"))
+		return
+	}
+	creditPref := map[string]string{"real_name": "name", "handle": "handle", "anonymous": "anon", "no": "no"}[creditPreference]
+	if creditPref == "" {
+		s.handleInternalError(w, r, "map security report credit preference", errors.New("invalid credit preference"))
+		return
+	}
+	if creditPreference == "handle" {
+		creditName = creditHandle
+	}
+	disclosureDate := time.Now().UTC().AddDate(0, 0, disclosureDays)
 
 	report := security.Report{
 		TrackingID:        trackingID,
-		SecurityIDUsed:    securityID,
-		AffectedComponent: affectedComponent,
-		AffectedEndpoint:  affectedEndpoint,
+		IDWindow:          idWindow,
 		Severity:          severity,
-		Summary:           summary,
-		EncryptedBody:     encryptedBody,
-		EncryptionMethod:  encryptionMethod,
-		CreditPreference:  creditPreference,
+		Component:         affectedComponent,
+		BodyEnc:           encryptedBody,
+		BodyAlg:           encryptionMethod,
+		ContactEnc:        []byte(contactEncrypted),
+		CreditPref:        creditPref,
 		CreditName:        creditName,
-		CreditHandle:      creditHandle,
-		DisclosureDays:    disclosureDays,
+		DisclosureDate:    &disclosureDate,
 		CVERequested:      cveRequested,
-		ReportTokenHash:   tokenHash,
+		TokenHash:         tokenHash,
+		Summary:           summary,
 	}
 
 	if s.dbManager != nil {
@@ -995,7 +1036,8 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 // before rendering — no hardcoded English strings.
 func composeSecurityReportBody(lang, trackingID, affectedComponent, affectedEndpoint, severity, summary,
 	stepsToReproduce, impact, suggestedFix, researcherEmail, researcherGPG,
-	creditPreference, creditName string, disclosureDays int, cveRequested bool, researcherNames ...string) string {
+	creditPreference, creditName string, disclosureDays int, cveRequested bool, researcherNames ...string,
+) string {
 	t := func(key string, args ...interface{}) string { return i18n.T(lang, key, args...) }
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n", t("email.security_report.label_tracking_id"), trackingID)
@@ -1086,7 +1128,7 @@ func (s *Server) sendSecurityMaintainerNotification(report security.Report, plai
 		subject := fmt.Sprintf("[security] %s (%s)", report.Summary, report.TrackingID)
 		body := pgpBody
 		if body == "" {
-			body = string(report.EncryptedBody)
+			body = string(report.BodyEnc)
 			body = "WARNING: This report is encrypted with the server's AES-256-GCM key because no PGP key is configured. Configure and securely share the key before attempting to decrypt it.\n\n" + body
 		}
 		msg := email.NewMessage([]string{recipient}, subject, body)
@@ -1236,13 +1278,16 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 // features, checks, stats.
 func (s *Server) buildHealthInfo() *HealthResponse {
 	// Per AI.md PART 13: Build Tor feature status
-	torState := health.TorState(s.config.Server.Tor.Enabled, s.torService != nil && s.torService.IsStarting(), s.torService != nil && s.torService.IsRunning(), func() string {
-		if s.torService != nil {
-			return s.torService.GetOnionAddress()
+	torStarting := s.torService != nil && s.torService.IsStarting()
+	torRunning, torHostname := false, ""
+	if s.torService != nil && !torStarting {
+		torRunning = s.torService.IsRunning()
+		if torRunning {
+			torHostname = s.torService.GetOnionAddress()
 		}
-		return ""
-	}())
-	torInfo := TorInfo{Enabled: torState.Enabled, Running: torState.Running, Status: torState.Status, Hostname: torState.Hostname}
+	}
+	torState := health.TorState(s.config.Server.Tor.Enabled, torStarting, torRunning, torHostname)
+	torInfo := TorInfo{Enabled: torState.Enabled, Running: torState.Running, State: torState.State, Status: torState.Status, Hostname: torState.Hostname}
 	i2pInfo := buildI2PInfo(s.i2pManager)
 
 	status := "healthy"
@@ -1279,7 +1324,7 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 	if s.dbManager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := s.dbManager.Ping(ctx); err != nil {
+		if err := s.dbManager.Probe(ctx); err != nil {
 			checks.Database = "error"
 			if status == "healthy" {
 				status = "unhealthy"
@@ -1373,8 +1418,7 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		Uptime:    formatDuration(time.Since(s.startTime)),
 		Mode:      s.config.Server.Mode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Cluster:   ClusterInfo{Enabled: false},
-		// 6. Features - PUBLIC only (PARTS 20, 32)
+		// 5. Features - PUBLIC only (PARTS 19, 31)
 		Features: FeaturesInfo{
 			Tor: torInfo,
 			// I2P status from the eepsite manager per AI.md PART 13 /
@@ -1474,14 +1518,19 @@ func (s *Server) rebuildHealthRegistry() {
 // mirroring the src/api healthz mapping. Status uses the AI.md PART 13
 // enum: disabled, starting, healthy, or unavailable. The separate state field
 // preserves I2P's full disabled/no_provider/starting/building/running/error
-// lifecycle. When disabled, every
-// field remains at its zero value; provider details are only present when an
-// active provider was found.
+// lifecycle. The provider is always present and uses "none" when no provider
+// is available.
 func buildI2PInfo(mgr *i2p.I2PManager) I2PInfo {
-	if mgr == nil || !mgr.Enabled() {
-		return I2PInfo{Status: "disabled", State: "disabled"}
+	if mgr == nil {
+		return I2PInfo{Status: "disabled", State: "disabled", Provider: "none"}
 	}
-	state := health.I2PState(mgr.LifecycleState(), mgr.ProviderName(), mgr.EepsiteAddress())
+	lifecycle := mgr.LifecycleState()
+	provider, hostname := "", ""
+	if lifecycle != "starting" && lifecycle != "building" {
+		provider = mgr.ProviderName()
+		hostname = mgr.EepsiteAddress()
+	}
+	state := health.I2PState(lifecycle, provider, hostname)
 	return I2PInfo{Enabled: state.Enabled, Running: state.Running, Status: state.Status, State: state.State, Hostname: state.Hostname, Provider: state.Provider}
 }
 
@@ -1572,10 +1621,9 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthResponse
 		formatHealthTimestamp(health.Build.Date), health.GoVersion,
 		translate("health.uptime"), formatDurationForHuman(health.Uptime), translate("health.mode"), health.Mode,
 		formatHealthTimestamp(health.Timestamp))
-	fmt.Fprintf(&b, "%s: %s\n", translate("health.section.cluster"), translate("common.disabled"))
 	fmt.Fprintf(&b, "\n%s\n", translate("health.features_heading"))
-	fmt.Fprintf(&b, "  %s:     %s\n", translate("health.components.tor"), healthFeatureText(health.Features.Tor.Status, health.Features.Tor.Hostname))
-	fmt.Fprintf(&b, "  I2P:     %s\n", healthFeatureText(health.Features.I2P.Status, health.Features.I2P.Hostname))
+	fmt.Fprintf(&b, "  %s:     %s\n", translate("health.components.tor"), healthFeatureText(health.Features.Tor.Status, health.Features.Tor.Hostname, translate))
+	fmt.Fprintf(&b, "  %s:     %s\n", translate("health.components.i2p"), healthFeatureText(health.Features.I2P.Status, health.Features.I2P.Hostname, translate))
 	if health.Features.GeoIP {
 		fmt.Fprintf(&b, "  %s:   %s\n", translate("health.geoip"), translate("common.enabled"))
 	} else {
@@ -1587,7 +1635,7 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthResponse
 		fmt.Fprintf(&b, "  %s:        %s\n", translate("health.components.tor"), health.Checks.Tor)
 	}
 	if health.Checks.I2P != "" {
-		fmt.Fprintf(&b, "  I2P:        %s\n", health.Checks.I2P)
+		fmt.Fprintf(&b, "  %s:        %s\n", translate("health.components.i2p"), health.Checks.I2P)
 	}
 	for _, check := range health.Checks.Extra {
 		labelKey := "health.check." + check.Key
@@ -1689,14 +1737,21 @@ func formatDurationForHuman(value string) string {
 	return strings.Join(human, " ")
 }
 
-func healthFeatureText(status, hostname string) string {
+func healthFeatureText(status, hostname string, translate func(string) string) string {
 	if status == "" {
 		status = "disabled"
 	}
-	if hostname != "" {
-		return status + " - " + hostname
+	statusLabel := translate("health." + status)
+	if statusLabel == "health."+status && status == "disabled" {
+		statusLabel = translate("common.disabled")
 	}
-	return status
+	if statusLabel == "health."+status {
+		statusLabel = humanizeHealthStatus(status)
+	}
+	if hostname != "" {
+		return statusLabel + " - " + hostname
+	}
+	return statusLabel
 }
 
 func formatHealthTimestamp(value string) string {
@@ -2048,6 +2103,11 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   s.cookieSecure(r),
 	})
+	s.logConsentUpdated(r, map[string]bool{
+		"essential":   essential,
+		"preferences": prefEnabled,
+		"analytics":   analyticsEnabled,
+	})
 
 	// Consent withdrawal (decline / unknown-treated-as-decline): clear cached and
 	// stored non-essential data per AI.md PART 11. "cookies" is excluded so the
@@ -2077,6 +2137,7 @@ func (s *Server) clearPreferenceCookies(w http.ResponseWriter, r *http.Request) 
 		"search_pref_units", "search_pref_new_tab", "search_pref_infinite_scroll",
 		"search_pref_keyboard_shortcuts", "search_pref_save_history", "search_pref_video_previews",
 		"search_pref_font_size", "search_pref_results_density", "search_pref_accent_color",
+		"search_pref_custom_css",
 		enginePreferenceCookie, engineOrderPreferenceCookie,
 	} {
 		http.SetCookie(w, &http.Cookie{

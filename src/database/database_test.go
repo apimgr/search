@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -229,6 +230,13 @@ func TestDatabaseManager_Ping(t *testing.T) {
 	ctx := context.Background()
 	if err := dm.Ping(ctx); err != nil {
 		t.Errorf("Ping() error = %v", err)
+	}
+}
+
+func TestDatabaseManager_ProbeReadAndWriteHandles(t *testing.T) {
+	dm := newManagerTempDir(t)
+	if err := dm.Probe(context.Background()); err != nil {
+		t.Fatalf("Probe() error = %v", err)
 	}
 }
 
@@ -462,6 +470,45 @@ func TestInitSchema_Idempotent(t *testing.T) {
 	}
 }
 
+func TestInitSchemaMigratesLegacyOwnerTokenIDsWithoutLosingReferences(t *testing.T) {
+	db := newInMemoryDB(t)
+	ctx := context.Background()
+	for _, statement := range []string{
+		`CREATE TABLE owners (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL)`,
+		`CREATE TABLE api_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, token_prefix TEXT NOT NULL, active INTEGER DEFAULT 1, expires_at INTEGER, created_at INTEGER, owner_id TEXT, kind TEXT NOT NULL, token_enc TEXT NOT NULL, rotated_at INTEGER, last_used_at INTEGER, revoked_at INTEGER, revoked_reason TEXT)`,
+		`CREATE TABLE token_references (id INTEGER PRIMARY KEY, token_id INTEGER NOT NULL REFERENCES api_tokens(id))`,
+		`INSERT INTO owners(id,created_at,last_seen_at) VALUES ('owner-1',1,1)`,
+		`INSERT INTO api_tokens(id,name,token_hash,token_prefix,active,expires_at,created_at,owner_id,kind,token_enc) VALUES (7,'legacy','hash-1','own_12345678',1,NULL,10,'owner-1','linked','ciphertext-1')`,
+		`INSERT INTO token_references(id,token_id) VALUES (1,7)`,
+	} {
+		if _, err := db.Exec(ctx, statement); err != nil {
+			t.Fatalf("prepare legacy token schema: %v; statement=%s", err, statement)
+		}
+	}
+	if err := initServerSchema(ctx, db); err != nil {
+		t.Fatalf("migrate legacy token schema: %v", err)
+	}
+	var legacyID int64
+	var publicID, tokenHash, tokenPrefix, tokenLast4, encrypted string
+	if err := db.QueryRow(ctx, `SELECT legacy_id,id,token_hash,token_prefix,token_last4,token_enc FROM api_tokens WHERE legacy_id=7`).Scan(&legacyID, &publicID, &tokenHash, &tokenPrefix, &tokenLast4, &encrypted); err != nil {
+		t.Fatalf("read migrated token: %v", err)
+	}
+	parsed, err := uuid.Parse(publicID)
+	if err != nil || parsed.Version() != 7 {
+		t.Fatalf("public token id = %q, want UUIDv7 (parse error %v)", publicID, err)
+	}
+	if legacyID != 7 || tokenHash != "hash-1" || tokenPrefix != "own_12345678" || tokenLast4 != "" || encrypted != "ciphertext-1" {
+		t.Fatalf("migrated token lost legacy data: legacy_id=%d hash=%q prefix=%q last4=%q ciphertext=%q", legacyID, tokenHash, tokenPrefix, tokenLast4, encrypted)
+	}
+	var referencedID int64
+	if err := db.QueryRow(ctx, `SELECT t.legacy_id FROM token_references r JOIN api_tokens t ON t.legacy_id=r.token_id WHERE r.id=1`).Scan(&referencedID); err != nil || referencedID != 7 {
+		t.Fatalf("legacy foreign-key reference = %d, error=%v", referencedID, err)
+	}
+	if err := initServerSchema(ctx, db); err != nil {
+		t.Fatalf("repeat owner-token schema migration: %v", err)
+	}
+}
+
 // --- RemoteDBConfig ---
 
 // --- GetSupportedDrivers / IsRemoteDriver ---
@@ -492,7 +539,7 @@ func TestConnectDatabase_LibSQL_EmptyDSN(t *testing.T) {
 
 // --- MixedDB.Close idempotent ---
 
-func TestCleanupExpiredAPITokens(t *testing.T) {
+func TestCleanupExpiredAPITokensRetainsExpiredOwnerTokens(t *testing.T) {
 	db := newInMemoryDB(t)
 	ctx := context.Background()
 	if _, err := db.Exec(ctx, `CREATE TABLE api_tokens (id INTEGER PRIMARY KEY, expires_at DATETIME)`); err != nil {
@@ -506,14 +553,14 @@ func TestCleanupExpiredAPITokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if removed != 1 {
-		t.Fatalf("removed = %d, want 1", removed)
+	if removed != 0 {
+		t.Fatalf("removed = %d, want 0", removed)
 	}
 	var remaining int
 	if err := db.QueryRow(ctx, `SELECT COUNT(*) FROM api_tokens`).Scan(&remaining); err != nil {
 		t.Fatal(err)
 	}
-	if remaining != 2 {
-		t.Fatalf("remaining = %d, want 2", remaining)
+	if remaining != 3 {
+		t.Fatalf("remaining = %d, want 3", remaining)
 	}
 }

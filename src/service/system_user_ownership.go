@@ -17,14 +17,20 @@ func markSystemUserOwned(name string) error {
 	if directory == "" {
 		return fmt.Errorf("configuration directory is unavailable")
 	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return fmt.Errorf("create private configuration directory for service account marker: %w", err)
+	}
+	if err := os.Chmod(directory, 0o700); err != nil {
+		return fmt.Errorf("secure configuration directory for service account marker: %w", err)
+	}
 	marker := filepath.Join(directory, ".service-account-created")
-	file, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if !os.IsExist(err) {
 			return fmt.Errorf("record service account ownership: %w", err)
 		}
 		info, statErr := os.Lstat(marker)
-		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
 			return fmt.Errorf("service account ownership marker is invalid")
 		}
 		data, readErr := os.ReadFile(marker)
@@ -51,7 +57,7 @@ func systemUserOwned(name string) bool {
 	}
 	marker := filepath.Join(config.GetConfigDir(), ".service-account-created")
 	info, err := os.Lstat(marker)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
 		return false
 	}
 	data, err := os.ReadFile(marker)

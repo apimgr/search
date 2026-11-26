@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -160,7 +159,7 @@ func (s *Server) renderOwnerTokensPage(w http.ResponseWriter, r *http.Request) {
 				status = "expired"
 				statusKey = "preferences.owner_tokens.expired"
 			}
-			revealed := hasFlash && flash.tokenCard == strconv.FormatInt(token.ID, 10) && flash.token != ""
+			revealed := hasFlash && flash.tokenCard == token.ID && flash.token != ""
 			expiresOn := ""
 			if token.ExpiresAt != nil {
 				expiresOn = token.ExpiresAt.Format("2006-01-02")
@@ -282,7 +281,7 @@ func (s *Server) handleOwnerLinkedCreate(w http.ResponseWriter, r *http.Request)
 		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
-	s.redirectOwnerTokenAction(w, r, "token-"+strconv.FormatInt(id, 10), token, "preferences.owner_tokens.linked_created", strconv.FormatInt(id, 10))
+	s.redirectOwnerTokenAction(w, r, "token-"+id, token, "preferences.owner_tokens.linked_created", id)
 }
 
 func (s *Server) handleOwnerLinkedReveal(w http.ResponseWriter, r *http.Request) {
@@ -302,13 +301,13 @@ func (s *Server) ownerLinkedAction(w http.ResponseWriter, r *http.Request, actio
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || id <= 0 {
+	id := chi.URLParam(r, "id")
+	if id == "" {
 		http.NotFound(w, r)
 		return
 	}
-	card := "token-" + strconv.FormatInt(id, 10)
-	tokenCard := strconv.FormatInt(id, 10)
+	card := "token-" + id
+	tokenCard := id
 	switch action {
 	case "reveal":
 		token, err := s.ownerManager.Reveal(r.Context(), identity, id)
@@ -338,8 +337,8 @@ func (s *Server) handleOwnerLinkedUpdate(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || id <= 0 {
+	id := chi.URLParam(r, "id")
+	if id == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -351,7 +350,7 @@ func (s *Server) handleOwnerLinkedUpdate(w http.ResponseWriter, r *http.Request)
 		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
-	s.redirectOwnerTokenAction(w, r, "token-"+strconv.FormatInt(id, 10), "", "preferences.owner_tokens.linked_updated", "")
+	s.redirectOwnerTokenAction(w, r, "token-"+id, "", "preferences.owner_tokens.linked_updated", "")
 }
 
 func parseWebOwnerExpiry(value, expiresOn string) (*time.Time, error) {

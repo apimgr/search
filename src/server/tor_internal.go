@@ -2,28 +2,42 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
-	"strings"
+	"os"
+	"path/filepath"
 
+	"github.com/apimgr/search/src/service"
 	"github.com/go-chi/chi/v5"
 )
 
 // registerTorInternalRoutes registers the internal-only Tor control endpoints
-// used by `search tor <subcommand>` to reach the running server's embedded
+// used by `search --maintenance tor <subcommand>` to reach the running server's embedded
 // Tor process. Per AI.md PART 31: "No REST API for Tor configuration" means
 // no PUBLIC REST API — these endpoints are loopback-gated, never documented,
 // versioned, or reachable through /api/{api_version}/**, and sit at the same
 // internal tier as /server/metrics.
 func (s *Server) registerTorInternalRoutes(r chi.Router) {
-	r.Get("/server/tor/status", s.loopbackOnly(s.handleTorInternalStatus))
-	r.Post("/server/tor/validate", s.loopbackOnly(s.handleTorInternalValidate))
-	r.Post("/server/tor/restart", s.loopbackOnly(s.handleTorInternalRestart))
-	r.Post("/server/tor/regenerate", s.loopbackOnly(s.handleTorInternalRegenerate))
-	r.Post("/server/tor/vanity/start", s.loopbackOnly(s.handleTorInternalVanityStart))
-	r.Post("/server/tor/vanity/apply", s.loopbackOnly(s.handleTorInternalVanityApply))
-	r.Post("/server/tor/import-keys", s.loopbackOnly(s.handleTorInternalImportKeys))
+	r.Handle("/server/tor/status", s.loopbackOnly(torMethodOnly(http.MethodGet, s.handleTorInternalStatus)))
+	r.Handle("/server/tor/validate", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalValidate)))
+	r.Handle("/server/tor/restart", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalRestart)))
+	r.Handle("/server/tor/regenerate", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalRegenerate)))
+	r.Handle("/server/tor/vanity/start", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalVanityStart)))
+	r.Handle("/server/tor/vanity/stop", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalVanityStop)))
+	r.Handle("/server/tor/vanity/apply", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalVanityApply)))
+	r.Handle("/server/tor/import-keys", s.loopbackOnly(torMethodOnly(http.MethodPost, s.handleTorInternalImportKeys)))
+}
+
+func torMethodOnly(method string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != method {
+			http.NotFound(w, r)
+			return
+		}
+		next(w, r)
+	}
 }
 
 // loopbackOnly rejects any request whose immediate TCP peer is not
@@ -59,16 +73,11 @@ func (s *Server) loopbackOnly(next http.HandlerFunc) http.HandlerFunc {
 // torUnavailable responds when the server has no Tor service configured
 // (Tor binary not found at startup, or the feature is disabled).
 func torUnavailable(w http.ResponseWriter) {
-	respondJSON(w, http.StatusServiceUnavailable, map[string]any{
-		"ok":      false,
-		"error":   "TOR_UNAVAILABLE",
-		"message": "Tor service is not configured or unavailable",
-		"details": map[string]any{},
-	})
+	torError(w, http.StatusInternalServerError, "SERVER_ERROR", errors.New("tor service is not configured or unavailable"))
 }
 
 // torError responds with a Tor operation failure. These endpoints are
-// loopback-only and consumed exclusively by the trusted `search tor`
+// loopback-only and consumed exclusively by the trusted `search --maintenance tor`
 // CLI operated by the same user running the server, so the underlying
 // error text is genuinely operator-actionable diagnostic detail (e.g.
 // "prefix too long", "tor process is not running") rather than a
@@ -86,10 +95,19 @@ func torError(w http.ResponseWriter, status int, code string, err error) {
 // handleTorInternalStatus handles GET /server/tor/status (loopback-only).
 func (s *Server) handleTorInternalStatus(w http.ResponseWriter, r *http.Request) {
 	if s.torService == nil {
-		torUnavailable(w)
+		respondOK(w, http.StatusOK, map[string]any{
+			"running":             false,
+			"version":             "",
+			"bootstrap_percent":   0,
+			"circuit_established": false,
+			"vanity": map[string]any{
+				"state": "idle", "prefix": "", "workers": 0, "attempts": 0,
+				"rate": 0, "elapsed_seconds": 0, "candidates": []string{},
+			},
+		})
 		return
 	}
-	respondOK(w, http.StatusOK, s.torService.GetTorStatus())
+	respondOK(w, http.StatusOK, s.torService.ControlStatus())
 }
 
 // handleTorInternalValidate handles POST /server/tor/validate (loopback-only).
@@ -102,19 +120,18 @@ func (s *Server) handleTorInternalValidate(w http.ResponseWriter, r *http.Reques
 	}
 	status := s.torService.GetTorStatus()
 	valid := true
-	var issues []string
+	errors := make([]map[string]string, 0)
 	if enabled, _ := status["enabled"].(bool); !enabled {
 		valid = false
-		issues = append(issues, "tor is not enabled in server.yml")
+		errors = append(errors, map[string]string{"field": "server.tor.enabled", "message": "Tor is not enabled in server.yml"})
 	}
 	if running, _ := status["running"].(bool); !running {
 		valid = false
-		issues = append(issues, "tor process is not running")
+		errors = append(errors, map[string]string{"field": "server.tor.running", "message": "Tor process is not running"})
 	}
 	respondOK(w, http.StatusOK, map[string]any{
 		"valid":  valid,
-		"issues": issues,
-		"status": status,
+		"errors": errors,
 	})
 }
 
@@ -125,10 +142,12 @@ func (s *Server) handleTorInternalRestart(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := s.torService.RestartTorService(); err != nil {
-		torError(w, http.StatusInternalServerError, "TOR_RESTART_FAILED", err)
+		torError(w, http.StatusInternalServerError, "SERVER_ERROR", err)
 		return
 	}
-	respondOK(w, http.StatusOK, s.torService.GetTorStatus())
+	status := s.torService.ControlStatus()
+	onionAddress, _ := status["onion_address"].(string)
+	respondOK(w, http.StatusOK, map[string]any{"restarted": true, "onion_address": onionAddress})
 }
 
 // handleTorInternalRegenerate handles POST /server/tor/regenerate (loopback-only).
@@ -137,17 +156,57 @@ func (s *Server) handleTorInternalRegenerate(w http.ResponseWriter, r *http.Requ
 		torUnavailable(w)
 		return
 	}
-	addr, err := s.torService.RegenerateAddress()
-	if err != nil {
-		torError(w, http.StatusInternalServerError, "TOR_REGENERATE_FAILED", err)
+	var req torConfirmRequest
+	if !decodeTorJSON(w, r, &req) {
 		return
 	}
-	respondOK(w, http.StatusOK, map[string]any{"onion_address": addr})
+	if !req.Confirm {
+		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", errTorConfirmationRequired)
+		return
+	}
+	previousAddress, _ := s.torService.ControlStatus()["onion_address"].(string)
+	addr, err := s.torService.RegenerateAddress()
+	if err != nil {
+		torError(w, http.StatusInternalServerError, "SERVER_ERROR", err)
+		return
+	}
+	respondOK(w, http.StatusOK, map[string]any{"onion_address": addr, "previous_address": previousAddress})
+}
+
+type torConfirmRequest struct {
+	Confirm bool `json:"confirm"`
+}
+
+var errTorConfirmationRequired = errors.New("confirm must be true")
+
+func decodeTorJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "error": "BAD_REQUEST", "message": "Invalid request body", "details": map[string]any{},
+		})
+		return false
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		respondJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "error": "BAD_REQUEST", "message": "Invalid request body", "details": map[string]any{},
+		})
+		return false
+	}
+	return true
 }
 
 // torVanityStartRequest is the JSON body for POST /server/tor/vanity/start.
 type torVanityStartRequest struct {
-	Prefix string `json:"prefix"`
+	Prefix  string `json:"prefix"`
+	Workers *int   `json:"workers,omitempty"`
+}
+
+type torVanityApplyRequest struct {
+	Address string `json:"address"`
+	Confirm bool   `json:"confirm"`
 }
 
 // handleTorInternalVanityStart handles POST /server/tor/vanity/start (loopback-only).
@@ -157,20 +216,48 @@ func (s *Server) handleTorInternalVanityStart(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req torVanityStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
-			"ok":      false,
-			"error":   "BAD_REQUEST",
-			"message": "Invalid request body",
-			"details": map[string]any{},
-		})
+	if !decodeTorJSON(w, r, &req) {
 		return
 	}
-	if err := s.torService.GenerateVanity(strings.TrimSpace(req.Prefix)); err != nil {
+	workers := 0
+	if req.Workers != nil {
+		workers = *req.Workers
+		if workers < 1 {
+			torError(w, http.StatusBadRequest, "VALIDATION_FAILED", errors.New("workers must be at least 1"))
+			return
+		}
+	}
+	if err := s.torService.GenerateVanityWithWorkers(req.Prefix, workers); err != nil {
+		var conflict *service.VanitySearchConflictError
+		if errors.As(err, &conflict) {
+			respondJSON(w, http.StatusConflict, map[string]any{
+				"ok": false, "error": "CONFLICT", "message": err.Error(), "details": map[string]any{"prefix": conflict.Prefix},
+			})
+			return
+		}
 		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", err)
 		return
 	}
-	respondOK(w, http.StatusOK, map[string]any{"started": true})
+	progress := s.torService.GetVanityProgress()
+	respondOK(w, http.StatusAccepted, map[string]any{"state": "running", "prefix": progress.Prefix, "workers": progress.Workers})
+}
+
+// handleTorInternalVanityStop cancels the running search while retaining any
+// candidates already written to disk.
+func (s *Server) handleTorInternalVanityStop(w http.ResponseWriter, r *http.Request) {
+	if s.torService == nil {
+		torUnavailable(w)
+		return
+	}
+	wasRunning := s.torService.GetVanityProgress().Running
+	if wasRunning {
+		s.torService.CancelVanity()
+	}
+	progress := s.torService.GetVanityProgress()
+	respondOK(w, http.StatusOK, map[string]any{
+		"stopped":    wasRunning,
+		"candidates": progress.Candidates,
+	})
 }
 
 // handleTorInternalVanityApply handles POST /server/tor/vanity/apply (loopback-only).
@@ -179,36 +266,89 @@ func (s *Server) handleTorInternalVanityApply(w http.ResponseWriter, r *http.Req
 		torUnavailable(w)
 		return
 	}
-	addr, err := s.torService.ApplyVanityAddress()
+	var req torVanityApplyRequest
+	if !decodeTorJSON(w, r, &req) {
+		return
+	}
+	if !req.Confirm {
+		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", errTorConfirmationRequired)
+		return
+	}
+	addr, err := s.torService.ApplyVanityCandidate(req.Address)
 	if err != nil {
-		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", err)
+		if errors.Is(err, service.ErrVanityCandidateNotFound) {
+			torError(w, http.StatusNotFound, "NOT_FOUND", err)
+			return
+		}
+		var ambiguous *service.AmbiguousVanityCandidateError
+		if errors.As(err, &ambiguous) {
+			respondJSON(w, http.StatusConflict, map[string]any{
+				"ok": false, "error": "CONFLICT", "message": err.Error(), "details": map[string]any{"candidates": ambiguous.Candidates},
+			})
+			return
+		}
+		torError(w, http.StatusInternalServerError, "SERVER_ERROR", err)
 		return
 	}
 	respondOK(w, http.StatusOK, map[string]any{"onion_address": addr})
 }
 
 // handleTorInternalImportKeys handles POST /server/tor/import-keys (loopback-only).
-// The CLI reads the key file itself and streams the raw private key bytes as
-// the request body.
+// The CLI sends a path only; private key bytes stay on disk and never cross
+// the loopback control channel.
 func (s *Server) handleTorInternalImportKeys(w http.ResponseWriter, r *http.Request) {
 	if s.torService == nil {
 		torUnavailable(w)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
-			"ok":      false,
-			"error":   "BAD_REQUEST",
-			"message": "Failed to read request body",
-			"details": map[string]any{},
-		})
+	var req struct {
+		Path    string `json:"path"`
+		Confirm bool   `json:"confirm"`
+	}
+	if !decodeTorJSON(w, r, &req) {
 		return
 	}
-	addr, err := s.torService.ImportKeys(body)
+	if !req.Confirm {
+		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", errTorConfirmationRequired)
+		return
+	}
+	keyData, err := readTorImportKey(req.Path)
 	if err != nil {
 		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", err)
 		return
 	}
+	if err := service.ValidateTorKeyMaterial(keyData); err != nil {
+		torError(w, http.StatusBadRequest, "VALIDATION_FAILED", err)
+		return
+	}
+	addr, err := s.torService.ImportKeys(keyData)
+	if err != nil {
+		torError(w, http.StatusInternalServerError, "SERVER_ERROR", err)
+		return
+	}
 	respondOK(w, http.StatusOK, map[string]any{"onion_address": addr})
+}
+
+func readTorImportKey(path string) ([]byte, error) {
+	if !filepath.IsAbs(path) {
+		return nil, errors.New("key directory path must be absolute")
+	}
+	keyDir := filepath.Clean(path)
+	dirInfo, err := os.Stat(keyDir)
+	if err != nil {
+		return nil, errors.New("key directory is not readable")
+	}
+	if !dirInfo.IsDir() {
+		return nil, errors.New("key path must name a directory")
+	}
+	keyPath := filepath.Join(keyDir, "hs_ed25519_secret_key")
+	keyInfo, err := os.Stat(keyPath)
+	if err != nil || !keyInfo.Mode().IsRegular() || keyInfo.Size() <= 0 || keyInfo.Size() > 1<<20 {
+		return nil, errors.New("key directory does not contain a readable Tor secret key")
+	}
+	keyData, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, errors.New("key directory does not contain a readable Tor secret key")
+	}
+	return keyData, nil
 }

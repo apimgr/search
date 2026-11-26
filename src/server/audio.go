@@ -1,13 +1,14 @@
 package server
 
 import (
-	"github.com/apimgr/search/src/common/closeutil"
 	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/closeutil"
 
 	"github.com/apimgr/search/src/direct"
 )

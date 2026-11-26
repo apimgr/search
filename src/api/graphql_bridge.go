@@ -10,10 +10,11 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/apimgr/search/src/common/closeutil"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+
+	"github.com/apimgr/search/src/common/closeutil"
 
 	"github.com/go-chi/chi/v5"
 )

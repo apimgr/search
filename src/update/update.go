@@ -552,6 +552,22 @@ type stagedVersion struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
+// StagedUpdateFailure identifies the release whose staged installation failed.
+// The version is kept so the scheduler can suppress another attempt until a
+// distinct release is available.
+type StagedUpdateFailure struct {
+	Version string
+	Err     error
+}
+
+func (e *StagedUpdateFailure) Error() string {
+	return e.Err.Error()
+}
+
+func (e *StagedUpdateFailure) Unwrap() error {
+	return e.Err
+}
+
 // StageUpdate verifies a scheduled release and atomically places it under
 // {data_dir}/update for the next root-started process to install.
 func (m *Manager) StageUpdate(downloadPath, assetName, checksumURL, version string, publishedAt time.Time) error {
@@ -641,48 +657,46 @@ func (m *Manager) ApplyStagedUpdate() (bool, error) {
 		cleanup()
 		return false, fmt.Errorf("invalid staged update metadata")
 	}
-	if !m.isNewerRelease(Release{TagName: metadata.Version, PublishedAt: metadata.PublishedAt}) {
+	failUpdate := func(err error) (bool, error) {
 		cleanup()
-		return false, fmt.Errorf("staged update %s is not newer than %s", metadata.Version, m.currentVersion)
+		return false, &StagedUpdateFailure{Version: metadata.Version, Err: err}
+	}
+	if !m.isNewerRelease(Release{TagName: metadata.Version, PublishedAt: metadata.PublishedAt}) {
+		return failUpdate(fmt.Errorf("staged update %s is not newer than %s", metadata.Version, m.currentVersion))
 	}
 	expectedBytes, err := os.ReadFile(checksumPath)
 	if err != nil {
-		cleanup()
-		return false, fmt.Errorf("read staged update checksum: %w", err)
+		return failUpdate(fmt.Errorf("read staged update checksum: %w", err))
 	}
 	actualChecksum, err := hashUpdateFile(binaryPath)
 	if err != nil {
-		cleanup()
-		return false, fmt.Errorf("hash staged update binary: %w", err)
+		return failUpdate(fmt.Errorf("hash staged update binary: %w", err))
 	}
 	if !strings.EqualFold(strings.TrimSpace(string(expectedBytes)), actualChecksum) {
-		cleanup()
-		return false, errors.New("staged update checksum mismatch")
+		return failUpdate(errors.New("staged update checksum mismatch"))
 	}
 	if err := m.backupCurrentBinary(); err != nil {
-		cleanup()
-		return false, fmt.Errorf("backup current binary before staged update: %w", err)
+		return failUpdate(fmt.Errorf("backup current binary before staged update: %w", err))
 	}
 	if err := m.replaceBinary(binaryPath); err != nil {
-		cleanup()
-		return false, fmt.Errorf("replace binary from staged update: %w", err)
+		return failUpdate(fmt.Errorf("replace binary from staged update: %w", err))
 	}
 	cleanup()
 	if err := os.Setenv("_SEARCH_UPDATE_PREVIOUS_VERSION", m.currentVersion); err != nil {
 		rollbackErr := m.replaceBinary(filepath.Join(m.backupDir, fmt.Sprintf("search-%s.backup", m.currentVersion)))
-		return false, errors.Join(fmt.Errorf("record previous version for update restart: %w", err), rollbackErr)
+		return failUpdate(errors.Join(fmt.Errorf("record previous version for update restart: %w", err), rollbackErr))
 	}
 	if err := os.Setenv("_SEARCH_UPDATE_NEW_VERSION", metadata.Version); err != nil {
 		_ = os.Unsetenv("_SEARCH_UPDATE_PREVIOUS_VERSION")
 		rollbackErr := m.replaceBinary(filepath.Join(m.backupDir, fmt.Sprintf("search-%s.backup", m.currentVersion)))
-		return false, errors.Join(fmt.Errorf("record new version for update restart: %w", err), rollbackErr)
+		return failUpdate(errors.Join(fmt.Errorf("record new version for update restart: %w", err), rollbackErr))
 	}
 	if err := RestartSelf(); err != nil {
 		_ = os.Unsetenv("_SEARCH_UPDATE_PREVIOUS_VERSION")
 		_ = os.Unsetenv("_SEARCH_UPDATE_NEW_VERSION")
 		backupPath := filepath.Join(m.backupDir, fmt.Sprintf("search-%s.backup", m.currentVersion))
 		rollbackErr := m.replaceBinary(backupPath)
-		return false, errors.Join(fmt.Errorf("restart after staged update: %w", err), rollbackErr)
+		return failUpdate(errors.Join(fmt.Errorf("restart after staged update: %w", err), rollbackErr))
 	}
 	return true, nil
 }

@@ -21,7 +21,7 @@ func TestBlocklistManager_IsBlocked(t *testing.T) {
 		ip   string
 		want bool
 	}{
-		{"blocked IP", "192.168.1.100", true},
+		{"always-trusted private IP", "192.168.1.100", false},
 		{"not blocked", "10.0.0.1", false},
 		{"invalid IP", "not-an-ip", false},
 	}
@@ -121,14 +121,14 @@ func TestBlocklistManager_ParseBlocklist(t *testing.T) {
 			input:    "10.0.0.0/8\n192.168.0.0/16\n# comment",
 			listType: "cidr",
 			wantIPs:  0,
-			wantNets: 2,
+			wantNets: 0,
 		},
 		{
 			name:     "mixed CIDR and IP",
 			input:    "10.0.0.0/8\n1.2.3.4\n",
 			listType: "cidr",
 			wantIPs:  1,
-			wantNets: 1,
+			wantNets: 0,
 		},
 		{
 			name:     "IP with comments",
@@ -159,7 +159,7 @@ func TestBlocklistManager_CIDRMatch(t *testing.T) {
 	m := NewBlocklistManager("", nil)
 
 	// Parse a CIDR blocklist
-	input := "10.0.0.0/8\n192.168.0.0/16"
+	input := "8.8.8.0/24\n192.168.0.0/16"
 	ips, nets, err := m.parseBlocklist(strings.NewReader(input), "cidr")
 	if err != nil {
 		t.Fatalf("parseBlocklist() error = %v", err)
@@ -174,10 +174,10 @@ func TestBlocklistManager_CIDRMatch(t *testing.T) {
 		ip   string
 		want bool
 	}{
-		{"10.1.2.3", true},
-		{"10.255.255.255", true},
-		{"192.168.1.1", true},
-		{"192.168.100.50", true},
+		{"8.8.8.3", true},
+		{"8.8.8.255", true},
+		{"192.168.1.1", false},
+		{"192.168.100.50", false},
 		{"11.0.0.1", false},
 		{"172.16.0.1", false},
 	}
@@ -201,7 +201,7 @@ func TestBlocklistManager_LoadFromDisk(t *testing.T) {
 
 	// Write test blocklist file
 	testFile := filepath.Join(blocklistDir, "test_list.txt")
-	content := "1.2.3.4\n5.6.7.8\n# comment\n10.0.0.0/8"
+	content := "1.2.3.4\n5.6.7.8\n# comment\n8.8.8.0/24"
 	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
@@ -229,8 +229,8 @@ func TestBlocklistManager_LoadFromDisk(t *testing.T) {
 	if !m.IsBlocked("1.2.3.4") {
 		t.Error("expected 1.2.3.4 to be blocked")
 	}
-	if !m.IsBlocked("10.1.1.1") {
-		t.Error("expected 10.1.1.1 to be blocked (CIDR match)")
+	if !m.IsBlocked("8.8.8.1") {
+		t.Error("expected 8.8.8.1 to be blocked (CIDR match)")
 	}
 }
 

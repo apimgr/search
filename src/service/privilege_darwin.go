@@ -9,16 +9,15 @@ import (
 	"strings"
 )
 
-// GetServiceUser returns the macOS service user name (underscore prefix convention).
-// Per AI.md PART 24: macOS daemon accounts use the _name convention.
+// GetServiceUser returns the canonical service account name.
+// Per AI.md PART 23, the account name is the frozen internal name on every OS.
 func GetServiceUser(serviceName string) string {
-	return "_" + serviceName
+	return serviceName
 }
 
-// GetServiceGroup returns the macOS service group name (underscore prefix convention).
-// Per AI.md PART 24: macOS daemon accounts use the _name convention.
+// GetServiceGroup returns the canonical service group name.
 func GetServiceGroup(serviceName string) string {
-	return "_" + serviceName
+	return serviceName
 }
 
 // FindAvailableSystemID finds an available UID/GID in the macOS safe range (200–399).
@@ -40,7 +39,7 @@ func CreateSystemUser(name string) (*SystemUser, error) {
 	return created, nil
 }
 
-// findAvailableMacOSSystemID finds an available ID for macOS (uses _underscored users).
+// findAvailableMacOSSystemID finds an available ID in the macOS safe range.
 // Per AI.md PART 24: macOS safe range is 200–399.
 func findAvailableMacOSSystemID() (int, error) {
 	usedIDs := make(map[int]bool)
@@ -73,9 +72,9 @@ func findAvailableMacOSSystemID() (int, error) {
 }
 
 // createMacOSServiceAccount creates a macOS service account via dscl.
-// Per AI.md PART 24: macOS service accounts must be hidden from login screen.
+// Per AI.md PART 23: the account uses the frozen internal name and is hidden from login.
 func createMacOSServiceAccount(name string) (*SystemUser, error) {
-	svcName := "_" + name
+	svcName := name
 
 	cmd := exec.Command("dscl", ".", "-read", "/Users/"+svcName)
 	if err := cmd.Run(); err == nil {

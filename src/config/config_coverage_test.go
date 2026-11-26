@@ -59,7 +59,7 @@ func TestConfigSaveMigratesGeneratedSecretsAndPreservesOperatorSecrets(t *testin
 	path := filepath.Join(dir, "server.yml")
 	secretPath := filepath.Join(dir, "secrets.yml")
 	generatedToken := strings.Repeat("a", 64)
-	if err := os.WriteFile(path, []byte("server:\n  token: "+generatedToken+"\n  pages:\n    contact:\n      captcha_secret_key: operator-captcha-secret\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("server:\n  token: "+generatedToken+"\n  pages:\n    contact:\n      captcha_secret_key: operator-captcha-secret\n  backup:\n    encryption_password: backup-key-material\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(secretPath, []byte("server:\n  notifications:\n    email:\n      smtp:\n        password: smtp-password\n"), 0600); err != nil {
@@ -68,6 +68,9 @@ func TestConfigSaveMigratesGeneratedSecretsAndPreservesOperatorSecrets(t *testin
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Server.Backup.EncryptionPassword != "backup-key-material" {
+		t.Fatalf("loaded backup encryption password = %q, want configured secret", cfg.Server.Backup.EncryptionPassword)
 	}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -80,10 +83,10 @@ func TestConfigSaveMigratesGeneratedSecretsAndPreservesOperatorSecrets(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(mainConfig), generatedToken) || strings.Contains(string(mainConfig), "smtp-password") || strings.Contains(string(mainConfig), "operator-captcha-secret") {
+	if strings.Contains(string(mainConfig), generatedToken) || strings.Contains(string(mainConfig), "smtp-password") || strings.Contains(string(mainConfig), "operator-captcha-secret") || strings.Contains(string(mainConfig), "backup-key-material") {
 		t.Fatalf("server.yml must not contain credentials: %s", mainConfig)
 	}
-	for _, expected := range []string{generatedToken, "smtp-password", "operator-captcha-secret"} {
+	for _, expected := range []string{generatedToken, "smtp-password", "operator-captcha-secret", "backup-key-material"} {
 		if !strings.Contains(string(secretConfig), expected) {
 			t.Fatalf("secrets.yml missing preserved value %q: %s", expected, secretConfig)
 		}

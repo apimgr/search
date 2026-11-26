@@ -13,23 +13,30 @@ package main
 // runs the typed-confirmation flow.
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/logging"
+	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/security"
+	"github.com/apimgr/search/src/server"
 	"github.com/google/uuid"
 )
 
@@ -40,6 +47,10 @@ const installationSecretGrace = 7 * 24 * time.Hour
 // encryptionKeyGrace is how long the pre-rotation encryption_key is retained
 // so any at-rest data not yet re-encrypted still decrypts (AI.md PART 11: 30 days).
 const encryptionKeyGrace = 30 * 24 * time.Hour
+
+func maintenanceAuditActor() logging.AuditActor {
+	return logging.AuditActor{Type: "operator", Username: pgpActor(), IP: pgpAuditIP}
+}
 
 // runMaintenanceSecret implements `--maintenance secret rotate <name>`.
 // Only installation_secret and encryption_key support manual rotation;
@@ -53,7 +64,7 @@ func runMaintenanceSecret(action, name string) {
 		printMaintenanceSecretHelp()
 		return
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown secret action: %s\n", action)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_secret_action", "action", action))
 		printMaintenanceSecretHelp()
 		exitFunc(1)
 		return
@@ -63,12 +74,12 @@ func runMaintenanceSecret(action, name string) {
 	case database.SecretInstallation, "encryption_key":
 		// rotatable
 	case database.SecretCookieSigning, database.SecretCSRFToken:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" %s is auto-rotated and cannot be rotated manually.\n", name)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.secret_auto_rotated", "name", name))
 		exitFunc(1)
 		return
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown secret: %s\n", name)
-		fmt.Println("Rotatable secrets: installation_secret, encryption_key")
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_secret", "name", name))
+		fmt.Println(serverCLIText("server_cli.maintenance.rotatable_secrets"))
 		exitFunc(1)
 		return
 	}
@@ -87,22 +98,22 @@ func runMaintenanceSecret(action, name string) {
 		err = rotateEncryptionKey(cfg, reasonText)
 	}
 	if err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Rotation failed: %v\n", err)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.rotation_failed", "error", err))
 		exitFunc(1)
 		return
 	}
-	fmt.Printf(display.Emoji("✅", "[OK]")+" %s rotated.\n", name)
+	fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.secret_rotated", "name", name))
 }
 
 // printMaintenanceSecretHelp documents the secret subcommand.
 func printMaintenanceSecretHelp() {
-	fmt.Println("Secret rotation:")
+	fmt.Println(serverCLIText("server_cli.maintenance.secret_rotation_heading"))
 	fmt.Println()
-	fmt.Println("  rotate installation_secret   Rotate the HMAC root secret (7-day grace)")
-	fmt.Println("  rotate encryption_key        Rotate the AES-256-GCM at-rest key (30-day grace)")
+	fmt.Println(serverCLIText("server_cli.maintenance.help_rotate_installation_secret"))
+	fmt.Println(serverCLIText("server_cli.maintenance.help_rotate_encryption_key"))
 	fmt.Println()
-	fmt.Println("cookie_signing_key and csrf_token_secret are auto-rotated and cannot")
-	fmt.Println("be rotated manually.")
+	fmt.Println(serverCLIText("server_cli.maintenance.help_auto_rotated_secrets"))
+	fmt.Println(serverCLIText("server_cli.maintenance.help_auto_rotated_secrets_continued"))
 }
 
 // rotateInstallationSecret generates a new installation_secret, re-encrypts the
@@ -135,8 +146,7 @@ func rotateInstallationSecret(cfg *config.Config, reasonText string) error {
 	}
 
 	cfg.Server.Security.InstallationSecretPrevious = oldSecret
-	cfg.Server.Security.InstallationSecretPreviousExpires =
-		time.Now().UTC().Add(installationSecretGrace).Format(time.RFC3339)
+	cfg.Server.Security.InstallationSecretPreviousExpires = time.Now().UTC().Add(installationSecretGrace).Format(time.RFC3339)
 	cfg.Server.Security.InstallationSecret = newSecret
 	if err := cfg.Save(config.GetConfigPath()); err != nil {
 		return err
@@ -146,124 +156,86 @@ func rotateInstallationSecret(cfg *config.Config, reasonText string) error {
 		logging.AuditActionInstallationSecretRotated,
 		logging.AuditCategorySecurity,
 		logging.AuditSeverityCritical,
-		logging.AuditActor{Type: "admin", Username: pgpActor(), IP: pgpAuditIP},
+		maintenanceAuditActor(),
 		&logging.AuditTarget{Type: "secret", Name: database.SecretInstallation},
 		"success",
 		map[string]interface{}{"grace_expires": cfg.Server.Security.InstallationSecretPreviousExpires},
 		reasonText,
 	)
-	fmt.Println("   Previous secret stays valid for 7 days (in-flight security_id URLs).")
+	fmt.Println("   " + serverCLIText("server_cli.maintenance.previous_installation_secret_grace"))
 	return nil
 }
 
-// rotateEncryptionKey generates a new AES-256-GCM key, re-encrypts every
-// AES-encrypted security report body under it, keeps the previous key for the
-// 30-day grace window and records security.encryption_key_rotated.
+// rotateEncryptionKey rotates the canonical at-rest AES key and eagerly
+// migrates every dependent ciphertext before recording the audit event.
 func rotateEncryptionKey(cfg *config.Config, reasonText string) error {
+	ctx := context.Background()
 	oldKey := cfg.Server.Security.EncryptionKey
+	if oldKey == "" {
+		return fmt.Errorf("current encryption key is unavailable")
+	}
+	dm, err := pgpOpenDB()
+	if err != nil { return err }
+	defer closeutil.Close(dm)
+	db := dm.ServerDB()
+	if err := cfg.ImportLegacyAppSecrets(ctx, db); err != nil { return fmt.Errorf("import legacy secrets: %w", err) }
+	prefix := ""
+	if db.Driver() == "libsql" { prefix = "srv_" }
+	previousKey, previousUntil, err := security.EnsurePreviousEncryptionKey(ctx, db, oldKey, cfg.Server.Security.EncryptionKeyPrevious, cfg.Server.Security.EncryptionKeyPreviousExpires)
+	if err != nil { return fmt.Errorf("load previous encryption key: %w", err) }
+	if _, err := owner.ReencryptTokenCopies(ctx, db, prefix, previousKey, oldKey); err != nil { return fmt.Errorf("finish prior owner-token rotation: %w", err) }
+	if err := pgpMigrateLegacyReports(cfg, dm); err != nil { return fmt.Errorf("migrate legacy security reports: %w", err) }
+	if _, err := security.ReencryptAESReportData(ctx, db, oldKey, previousKey); err != nil { return fmt.Errorf("finish prior security-report rotation: %w", err) }
+	if _, err := security.ReencryptQRShortlinks(ctx, db, oldKey, previousKey); err != nil { return fmt.Errorf("finish prior QR short-link rotation: %w", err) }
+	changed, err := cfg.ReencryptDNSCredentials(oldKey, previousKey)
+	if err != nil { return fmt.Errorf("finish prior DNS credential rotation: %w", err) }
+	if changed { if err := cfg.Save(config.GetConfigPath()); err != nil { return fmt.Errorf("save migrated DNS credentials: %w", err) } }
+	if previousKey != "" {
+		if previousUntil.After(time.Now().UTC()) {
+			return fmt.Errorf("a previous encryption key is still within its 30-day grace period")
+		}
+		if err := database.DeleteAppSecretValue(ctx, db, database.SecretEncryptionKeyPrevious); err != nil { return err }
+		if err := database.DeleteAppSecretValue(ctx, db, database.SecretEncryptionKeyPreviousUntil); err != nil { return err }
+	}
 	newKey := config.GenerateBase64Secret()
-
-	for name, encoded := range cfg.Server.SSL.LetsEncrypt.DNSCredentials {
-		if !strings.HasPrefix(encoded, "enc:v1:") {
-			return fmt.Errorf("DNS credential %s is not encrypted", name)
-		}
-		plaintext, err := security.DecryptAESGCM(oldKey, strings.TrimPrefix(encoded, "enc:v1:"))
-		if err != nil {
-			return fmt.Errorf("cannot decrypt DNS credential %s for key rotation", name)
-		}
-		ciphertext, err := security.EncryptAESGCM(newKey, plaintext)
-		if err != nil {
-			return fmt.Errorf("cannot re-encrypt DNS credential %s", name)
-		}
-		cfg.Server.SSL.LetsEncrypt.DNSCredentials[name] = "enc:v1:" + ciphertext
-	}
-
-	reencrypted, err := reencryptSecurityReports(oldKey, newKey)
-	if err != nil {
-		return err
-	}
-
-	cfg.Server.Security.EncryptionKeyPrevious = oldKey
-	cfg.Server.Security.EncryptionKeyPreviousExpires =
-		time.Now().UTC().Add(encryptionKeyGrace).Format(time.RFC3339)
+	expires := time.Now().UTC().Add(encryptionKeyGrace)
+	if err := security.BeginEncryptionKeyRotation(ctx, db, oldKey, newKey, expires, reasonText); err != nil { return fmt.Errorf("stage encryption key rotation: %w", err) }
 	cfg.Server.Security.EncryptionKey = newKey
+	cfg.Server.Security.EncryptionKeyPrevious = ""
+	cfg.Server.Security.EncryptionKeyPreviousExpires = ""
 	if err := cfg.Save(config.GetConfigPath()); err != nil {
-		return err
+		return fmt.Errorf("persist new encryption key; rotation will resume at next startup: %w", err)
 	}
+	if err := pgpMigrateLegacyReports(cfg, dm); err != nil { return fmt.Errorf("migrate legacy security reports: %w", err) }
+	tokenCount, err := owner.ReencryptTokenCopies(ctx, db, prefix, oldKey, newKey)
+	if err != nil { return fmt.Errorf("re-encrypt owner and linked API tokens: %w", err) }
+	reportCount, err := security.ReencryptAESReportData(ctx, db, newKey, oldKey)
+	if err != nil { return fmt.Errorf("re-encrypt security reports: %w", err) }
+	shortlinkCount, err := security.ReencryptQRShortlinks(ctx, db, newKey, oldKey)
+	if err != nil { return fmt.Errorf("re-encrypt QR short links: %w", err) }
+	dnsChanged, err := cfg.ReencryptDNSCredentials(newKey, oldKey)
+	if err != nil { return fmt.Errorf("re-encrypt DNS credentials: %w", err) }
+	if dnsChanged { if err := cfg.Save(config.GetConfigPath()); err != nil { return fmt.Errorf("save re-encrypted DNS credentials: %w", err) } }
 
 	pgpAuditLogger().LogEvent(
 		logging.AuditActionEncryptionKeyRotated,
 		logging.AuditCategorySecurity,
 		logging.AuditSeverityCritical,
-		logging.AuditActor{Type: "admin", Username: pgpActor(), IP: pgpAuditIP},
+		maintenanceAuditActor(),
 		&logging.AuditTarget{Type: "secret", Name: "encryption_key"},
 		"success",
 		map[string]interface{}{
-			"reports_reencrypted": reencrypted,
-			"grace_expires":       cfg.Server.Security.EncryptionKeyPreviousExpires,
+			"tokens_reencrypted": tokenCount,
+			"reports_reencrypted": reportCount,
+			"shortlinks_reencrypted": shortlinkCount,
+			"grace_expires":       expires.Format(time.RFC3339),
 		},
 		reasonText,
 	)
-	fmt.Printf("   Re-encrypted %d security report bodies.\n", reencrypted)
-	fmt.Println("   Previous key stays valid for 30 days.")
+	if err := security.CompleteEncryptionKeyRotation(ctx, db); err != nil { return fmt.Errorf("finish encryption-key recovery marker: %w", err) }
+	fmt.Println("   "+serverCLITf("server_cli.maintenance.encryption_rotation_summary", "tokens", tokenCount, "reports", reportCount, "shortlinks", shortlinkCount))
+	fmt.Println("   " + serverCLIText("server_cli.maintenance.previous_encryption_key_grace"))
 	return nil
-}
-
-// reencryptSecurityReports rewrites every AES-256-GCM encrypted report body
-// under newKey, returning how many rows were rewritten.
-func reencryptSecurityReports(oldKey, newKey string) (int, error) {
-	dm, err := pgpOpenDB()
-	if err != nil {
-		return 0, err
-	}
-	defer closeutil.Close(dm)
-
-	db := dm.ServerDB()
-	table := database.ServerTableName(db, "security_reports")
-	ctx := context.Background()
-	rows, err := db.Query(ctx,
-		fmt.Sprintf("SELECT tracking_id, encrypted_body FROM %s WHERE encryption_method = ?", table),
-		security.EncryptionMethodAESGCM)
-	if err != nil {
-		return 0, err
-	}
-
-	type pending struct {
-		id   string
-		body string
-	}
-	var updates []pending
-	for rows.Next() {
-		var id string
-		var body []byte
-		if err := rows.Scan(&id, &body); err != nil {
-			return 0, errors.Join(err, rows.Close())
-		}
-		plaintext, decErr := security.DecryptAESGCM(oldKey, string(body))
-		if decErr != nil {
-			return 0, fmt.Errorf("decrypt report %s: %w", id, errors.Join(decErr, rows.Close()))
-		}
-		encoded, encErr := security.EncryptAESGCM(newKey, plaintext)
-		if encErr != nil {
-			return 0, fmt.Errorf("re-encrypt report %s: %w", id, errors.Join(encErr, rows.Close()))
-		}
-		updates = append(updates, pending{id: id, body: encoded})
-	}
-	if err := rows.Err(); err != nil {
-		return 0, errors.Join(err, rows.Close())
-	}
-	if err := rows.Close(); err != nil {
-		return 0, err
-	}
-
-	for _, u := range updates {
-		if _, err := db.Exec(ctx,
-			fmt.Sprintf("UPDATE %s SET encrypted_body = ?, updated_at = CURRENT_TIMESTAMP WHERE tracking_id = ?", table),
-			[]byte(u.body), u.id); err != nil {
-			return 0, err
-		}
-	}
-	return len(updates), nil
 }
 
 // runMaintenanceToken implements `--maintenance token list|revoke <prefix>`
@@ -277,7 +249,7 @@ func runMaintenanceToken(action, prefix string) {
 		printMaintenanceTokenHelp()
 		return
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown token action: %s\n", action)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_token_action", "action", action))
 		printMaintenanceTokenHelp()
 		exitFunc(1)
 		return
@@ -287,7 +259,7 @@ func runMaintenanceToken(action, prefix string) {
 
 	dm, err := pgpOpenDB()
 	if err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to open database: %v\n", err)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_open_database", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -301,7 +273,7 @@ func runMaintenanceToken(action, prefix string) {
 		rows, err := db.Query(ctx, fmt.Sprintf(
 			"SELECT token_prefix, COALESCE(owner_id, ''), kind, name, created_at, expires_at, revoked_at FROM %s WHERE owner_id IS NOT NULL ORDER BY created_at", table))
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to list tokens: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_list_tokens", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -312,12 +284,12 @@ func runMaintenanceToken(action, prefix string) {
 			var tokenPrefix, ownerID, kind, name string
 			var createdAt, expiresAt, revokedAt sql.NullInt64
 			if err := rows.Scan(&tokenPrefix, &ownerID, &kind, &name, &createdAt, &expiresAt, &revokedAt); err != nil {
-				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to read token row: %v\n", err)
+				fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_read_token", "error", err))
 				exitFunc(1)
 				return
 			}
 			if found == 0 {
-				fmt.Println("Active tokens:")
+				fmt.Println(serverCLIText("server_cli.maintenance.active_tokens_heading"))
 			}
 			found++
 			status := "active"
@@ -326,319 +298,577 @@ func runMaintenanceToken(action, prefix string) {
 			} else if expiresAt.Valid && expiresAt.Int64 <= time.Now().Unix() {
 				status = "expired"
 			}
-			fmt.Printf("  %-12s %-7s %-20s owner=%s status=%s", tokenPrefix, kind, name, ownerID, status)
+			fmt.Print(serverCLITf("server_cli.maintenance.token_list_row", "prefix", tokenPrefix, "kind", kind, "name", name, "owner", ownerID, "status", serverCLIText("server_cli.maintenance.token_status_"+status)))
 			if createdAt.Valid {
-				fmt.Printf(" created=%s", time.Unix(createdAt.Int64, 0).UTC().Format(time.RFC3339))
+				fmt.Print(serverCLITf("server_cli.maintenance.token_created", "date", time.Unix(createdAt.Int64, 0).UTC().Format(time.RFC3339)))
 			}
 			fmt.Println()
 		}
 		if err := rows.Err(); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to read tokens: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_read_tokens", "error", err))
 			exitFunc(1)
 			return
 		}
 		if found == 0 {
-			fmt.Println("No active tokens.")
+			fmt.Println(serverCLIText("server_cli.maintenance.no_active_tokens"))
 		}
 		return
 	}
 
 	if prefix == "" {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify the token prefix to revoke")
-		fmt.Println("Usage: " + config.ProjectName + " --maintenance token revoke <prefix>")
+		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.maintenance.token_prefix_required"))
+		fmt.Println(serverCLITf("server_cli.maintenance.token_revoke_usage", "project", config.ProjectName))
 		exitFunc(1)
 		return
 	}
 
 	result, err := db.Exec(ctx,
-		fmt.Sprintf("UPDATE %s SET active = 0, revoked_at = ?, revoked_reason = 'operator_action' WHERE token_prefix = ? AND owner_id IS NOT NULL AND active = 1 AND revoked_at IS NULL", table), time.Now().Unix(), prefix)
+		fmt.Sprintf("UPDATE %s SET revoked_at = ?, revoked_reason = 'operator_action' WHERE token_prefix = ? AND owner_id IS NOT NULL AND revoked_at IS NULL", table), time.Now().Unix(), prefix)
 	if err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to revoke token: %v\n", err)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_revoke_token", "error", err))
 		exitFunc(1)
 		return
 	}
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" No active token with prefix %s\n", prefix)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.no_matching_active_token", "prefix", prefix))
 		exitFunc(1)
 		return
 	}
 	if affected > 0 {
 		if _, err := db.Exec(ctx, "INSERT INTO "+database.ServerTableName(db, "audit_log")+" (id, timestamp, actor_type, action, resource_type, resource_id, details) VALUES (?, ?, 'operator', 'token.revoked', 'api_token', ?, ?)", uuid.NewString(), time.Now().Unix(), prefix, `{"reason":"operator_action"}`); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Token revoked but audit write failed: %v\n", err)
+			fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.token_revoked_audit_failed", "error", err))
 			exitFunc(1)
 			return
 		}
 	}
 
 	pgpAuditLogger().LogTokenRevoke(pgpActor(), pgpAuditIP, prefix)
-	fmt.Printf(display.Emoji("✅", "[OK]")+" Revoked %d token(s) with prefix %s\n", affected, prefix)
+	fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.tokens_revoked", "count", affected, "prefix", prefix))
 }
 
 // printMaintenanceTokenHelp documents the token subcommand.
 func printMaintenanceTokenHelp() {
-	fmt.Println("Token management:")
+	fmt.Println(serverCLIText("server_cli.maintenance.token_management_heading"))
 	fmt.Println()
-	fmt.Println("  list               List active tokens (prefix + name)")
-	fmt.Println("  revoke <prefix>    Revoke the token with the given prefix")
+	fmt.Println(serverCLIText("server_cli.maintenance.help_token_list"))
+	fmt.Println(serverCLIText("server_cli.maintenance.help_token_revoke"))
 }
 
-// personalDataExport is the JSON document produced by
-// `--maintenance data export` (AI.md PART 12: GDPR data export / CCPA
-// data disclosure). It never contains secrets, hashes, or encrypted material.
+type personalDataOwner struct {
+	ID         string     `json:"id"`
+	CreatedAt  *time.Time `json:"created_at"`
+	LastSeenAt *time.Time `json:"last_seen_at"`
+}
+
+type personalDataToken struct {
+	Prefix     string     `json:"prefix"`
+	Kind       string     `json:"kind"`
+	Name       string     `json:"name"`
+	CreatedAt  *time.Time `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	ExpiresAt  *time.Time `json:"expires_at"`
+	Status     string     `json:"status"`
+}
+
 type personalDataExport struct {
-	GeneratedAt string                   `json:"generated_at"`
-	Subject     string                   `json:"subject,omitempty"`
-	DataSold    bool                     `json:"data_sold"`
-	Retention   string                   `json:"retention_period,omitempty"`
-	Alerts      []map[string]interface{} `json:"search_alerts"`
-	AuditEvents []map[string]interface{} `json:"audit_events"`
-	BlockedIPs  []map[string]interface{} `json:"blocked_ips"`
+	Format    int                    `json:"format"`
+	Owner     personalDataOwner      `json:"owner"`
+	Tokens    []personalDataToken    `json:"tokens"`
+	Resources map[string]interface{} `json:"resources"`
 }
 
-// runMaintenanceData implements `--maintenance data export|delete [email]`
-// per AI.md PART 12 (GDPR right of access / right to erasure, CCPA data
-// disclosure / right to delete). With no email, the whole instance's personal
-// data is covered; with an email, only that data subject's.
-func runMaintenanceData(action, subject string) {
-	switch action {
-	case "export", "delete":
-		// handled below
-	case "help", "--help", "":
+type dataActionFlags struct {
+	ownerPrefix string
+	output      string
+	yes         bool
+	help        bool
+}
+
+func maintenanceDataWritesStdout(args []string) bool {
+	for i, arg := range args {
+		if arg == "--output" && i+1 < len(args) && args[i+1] == "-" {
+			return true
+		}
+		if arg == "--output=-" {
+			return true
+		}
+	}
+	return false
+}
+
+func runMaintenanceData(action string, args []string) {
+	if action == "help" || action == "--help" || action == "-h" || action == "" {
 		printMaintenanceDataHelp()
 		return
-	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown data action: %s\n", action)
+	}
+	if action != "export" && action != "delete" {
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.unknown_data_action", "action", action))
 		printMaintenanceDataHelp()
-		exitFunc(1)
+		exitFunc(2)
+		return
+	}
+
+	flags, err := parseDataActionFlags(action, args)
+	if errors.Is(err, flag.ErrHelp) || flags.help {
+		printMaintenanceDataHelp()
+		return
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.error", "error", err))
+		printMaintenanceDataHelp()
+		exitFunc(2)
+		return
+	}
+	if flags.ownerPrefix == "" {
+		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.maintenance.owner_prefix_required"))
+		printMaintenanceDataHelp()
+		exitFunc(2)
+		return
+	}
+	if action == "export" && flags.yes || action == "delete" && flags.output != "" {
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.data_option_unsupported", "action", action))
+		printMaintenanceDataHelp()
+		exitFunc(2)
 		return
 	}
 
 	cfg := pgpRequireAuthorized()
-
 	dm, err := pgpOpenDB()
 	if err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to open database: %v\n", err)
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.failed_open_database", "error", err))
 		exitFunc(1)
 		return
 	}
 	defer closeutil.Close(dm)
 
+	ctx := context.Background()
+	dataOwner, err := resolveDataOwner(ctx, dm.ServerDB(), flags.ownerPrefix)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.error", "error", err))
+		exitFunc(66)
+		return
+	}
 	if action == "export" {
-		if err := exportPersonalData(cfg, dm, subject); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Export failed: %v\n", err)
+		if err := exportPersonalData(ctx, cfg, dm, dataOwner, flags.output); err != nil {
+			fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.export_failed", "error", err))
 			exitFunc(1)
 		}
 		return
 	}
-	if err := deletePersonalData(dm, subject); err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Deletion failed: %v\n", err)
+	if err := deletePersonalData(ctx, dm, dataOwner, flags.yes); err != nil {
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.deletion_failed", "error", err))
 		exitFunc(1)
 	}
 }
 
-// printMaintenanceDataHelp documents the data subcommand.
-func printMaintenanceDataHelp() {
-	fmt.Println("Data subject requests (GDPR / CCPA):")
-	fmt.Println()
-	fmt.Println("  export [email]   Write every piece of personal data held to a JSON file")
-	fmt.Println("  delete [email]   Erase personal data; audit entries are anonymized, not deleted")
-	fmt.Println()
-	fmt.Println("Omitting the email covers every data subject on this instance.")
+func parseDataActionFlags(action string, args []string) (dataActionFlags, error) {
+	var result dataActionFlags
+	fs := flag.NewFlagSet("data "+action, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&result.ownerPrefix, "owner", "", serverCLIText("server_cli.maintenance.flag_owner_help"))
+	fs.BoolVar(&result.help, "help", false, serverCLIText("server_cli.maintenance.flag_data_help"))
+	fs.BoolVar(&result.help, "h", false, serverCLIText("server_cli.maintenance.flag_data_help"))
+	if action == "export" {
+		fs.StringVar(&result.output, "output", "", serverCLIText("server_cli.maintenance.flag_output_help"))
+	} else {
+		fs.BoolVar(&result.yes, "yes", false, serverCLIText("server_cli.maintenance.flag_yes_help"))
+	}
+	if err := fs.Parse(args); err != nil {
+		return result, err
+	}
+	if fs.NArg() != 0 {
+		return result, errors.New(serverCLITf("server_cli.maintenance.unexpected_argument", "argument", fs.Arg(0)))
+	}
+	return result, nil
 }
 
-// exportPersonalData writes the export document to
-// {data_dir}/exports/data-export-{timestamp}.json and prints its path.
-func exportPersonalData(cfg *config.Config, dm *database.DatabaseManager, subject string) error {
-	ctx := context.Background()
-	db := dm.ServerDB()
+func printMaintenanceDataHelp() {
+	fmt.Println(serverCLIText("server_cli.maintenance.data_subject_heading"))
+	fmt.Println()
+	fmt.Println(serverCLIText("server_cli.maintenance.help_data_export"))
+	fmt.Println(serverCLIText("server_cli.maintenance.help_data_export_description"))
+	fmt.Println(serverCLIText("server_cli.maintenance.help_data_delete"))
+	fmt.Println(serverCLIText("server_cli.maintenance.help_data_delete_description"))
+	fmt.Println()
+	fmt.Println(serverCLIText("server_cli.maintenance.help_data_security_note"))
+}
 
-	doc := personalDataExport{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Subject:     subject,
-		DataSold:    cfg.Server.Privacy.Data.Sold,
-		Retention:   cfg.Server.Privacy.Retention.Period,
-		Alerts:      []map[string]interface{}{},
-		AuditEvents: []map[string]interface{}{},
-		BlockedIPs:  []map[string]interface{}{},
+func resolveDataOwner(ctx context.Context, db *database.DB, prefix string) (personalDataOwner, error) {
+	if strings.TrimSpace(prefix) == "" {
+		return personalDataOwner{}, errors.New("owner token prefix is required")
 	}
+	tableOwners := database.ServerTableName(db, "owners")
+	tableTokens := database.ServerTableName(db, "api_tokens")
+	rows, err := db.Query(ctx, fmt.Sprintf(`
+		SELECT DISTINCT o.id, o.created_at, o.last_seen_at
+		FROM %s AS o
+		JOIN %s AS t ON t.owner_id = o.id
+		WHERE t.token_prefix = ?
+	`, tableOwners, tableTokens), prefix)
+	if err != nil {
+		return personalDataOwner{}, fmt.Errorf("resolve owner prefix: %w", err)
+	}
+	defer closeutil.Close(rows)
 
-	alertTable := database.ServerTableName(db, "search_alerts")
-	alertQuery := fmt.Sprintf(`SELECT id, email, query, category, frequency, status,
-		COALESCE(created_from_ip, ''), created_at FROM %s`, alertTable)
-	var alertArgs []interface{}
-	if subject != "" {
-		alertQuery += " WHERE email = ?"
-		alertArgs = append(alertArgs, subject)
-	}
-	if err := scanRowsInto(ctx, db, alertQuery, alertArgs,
-		[]string{"id", "email", "query", "category", "frequency", "status", "created_from_ip", "created_at"},
-		&doc.Alerts); err != nil {
-		return err
-	}
-
-	auditTable := database.ServerTableName(db, "audit_log")
-	auditQuery := fmt.Sprintf(`SELECT id, timestamp, action, COALESCE(actor_id, ''),
-		COALESCE(ip_address, ''), COALESCE(user_agent, '') FROM %s`, auditTable)
-	var auditArgs []interface{}
-	if subject != "" {
-		auditQuery += " WHERE actor_id = ?"
-		auditArgs = append(auditArgs, subject)
-	}
-	if err := scanRowsInto(ctx, db, auditQuery, auditArgs,
-		[]string{"id", "timestamp", "action", "actor_id", "ip_address", "user_agent"},
-		&doc.AuditEvents); err != nil {
-		return err
-	}
-
-	// Blocked IPs are only personal data when a specific subject is not named;
-	// they are keyed by address, not by an identified person.
-	if subject == "" {
-		blockedTable := database.ServerTableName(db, "blocked_ips")
-		blockedQuery := fmt.Sprintf(
-			"SELECT ip_address, COALESCE(reason, ''), created_at FROM %s", blockedTable)
-		if err := scanRowsInto(ctx, db, blockedQuery, nil,
-			[]string{"ip_address", "reason", "created_at"}, &doc.BlockedIPs); err != nil {
-			return err
+	var resolved personalDataOwner
+	found := false
+	for rows.Next() {
+		var createdAt, lastSeenAt sql.NullInt64
+		var item personalDataOwner
+		if err := rows.Scan(&item.ID, &createdAt, &lastSeenAt); err != nil {
+			return personalDataOwner{}, fmt.Errorf("read owner record: %w", err)
 		}
+		if found && resolved.ID != item.ID {
+			return personalDataOwner{}, errors.New("owner token prefix is ambiguous")
+		}
+		item.CreatedAt = unixTimeOrNil(createdAt)
+		item.LastSeenAt = unixTimeOrNil(lastSeenAt)
+		resolved = item
+		found = true
 	}
+	if err := rows.Err(); err != nil {
+		return personalDataOwner{}, fmt.Errorf("read owner records: %w", err)
+	}
+	if !found {
+		return personalDataOwner{}, errors.New("no owner token matches the supplied prefix")
+	}
+	return resolved, nil
+}
 
-	dir := filepath.Join(config.GetDataDir(), "exports")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+func loadOwnerTokens(ctx context.Context, db *database.DB, ownerID string) ([]personalDataToken, error) {
+	table := database.ServerTableName(db, "api_tokens")
+	rows, err := db.Query(ctx, fmt.Sprintf(`
+		SELECT token_prefix, kind, name, created_at, last_used_at, expires_at, revoked_at
+		FROM %s
+		WHERE owner_id = ?
+		ORDER BY kind, id
+	`, table), ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("read owner token metadata: %w", err)
+	}
+	defer closeutil.Close(rows)
+
+	items := make([]personalDataToken, 0)
+	now := time.Now().Unix()
+	for rows.Next() {
+		var item personalDataToken
+		var createdAt, lastUsedAt, expiresAt, revokedAt sql.NullInt64
+		if err := rows.Scan(&item.Prefix, &item.Kind, &item.Name, &createdAt, &lastUsedAt, &expiresAt, &revokedAt); err != nil {
+			return nil, fmt.Errorf("read owner token metadata: %w", err)
+		}
+		item.CreatedAt = unixTimeOrNil(createdAt)
+		item.LastUsedAt = unixTimeOrNil(lastUsedAt)
+		item.ExpiresAt = unixTimeOrNil(expiresAt)
+		item.Status = "active"
+		switch {
+		case revokedAt.Valid:
+			item.Status = "revoked"
+		case expiresAt.Valid && expiresAt.Int64 <= now:
+			item.Status = "expired"
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read owner token metadata: %w", err)
+	}
+	return items, nil
+}
+
+func unixTimeOrNil(value sql.NullInt64) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	result := time.Unix(value.Int64, 0).UTC()
+	return &result
+}
+
+func exportPersonalData(ctx context.Context, cfg *config.Config, dm *database.DatabaseManager, dataOwner personalDataOwner, output string) error {
+	requestID := uuid.NewString()
+	logComplianceEvent(logging.AuditActionDataExportRequested, dataOwner.ID, requestID, nil)
+
+	tokens, err := loadOwnerTokens(ctx, dm.ServerDB(), dataOwner.ID)
+	if err != nil {
 		return err
 	}
-	path := filepath.Join(dir, fmt.Sprintf("data-export-%s.json", time.Now().UTC().Format("20060102-150405")))
+	alerts, err := alert.NewManagerWithDB(dm.ServerDB(), cfg, nil, nil).ListByOwner(ctx, dataOwner.ID)
+	if err != nil {
+		return err
+	}
+	results, err := loadOwnerAlertResults(ctx, dm.ServerDB(), dataOwner.ID)
+	if err != nil {
+		return err
+	}
+	doc := personalDataExport{
+		Format: 1,
+		Owner:  dataOwner,
+		Tokens: tokens,
+		Resources: map[string]interface{}{
+			"search_alerts":        alerts,
+			"search_alert_results": results,
+		},
+	}
 	payload, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, append(payload, '\n'), 0o600); err != nil {
-		return err
+	payload = append(payload, '\n')
+
+	path := output
+	if path == "" {
+		path = fmt.Sprintf("%s-export-%s-%s.json", config.ProjectName, dataOwner.ID, time.Now().UTC().Format("20060102"))
+	}
+	if path == "-" {
+		if _, err := os.Stdout.Write(payload); err != nil {
+			return fmt.Errorf("write export to stdout: %w", err)
+		}
+	} else {
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return fmt.Errorf("create export file: %w", err)
+		}
+		if _, err := file.Write(payload); err != nil {
+			_ = file.Close()
+			_ = os.Remove(path)
+			return fmt.Errorf("write export file: %w", err)
+		}
+		if err := file.Sync(); err != nil {
+			_ = file.Close()
+			_ = os.Remove(path)
+			return fmt.Errorf("sync export file: %w", err)
+		}
+		if err := file.Close(); err != nil {
+			_ = os.Remove(path)
+			return fmt.Errorf("close export file: %w", err)
+		}
 	}
 
-	pgpAuditLogger().LogEvent(
-		logging.AuditActionDataExportCompleted,
-		logging.AuditCategoryCompliance,
-		logging.AuditSeverityInfo,
-		logging.AuditActor{Type: "admin", Username: pgpActor(), IP: pgpAuditIP},
-		&logging.AuditTarget{Type: "data_export", Name: subject},
-		"success",
-		map[string]interface{}{"file_size": len(payload), "alerts": len(doc.Alerts)},
-		"",
-	)
-
-	fmt.Printf(display.Emoji("✅", "[OK]")+" Data export written: %s\n", path)
-	fmt.Printf("   Search alerts: %d  Audit events: %d\n", len(doc.Alerts), len(doc.AuditEvents))
+	logComplianceEvent(logging.AuditActionDataExportCompleted, dataOwner.ID, requestID, map[string]interface{}{
+		"file_size": len(payload),
+		"resources": len(alerts) + len(results),
+	})
+	if path != "-" {
+		fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.data_export_written", "path", path))
+	}
 	return nil
 }
 
-// scanRowsInto runs a query whose selected columns are all text-compatible and
-// appends one map per row, keyed by the supplied column names.
-func scanRowsInto(ctx context.Context, db *database.DB, query string, args []interface{}, columns []string, out *[]map[string]interface{}) error {
-	rows, err := db.Query(ctx, query, args...)
+func loadOwnerAlertResults(ctx context.Context, db *database.DB, ownerID string) ([]alert.AlertResult, error) {
+	resultsTable := database.ServerTableName(db, "search_alert_results")
+	alertsTable := database.ServerTableName(db, "search_alerts")
+	rows, err := db.Query(ctx, fmt.Sprintf(`
+		SELECT r.id, r.title, r.url, r.content, r.engine, r.published_at, r.first_seen_at,
+		       r.notified_email_at, r.notified_webhook_at
+		FROM %s AS r
+		JOIN %s AS a ON a.id = r.alert_id
+		WHERE a.owner_id = ?
+		ORDER BY r.first_seen_at DESC
+	`, resultsTable, alertsTable), ownerID)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("read owner alert results: %w", err)
 	}
 	defer closeutil.Close(rows)
 
+	items := make([]alert.AlertResult, 0)
 	for rows.Next() {
-		values := make([]sql.NullString, len(columns))
-		targets := make([]interface{}, len(columns))
-		for i := range values {
-			targets[i] = &values[i]
+		var item alert.AlertResult
+		var publishedAt, notifiedEmail, notifiedWebhook sql.NullTime
+		if err := rows.Scan(
+			&item.ID, &item.Title, &item.URL, &item.Content, &item.Engine,
+			&publishedAt, &item.FirstSeenAt, &notifiedEmail, &notifiedWebhook,
+		); err != nil {
+			return nil, fmt.Errorf("read owner alert result: %w", err)
 		}
-		if err := rows.Scan(targets...); err != nil {
-			return err
+		if publishedAt.Valid {
+			item.PublishedAt = &publishedAt.Time
 		}
-		record := make(map[string]interface{}, len(columns))
-		for i, name := range columns {
-			if values[i].Valid {
-				record[name] = values[i].String
-			} else {
-				record[name] = nil
-			}
+		if notifiedEmail.Valid {
+			item.NotifiedEmailAt = &notifiedEmail.Time
 		}
-		*out = append(*out, record)
+		if notifiedWebhook.Valid {
+			item.NotifiedWebhookAt = &notifiedWebhook.Time
+		}
+		items = append(items, item)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read owner alert results: %w", err)
+	}
+	return items, nil
 }
 
-// deletePersonalData erases the data subject's records. Per AI.md PART 12
-// ("Right to Erasure vs Retention Requirements") audit entries are anonymized
-// rather than deleted so the audit trail survives with the PII removed.
-func deletePersonalData(dm *database.DatabaseManager, subject string) error {
-	target := subject
-	if target == "" {
-		target = "EVERY data subject on this instance"
+type ownerDeletionCounts struct {
+	deleted    int64
+	anonymized int64
+	tokens     int64
+	alerts     int64
+	results    int64
+}
+
+func deletePersonalData(ctx context.Context, dm *database.DatabaseManager, dataOwner personalDataOwner, skipPrompt bool) error {
+	requestID := uuid.NewString()
+	if err := logDataDeletionRequested(ctx, dm.ServerDB(), dataOwner.ID, requestID); err != nil {
+		return fmt.Errorf("log deletion request: %w", err)
 	}
-	fmt.Printf("Erase personal data for %s? This cannot be undone. (yes/no): ", target)
-	var confirm string
-	if _, err := fmt.Scanln(&confirm); err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("read personal data erasure confirmation: %w", err)
+	counts, err := countOwnerData(ctx, dm.ServerDB(), dataOwner.ID)
+	if err != nil {
+		return err
 	}
-	if confirm != "yes" {
-		fmt.Println("Cancelled.")
+	if !skipPrompt {
+			fmt.Print(serverCLITf("server_cli.maintenance.delete_owner_confirm", "owner", dataOwner.ID, "tokens", counts.tokens, "resources", counts.alerts))
+		var confirmation string
+		if _, err := fmt.Scanln(&confirmation); err != nil && !errors.Is(err, io.EOF) {
+			return fmt.Errorf("read owner deletion confirmation: %w", err)
+		}
+		if confirmation != dataOwner.ID {
+			fmt.Println(serverCLIText("admin.status.cancelled"))
+			return nil
+		}
+	}
+
+	counts, err = deleteOwnerData(ctx, dm.ServerDB(), dataOwner.ID, requestID)
+	if err != nil {
+		return err
+	}
+	logComplianceEvent(logging.AuditActionDataDeletionCompleted, dataOwner.ID, requestID, map[string]interface{}{
+		"deleted_count":     counts.deleted,
+		"anonymized_count":  counts.anonymized,
+		"tokens_deleted":    counts.tokens,
+		"resources_deleted": counts.alerts + counts.results,
+	})
+	fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.data_deleted", "deleted", counts.deleted, "anonymized", counts.anonymized))
+	return nil
+}
+
+func logDataDeletionRequested(ctx context.Context, db *database.DB, ownerID, requestID string) error {
+	audit := database.ServerTableName(db, "audit_log")
+	details, err := json.Marshal(map[string]string{"request_id": requestID})
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, fmt.Sprintf(`
+		INSERT INTO %s (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details, severity, category)
+		VALUES (?, ?, 'operator', ?, ?, 'owner', ?, ?, 'info', 'compliance')
+	`, audit), uuid.NewString(), time.Now().UTC().Unix(), pgpActor(), string(logging.AuditActionDataDeletionRequested), ownerID, string(details))
+	if err == nil {
+		logComplianceEvent(logging.AuditActionDataDeletionRequested, ownerID, requestID, nil)
+	}
+	return err
+}
+
+func countOwnerData(ctx context.Context, db *database.DB, ownerID string) (ownerDeletionCounts, error) {
+	tokens := database.ServerTableName(db, "api_tokens")
+	owners := database.ServerTableName(db, "owners")
+	alerts := database.ServerTableName(db, "search_alerts")
+	results := database.ServerTableName(db, "search_alert_results")
+	var counts ownerDeletionCounts
+	if err := db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE owner_id = ?", tokens), ownerID).Scan(&counts.tokens); err != nil {
+		return counts, err
+	}
+	if err := db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE owner_id = ?", alerts), ownerID).Scan(&counts.alerts); err != nil {
+		return counts, err
+	}
+	if err := db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)", results, alerts), ownerID).Scan(&counts.results); err != nil {
+		return counts, err
+	}
+	var ownerCount int
+	if err := db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = ?", owners), ownerID).Scan(&ownerCount); err != nil {
+		return counts, err
+	}
+	if ownerCount != 1 {
+		return counts, errors.New("owner no longer exists")
+	}
+	counts.deleted = counts.tokens + counts.alerts + counts.results + 1
+	return counts, nil
+}
+
+func deleteOwnerData(ctx context.Context, db *database.DB, ownerID, requestID string) (ownerDeletionCounts, error) {
+	owners := database.ServerTableName(db, "owners")
+	tokens := database.ServerTableName(db, "api_tokens")
+	alerts := database.ServerTableName(db, "search_alerts")
+	results := database.ServerTableName(db, "search_alert_results")
+	audit := database.ServerTableName(db, "audit_log")
+	counts := ownerDeletionCounts{}
+	err := db.Write(ctx, func(tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = ?", owners), ownerID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists != 1 {
+			return errors.New("owner no longer exists")
+		}
+
+		result, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)", results, alerts), ownerID)
+		if err != nil {
+			return err
+		}
+		counts.results, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		result, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE owner_id = ?", alerts), ownerID)
+		if err != nil {
+			return err
+		}
+		counts.alerts, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		result, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE owner_id = ?", tokens), ownerID)
+		if err != nil {
+			return err
+		}
+		counts.tokens, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		result, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", owners), ownerID)
+		if err != nil {
+			return err
+		}
+		if deleted, err := result.RowsAffected(); err != nil {
+			return err
+		} else if deleted != 1 {
+			return errors.New("owner no longer exists")
+		}
+
+		details, err := json.Marshal(map[string]interface{}{
+			"owner_id":         ownerID,
+			"request_id":       requestID,
+			"deleted_count":    counts.tokens + counts.alerts + counts.results + 1,
+			"anonymized_count": counts.anonymized,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, fmt.Sprintf(`
+			INSERT INTO %s (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details, severity, category)
+			VALUES (?, ?, 'operator', ?, ?, 'owner', ?, ?, 'info', 'compliance')
+		`, audit), uuid.NewString(), time.Now().UTC().Unix(), pgpActor(), string(logging.AuditActionDataDeletionCompleted), ownerID, string(details))
+		if err != nil {
+			return err
+		}
+		counts.deleted = counts.tokens + counts.alerts + counts.results + 1
 		return nil
+	})
+	return counts, err
+}
+
+func logComplianceEvent(action logging.AuditAction, ownerID, requestID string, extra map[string]interface{}) {
+	details := map[string]interface{}{"owner_id": ownerID, "request_id": requestID}
+	for key, value := range extra {
+		details[key] = value
 	}
-
-	ctx := context.Background()
-	db := dm.ServerDB()
-	alertTable := database.ServerTableName(db, "search_alerts")
-	resultTable := database.ServerTableName(db, "search_alert_results")
-	auditTable := database.ServerTableName(db, "audit_log")
-	rateTable := database.ServerTableName(db, "rate_limits")
-
-	const redacted = "[REDACTED]"
-	var deletedAlerts int64
-
-	if subject == "" {
-		if _, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s", resultTable)); err != nil {
-			return err
-		}
-		res, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s", alertTable))
-		if err != nil {
-			return err
-		}
-		deletedAlerts, _ = res.RowsAffected()
-		if _, err := db.Exec(ctx, fmt.Sprintf(
-			"UPDATE %s SET ip_address = ?, user_agent = ?, actor_id = ?", auditTable),
-			redacted, redacted, redacted); err != nil {
-			return err
-		}
-		if _, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s", rateTable)); err != nil {
-			return err
-		}
-	} else {
-		if _, err := db.Exec(ctx, fmt.Sprintf(
-			"DELETE FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE email = ?)", resultTable, alertTable),
-			subject); err != nil {
-			return err
-		}
-		res, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE email = ?", alertTable), subject)
-		if err != nil {
-			return err
-		}
-		deletedAlerts, _ = res.RowsAffected()
-		if _, err := db.Exec(ctx, fmt.Sprintf(
-			"UPDATE %s SET ip_address = ?, user_agent = ?, actor_id = ? WHERE actor_id = ?", auditTable),
-			redacted, redacted, redacted, subject); err != nil {
-			return err
-		}
-	}
-
-	pgpAuditLogger().LogEvent(
-		logging.AuditActionDataDeletionCompleted,
+	target := &logging.AuditTarget{Type: "owner", ID: ownerID}
+	pgpAuditLogger().LogEventQuiet(
+		action,
 		logging.AuditCategoryCompliance,
-		logging.AuditSeverityWarning,
-		logging.AuditActor{Type: "admin", Username: pgpActor(), IP: pgpAuditIP},
-		&logging.AuditTarget{Type: "data_subject", Name: subject},
+		logging.AuditSeverityInfo,
+		maintenanceAuditActor(),
+		target,
 		"success",
-		map[string]interface{}{"alerts_deleted": deletedAlerts},
+		details,
 		"",
 	)
-
-	fmt.Printf(display.Emoji("✅", "[OK]")+" Deleted %d search alert(s); audit entries anonymized.\n", deletedAlerts)
-	return nil
 }
 
 // runMaintenanceCompliance implements `--maintenance compliance report`
@@ -653,60 +883,271 @@ func runMaintenanceCompliance(action string) {
 		printMaintenanceComplianceHelp()
 		return
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown compliance action: %s\n", action)
+		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_compliance_action", "action", action))
 		printMaintenanceComplianceHelp()
 		exitFunc(1)
 		return
 	}
 
 	cfg := pgpRequireAuthorized()
-	printComplianceReport(cfg)
+	if err := printComplianceReport(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.compliance_report_failed", "error", err))
+		exitFunc(1)
+		return
+	}
 
 	pgpAuditLogger().LogEvent(
 		logging.AuditActionComplianceReport,
 		logging.AuditCategoryCompliance,
 		logging.AuditSeverityInfo,
-		logging.AuditActor{Type: "admin", Username: pgpActor(), IP: pgpAuditIP},
+		maintenanceAuditActor(),
 		&logging.AuditTarget{Type: "compliance_report", Name: "summary"},
 		"success",
-		map[string]interface{}{"compliance_enabled": cfg.Server.Compliance.Enabled},
+		map[string]interface{}{"compliance_enabled": cfg.Server.Compliance.AnyEnabled()},
 		"",
 	)
 }
 
 // printMaintenanceComplianceHelp documents the compliance subcommand.
 func printMaintenanceComplianceHelp() {
-	fmt.Println("Compliance:")
+	fmt.Println(serverCLIText("server_cli.maintenance.compliance_heading"))
 	fmt.Println()
-	fmt.Println("  report   Print the compliance summary for this instance")
+	fmt.Println(serverCLIText("server_cli.maintenance.help_compliance_report"))
 }
 
 // printComplianceReport renders the operator-facing compliance summary.
-func printComplianceReport(cfg *config.Config) {
+func printComplianceReport(cfg *config.Config) error {
 	yesNo := func(b bool) string {
 		if b {
-			return "yes"
+			return serverCLIText("common.yes")
 		}
-		return "no"
+		return serverCLIText("common.no")
 	}
 
-	fmt.Println("Compliance report")
+	dm, err := pgpOpenDB()
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer closeutil.Close(dm)
+	db := dm.ServerDB()
+	ctx := context.Background()
+	count := func(table string, where string) (int64, error) {
+		query := "SELECT COUNT(*) FROM " + database.ServerTableName(db, table)
+		if where != "" {
+			query += " WHERE " + where
+		}
+		var value int64
+		if err := db.QueryRow(ctx, query).Scan(&value); err != nil {
+			return 0, fmt.Errorf("count %s: %w", table, err)
+		}
+		return value, nil
+	}
+	owners, err := count("owners", "")
+	if err != nil {
+		return err
+	}
+	tokens, err := count("api_tokens", "owner_id IS NOT NULL AND revoked_at IS NULL")
+	if err != nil {
+		return err
+	}
+	alerts, err := count("search_alerts", "")
+	if err != nil {
+		return err
+	}
+	results, err := count("search_alert_results", "")
+	if err != nil {
+		return err
+	}
+	openReports, err := count("security_reports", "closed_at IS NULL")
+	if err != nil {
+		return err
+	}
+	var lastBackup time.Time
+	backups, err := backup.NewManager().List()
+	if err != nil {
+		return fmt.Errorf("list backups: %w", err)
+	}
+	for _, item := range backups {
+		if item.CreatedAt.After(lastBackup) {
+			lastBackup = item.CreatedAt
+		}
+	}
+
+	auditPath := filepath.Join(config.GetLogDir(), "audit.log")
+	effectiveAuditKeep, err := effectiveAuditLogKeep(cfg)
+	if err != nil {
+		return fmt.Errorf("resolve audit log retention: %w", err)
+	}
+	auditEntries, integrityIssue, err := logging.VerifyAuditLog(auditPath)
+	if err != nil {
+		return fmt.Errorf("verify audit log: %w", err)
+	}
+	events, err := recentComplianceEvents(auditPath, time.Now().UTC().Add(-30*24*time.Hour))
+	if err != nil {
+		return fmt.Errorf("read compliance events: %w", err)
+	}
+
+	fmt.Println(serverCLIText("server_cli.maintenance.compliance_report_title"))
 	fmt.Println(strings.Repeat("-", 40))
-	fmt.Printf("  Compliance mode:        %s\n", yesNo(cfg.Server.Compliance.Enabled))
-	fmt.Printf("  Backup encryption:      %s\n", yesNo(cfg.Server.Backup.Encryption.Enabled || cfg.Server.Compliance.Enabled))
-	fmt.Printf("  TLS enabled:            %s\n", yesNo(cfg.Server.SSL.Enabled))
-	fmt.Printf("  HSTS enabled:           %s\n", yesNo(cfg.Server.Security.HSTS.Enabled))
+	enabledStandards := enabledComplianceStandards(cfg.Server.Compliance)
+	if len(enabledStandards) == 0 {
+		enabledStandards = []string{"none"}
+	}
+	fmt.Println(serverCLITf("server_cli.maintenance.report_enabled_standards", "standards", strings.Join(enabledStandards, ", ")))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_backup_encryption", "state", yesNo(cfg.Server.Backup.EncryptionPassword != "")))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_tls", "state", yesNo(cfg.Server.SSL.Enabled)))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_hsts", "state", yesNo(cfg.Server.Security.HSTS.Enabled)))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_audit_retention", "period", effectiveAuditKeep))
 	fmt.Println()
-	fmt.Println("Privacy policy (server.privacy):")
-	fmt.Printf("  Data sold:              %s\n", yesNo(cfg.Server.Privacy.Data.Sold))
-	fmt.Printf("  Stored on this server:  %s\n", yesNo(cfg.Server.Privacy.Data.StoredOnServer))
-	fmt.Printf("  Export right offered:   %s\n", yesNo(cfg.Server.Privacy.Retention.ExportAvailable))
-	fmt.Printf("  Deletion right offered: %s\n", yesNo(cfg.Server.Privacy.Retention.DeletionAvailable))
+	fmt.Println(serverCLIText("server_cli.maintenance.report_privacy_heading"))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_data_sold", "state", yesNo(cfg.Server.Privacy.Data.Sold)))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_data_stored", "state", yesNo(cfg.Server.Privacy.Data.StoredOnServer)))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_export_right", "state", yesNo(cfg.Server.Privacy.Retention.ExportAvailable)))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_deletion_right", "state", yesNo(cfg.Server.Privacy.Retention.DeletionAvailable)))
 	if cfg.Server.Privacy.Retention.Period != "" {
-		fmt.Printf("  Retention period:       %s\n", cfg.Server.Privacy.Retention.Period)
+		fmt.Println(serverCLITf("server_cli.maintenance.report_privacy_retention", "period", cfg.Server.Privacy.Retention.Period))
 	}
 	fmt.Println()
-	fmt.Println("Data subject requests:")
-	fmt.Println("  " + config.ProjectName + " --maintenance data export [email]")
-	fmt.Println("  " + config.ProjectName + " --maintenance data delete [email]")
+	fmt.Println(serverCLIText("server_cli.maintenance.report_data_counts"))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_owners", "count", owners))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_resources", "count", alerts+results))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_active_tokens", "count", tokens))
+	fmt.Println(serverCLITf("server_cli.maintenance.report_open_security_reports", "count", openReports))
+	lastBackupText := serverCLIText("server_cli.maintenance.none")
+	if !lastBackup.IsZero() {
+		lastBackupText = lastBackup.UTC().Format(time.RFC3339)
+	}
+	fmt.Println(serverCLITf("server_cli.maintenance.report_last_backup", "date", lastBackupText))
+	fmt.Println()
+	fmt.Println(serverCLIText("server_cli.maintenance.report_compliance_events"))
+	if len(events) == 0 {
+		fmt.Println("  " + serverCLIText("server_cli.maintenance.none"))
+	} else {
+		for _, event := range events {
+			fmt.Println(serverCLITf("server_cli.maintenance.report_event", "name", event.Name, "count", event.Count))
+		}
+	}
+	fmt.Println()
+	if integrityIssue == nil {
+		fmt.Println(serverCLITf("server_cli.maintenance.report_audit_intact", "count", auditEntries))
+	} else if integrityIssue.Line > 0 {
+		fmt.Println(serverCLITf("server_cli.maintenance.report_audit_broken", "file", filepath.Base(integrityIssue.File), "line", integrityIssue.Line))
+	} else {
+		fmt.Println(serverCLITf("server_cli.maintenance.report_audit_broken_reason", "file", filepath.Base(integrityIssue.File), "reason", integrityIssue.Reason))
+	}
+	fmt.Println()
+	fmt.Println(serverCLIText("server_cli.maintenance.report_effective_retention"))
+	for _, standard := range enabledComplianceStandards(cfg.Server.Compliance) {
+		fmt.Println(serverCLITf("server_cli.maintenance.report_standard_retention", "standard", standard, "period", complianceRetention[standard]))
+	}
+	fmt.Println()
+	fmt.Println(serverCLIText("server_cli.maintenance.data_subject_heading"))
+	fmt.Println(serverCLITf("server_cli.maintenance.data_export_command", "project", config.ProjectName))
+	fmt.Println(serverCLITf("server_cli.maintenance.data_delete_command", "project", config.ProjectName))
+	return nil
+}
+
+func effectiveAuditLogKeep(cfg *config.Config) (string, error) {
+	if cfg == nil {
+		return "", errors.New("configuration is unavailable")
+	}
+	keep := cfg.Server.Logs.Audit.Keep
+	if keep == "" {
+		keep = cfg.Server.Logs.Defaults.Keep
+	}
+	policy, err := logging.AuditRetentionPolicyFromKeep(keep)
+	if err != nil {
+		return "", err
+	}
+	minimum := server.MinimumComplianceAuditRetention(cfg.Server.Compliance)
+	if policy.MaxAge >= 0 && policy.MaxAge < minimum {
+		policy.MaxAge = minimum
+	}
+	if policy.MaxAge < 0 {
+		return "forever", nil
+	}
+	if policy.MaxAge == 0 {
+		return "none", nil
+	}
+	return fmt.Sprintf("%dd", int(policy.MaxAge/(24*time.Hour))), nil
+}
+
+type complianceEventCount struct {
+	Name  string
+	Count int
+}
+
+var complianceRetention = map[string]string{
+	"gdpr": "1 year", "ccpa": "1 year", "hipaa": "6 years", "soc2": "1 year",
+	"pci_dss": "1 year", "iso27001": "3 years", "fedramp": "not specified by the template",
+	"lgpd": "not specified by the template", "pipeda": "not specified by the template",
+	"appi": "not specified by the template", "pdpa": "not specified by the template",
+}
+
+func enabledComplianceStandards(c config.ComplianceConfig) []string {
+	all := []struct {
+		name    string
+		enabled bool
+	}{
+		{"gdpr", c.GDPR},
+		{"ccpa", c.CCPA},
+		{"hipaa", c.HIPAA},
+		{"soc2", c.SOC2},
+		{"pci_dss", c.PCIDSS},
+		{"iso27001", c.ISO27001},
+		{"fedramp", c.FedRAMP},
+		{"lgpd", c.LGPD},
+		{"pipeda", c.PIPEDA},
+		{"appi", c.APPI},
+		{"pdpa", c.PDPA},
+	}
+	var enabled []string
+	for _, item := range all {
+		if item.enabled {
+			enabled = append(enabled, item.name)
+		}
+	}
+	return enabled
+}
+
+func recentComplianceEvents(path string, since time.Time) ([]complianceEventCount, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	type auditSummary struct {
+		Time     time.Time `json:"time"`
+		Event    string    `json:"event"`
+		Category string    `json:"category"`
+	}
+	counts := make(map[string]int)
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		var entry auditSummary
+		if json.Unmarshal(scanner.Bytes(), &entry) == nil && entry.Time.After(since) && (entry.Category == "compliance" || strings.HasPrefix(entry.Event, "compliance.")) {
+			counts[entry.Event]++
+		}
+	}
+	scanErr := scanner.Err()
+	closeErr := file.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close audit log after reading compliance events: %w", closeErr)
+	}
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]complianceEventCount, 0, len(names))
+	for _, name := range names {
+		result = append(result, complianceEventCount{Name: name, Count: counts[name]})
+	}
+	return result, nil
 }

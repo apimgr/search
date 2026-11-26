@@ -3,6 +3,14 @@
  * Per AI.md PART 16: NO inline CSS - all styles in external main.css
  * ============================================================================== */
 
+/* Shared server-rendered page width modifiers from AI.md PART 16. */
+.container-sm { max-width: 40rem; }
+.container-md { max-width: 56rem; }
+.container-lg { max-width: 72rem; }
+.page-header { display: grid; gap: var(--space-2); margin-block: var(--space-6) var(--space-4); }
+.page-title { max-width: 100%; margin: 0; overflow-wrap: anywhere; word-break: break-word; }
+.page-lead { max-width: 70ch; margin: 0; color: var(--color-muted); }
+
 /* Modal base styles using HTML dialog element - mobile-first */
 dialog.modal {
     border: none;

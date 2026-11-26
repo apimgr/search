@@ -75,19 +75,22 @@ jobs:
         run: |
           go mod download
           go run ./src/apigen
+          go generate ./src/swagger/...
 
       - name: Set build info
         run: |
-          echo "VERSION=${{ needs.version.outputs.version }}" >> "$GITEA_ENV"
-          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITEA_ENV"
-          echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITEA_ENV"
-          if [ -f site.txt ]; then
-            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITEA_ENV"
-          else
-            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITEA_ENV"
-          fi
-          echo "OUTPUT=${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$GITEA_ENV"
-          echo "CLI_OUTPUT=${PROJECTNAME}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$GITEA_ENV"
+          {
+            echo "VERSION=${{ needs.version.outputs.version }}"
+            echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)"
+            echo "BUILD_EPOCH=$(date -u +%s)"
+            if [ -f site.txt ]; then
+              echo "OFFICIAL_SITE=$(cat site.txt)"
+            else
+              echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}"
+            fi
+            echo "OUTPUT=${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+            echo "CLI_OUTPUT=${PROJECTNAME}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          } >> "$GITEA_ENV"
 
       - name: Build server
         env:
@@ -99,7 +102,7 @@ jobs:
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
@@ -117,7 +120,7 @@ jobs:
             -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
           go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client
@@ -141,6 +144,9 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: write
+      # GitHub artifact attestations (SBOM, provenance)
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -173,15 +179,20 @@ jobs:
       - name: Generate checksums
         run: |
           cd "$GITEA_WORKSPACE/binaries"
-          FILES="$(ls)"
-          sha256sum $FILES > sha256.txt
-          sha512sum $FILES > sha512.txt
+          mapfile -t FILES < <(find . -maxdepth 1 -type f ! -name sha256.txt ! -name sha512.txt -printf '%f\n' | LC_ALL=C sort)
+          sha256sum "${FILES[@]}" > sha256.txt
+          sha512sum "${FILES[@]}" > sha512.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: binaries/${{ env.PROJECTNAME }}-*
 
       - name: Delete previous devel release
+        env:
+          GH_TOKEN: ${{ gitea.token }}
         run: |
-          curl -X DELETE \
-            -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
-            "${{ gitea.server_url }}/api/v1/repos/${{ gitea.repository }}/releases/tags/devel" || true
+          gh release delete devel --yes 2>/dev/null || true
           git push origin :refs/tags/devel 2>/dev/null || true
 
       - name: Create Release
@@ -194,3 +205,5 @@ jobs:
           body: "Devel build: ${{ env.VERSION }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITHUB_API_URL: ${{ gitea.server_url }}/api/v1
+          GITHUB_SERVER_URL: ${{ gitea.server_url }}

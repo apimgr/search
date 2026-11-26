@@ -1,8 +1,10 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
 
-import "github.com/apimgr/search/src/common/hubpages"
+	"github.com/apimgr/search/src/common/hubpages"
+)
 
 type HubPage = hubpages.Page
 

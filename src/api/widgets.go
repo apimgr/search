@@ -81,13 +81,13 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 	widgetType := widget.WidgetType(strings.Split(path, "/")[0])
 
 	if widgetType == "" {
-		h.errorResponse(w, http.StatusBadRequest, "Widget type required", "")
+		h.errorResponse(w, http.StatusBadRequest, "Widget type required", "", r)
 		return
 	}
 
 	// Check if widget is enabled
 	if !h.widgetManager.IsWidgetEnabled(widgetType) {
-		h.errorResponse(w, http.StatusNotFound, "Widget not available", "")
+		h.errorResponse(w, http.StatusNotFound, "Widget not available", "", r)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	data, err := h.widgetManager.FetchWidgetData(ctx, widgetType, params)
 	if err != nil {
-		h.errorResponse(w, http.StatusInternalServerError, "Failed to fetch widget data", err.Error())
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to fetch widget data", err.Error(), r)
 		return
 	}
 

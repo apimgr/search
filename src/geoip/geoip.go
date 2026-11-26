@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -151,6 +152,7 @@ func (l *Lookup) LoadDatabases() error {
 	}
 
 	var loadErrors []string
+	downloaded := false
 
 	// Databases enabled in config, in load order
 	databases := []struct {
@@ -174,6 +176,8 @@ func (l *Lookup) LoadDatabases() error {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			if err := l.downloadDatabase(db.url, path); err != nil {
 				loadErrors = append(loadErrors, fmt.Sprintf("%s: %v", db.name, err))
+			} else {
+				downloaded = true
 			}
 		}
 		reader, err := openMMDB(path)
@@ -187,6 +191,14 @@ func (l *Lookup) LoadDatabases() error {
 	// Mark as loaded if at least country database is available
 	l.loaded = l.countryDB != nil
 	l.lastUpdate = time.Now()
+	if downloaded && len(loadErrors) == 0 {
+		if err := writeLastUpdated(l.dbDir, time.Now()); err != nil {
+			slog.Warn("failed to update GeoIP freshness marker", "error", err)
+		}
+	}
+	if len(loadErrors) > 0 && l.loaded {
+		slog.Warn("GeoIP database load incomplete; available databases remain in use", "errors", strings.Join(loadErrors, "; "))
+	}
 
 	if len(loadErrors) > 0 && !l.loaded {
 		return fmt.Errorf("failed to load databases: %s", strings.Join(loadErrors, "; "))
@@ -287,6 +299,7 @@ func (l *Lookup) UpdateDatabases() error {
 	}
 
 	var updateErrors []string
+	updated := false
 	if err := l.removeLegacyFiles(); err != nil {
 		updateErrors = append(updateErrors, err.Error())
 	}
@@ -309,11 +322,23 @@ func (l *Lookup) UpdateDatabases() error {
 			continue
 		}
 		path := filepath.Join(l.dbDir, db.file)
-		if err := l.downloadDatabase(db.url, path); err != nil {
+		stageDir, err := os.MkdirTemp(l.dbDir, ".geoip-update-*")
+		if err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("%s staging directory: %v", db.name, err))
+			continue
+		}
+		stagePath := filepath.Join(stageDir, db.file)
+		if err := l.downloadDatabase(db.url, stagePath); err != nil {
+			if removeErr := os.RemoveAll(stageDir); removeErr != nil {
+				slog.Warn("failed to remove temporary GeoIP update directory", "path", stageDir, "error", removeErr)
+			}
 			updateErrors = append(updateErrors, fmt.Sprintf("%s: %v", db.name, err))
 			continue
 		}
-		reader, err := openMMDB(path)
+		reader, err := installValidatedDatabase(stagePath, path)
+		if removeErr := os.RemoveAll(stageDir); removeErr != nil {
+			slog.Warn("failed to remove temporary GeoIP update directory", "path", stageDir, "error", removeErr)
+		}
 		if err != nil {
 			updateErrors = append(updateErrors, fmt.Sprintf("%s load: %v", db.name, err))
 			continue
@@ -322,16 +347,85 @@ func (l *Lookup) UpdateDatabases() error {
 			(*db.target).Close()
 		}
 		*db.target = reader
+		updated = true
 	}
 
 	l.loaded = l.countryDB != nil
 	l.lastUpdate = time.Now()
+	if updated && len(updateErrors) == 0 {
+		if err := writeLastUpdated(l.dbDir, time.Now()); err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("freshness marker: %v", err))
+		}
+	}
 
 	if len(updateErrors) > 0 {
 		return fmt.Errorf("update errors: %s", strings.Join(updateErrors, "; "))
 	}
 
 	return nil
+}
+
+// installValidatedDatabase parses a downloaded database before replacing the
+// live file and restores the previous file if publication or reopening fails.
+func installValidatedDatabase(stagePath, livePath string) (*mmdbReader, error) {
+	staged, err := openMMDB(stagePath)
+	if err != nil {
+		return nil, fmt.Errorf("validate staged GeoIP database: %w", err)
+	}
+	staged.Close()
+
+	dir := filepath.Dir(livePath)
+	backupFile, err := os.CreateTemp(dir, ".geoip-previous-*")
+	if err != nil {
+		return nil, fmt.Errorf("create GeoIP rollback path: %w", err)
+	}
+	backupPath := backupFile.Name()
+	if err := backupFile.Close(); err != nil {
+		_ = os.Remove(backupPath)
+		return nil, fmt.Errorf("close GeoIP rollback path: %w", err)
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return nil, fmt.Errorf("prepare GeoIP rollback path: %w", err)
+	}
+	_, statErr := os.Stat(livePath)
+	hadPrevious := statErr == nil
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("inspect live GeoIP database: %w", statErr)
+	}
+	if hadPrevious {
+		if err := os.Rename(livePath, backupPath); err != nil {
+			return nil, fmt.Errorf("stage previous GeoIP database: %w", err)
+		}
+	}
+	rollback := func(cause error) error {
+		removeErr := os.Remove(livePath)
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
+		}
+		var restoreErr error
+		if hadPrevious {
+			restoreErr = os.Rename(backupPath, livePath)
+		}
+		return errors.Join(cause, removeErr, restoreErr)
+	}
+	if err := os.Rename(stagePath, livePath); err != nil {
+		if hadPrevious {
+			if restoreErr := os.Rename(backupPath, livePath); restoreErr != nil {
+				return nil, errors.Join(fmt.Errorf("publish GeoIP database: %w", err), fmt.Errorf("restore previous GeoIP database: %w", restoreErr))
+			}
+		}
+		return nil, fmt.Errorf("publish GeoIP database: %w", err)
+	}
+	reader, err := openMMDB(livePath)
+	if err != nil {
+		return nil, rollback(fmt.Errorf("open published GeoIP database: %w", err))
+	}
+	if hadPrevious {
+		if err := os.Remove(backupPath); err != nil {
+			slog.Warn("failed to remove previous GeoIP database after update", "path", backupPath, "error", err)
+		}
+	}
+	return reader, nil
 }
 
 // isPrivateIP reports whether ip is a private, loopback, link-local, or
@@ -444,21 +538,79 @@ func (l *Lookup) DatabaseHealth() map[string]string {
 		{"city_ipv4", l.config.City, l.cityDB4},
 		{"city_ipv6", l.config.City, l.cityDB6},
 	}
+	var markerTime time.Time
+	markerErr := fmt.Errorf("GeoIP directory is not configured")
+	if l.dbDir != "" {
+		markerTime, markerErr = readLastUpdated(filepath.Join(l.dbDir, ".last_updated"))
+	}
+	stale := markerErr != nil || time.Since(markerTime) > 21*24*time.Hour
 	for _, database := range databases {
 		if !database.enabled {
 			continue
 		}
 		status := "error"
-		if database.reader != nil && database.reader.metadata != nil && database.reader.metadata.NodeCount > 0 {
-			status = "ok"
-			built := time.Unix(int64(database.reader.metadata.BuildEpoch), 0)
-			if database.reader.metadata.BuildEpoch == 0 || time.Since(built) > 7*24*time.Hour {
-				status = "degraded"
+		if database.reader != nil {
+			status = "degraded"
+			if !stale {
+				status = "ok"
 			}
 		}
 		result[database.name] = status
 	}
 	return result
+}
+
+// readLastUpdated returns the directory marker's UTC update time. Missing or
+// malformed markers are treated as stale by DatabaseHealth.
+func readLastUpdated(path string) (time.Time, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	updated, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse GeoIP freshness marker: %w", err)
+	}
+	return updated.UTC(), nil
+}
+
+// writeLastUpdated atomically records the time of the last fully successful
+// GeoIP database update without risking a partial marker after a crash.
+func writeLastUpdated(dir string, updated time.Time) error {
+	file, err := os.CreateTemp(dir, ".last_updated-*")
+	if err != nil {
+		return fmt.Errorf("create GeoIP freshness marker: %w", err)
+	}
+	tmpPath := file.Name()
+	removeTemp := func() {
+		if err := os.Remove(tmpPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("failed to remove temporary GeoIP freshness marker", "error", err)
+		}
+	}
+	if err := file.Chmod(0600); err != nil {
+		_ = file.Close()
+		removeTemp()
+		return fmt.Errorf("set GeoIP freshness marker permissions: %w", err)
+	}
+	if _, err := fmt.Fprintln(file, updated.UTC().Format(time.RFC3339)); err != nil {
+		_ = file.Close()
+		removeTemp()
+		return fmt.Errorf("write GeoIP freshness marker: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		removeTemp()
+		return fmt.Errorf("sync GeoIP freshness marker: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		removeTemp()
+		return fmt.Errorf("close GeoIP freshness marker: %w", err)
+	}
+	if err := os.Rename(tmpPath, filepath.Join(dir, ".last_updated")); err != nil {
+		removeTemp()
+		return fmt.Errorf("install GeoIP freshness marker: %w", err)
+	}
+	return nil
 }
 
 // GetCountry returns country info by code

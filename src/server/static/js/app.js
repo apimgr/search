@@ -1,3 +1,5 @@
+const API_BASE_PATH = document.documentElement.dataset.apiBase;
+
 /**
  * Search Application - Consolidated JavaScript
  * Per AI.md PART 17: Single app.js with event delegation (no inline handlers)
@@ -10,8 +12,6 @@
     // ========================================================================
     const SEARCH_HISTORY_KEY = 'search_history';
     const SEARCH_HISTORY_LIMIT = 20;
-    const CUSTOM_CSS_KEY = 'search_custom_css';
-    const CUSTOM_CSS_LIMIT = 4096;
     const THEMES = ['dark', 'light', 'auto'];
     let clientTranslations = null;
 
@@ -31,35 +31,35 @@
         return THEMES.includes(theme) ? theme : 'dark';
     }
 
-    function applyCustomCSS(css) {
-        var style = document.getElementById('search-custom-css');
-        if (!css || typeof css !== 'string' || css.length > CUSTOM_CSS_LIMIT) {
-            if (style) style.remove();
-            return;
-        }
-        if (!style) {
-            style = document.createElement('style');
-            style.id = 'search-custom-css';
-            document.head.appendChild(style);
-        }
-        style.textContent = css;
-    }
-
-    function loadCustomCSS() {
-        try {
-            var css = localStorage.getItem(CUSTOM_CSS_KEY) || '';
-            applyCustomCSS(css);
-            return css.length <= CUSTOM_CSS_LIMIT ? css : '';
-        } catch (e) {
-            return '';
-        }
-    }
-
     function getClientLanguage() {
         var lang = (document.documentElement.lang || 'en').trim().toLowerCase();
         if (!lang) return 'en';
         return lang.split(/[-_]/, 1)[0] || 'en';
     }
+
+    function storeOfflineStrings() {
+        var metaContent = function(name, fallback) {
+            var element = document.querySelector('meta[name="' + name + '"]');
+            return element ? element.content : fallback;
+        };
+        window.OFFLINE_STRINGS = {
+            lang: document.documentElement.lang || 'en',
+            dir: document.documentElement.dir || 'ltr',
+            title: metaContent('offline-title', 'Offline'),
+            heading: metaContent('offline-heading', 'You are offline'),
+            message: metaContent('offline-message', 'This page could not be loaded and no cached copy is available. Check your connection and try again.')
+        };
+        if (!('caches' in window) || typeof window.Response !== 'function') return;
+        caches.open('search-offline-strings').then(function(cache) {
+            return cache.put('/offline-strings.json', new Response(JSON.stringify(window.OFFLINE_STRINGS), {
+                headers: { 'Content-Type': 'application/json' }
+            }));
+        }).catch(function(error) {
+            console.warn('Unable to store offline translations', error);
+        });
+    }
+
+    window.storeOfflineStrings = storeOfflineStrings;
 
     function getTranslationValue(key) {
         if (!clientTranslations) return '';
@@ -1442,7 +1442,7 @@
             if (query.startsWith('!')) {
                 var bangQuery = query.slice(1).toLowerCase();
                 abortController = new AbortController();
-                fetch(window.location.origin + '/api/v1/bangs?search=' + encodeURIComponent(bangQuery), {
+                fetch(window.location.origin + API_BASE_PATH + '/bangs?search=' + encodeURIComponent(bangQuery), {
                     signal: abortController.signal
                 })
                 .then(function(response) {
@@ -2102,7 +2102,7 @@
             // Standard results
             return '<article class="result-item">' +
                 '<div class="result-favicon">' +
-                '<img src="/api/v1/favicon?url=' + encodeURIComponent(result.url) + '" alt="" loading="lazy" data-favicon-fallback>' +
+                '<img src="' + API_BASE_PATH + '/favicon?url=' + encodeURIComponent(result.url) + '" alt="" loading="lazy" data-favicon-fallback>' +
                 '<span class="favicon-placeholder hidden">' + escapeHtmlLocal(firstLetter) + '</span>' +
                 '</div>' +
                 '<div class="result-body">' +
@@ -2122,7 +2122,7 @@
             if (loadingIndicator) loadingIndicator.classList.remove('hidden');
 
             var nextPage = currentPage + 1;
-            var apiURL = '/api/v1/search?q=' + encodeURIComponent(query) +
+            var apiURL = API_BASE_PATH + '/search?q=' + encodeURIComponent(query) +
                 '&category=' + encodeURIComponent(category) +
                 '&page=' + nextPage +
                 '&limit=' + perPage +
@@ -2849,6 +2849,7 @@
 
             // Theme toggle
             if (target.matches('.theme-toggle') || target.closest('.theme-toggle')) {
+                e.preventDefault();
                 toggleTheme();
                 return;
             }
@@ -3267,8 +3268,9 @@
     // PREFERENCES PAGE - Per AI.md PART 16: NO inline JS
     // ========================================================================
     function initPreferencesPage() {
-        var prefsPage = document.querySelector('.preferences-page');
+        var prefsPage = document.querySelector('#general-settings, #add-custom-bang');
         if (!prefsPage) return;
+        prefsPage = prefsPage.closest('.container') || prefsPage;
 
         var preferencesTabs = prefsPage.querySelector('.preferences-tabs');
         if (preferencesTabs) {
@@ -3342,7 +3344,6 @@
                 var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
                 var saveHistoryCheckbox = document.getElementById('save-history');
                 var videoPreviewsCheckbox = document.getElementById('video-previews');
-                var customCSSInput = document.getElementById('custom-css');
 
                 if (themeSelect) themeSelect.value = getPreferredTheme();
                 if (langSelect) langSelect.value = prefs.lang;
@@ -3358,7 +3359,6 @@
                     var videoPreviewCookie = document.cookie.split('; ').find(function(item) { return item.indexOf('search_pref_video_previews=') === 0; });
                     videoPreviewsCheckbox.checked = !videoPreviewCookie || decodeURIComponent(videoPreviewCookie.split('=').slice(1).join('=')) !== '0';
                 }
-                if (customCSSInput) customCSSInput.value = loadCustomCSS();
             } catch (e) {
                 console.error('Failed to load preferences:', e);
             }
@@ -3428,35 +3428,6 @@
 
         // Event handlers via delegation
         prefsPage.addEventListener('click', function(e) {
-            if (e.target.id === 'save-custom-css') {
-                var cssInput = document.getElementById('custom-css');
-                var cssStatus = document.getElementById('custom-css-status');
-                var css = cssInput ? cssInput.value : '';
-                if (css.length > CUSTOM_CSS_LIMIT) {
-                    if (cssStatus) cssStatus.textContent = t('preferences.custom_css_too_long', 'Custom CSS is too long.');
-                    return;
-                }
-                try {
-                    if (css.trim()) localStorage.setItem(CUSTOM_CSS_KEY, css);
-                    else localStorage.removeItem(CUSTOM_CSS_KEY);
-                    applyCustomCSS(css);
-                    if (cssStatus) cssStatus.textContent = t('preferences.custom_css_saved', 'Custom CSS saved for this browser.');
-                } catch (error) {
-                    if (cssStatus) cssStatus.textContent = t('preferences.custom_css_storage_error', 'Custom CSS could not be saved in this browser.');
-                }
-                return;
-            }
-
-            if (e.target.id === 'clear-custom-css') {
-                localStorage.removeItem(CUSTOM_CSS_KEY);
-                applyCustomCSS('');
-                var cssInput = document.getElementById('custom-css');
-                var cssStatus = document.getElementById('custom-css-status');
-                if (cssInput) cssInput.value = '';
-                if (cssStatus) cssStatus.textContent = t('preferences.custom_css_cleared', 'Custom CSS cleared.');
-                return;
-            }
-
             // Category filter buttons
             if (e.target.matches('.filter-btn')) {
                 document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -3498,7 +3469,6 @@
                 var data = {
                     preferences: getStoredSearchPreferences(),
                     custom_bangs: JSON.parse(localStorage.getItem(BANGS_KEY) || '[]'),
-                    custom_css: loadCustomCSS(),
                     search_history: readSearchHistory(),
                     exported_at: new Date().toISOString()
                 };
@@ -3607,12 +3577,6 @@
                         if (data.preferences && typeof data.preferences === 'object' && !Array.isArray(data.preferences)) writeSearchPreferences(data.preferences);
                         if (Array.isArray(data.custom_bangs)) {
                             localStorage.setItem(BANGS_KEY, JSON.stringify(data.custom_bangs));
-                        }
-                        if (typeof data.custom_css === 'string') {
-                            if (data.custom_css.length > CUSTOM_CSS_LIMIT) throw new Error('custom CSS exceeds the supported limit');
-                            if (data.custom_css) localStorage.setItem(CUSTOM_CSS_KEY, data.custom_css);
-                            else localStorage.removeItem(CUSTOM_CSS_KEY);
-                            applyCustomCSS(data.custom_css);
                         }
                         var importedPreferences = data.preferences || getStoredSearchPreferences();
                         if (importedPreferences.save_history === false) {
@@ -4305,7 +4269,6 @@
     function init() {
         loadClientTranslations();
         applyTheme(getActiveSearchPreferences().theme || getPreferredTheme());
-        loadCustomCSS();
         applySearchPreferencesToForms();
         initLanguageSelector();
         initFlashMessages();
@@ -4707,7 +4670,7 @@
     async function fetchWidgetData(widgetType, params) {
         params = params || {};
         const queryString = new URLSearchParams(params).toString();
-        const url = '/api/v1/widgets/' + widgetType + (queryString ? '?' + queryString : '');
+        const url = API_BASE_PATH + '/widgets/' + widgetType + (queryString ? '?' + queryString : '');
 
         try {
             const response = await fetch(url);
@@ -6546,28 +6509,6 @@
 
 
 // ============================================================================
-// MOBILE PREFERENCES SHEET (native route remains available without JavaScript)
-// ============================================================================
-(function() {
-    'use strict';
-
-    document.addEventListener('click', function(event) {
-        var target = event.target && event.target.nodeType === 1 ? event.target : event.target.parentElement;
-        var trigger = target && target.closest('[data-mobile-preferences-trigger]');
-        if (!trigger || !window.matchMedia('(max-width: 767px)').matches) return;
-
-        var dialog = document.getElementById('mobile-preferences-dialog');
-        if (!dialog || typeof dialog.showModal !== 'function') return;
-
-        event.preventDefault();
-        if (!dialog.open) dialog.showModal();
-        var frame = dialog.querySelector('[data-mobile-preferences-frame]');
-        if (frame && !frame.hasAttribute('src')) frame.src = trigger.href;
-    });
-})();
-
-
-// ============================================================================
 // ADVANCED SEARCH FORM (per IDEA.md)
 // ============================================================================
 (function() {
@@ -6874,6 +6815,7 @@
 
     // Initialize
     function init() {
+        window.storeOfflineStrings();
         // Add advanced search button to search forms
         document.querySelectorAll('.search-form, form[action*="search"]').forEach(function(form) {
             if (form.querySelector('.advanced-search-trigger')) return;
@@ -6955,7 +6897,7 @@
 
     function fetchRelatedSearches(query) {
         // Try API first - per AI.md PART 14: use origin prefix
-        fetch(window.location.origin + '/api/v1/search/related?q=' + encodeURIComponent(query) + '&limit=8')
+        fetch(window.location.origin + API_BASE_PATH + '/search/related?q=' + encodeURIComponent(query) + '&limit=8')
             .then(function(response) {
                 if (!response.ok) throw new Error('API not available');
                 return response.json();

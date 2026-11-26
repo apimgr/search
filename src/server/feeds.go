@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 type feedQuery struct {
@@ -153,7 +154,7 @@ func (s *Server) feedTitle() string {
 func (s *Server) serveFeed(w http.ResponseWriter, r *http.Request, atom bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	items := s.feedEntries()

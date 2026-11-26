@@ -255,7 +255,7 @@ func TestRunServiceEnableIsRejected(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--service", "enable"})
 	out := captureStdout(t, func() { runService("enable") })
-	if !strings.Contains(out, "Unknown action") {
+	if !strings.Contains(out, "Unknown service action") {
 		t.Fatalf("runService(enable) output = %q, want unsupported-action message", out)
 	}
 }

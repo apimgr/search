@@ -16,6 +16,11 @@
 // server is redeployed.
 const CACHE_VERSION = '__CACHE_VERSION__';
 const CACHE_NAME = 'search-cache-' + CACHE_VERSION;
+const STRINGS_CACHE = 'search-offline-strings';
+const DEFAULT_STRINGS = {
+  lang: 'en', dir: 'ltr', title: 'Offline', heading: 'You are offline',
+  message: 'This page could not be loaded and no cached copy is available. Check your connection and try again.'
+};
 const STATIC_ASSETS = [
   '/static/css/common.css?v=__CACHE_VERSION__',
   '/static/css/components.css?v=__CACHE_VERSION__',
@@ -43,8 +48,7 @@ const STATIC_ASSETS = [
   '/static/splash/iphone-1284x2778.png?v=__CACHE_VERSION__',
   '/static/screenshots/desktop.png?v=__CACHE_VERSION__',
   '/static/screenshots/mobile.png?v=__CACHE_VERSION__',
-  '/manifest.json',
-  '/offline.html'
+  '/manifest.json'
 ];
 
 // Pre-cache static assets only when they return successful non-redirect responses.
@@ -90,7 +94,6 @@ self.addEventListener('message', (event) => {
 // A navigation never waits on the network forever. Search requests can take
 // longer than ordinary pages because the server aggregates remote engines.
 const NAV_TIMEOUT_MS = 8000;
-const SEARCH_NAV_TIMEOUT_MS = 30000;
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout')), ms);
@@ -101,38 +104,28 @@ function withTimeout(promise, ms) {
   });
 }
 
-// GUARANTEED last-resort page - synthesized in the worker so it needs no cache
-// hit and can never itself miss
-function requestCookie(request, name) {
-  const cookies = request.headers.get('cookie') || '';
-  const prefix = name + '=';
-  for (const part of cookies.split(';')) {
-    const cookie = part.trim();
-    if (cookie.startsWith(prefix)) return cookie.slice(prefix.length);
-  }
-  return '';
+// The strings cache contains the visitor's last server-translated offline text.
+// English is used only before a page has stored that translation.
+function escapeHtml(text) {
+  return String(text).replace(/[&<>\"]/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+  }[character]));
 }
 
-function offlineFallbackResponse(request) {
-  const themePreference = requestCookie(request, 'theme');
-  const theme = ['light', 'dark', 'auto'].includes(themePreference) ? themePreference : 'dark';
-  const languagePreference = requestCookie(request, 'lang');
-  const lang = /^[a-z]{2}(?:-[A-Z]{2})?$/.test(languagePreference) ? languagePreference : 'en';
+async function offlineFallbackResponse() {
+  let strings = DEFAULT_STRINGS;
+  try {
+    const stored = await (await caches.open(STRINGS_CACHE)).match('/offline-strings.json');
+    if (stored) strings = Object.assign({}, DEFAULT_STRINGS, await stored.json());
+  } catch (error) {
+    strings = DEFAULT_STRINGS;
+  }
   return new Response(
-    '<!doctype html><html lang="' + lang + '" class="theme-' + theme + '"><head><meta charset="utf-8">'
+    '<!doctype html><html lang="' + escapeHtml(strings.lang) + '" dir="' + escapeHtml(strings.dir) + '"><head><meta charset="utf-8">'
       + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-      + '<title>Offline</title>'
-      + '<link rel="stylesheet" href="/static/css/common.css?v=__CACHE_VERSION__">'
-      + '<link rel="stylesheet" href="/static/css/components.css?v=__CACHE_VERSION__">'
-      + '<link rel="stylesheet" href="/static/css/public.css?v=__CACHE_VERSION__">'
-      + '</head><body><a class="skip-link" href="#main-content">Skip to content</a>'
-      + '<header class="header"><a class="site-brand" href="/">Search</a></header>'
-      + '<main id="main-content" class="container"><header class="page-header">'
-      + '<h1 id="offline-heading">Offline</h1></header>'
-      + '<section class="section-card" aria-labelledby="offline-heading">'
-      + '<p>You are offline. This page could not be loaded and no cached copy is available. Check your connection and try again.</p>'
-      + '<a href="/" class="btn btn-primary">Go home</a></section></main>'
-      + '<footer class="footer"><a href="/server/help">Help</a></footer></body></html>',
+      + '<title>' + escapeHtml(strings.title) + '</title></head><body><main>'
+      + '<h1>' + escapeHtml(strings.heading) + '</h1><p>' + escapeHtml(strings.message) + '</p>'
+      + '</main></body></html>',
     { status: 503, statusText: 'Service Unavailable',
       headers: { 'Content-Type': 'text/html; charset=utf-8' } }
   );
@@ -172,25 +165,24 @@ self.addEventListener('fetch', (event) => {
   // failures. Search bangs bypass interception above and follow their direct
   // redirects in the browser.
   if (request.mode === 'navigate') {
-    const navigationTimeout = url.pathname === '/search'
-      ? SEARCH_NAV_TIMEOUT_MS
-      : NAV_TIMEOUT_MS;
     event.respondWith(
-      withTimeout(fetch(request), navigationTimeout)
+      withTimeout(fetch(request), NAV_TIMEOUT_MS)
         .then((response) => {
           if (response.redirected || response.type === 'opaqueredirect') {
             throw new Error('redirected navigation response');
           }
-          if (response.ok && !response.redirected && response.type !== 'opaqueredirect') {
+          if (response.ok && !response.redirected && response.type !== 'opaqueredirect'
+              && response.headers.get('X-Offline-Cache') === 'public') {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
+          } else {
+            return caches.open(CACHE_NAME).then((cache) => cache.delete(request)).then(() => response);
           }
           return response;
         })
         .catch(async () =>
           (await caches.match(request))
-            || (await caches.match('/offline.html'))
-            || offlineFallbackResponse(request)
+            || offlineFallbackResponse()
         )
     );
     return;

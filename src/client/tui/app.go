@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/client/surface"
 	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/common/terminal"
 )
@@ -58,14 +60,15 @@ func refreshStyles() {
 }
 
 type model struct {
-	client    *api.Client
-	input     textinput.Model
-	viewport  viewport.Model
-	results   []api.SearchResult
-	err       error
-	searching bool
-	width     int
-	height    int
+	client        *api.Client
+	input         textinput.Model
+	commandInputs []textinput.Model
+	viewport      viewport.Model
+	results       []api.SearchResult
+	err           error
+	searching     bool
+	width         int
+	height        int
 	// sizeMode is the responsive breakpoint tier per AI.md PART 32.
 	sizeMode terminal.SizeMode
 	// layout is the responsive layout derived from sizeMode.
@@ -82,7 +85,15 @@ type model struct {
 	inputFocused bool
 	// debug enables verbose diagnostics (window resize, etc) to stderr.
 	// Per AI.md PART 32 window resize example.
-	debug bool
+	debug          bool
+	commands       []surface.Command
+	commandIndex   int
+	commandMode    bool
+	commandView    bool
+	commandFocus   int
+	commandRunning bool
+	commandOutput  string
+	commandErr     error
 }
 
 type searchResultMsg struct {
@@ -90,9 +101,17 @@ type searchResultMsg struct {
 	err     error
 }
 
+type commandResultMsg struct {
+	output string
+	err    error
+}
+
+// Views returns TUI views in CLI help order.
+func Views() []surface.Command { return surface.Commands() }
+
 func initialModel(client *api.Client, debug bool) model {
 	ti := textinput.New()
-	ti.Placeholder = "Enter search query..."
+	ti.Placeholder = surface.Text("client.surface.enter_value")
 	ti.Focus()
 	ti.Width = 50
 
@@ -100,11 +119,13 @@ func initialModel(client *api.Client, debug bool) model {
 	return model{
 		client:       client,
 		input:        ti,
+		commands:     Views(),
+		commandMode:  true,
 		debug:        debug,
 		sizeMode:     mode,
 		layout:       GetLayoutConfig(mode),
 		symbols:      GetTUISymbols(display.Detect()),
-		inputFocused: true,
+		inputFocused: false,
 	}
 }
 
@@ -130,7 +151,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sizeMode = terminal.GetSize().Mode
 		m.layout = GetLayoutConfig(m.sizeMode)
 		m.viewport = viewport.New(msg.Width, m.contentHeight())
-		m.viewport.SetContent(m.renderResults())
+		m.viewport.SetContent(m.renderContent())
 		// Per AI.md PART 32 window resize example: debug-mode diagnostics.
 		if m.debug {
 			log.Printf("Window resize: %dx%d, mode: %s", msg.Width, msg.Height, m.sizeMode)
@@ -143,10 +164,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selected = 0
 		m.offset = 0
 		m.viewport.SetContent(m.renderResults())
+
+	case commandResultMsg:
+		m.commandRunning = false
+		m.commandOutput = msg.output
+		m.commandErr = msg.err
+		m.viewport.SetContent(m.renderContent())
 	}
 
 	var cmd tea.Cmd
-	if m.inputFocused {
+	if m.commandMode && m.commandView && m.commandFocus >= 0 && m.commandFocus < len(m.commandInputs) {
+		m.commandInputs[m.commandFocus], cmd = m.commandInputs[m.commandFocus].Update(msg)
+		cmds = append(cmds, cmd)
+	} else if !m.commandMode && m.inputFocused {
 		m.input, cmd = m.input.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -162,24 +192,106 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // fully handled (in which case Update returns immediately).
 func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd, bool) {
 	key := msg.String()
-
-	// Quit and help work in every mode.
-	switch key {
-	case "ctrl+c":
+	if key == "ctrl+c" {
 		return m, tea.Quit, true
-	case "?":
-		if !m.inputFocused {
-			m.showHelp = !m.showHelp
-			return m, nil, true
-		}
 	}
 
 	if m.showHelp {
 		// Any key closes the help screen.
 		m.showHelp = false
+		m.viewport.SetContent(m.renderContent())
 		return m, nil, true
 	}
 
+	if m.commandMode {
+		if key == "?" {
+			m.showHelp = true
+			return m, nil, true
+		}
+		if !m.commandView {
+			switch key {
+			case "/":
+				m.commandMode = false
+				m.inputFocused = true
+				m.input.Focus()
+				m.viewport.SetContent(m.renderContent())
+				return m, textinput.Blink, true
+			case "q", "esc":
+				return m, tea.Quit, true
+			case "j", "down", "l", "right":
+				if len(m.commands) > 0 {
+					m.commandIndex = (m.commandIndex + 1) % len(m.commands)
+					m.viewport.SetContent(m.renderContent())
+				}
+				return m, nil, true
+			case "k", "up", "h", "left":
+				if len(m.commands) > 0 {
+					m.commandIndex = (m.commandIndex + len(m.commands) - 1) % len(m.commands)
+					m.viewport.SetContent(m.renderContent())
+				}
+				return m, nil, true
+			case "enter":
+				m = m.openCommand()
+				m.viewport.SetContent(m.renderContent())
+				return m, nil, true
+			}
+			return m, nil, false
+		}
+
+		fieldCount := len(m.commandInputs)
+		switch key {
+		case "q":
+			return m, tea.Quit, true
+		case "esc", "b":
+			m.commandView = false
+			m.commandInputs = nil
+			m.commandOutput = ""
+			m.commandErr = nil
+			m.viewport.SetContent(m.renderContent())
+			return m, nil, true
+		case "tab", "shift+tab":
+			if key == "shift+tab" {
+				if m.commandFocus == 0 {
+					m.commandFocus = fieldCount
+				} else {
+					m.commandFocus--
+				}
+			} else if m.commandFocus >= fieldCount {
+				m.commandFocus = 0
+			} else {
+				m.commandFocus++
+			}
+			m.focusCommandInput()
+			m.viewport.SetContent(m.renderContent())
+			return m, textinput.Blink, true
+		case "enter":
+			if m.commandFocus < fieldCount {
+				m.commandFocus++
+				m.focusCommandInput()
+				m.viewport.SetContent(m.renderContent())
+				return m, textinput.Blink, true
+			}
+			if !m.commandRunning {
+				m.commandRunning = true
+				m.commandOutput = ""
+				m.commandErr = nil
+				return m, m.doCommand, true
+			}
+			return m, nil, true
+		case "?":
+			m.showHelp = true
+			return m, nil, true
+		}
+		if m.commandFocus < fieldCount {
+			return m, nil, false
+		}
+		return m, nil, false
+	}
+
+	if key == "?" && !m.inputFocused {
+		m.showHelp = true
+		return m, nil, true
+	}
 	if m.inputFocused {
 		switch key {
 		case "enter":
@@ -195,49 +307,100 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd, bool) {
 		}
 		return m, nil, false
 	}
-
-	switch key {
-	case "q":
-		return m, tea.Quit, true
-	case "/":
+	if key == "esc" {
+		m.input.SetValue("")
 		m.inputFocused = true
 		m.input.Focus()
-		return m, textinput.Blink, true
-	case "j", "down":
-		m = m.moveSelection(1)
-		return m, nil, true
-	case "k", "up":
-		m = m.moveSelection(-1)
-		return m, nil, true
-	case "l", "right", "pgdown", " ":
-		m = m.moveSelection(m.pageRows())
-		return m, nil, true
-	case "h", "left", "pgup":
-		m = m.moveSelection(-m.pageRows())
-		return m, nil, true
-	case "g", "home":
-		m.selected = 0
-		m.offset = 0
-		m.viewport.SetContent(m.renderResults())
-		return m, nil, true
-	case "G", "end":
-		m = m.moveSelection(len(m.results))
-		return m, nil, true
-	case "esc", "b":
-		m.input.SetValue("")
+		m.searching = false
 		m.results = nil
 		m.err = nil
 		m.selected = 0
 		m.offset = 0
-		m.inputFocused = true
-		m.input.Focus()
-		m.viewport.SetContent(m.renderResults())
+		m.viewport.SetContent(m.renderContent())
 		return m, textinput.Blink, true
-	case "enter":
-		m.viewport.SetContent(m.renderResults())
+	}
+	if !m.commandMode {
+		switch key {
+		case "/":
+			m.inputFocused = true
+			m.input.Focus()
+			m.viewport.SetContent(m.renderContent())
+			return m, textinput.Blink, true
+		case "j", "down":
+			m = m.moveSelection(1)
+			return m, nil, true
+		case "k", "up":
+			m = m.moveSelection(-1)
+			return m, nil, true
+		case "g":
+			m.selected = 0
+			m.offset = 0
+			m.viewport.SetContent(m.renderResults())
+			return m, nil, true
+		case "G":
+			if len(m.results) > 0 {
+				m.selected = len(m.results) - 1
+				m.offset = ensureVisible(m.selected, m.offset, m.pageRows())
+				m.viewport.SetContent(m.renderResults())
+			}
+			return m, nil, true
+		}
+	}
+	if key == "tab" {
+		m.commandMode = true
+		m.viewport.SetContent(m.renderContent())
 		return m, nil, true
 	}
 	return m, nil, false
+}
+
+func (m model) openCommand() model {
+	if len(m.commands) == 0 {
+		return m
+	}
+	m.commandView = true
+	m.commandOutput = ""
+	m.commandErr = nil
+	m.commandInputs = make([]textinput.Model, len(m.commands[m.commandIndex].Arguments))
+	for i := range m.commands[m.commandIndex].Arguments {
+		field := textinput.New()
+		field.Placeholder = surface.Text("client.surface.enter_value")
+		field.Width = 50
+		m.commandInputs[i] = field
+	}
+	m.commandFocus = 0
+	m.focusCommandInput()
+	return m
+}
+
+func (m *model) focusCommandInput() {
+	for i := range m.commandInputs {
+		m.commandInputs[i].Blur()
+	}
+	if m.commandFocus < len(m.commandInputs) {
+		m.commandInputs[m.commandFocus].Focus()
+	}
+}
+
+func (m model) commandValues() map[string]string {
+	values := make(map[string]string, len(m.commandInputs))
+	if len(m.commands) == 0 || m.commandIndex >= len(m.commands) {
+		return values
+	}
+	for i, argument := range m.commands[m.commandIndex].Arguments {
+		if i < len(m.commandInputs) {
+			values[argument.Name] = m.commandInputs[i].Value()
+		}
+	}
+	return values
+}
+
+func (m model) doCommand() tea.Msg {
+	if len(m.commands) == 0 {
+		return commandResultMsg{err: fmt.Errorf("%s", surface.Text("client.surface.no_commands"))}
+	}
+	output, err := surface.Run(context.Background(), m.client, m.commands[m.commandIndex], m.commandValues())
+	return commandResultMsg{output: output, err: err}
 }
 
 // moveSelection shifts the highlighted result by delta, clamping to range and
@@ -315,11 +478,11 @@ func (m model) doSearch() tea.Msg {
 // responsive LayoutConfig.
 func (m model) renderResults() string {
 	if m.err != nil {
-		return errorStyle.Render(fmt.Sprintf("%s Error: %v", m.symbols.Error, m.err))
+		return errorStyle.Render(fmt.Sprintf("%s %s %v", m.symbols.Error, surface.Text("client.surface.error_label"), m.err))
 	}
 
 	if len(m.results) == 0 {
-		return helpStyle.Render("No results found")
+		return helpStyle.Render(surface.Text("client.surface.no_results"))
 	}
 
 	width := m.resultWidth()
@@ -369,6 +532,92 @@ func (m model) renderResults() string {
 	return sb.String()
 }
 
+// renderContent renders the selected command screen or the ordered command menu.
+func (m model) renderContent() string {
+	if !m.commandMode {
+		return m.renderResults()
+	}
+	var sb strings.Builder
+	if !m.commandView {
+		sb.WriteString(titleStyle.Render(surface.Text("client.surface.menu_title")))
+		sb.WriteString("\n\n")
+		start, end := visibleCommandRange(m.commandIndex, len(m.commands), m.viewport.Height)
+		for i := start; i < end; i++ {
+			command := m.commands[i]
+			line := fmt.Sprintf("%s %-24s %s", " ", command.Name(), surface.DescriptionText(command))
+			if i == m.commandIndex {
+				line = fmt.Sprintf("%s %-24s %s", m.symbols.Arrow, command.Name(), surface.DescriptionText(command))
+				sb.WriteString(selectedStyle.Render(line))
+			} else {
+				sb.WriteString(resultStyle.Render(line))
+			}
+			sb.WriteByte('\n')
+		}
+		return sb.String()
+	}
+	if m.commandIndex < 0 || m.commandIndex >= len(m.commands) {
+		return errorStyle.Render(surface.Text("client.surface.no_selection"))
+	}
+	command := m.commands[m.commandIndex]
+	sb.WriteString(titleStyle.Render(command.Name()))
+	sb.WriteString("\n")
+	sb.WriteString(helpStyle.Render(surface.DescriptionText(command)))
+	sb.WriteString("\n\n")
+	for i, argument := range command.Arguments {
+		label := surface.Text(argument.Label)
+		if argument.Required {
+			label = surface.Text("client.surface.required", label)
+		}
+		sb.WriteString(resultStyle.Render(label))
+		sb.WriteByte('\n')
+		if i < len(m.commandInputs) {
+			if m.layout.ShowBorders {
+				sb.WriteString(inputStyle.Render(m.commandInputs[i].View()))
+			} else {
+				sb.WriteString(m.commandInputs[i].View())
+			}
+		}
+		sb.WriteString("\n")
+	}
+	runLabel := "  " + surface.Text("client.surface.run")
+	if m.commandFocus == len(m.commandInputs) {
+		runLabel = m.symbols.Arrow + " " + surface.Text("client.surface.run")
+	}
+	if m.commandRunning {
+		runLabel = "  " + surface.Text("client.surface.running")
+	}
+	sb.WriteString(selectedStyle.Render(runLabel))
+	if m.commandErr != nil {
+		sb.WriteString("\n\n")
+		sb.WriteString(errorStyle.Render(surface.Text("client.surface.command_failed", m.commandErr.Error())))
+	}
+	if m.commandOutput != "" {
+		sb.WriteString("\n\n")
+		sb.WriteString(resultStyle.Render(strings.TrimSpace(m.commandOutput)))
+	}
+	return sb.String()
+}
+
+func visibleCommandRange(selected, count, height int) (int, int) {
+	if height <= 0 || height >= count {
+		return 0, count
+	}
+	if selected < 0 {
+		selected = 0
+	}
+	if selected >= count {
+		selected = count - 1
+	}
+	start := selected - height/2
+	if start < 0 {
+		start = 0
+	}
+	if start+height > count {
+		start = count - height
+	}
+	return start, start + height
+}
+
 // renderHelp renders the keyboard help screen bound to "?".
 // Per AI.md PART 32 the help screen is a minimum TUI feature and adapts to the
 // current size mode.
@@ -378,17 +627,13 @@ func (m model) renderHelp() string {
 		desc string
 	}
 	bindings := []binding{
-		{"/", "focus the search box"},
-		{"enter", "run the search"},
-		{"j / down", "next result"},
-		{"k / up", "previous result"},
-		{"l / right", "next page"},
-		{"h / left", "previous page"},
-		{"g", "first result"},
-		{"G", "last result"},
-		{"esc / b", "clear and go back"},
-		{"?", "toggle this help"},
-		{"q / ctrl+c", "quit"},
+		{"j / down", "client.surface.help.menu_move"},
+		{"k / up", "client.surface.help.menu_previous"},
+		{"enter", "client.surface.help.open_run"},
+		{"tab / shift+tab", "client.surface.help.focus"},
+		{"esc / b", "client.surface.help.back"},
+		{"?", "client.surface.help.help"},
+		{"q / ctrl+c", "client.surface.help.quit"},
 	}
 
 	keyWidth := 0
@@ -399,7 +644,7 @@ func (m model) renderHelp() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(titleStyle.Render("Keyboard Help"))
+	sb.WriteString(titleStyle.Render(surface.Text("client.surface.help.title")))
 	sb.WriteString("\n\n")
 
 	compact := m.sizeMode <= terminal.SizeModeMinimal
@@ -407,29 +652,29 @@ func (m model) renderHelp() string {
 		if compact {
 			sb.WriteString(resultStyle.Render(b.keys))
 			sb.WriteString("\n")
-			sb.WriteString(helpStyle.Render("  " + b.desc))
+			sb.WriteString(helpStyle.Render("  " + surface.Text(b.desc)))
 			sb.WriteString("\n")
 			continue
 		}
 		sb.WriteString(resultStyle.Render(padTo(b.keys, keyWidth+2)))
-		sb.WriteString(helpStyle.Render(b.desc))
+		sb.WriteString(helpStyle.Render(surface.Text(b.desc)))
 		sb.WriteString("\n")
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(helpStyle.Render("Press any key to return"))
+	sb.WriteString(helpStyle.Render(surface.Text("client.surface.help.return")))
 	return sb.String()
 }
 
 // renderFooter renders the key hint bar for the current size mode.
 func (m model) renderFooter() string {
-	if m.sizeMode <= terminal.SizeModeMinimal {
-		return helpStyle.Render("? help • q quit")
+	if m.commandMode {
+		if m.commandView {
+			return helpStyle.Render(surface.Text("client.surface.footer.form"))
+		}
+		return helpStyle.Render(surface.Text("client.surface.footer.menu"))
 	}
-	if m.inputFocused {
-		return helpStyle.Render("Enter: search • Esc: browse results • Ctrl+C: quit")
-	}
-	return helpStyle.Render("j/k: move • /: search • ?: help • q: quit")
+	return helpStyle.Render(surface.Text("client.surface.footer.menu"))
 }
 
 func (m model) View() string {
@@ -438,9 +683,25 @@ func (m model) View() string {
 	}
 
 	var sb strings.Builder
+	if m.commandMode {
+		if m.layout.ShowHeader {
+			sb.WriteString(titleStyle.Render(surface.Text("client.surface.title")))
+			sb.WriteString("\n\n")
+		}
+		if m.commandRunning {
+			sb.WriteString(helpStyle.Render(surface.Text("client.surface.running")))
+			sb.WriteString("\n")
+		}
+		sb.WriteString(m.viewport.View())
+		if m.layout.ShowFooter {
+			sb.WriteString("\n")
+			sb.WriteString(m.renderFooter())
+		}
+		return sb.String()
+	}
 
 	if m.layout.ShowHeader {
-		sb.WriteString(titleStyle.Render("Search"))
+		sb.WriteString(titleStyle.Render(surface.Text("client.surface.title")))
 		sb.WriteString("\n\n")
 	}
 

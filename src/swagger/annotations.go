@@ -11,6 +11,51 @@ import (
 func generatePaths() map[string]PathItem {
 	paths := make(map[string]PathItem)
 
+	// Debug diagnostics are root-only, operator-protected routes. PART 6
+	// explicitly forbids versioned and unversioned API debug aliases.
+	debugRoute := func(response Response) PathItem {
+		return PathItem{
+			XMountedWhen: debugMountedCondition,
+			Get: &Operation{
+				Summary:     "Debug diagnostic",
+				Description: "Operator-only diagnostics, available only when debug mode is enabled.",
+				Tags:        []string{"System"},
+				Security:    operatorSecurity(),
+				Responses:   map[string]Response{"200": response, "401": errorResponse("Missing or invalid operator token")},
+			},
+		}
+	}
+	debugJSON := func() Response {
+		return Response{Description: "Debug output", Content: map[string]MediaType{"application/json": {Schema: &Schema{Type: "object", Properties: map[string]Schema{"ok": {Type: "boolean", Example: true}, "data": {Type: "object"}}}}}}
+	}
+	debugText := func() Response {
+		return Response{Description: "Debug output", Content: map[string]MediaType{"text/plain": {Schema: &Schema{Type: "string"}}}}
+	}
+	for path, item := range map[string]PathItem{
+		"/debug/pprof":              debugRoute(debugText()),
+		"/debug/pprof/heap":         debugRoute(debugText()),
+		"/debug/pprof/goroutine":    debugRoute(debugText()),
+		"/debug/pprof/allocs":       debugRoute(debugText()),
+		"/debug/pprof/block":        debugRoute(debugText()),
+		"/debug/pprof/mutex":        debugRoute(debugText()),
+		"/debug/pprof/threadcreate": debugRoute(debugText()),
+		"/debug/pprof/cmdline":      debugRoute(debugText()),
+		"/debug/pprof/profile":      debugRoute(debugText()),
+		"/debug/pprof/symbol":       debugRoute(debugText()),
+		"/debug/pprof/trace":        debugRoute(debugText()),
+		"/debug/vars": {XMountedWhen: debugMountedCondition, Get: &Operation{Summary: "Debug diagnostic", Description: "Operator-only diagnostics, available only when debug mode is enabled.", Tags: []string{"System"}, Security: operatorSecurity(), Responses: map[string]Response{"200": {Description: "Debug output", Content: map[string]MediaType{"application/json": {Schema: &Schema{Type: "object"}}}}, "401": errorResponse("Missing or invalid operator token")}}},
+		"/debug/config":             debugRoute(debugJSON()),
+		"/debug/routes":             debugRoute(debugJSON()),
+		"/debug/cache":              debugRoute(debugJSON()),
+		"/debug/db":                 debugRoute(debugJSON()),
+		"/debug/scheduler":          debugRoute(debugJSON()),
+		"/debug/memory":             debugRoute(debugJSON()),
+		"/debug/goroutines":         debugRoute(debugText()),
+		"/debug/error500": {XMountedWhen: debugMountedCondition, Get: &Operation{Summary: "Debug diagnostic", Description: "Operator-only diagnostics, available only when debug mode is enabled.", Tags: []string{"System"}, Security: operatorSecurity(), Responses: map[string]Response{"500": {Description: "Standard localized server error page", Content: map[string]MediaType{"text/html": {Schema: &Schema{Type: "string"}}, "text/plain": {Schema: &Schema{Type: "string"}}}}, "401": errorResponse("Missing or invalid operator token")}}},
+	} {
+		paths[path] = item
+	}
+
 	// Health check - canonical route is /server/healthz per AI.md PART 13
 	paths["/server/healthz"] = PathItem{
 		Get: &Operation{
@@ -456,10 +501,33 @@ func generatePaths() map[string]PathItem {
 	paths["/api/autodiscover"] = PathItem{
 		Get: &Operation{
 			Summary:     "Autodiscover server settings",
-			Description: "Returns server settings, config schema, and options for the CLI client",
+			Description: "Returns the server name and version, API version prefix, public URLs, optional exposed overlay addresses, and published CLI versions",
 			Tags:        []string{"System"},
 			Responses: map[string]Response{
-				"200": okResponse("Server settings", &Schema{Type: "object"}),
+				"200": okResponse("Autodiscover document", &Schema{Type: "object", Properties: map[string]Schema{
+					"name":            {Type: "string"},
+					"version":         {Type: "string"},
+					"api":             {Type: "object", Properties: map[string]Schema{"current_version": {Type: "string"}}},
+					"urls":            {Type: "array", Items: &Schema{Type: "string"}},
+					"onion":           {Type: "string"},
+					"i2p":             {Type: "string"},
+					"cli_versions":    {Type: "object"},
+					"cli_min_version": {Type: "string"},
+				}}),
+			},
+		},
+	}
+	paths["/cli/binaries/{filename}"] = PathItem{
+		Get: &Operation{
+			Summary:     "Download a verified CLI release binary",
+			Description: "Streams an operator-provisioned CLI binary only after its SHA-256 matches sha256.txt; requires the operator Bearer token when cli.binary_download.require_auth is true",
+			Tags:        []string{"System"},
+			Parameters:  []Parameter{{Name: "filename", In: "path", Description: "Published search-cli platform filename", Required: true, Schema: &Schema{Type: "string"}}},
+			Responses: map[string]Response{
+				"200": {Description: "Verified CLI binary", Content: map[string]MediaType{"application/octet-stream": {Schema: &Schema{Type: "string"}}}},
+				"401": errorResponse("Operator authorization required when downloads are private"),
+				"403": errorResponse("Valid owner or linked token lacks operator scope"),
+				"404": errorResponse("Binary is unavailable or failed checksum verification"),
 			},
 		},
 	}
@@ -585,11 +653,10 @@ func generatePaths() map[string]PathItem {
 	paths[version.APIPrefix+"/server/help/mcp"] = PathItem{
 		Get: &Operation{
 			Summary:     "MCP connection help",
-			Description: "Return the enabled MCP endpoint, aliases, authentication scheme, live tools, and project-specific usage guidance",
+			Description: "Return the MCP endpoint, aliases, authentication scheme, live tools, and project-specific usage guidance",
 			Tags:        []string{"Server"},
 			Responses: map[string]Response{
 				"200": okResponse("MCP connection help", &Schema{Type: "object"}),
-				"404": errorResponse("MCP is disabled"),
 			},
 		},
 	}
@@ -792,7 +859,7 @@ func generatePaths() map[string]PathItem {
 	paths[version.APIPrefix+"/server/scheduler/tasks"] = PathItem{Get: taskList}
 	paths[version.APIPrefix+"/server/scheduler/tasks/{task}"] = PathItem{Get: &Operation{Summary: "Get scheduler task", Tags: []string{"Scheduler", "Operator"}, Security: operatorSecurity(), Parameters: taskParam, Responses: map[string]Response{"200": okResponse("Scheduler task", &Schema{Type: "object"}), "401": errorResponse("Missing or invalid operator token"), "404": errorResponse("Task not found")}}}
 	paths[version.APIPrefix+"/server/scheduler/tasks/{task}/history"] = PathItem{Get: &Operation{Summary: "Get scheduler task history", Tags: []string{"Scheduler", "Operator"}, Security: operatorSecurity(), Parameters: taskParam, Responses: map[string]Response{"200": okResponse("Recent task history", &Schema{Type: "array", Items: &Schema{Type: "object"}}), "401": errorResponse("Missing or invalid operator token"), "404": errorResponse("Task not found")}}}
-	for action, summary := range map[string]string{"run": "Run scheduler task", "enable": "Enable scheduler task", "disable": "Disable scheduler task"} {
+	for action, summary := range map[string]string{"run": "Run scheduler task"} {
 		paths[version.APIPrefix+"/server/scheduler/tasks/{task}/"+action] = PathItem{Post: &Operation{Summary: summary, Description: "Operator bearer token required", Tags: []string{"Scheduler", "Operator"}, Security: operatorSecurity(), Parameters: taskParam, Responses: map[string]Response{"200": okResponse("Scheduler task action result", &Schema{Type: "object"}), "401": errorResponse("Missing or invalid operator token"), "404": errorResponse("Task not found"), "503": errorResponse("Scheduler unavailable")}}}
 	}
 
@@ -813,6 +880,21 @@ func generatePaths() map[string]PathItem {
 	paths["/api/swagger"] = swaggerSpec
 
 	graphqlQuery := PathItem{
+		Get: &Operation{
+			Summary:     "Read-only GraphQL query",
+			Description: "Execute a read-only GraphQL query. Pass query and optional variables and operationName as URL parameters. Mutations are not allowed with GET.",
+			Tags:        []string{"Docs"},
+			Parameters: []Parameter{
+				{Name: "query", In: "query", Required: true, Schema: &Schema{Type: "string"}},
+				{Name: "variables", In: "query", Schema: &Schema{Type: "string", Description: "JSON object"}},
+				{Name: "operationName", In: "query", Schema: &Schema{Type: "string"}},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "GraphQL result", Content: map[string]MediaType{"application/json": {Schema: &Schema{Type: "object"}}}},
+				"400": errorResponse("Malformed GraphQL request"),
+				"405": errorResponse("GET accepts queries only"),
+			},
+		},
 		Post: &Operation{
 			Summary:     "GraphQL query",
 			Description: "Execute a GraphQL query or mutation",
@@ -846,33 +928,68 @@ func generatePaths() map[string]PathItem {
 	paths["/api/mcp"] = mcpEndpoint
 	paths["/mcp"] = mcpEndpoint
 	ownerAuth := ownerSecurity()
-	ownerParam := []Parameter{{Name: "id", In: "path", Required: true, Schema: &Schema{Type: "integer"}}}
+	ownerParam := []Parameter{{Name: "id", In: "path", Description: "UUIDv7 token identifier", Required: true, Schema: &Schema{Type: "string", Format: "uuid"}}}
 	ownerBody := func(properties map[string]Schema) *RequestBody {
 		return &RequestBody{Required: true, Content: map[string]MediaType{"application/json": {Schema: &Schema{Type: "object", Properties: properties}}}}
 	}
+	ownerTokenSchema := func(includeLinkedToken bool) *Schema {
+		properties := map[string]Schema{
+			"id": {Type: "string", Format: "uuid"}, "name": {Type: "string"}, "kind": {Type: "string", Enum: []interface{}{"primary", "linked"}},
+			"token_masked": {Type: "string"}, "created_at": {Type: "string", Format: "date-time"}, "last_used_at": {Type: "string", Format: "date-time", Nullable: true},
+			"expires_at": {Type: "string", Format: "date-time", Nullable: true}, "status": {Type: "string", Enum: []interface{}{"active", "expired", "revoked"}},
+		}
+		if includeLinkedToken {
+			properties["linked_token"] = Schema{Type: "string"}
+		}
+		return &Schema{Type: "object", Properties: properties}
+	}
+	paths[version.APIPrefix+"/server/preferences/tokens/primary"] = PathItem{
+		Post: &Operation{Summary: "Issue a primary owner token", Description: "Creates a new owner and returns its primary credential in owner_token. A valid existing owner token receives a conflict response.", Tags: []string{"Owner Tokens"}, Responses: map[string]Response{"201": okResponse("Primary owner token issued", &Schema{Type: "object", Properties: map[string]Schema{"owner_token": {Type: "string"}}}), "409": errorResponse("A valid existing owner token receives a conflict response")}},
+		Delete: &Operation{Summary: "Revoke the primary owner token", Description: "Requires the primary owner bearer token and confirmation with its last four characters. Deletes the owner, its tokens, and its resources in one transaction.", Tags: []string{"Owner Tokens"}, Security: ownerAuth, RequestBody: ownerBody(map[string]Schema{"confirm": {Type: "string", MinLength: 4, MaxLength: 4}}), Responses: map[string]Response{"200": okResponse("Owner and resources deleted", &Schema{Type: "object", Properties: map[string]Schema{"tokens": {Type: "integer"}, "resources": {Type: "integer"}}}), "400": errorResponse("Primary token confirmation did not match"), "401": errorResponse("Missing or invalid owner token"), "403": errorResponse("Primary owner token required")}},
+	}
 	paths[version.APIPrefix+"/server/preferences/tokens"] = PathItem{
-		Get:  &Operation{Summary: "List owner tokens", Description: "Primary owner bearer token required; token values are masked", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Responses: map[string]Response{"200": okResponse("Owner tokens", &Schema{Type: "array", Items: &Schema{Type: "object"}}), "403": errorResponse("Primary owner token required")}},
-		Post: &Operation{Summary: "Create linked owner token", Description: "Primary owner bearer token required", Tags: []string{"Owner Tokens"}, Security: ownerAuth, RequestBody: ownerBody(map[string]Schema{"name": {Type: "string"}, "expires_at": {Type: "string"}}), Responses: map[string]Response{"201": okResponse("Created linked token", &Schema{Type: "object"}), "403": errorResponse("Primary owner token required")}},
+		Get:  &Operation{Summary: "List owner tokens", Description: "Primary owner bearer token required; token values are masked", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Responses: map[string]Response{"200": okResponse("Owner tokens", &Schema{Type: "object", Properties: map[string]Schema{"primary": *ownerTokenSchema(false), "linked": {Type: "array", Items: ownerTokenSchema(false)}, "max_linked": {Type: "integer"}}}), "403": errorResponse("Primary owner token required")}},
+		Post: &Operation{Summary: "Create linked owner token", Description: "Primary owner bearer token required. Send either expires (never, 7d, 30d, 90d, 1y) or expires_on (YYYY-MM-DD), not both", Tags: []string{"Owner Tokens"}, Security: ownerAuth, RequestBody: ownerBody(map[string]Schema{"name": {Type: "string"}, "expires": {Type: "string", Enum: []interface{}{"never", "7d", "30d", "90d", "1y"}}, "expires_on": {Type: "string", Format: "date"}}), Responses: map[string]Response{"201": okResponse("Created linked token", ownerTokenSchema(true)), "400": errorResponse("Invalid linked-token expiry"), "401": errorResponse("Missing or invalid owner token"), "403": errorResponse("Primary owner token required")}},
 	}
 	for suffix, summary := range map[string]string{"primary/reveal": "Reveal primary owner token", "primary/rotate": "Rotate primary owner token"} {
-		paths[version.APIPrefix+"/server/preferences/tokens/"+suffix] = PathItem{Post: &Operation{Summary: summary, Tags: []string{"Owner Tokens"}, Security: ownerAuth, Responses: map[string]Response{"200": okResponse("Owner token", &Schema{Type: "object"}), "403": errorResponse("Primary owner token required")}}}
+		paths[version.APIPrefix+"/server/preferences/tokens/"+suffix] = PathItem{Post: &Operation{Summary: summary, Tags: []string{"Owner Tokens"}, Security: ownerAuth, Responses: map[string]Response{"200": okResponse("Owner token", &Schema{Type: "object", Properties: map[string]Schema{"owner_token": {Type: "string"}}}), "403": errorResponse("Primary owner token required")}}}
 	}
-	paths[version.APIPrefix+"/server/preferences/tokens/{id}/reveal"] = PathItem{Post: &Operation{Summary: "Reveal linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, Responses: map[string]Response{"200": okResponse("Owner token", &Schema{Type: "object"}), "404": errorResponse("Token not found")}}}
-	paths[version.APIPrefix+"/server/preferences/tokens/{id}/rotate"] = PathItem{Post: &Operation{Summary: "Rotate linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, Responses: map[string]Response{"200": okResponse("Owner token", &Schema{Type: "object"}), "404": errorResponse("Token not found")}}}
+	paths[version.APIPrefix+"/server/preferences/tokens/{id}/reveal"] = PathItem{Post: &Operation{Summary: "Reveal linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, Responses: map[string]Response{"200": okResponse("Revealed owner token", ownerTokenSchema(true)), "404": errorResponse("Token not found")}}}
+	paths[version.APIPrefix+"/server/preferences/tokens/{id}/rotate"] = PathItem{Post: &Operation{Summary: "Rotate linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, Responses: map[string]Response{"200": okResponse("Rotated owner token", ownerTokenSchema(true)), "404": errorResponse("Token not found")}}}
 	paths[version.APIPrefix+"/server/preferences/tokens/{id}"] = PathItem{
-		Patch:  &Operation{Summary: "Update linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, RequestBody: ownerBody(map[string]Schema{"name": {Type: "string"}, "expires_at": {Type: "string"}}), Responses: map[string]Response{"200": okResponse("Updated token", &Schema{Type: "object"}), "404": errorResponse("Token not found")}},
-		Delete: &Operation{Summary: "Revoke linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, Responses: map[string]Response{"200": okResponse("Revoked token", &Schema{Type: "object"}), "404": errorResponse("Token not found")}},
+		Patch:  &Operation{Summary: "Update linked owner token", Description: "Send any of name, expires, or expires_on; expiry fields follow linked-token creation rules", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, RequestBody: ownerBody(map[string]Schema{"name": {Type: "string"}, "expires": {Type: "string", Enum: []interface{}{"never", "7d", "30d", "90d", "1y"}}, "expires_on": {Type: "string", Format: "date"}}), Responses: map[string]Response{"200": okResponse("Updated token", ownerTokenSchema(false)), "400": errorResponse("Invalid linked-token expiry"), "401": errorResponse("Missing or invalid owner token"), "403": errorResponse("Primary owner token required"), "404": errorResponse("Token not found")}},
+		Delete: &Operation{Summary: "Revoke linked owner token", Tags: []string{"Owner Tokens"}, Security: ownerAuth, Parameters: ownerParam, Responses: map[string]Response{"200": okResponse("Revoked token", &Schema{Type: "object", Properties: map[string]Schema{"id": {Type: "string", Format: "uuid"}, "status": {Type: "string", Enum: []interface{}{"revoked"}}}}), "404": errorResponse("Token not found")}},
 	}
 	paths[version.APIPrefix+"/server/config/contact/webhooks"] = PathItem{Post: &Operation{
 		Summary:     "Configure a contact notification webhook",
-		Description: "Operator bearer token required. A newly generated signing secret is returned once when a URL is first configured or changed.",
+		Description: "Operator bearer token required. Webhook signing secrets are never returned in API responses.",
 		Tags:        []string{"Configuration", "Notifications"},
 		Security:    operatorSecurity(),
 		RequestBody: &RequestBody{Required: true, Content: map[string]MediaType{"application/json": {Schema: &Schema{Type: "object", Example: map[string]string{"role": "general", "transport": "generic", "url": "https://example.com/webhook"}, Properties: map[string]Schema{"role": {Type: "string", Example: "admin|security|abuse|general"}, "transport": {Type: "string", Example: "telegram|discord|slack|mattermost|pushover|gotify|generic"}, "url": {Type: "string", Example: "https://example.com/webhook"}}}}}},
-		Responses:   map[string]Response{"200": okResponse("Webhook configuration updated; a new signing secret may be included once", &Schema{Type: "object", Properties: map[string]Schema{"role": {Type: "string"}, "transport": {Type: "string"}, "configured": {Type: "boolean"}, "secret": {Type: "string"}}}), "400": errorResponse("Invalid webhook configuration"), "401": errorResponse("Operator bearer token required"), "500": errorResponse("Webhook configuration could not be persisted")},
+		Responses:   map[string]Response{"200": okResponse("Webhook configuration updated. Signing secrets are never returned in API responses.", &Schema{Type: "object", Properties: map[string]Schema{"role": {Type: "string"}, "transport": {Type: "string"}, "configured": {Type: "boolean"}}}), "400": errorResponse("Invalid webhook configuration"), "401": errorResponse("Operator bearer token required"), "500": errorResponse("Webhook configuration could not be persisted")},
 	}}
 
+	for _, path := range paths {
+		for _, operation := range []*Operation{path.Get, path.Post, path.Put, path.Patch, path.Delete} {
+			if operation == nil || !requiresOperatorToken(operation.Security) {
+				continue
+			}
+			if operation.Responses == nil {
+				operation.Responses = make(map[string]Response)
+			}
+			operation.Responses["403"] = errorResponse("Valid owner or linked token lacks operator scope")
+		}
+	}
 	return paths
+}
+
+func requiresOperatorToken(security []map[string][]string) bool {
+	for _, requirement := range security {
+		if _, ok := requirement["operatorToken"]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func healthResponseSchema() *Schema {
@@ -886,7 +1003,6 @@ func healthResponseSchema() *Schema {
 		"version":         {Type: "string", Example: "1.0.0"}, "go_version": {Type: "string"},
 		"build":  {Type: "object", Properties: map[string]Schema{"commit": {Type: "string"}, "date": {Type: "string"}}},
 		"uptime": {Type: "string"}, "mode": {Type: "string"}, "timestamp": {Type: "string"},
-		"cluster": {Type: "object", Properties: map[string]Schema{"enabled": {Type: "boolean"}}},
 		"features": {Type: "object", Properties: map[string]Schema{
 			"tor":   {Type: "object", Properties: map[string]Schema{"enabled": {Type: "boolean"}, "running": {Type: "boolean"}, "status": {Type: "string"}, "hostname": {Type: "string"}}},
 			"i2p":   {Type: "object", Properties: map[string]Schema{"enabled": {Type: "boolean"}, "running": {Type: "boolean"}, "status": {Type: "string"}, "hostname": {Type: "string"}, "provider": {Type: "string"}}},

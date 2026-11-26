@@ -6,13 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"mime"
 	"net/http"
 
-	"github.com/apimgr/search/src/common/closeutil"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/apimgr/search/src/common/closeutil"
 
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
@@ -20,7 +25,9 @@ import (
 	"github.com/apimgr/search/src/version"
 )
 
-var mcpVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26"}
+const mcpProtocolVersion = "2026-07-28"
+
+var mcpVersions = []string{mcpProtocolVersion}
 
 type mcpRequest struct {
 	JSONRPC string                     `json:"jsonrpc"`
@@ -33,6 +40,7 @@ type mcpTool struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	InputSchema map[string]interface{} `json:"inputSchema"`
+	Annotations map[string]bool        `json:"annotations"`
 	Path        string                 `json:"-"`
 	Method      string                 `json:"-"`
 	Operation   *swagger.Operation     `json:"-"`
@@ -41,52 +49,46 @@ type mcpTool struct {
 func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
-		return
-	}
-	if !h.validMCPOrigin(r) {
-		http.Error(w, i18n.RequestString(r, "errors.forbidden"), http.StatusForbidden)
+		h.errorResponse(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", r)
 		return
 	}
 	if r.ContentLength > 1<<20 {
-		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusRequestEntityTooLarge)
+		h.errorResponse(w, http.StatusRequestEntityTooLarge, "BAD_REQUEST", "", r)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
-		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "", r)
 		return
 	}
 	var request mcpRequest
 	if err := json.Unmarshal(body, &request); err != nil || request.JSONRPC != "2.0" || request.Method == "" {
-		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		h.errorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "", r)
 		return
 	}
-	if mismatch := mcpHeaderError(r, request); mismatch != "" {
-		writeMCPError(w, http.StatusBadRequest, request.ID, -32600, "HeaderMismatch", mismatch)
+	if !h.validMCPOrigin(r) {
+		writeMCPError(w, http.StatusForbidden, request.ID, -32000, "Forbidden", i18n.RequestString(r, "errors.forbidden"))
 		return
 	}
-	versionParam, versionErr := mcpProtocolParam(request.Params)
-	if versionErr != nil {
-		writeMCPError(w, http.StatusBadRequest, request.ID, -32000, "UnsupportedProtocolVersionError", "supported versions: "+strings.Join(mcpVersions, ", "))
+	if !h.validMCPBearer(r) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="server"`)
+		writeMCPError(w, http.StatusUnauthorized, request.ID, -32001, "Unauthorized", i18n.RequestString(r, "errors.unauthorized"))
 		return
 	}
-	if headerVersion := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version")); headerVersion != "" && versionParam != "" && headerVersion != versionParam {
-		writeMCPError(w, http.StatusBadRequest, request.ID, -32600, "HeaderMismatch", "MCP-Protocol-Version does not match JSON-RPC protocolVersion")
+	if request.Method == "initialize" && r.Header.Get("MCP-Protocol-Version") == "" && mcpRequestProtocolVersion(request) == "" {
+		writeMCPUnsupportedVersion(w, r, request.ID)
 		return
 	}
-	protocol, err := mcpProtocol(r, request)
-	if err != nil {
-		writeMCPError(w, http.StatusBadRequest, request.ID, -32000, "UnsupportedProtocolVersionError", "supported versions: "+strings.Join(mcpVersions, ", "))
+	requestedVersion := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version"))
+	if requestedVersion != "" && requestedVersion != mcpProtocolVersion {
+		writeMCPUnsupportedVersion(w, r, request.ID)
 		return
 	}
-	if protocol != "" {
-		w.Header().Set("MCP-Protocol-Version", protocol)
-	}
-	if len(request.ID) == 0 && strings.HasPrefix(request.Method, "notifications/") {
-		w.WriteHeader(http.StatusAccepted)
+	if mcpHeaderError(r, request) {
+		writeMCPError(w, http.StatusBadRequest, request.ID, -32020, "HeaderMismatch", i18n.RequestString(r, "mcp.errors.header_mismatch"))
 		return
 	}
+	w.Header().Set("MCP-Protocol-Version", mcpProtocolVersion)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	result, rpcErr := h.dispatchMCP(r, request)
@@ -101,77 +103,51 @@ func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		response["result"] = result
 	}
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(response)
+	status := http.StatusOK
+	var protocolErr *mcpRPCError
+	if errors.As(rpcErr, &protocolErr) && protocolErr.code == -32601 {
+		status = http.StatusNotFound
+	}
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		slog.Debug("failed to write MCP response", "error", err)
+	}
 }
 
-func mcpHeaderError(r *http.Request, request mcpRequest) string {
-	if method := r.Header.Get("Mcp-Method"); method != "" && method != request.Method {
-		return "Mcp-Method does not match JSON-RPC method"
+func mcpHeaderError(r *http.Request, request mcpRequest) bool {
+	if version := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version")); version == "" || version != mcpRequestProtocolVersion(request) {
+		return true
 	}
-	if name := r.Header.Get("Mcp-Name"); name != "" {
-		var params struct {
-			Name string `json:"name"`
-		}
-		if err := json.Unmarshal(rawParams(request.Params), &params); err != nil {
-			return "Mcp-Name does not match JSON-RPC name"
-		}
-		if name != params.Name {
-			return "Mcp-Name does not match JSON-RPC name"
-		}
+	if method := strings.TrimSpace(r.Header.Get("Mcp-Method")); method == "" || method != request.Method {
+		return true
 	}
-	return ""
-}
-
-func mcpProtocol(r *http.Request, request mcpRequest) (string, error) {
-	header := strings.TrimSpace(r.Header.Get("MCP-Protocol-Version"))
-	bodyValue, err := mcpProtocolParam(request.Params)
-	if err != nil {
-		return "", err
-	}
-	body := strings.TrimSpace(bodyValue)
-	if header != "" && body != "" && header != body {
-		return "", errors.New("protocol version header and body differ")
-	}
-	version := body
-	if version == "" {
-		version = header
-	}
-	if version == "" && request.Method != "initialize" {
-		version = mcpVersions[0]
-	}
-	if version != "" {
-		found := false
-		for _, supported := range mcpVersions {
-			if version == supported {
-				found = true
-				break
+	if request.Method == "tools/call" || request.Method == "resources/read" || request.Method == "prompts/get" {
+		rawName := strings.TrimSpace(r.Header.Get("Mcp-Name"))
+		for _, char := range rawName {
+			if char > 127 {
+				return true
 			}
 		}
-		if !found {
-			return "", errors.New("unsupported protocol version")
+		name, err := new(mime.WordDecoder).DecodeHeader(rawName)
+		if err != nil || name == "" || !utf8.ValidString(name) {
+			return true
+		}
+		var params struct {
+			Name string `json:"name"`
+			URI  string `json:"uri"`
+		}
+		if err := json.Unmarshal(rawParams(request.Params), &params); err != nil {
+			return true
+		}
+		want := params.Name
+		if request.Method == "resources/read" {
+			want = params.URI
+		}
+		if want == "" || name != want {
+			return true
 		}
 	}
-	return version, nil
-}
-
-func mcpProtocolParam(params map[string]json.RawMessage) (string, error) {
-	if raw, ok := params["protocolVersion"]; ok {
-		var candidate interface{}
-		if err := json.Unmarshal(raw, &candidate); err != nil {
-			return "", fmt.Errorf("invalid protocolVersion parameter: %w", err)
-		}
-		if _, ok := candidate.(string); !ok {
-			return "", errors.New("invalid protocolVersion parameter type")
-		}
-	}
-	var value struct {
-		ProtocolVersion string `json:"protocolVersion"`
-	}
-	if err := json.Unmarshal(rawParams(params), &value); err != nil {
-		return "", fmt.Errorf("invalid protocolVersion parameter: %w", err)
-	}
-	return value.ProtocolVersion, nil
+	return false
 }
 
 type mcpRPCError struct {
@@ -188,15 +164,6 @@ func rawParams(params map[string]json.RawMessage) []byte {
 
 func (h *Handler) dispatchMCP(r *http.Request, request mcpRequest) (interface{}, error) {
 	switch request.Method {
-	case "initialize":
-		protocol, err := mcpProtocolParam(request.Params)
-		if err != nil {
-			return nil, &mcpRPCError{code: -32602, message: "invalid initialize params"}
-		}
-		if protocol == "" {
-			protocol = mcpVersions[0]
-		}
-		return map[string]interface{}{"protocolVersion": protocol, "capabilities": map[string]interface{}{"tools": map[string]interface{}{"listChanged": false}}, "serverInfo": map[string]string{"name": h.config.Server.Title, "version": configVersion()}}, nil
 	case "ping":
 		return map[string]interface{}{}, nil
 	case "tools/list":
@@ -208,24 +175,60 @@ func (h *Handler) dispatchMCP(r *http.Request, request mcpRequest) (interface{},
 			Arguments map[string]interface{} `json:"arguments"`
 		}
 		if err := json.Unmarshal(rawParams(request.Params), &params); err != nil || params.Name == "" {
-			return nil, &mcpRPCError{code: -32602, message: "invalid tools/call params"}
+			return nil, &mcpRPCError{code: -32602, message: i18n.RequestString(r, "mcp.errors.invalid_call")}
 		}
 		for _, tool := range h.mcpTools(r) {
 			if tool.Name == params.Name {
 				return h.callMCPTool(r, tool, params.Arguments), nil
 			}
 		}
-		return map[string]interface{}{"content": []map[string]string{{"type": "text", "text": `{"ok":false,"error":"NOT_FOUND","message":"tool not found or unavailable"}`}}, "isError": true}, nil
+		return mcpToolError(r, "NOT_FOUND", "mcp.errors.tool_not_found"), nil
 	default:
-		return nil, fmt.Errorf("method not found: %s", request.Method)
+		return nil, &mcpRPCError{code: -32601, message: i18n.RequestString(r, "mcp.errors.method_not_found")}
 	}
+}
+
+func (h *Handler) validMCPBearer(r *http.Request) bool {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	const prefix = "Bearer "
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return false
+	}
+	if h.operatorAuthError(r) == nil {
+		return true
+	}
+	if h.ownerManager == nil {
+		return false
+	}
+	_, err := h.ownerManager.Resolve(r.Context(), strings.TrimSpace(header[len(prefix):]))
+	return err == nil
+}
+
+func mcpRequestProtocolVersion(request mcpRequest) string {
+	metaRaw, ok := request.Params["_meta"]
+	if !ok {
+		return ""
+	}
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal(metaRaw, &meta); err != nil {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(meta["io.modelcontextprotocol/protocolVersion"], &value); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func writeMCPUnsupportedVersion(w http.ResponseWriter, r *http.Request, id json.RawMessage) {
+	writeMCPError(w, http.StatusBadRequest, id, -32000, "UnsupportedProtocolVersionError", i18n.RequestFormat(r, "mcp.errors.unsupported_version", "version", mcpProtocolVersion))
 }
 
 func (h *Handler) mcpTools(r *http.Request) []mcpTool {
 	spec := swagger.GenerateSpec(h.config, "")
 	tools := make([]mcpTool, 0)
 	for path, item := range spec.Paths {
-		if !strings.HasPrefix(path, version.APIPrefix+"/") || strings.Contains(path, "/server/preferences/tokens") || strings.Contains(path, "/server/mcp") {
+		if !strings.HasPrefix(path, version.APIPrefix+"/") || strings.Contains(path, "/server/preferences") || strings.Contains(path, "/server/mcp") {
 			continue
 		}
 		for method, operation := range map[string]*swagger.Operation{"GET": item.Get, "POST": item.Post, "PUT": item.Put, "PATCH": item.Patch, "DELETE": item.Delete} {
@@ -240,11 +243,27 @@ func (h *Handler) mcpTools(r *http.Request) []mcpTool {
 			if len(operation.Security) > 0 && h.operatorAuthError(r) != nil {
 				continue
 			}
-			tools = append(tools, mcpTool{Name: operation.OperationID, Description: firstNonEmpty(operation.Description, operation.Summary), InputSchema: mcpInputSchema(operation), Path: path, Method: method, Operation: operation})
+			tools = append(tools, mcpTool{Name: operation.OperationID, Description: firstNonEmpty(operation.Description, operation.Summary), InputSchema: mcpInputSchema(operation), Annotations: mcpToolAnnotations(method), Path: path, Method: method, Operation: operation})
 		}
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	return tools
+}
+
+func mcpToolAnnotations(method string) map[string]bool {
+	annotations := make(map[string]bool)
+	switch method {
+	case http.MethodGet:
+		annotations["readOnlyHint"] = true
+	case http.MethodDelete:
+		annotations["destructiveHint"] = true
+		annotations["idempotentHint"] = true
+	case http.MethodPut:
+		annotations["idempotentHint"] = true
+	case http.MethodPost, http.MethodPatch:
+		annotations["readOnlyHint"] = false
+	}
+	return annotations
 }
 
 func hasTag(tags []string, expected string) bool {
@@ -336,7 +355,7 @@ func (h *Handler) callMCPTool(r *http.Request, tool mcpTool, arguments map[strin
 		}
 	}
 	if strings.Contains(path, "{") {
-		return mcpToolError("required path argument missing")
+		return mcpToolError(r, "BAD_REQUEST", "mcp.errors.path_argument_missing")
 	}
 	if encoded := query.Encode(); encoded != "" {
 		path += "?" + encoded
@@ -360,7 +379,7 @@ func (h *Handler) callMCPTool(r *http.Request, tool mcpTool, arguments map[strin
 		}
 		data, err := json.Marshal(payload)
 		if err != nil {
-			return mcpToolError("invalid tool arguments")
+			return mcpToolError(r, "BAD_REQUEST", "mcp.errors.invalid_tool_arguments")
 		}
 		body = bytes.NewReader(data)
 	}
@@ -372,14 +391,14 @@ func (h *Handler) callMCPTool(r *http.Request, tool mcpTool, arguments map[strin
 	request.TLS = r.TLS
 	recorder := httptest.NewRecorder()
 	if h.apiRoutes == nil {
-		return mcpToolError("API routes are unavailable")
+		return mcpToolError(r, "SERVER_ERROR", "mcp.errors.api_routes_unavailable")
 	}
 	h.apiRoutes.ServeHTTP(recorder, request)
 	response := recorder.Result()
 	defer closeutil.Close(response.Body)
 	data, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
 	if err != nil {
-		return mcpToolError("tool response unavailable")
+		return mcpToolError(r, "SERVER_ERROR", "mcp.errors.tool_response_unavailable")
 	}
 	var parsed interface{}
 	if err := json.Unmarshal(data, &parsed); err != nil {
@@ -395,16 +414,19 @@ func (h *Handler) callMCPTool(r *http.Request, tool mcpTool, arguments map[strin
 	return result
 }
 
-func mcpToolError(message string) map[string]interface{} {
-	body := map[string]interface{}{"ok": false, "error": "BAD_REQUEST", "message": message}
+func mcpToolError(r *http.Request, code, key string) map[string]interface{} {
+	body := map[string]interface{}{"ok": false, "error": code, "message": i18n.RequestString(r, key)}
 	encoded, _ := json.Marshal(body)
 	return map[string]interface{}{"content": []map[string]string{{"type": "text", "text": string(encoded)}}, "structuredContent": body, "isError": true}
 }
 
 func writeMCPError(w http.ResponseWriter, status int, id json.RawMessage, code int, name, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{"code": code, "message": message, "data": map[string]string{"name": name}}})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{"code": code, "message": message, "data": map[string]string{"name": name}}}); err != nil {
+		slog.Debug("failed to write MCP error response", "error", err)
+	}
 }
 
 func (h *Handler) validMCPOrigin(r *http.Request) bool {
@@ -416,9 +438,36 @@ func (h *Handler) validMCPOrigin(r *http.Request) bool {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return false
 	}
-	requestURL, err := url.Parse(httputil.GetBaseURLFromRequest(r))
+	requestURL, err := url.Parse(httputil.BuildURL(r, "/"))
 	if err == nil && sameOrigin(parsed, requestURL) {
 		return true
+	}
+	domains := strings.Split(os.Getenv("DOMAIN"), ",")
+	if os.Getenv("DOMAIN") == "" && h.config.Server.FQDN != "" {
+		domains = strings.Split(h.config.Server.FQDN, ",")
+	}
+	for _, domain := range domains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
+			continue
+		}
+		allowed, err := url.Parse("https://" + domain)
+		if err == nil && allowed.Host != "" && allowed.User == nil && allowed.Path == "" && sameOrigin(parsed, allowed) {
+			return true
+		}
+	}
+	if h.mcpOriginAllowed != nil && h.mcpOriginAllowed(r, parsed) {
+		return true
+	}
+	for _, configured := range h.config.Server.CORS.AllowedOrigins {
+		configured = strings.TrimSpace(configured)
+		if configured == "" || configured == "*" {
+			continue
+		}
+		allowed, err := url.Parse(configured)
+		if err == nil && allowed.Scheme != "" && allowed.Host != "" && sameOrigin(parsed, allowed) {
+			return true
+		}
 	}
 	for _, configured := range strings.Split(h.config.Server.Web.CORS, ",") {
 		configured = strings.TrimSpace(configured)
@@ -436,5 +485,3 @@ func sameOrigin(a, b *url.URL) bool {
 	}
 	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
 }
-
-func configVersion() string { return version.Version }

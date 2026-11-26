@@ -29,6 +29,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 )
 
 func TestNoJSNavigationDrawer(t *testing.T) {
@@ -46,8 +47,8 @@ func TestNoJSNavigationDrawer(t *testing.T) {
 	); err != nil {
 		t.Fatalf("open no-JS navigation drawer: %v", err)
 	}
-	if !visible || len(links) != 3 {
-		t.Fatalf("no-JS drawer visible=%t links=%v, want visible with all three navigation links", visible, links)
+	if !visible || len(links) != 1 || links[0] != "/" {
+		t.Fatalf("no-JS drawer visible=%t links=%v, want the configured home link", visible, links)
 	}
 }
 
@@ -318,13 +319,18 @@ func TestNoJSAlertManageLifecycle(t *testing.T) {
 	if err := chromedp.Run(ctx,
 		chromedp.SetValue("#query", "nojs alert updated", chromedp.ByQuery),
 		chromedp.SetValue("#frequency", "weekly", chromedp.ByQuery),
-		chromedp.Click(".alert-page form.alert-form button[type=submit]", chromedp.ByQuery),
-		chromedp.WaitReady(".alert-page", chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare no-JS alert update: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, ".alert-page form.alert-form button[type=submit]"); err != nil {
+		t.Fatalf("submit no-JS alert update: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.Poll(`document.querySelector('#query')?.value === 'nojs alert updated'`, nil,
 			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Value("#query", &value, chromedp.ByQuery),
 	); err != nil {
-		t.Fatalf("update alert without JavaScript: %v", err)
+		t.Fatalf("verify no-JS alert update: %v", err)
 	}
 	if value != "nojs alert updated" {
 		t.Fatalf("updated alert query = %q", value)
@@ -396,12 +402,12 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if err := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			err := network.SetCookie("search_owner_token_xJ5yCXLv", primary).
-				WithURL(site.URL).WithPath("/").WithSecure(true).WithHTTPOnly(true).
+				WithURL(site.URL).WithPath("/").WithHTTPOnly(true).
 				WithSameSite(network.CookieSameSiteStrict).Do(ctx)
 			return err
 		}),
 		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
-		chromedp.WaitVisible(`.owner-tokens-page h1`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.container-lg h1.page-title`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("load API-created owner in a no-JS browser: %v", err)
 	}
@@ -439,13 +445,42 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		t.Fatalf("linked token management request status = %d, want 403", response.StatusCode)
 	}
 	var action string
-	if err := chromedp.Run(ctx,
-		chromedp.Click(`.owner-token-edit > summary`, chromedp.ByQuery),
+	var editOpenAfterClick bool
+	var editOpenAfterFields bool
+	openActionCtx, cancelOpenAction := context.WithTimeout(ctx, 5*time.Second)
+	err = chromedp.Run(openActionCtx,
+		chromedp.ScrollIntoView(`.owner-token-edit > summary`, chromedp.ByQuery),
+		chromedp.Focus(`.owner-token-edit > summary`, chromedp.ByQuery),
+		chromedp.KeyEvent(kb.Enter),
+		chromedp.Sleep(100*time.Millisecond),
+		chromedp.Evaluate(`document.querySelector('.owner-token-edit').open`, &editOpenAfterClick),
+	)
+	cancelOpenAction()
+	if err != nil {
+		t.Fatalf("click linked-token edit disclosure without JavaScript: %v", err)
+	}
+	openStateCtx, cancelOpenState := context.WithTimeout(ctx, 5*time.Second)
+	err = chromedp.Run(openStateCtx,
 		chromedp.Evaluate(`document.querySelector('.owner-token-item form[action$="/update"]').action`, &action),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] input[name=name]`, "nojs-renamed", chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] select[name=expires_at]`, "30d", chromedp.ByQuery),
-	); err != nil {
+		chromedp.Evaluate(`document.querySelector('.owner-token-edit').open`, &editOpenAfterFields),
+	)
+	cancelOpenState()
+	if err != nil {
 		t.Fatalf("prepare linked-token update without JavaScript: %v", err)
+	}
+	if !editOpenAfterClick {
+		var state string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`(() => { const details = document.querySelector('.owner-token-edit'); const summary = details?.querySelector(':scope > summary'); const rect = summary?.getBoundingClientRect(); const point = rect && document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2); return JSON.stringify({open: !!details?.open, summary: summary?.outerHTML, width: rect?.width, height: rect?.height, top: point?.tagName + '.' + point?.className}); })()`, &state))
+		t.Fatalf("linked-token edit disclosure did not open without JavaScript: %s", state)
+	}
+	var linkedUpdateState string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`(() => { const details = document.querySelector('.owner-token-edit'); const form = details?.querySelector('form[action$="/update"]'); return JSON.stringify({open: !!details?.open, valid: !!form?.checkValidity(), name: form?.querySelector('[name=name]')?.value, expiry: form?.querySelector('[name=expires_at]')?.value}); })()`, &linkedUpdateState)); err != nil {
+		t.Fatalf("validate linked-token update form without JavaScript: %v", err)
+	}
+	if !strings.Contains(linkedUpdateState, `"open":true`) || !strings.Contains(linkedUpdateState, `"valid":true`) {
+		t.Fatalf("linked-token update form is closed or invalid without JavaScript: open_after_fields=%t state=%s", editOpenAfterFields, linkedUpdateState)
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/update"] button[type=submit]`); err != nil {
 		t.Fatalf("submit linked-token update without JavaScript: %v", err)
@@ -461,8 +496,23 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if updated != "nojs-renamed" {
 		t.Fatalf("linked token name after update = %q", updated)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`.owner-token-item button[popovertarget^="rotate-token-"]`, chromedp.ByQuery)); err != nil {
+	var linkedRotationOpen bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('.owner-token-item details[id^="rotate-token-"]').open`, &linkedRotationOpen)); err != nil {
 		t.Fatalf("open linked-token rotation confirmation without JavaScript: %v", err)
+	}
+	if !linkedRotationOpen {
+		if err := chromedp.Run(ctx,
+			chromedp.ScrollIntoView(`.owner-token-item details[id^="rotate-token-"] > summary`, chromedp.ByQuery),
+			chromedp.Focus(`.owner-token-item details[id^="rotate-token-"] > summary`, chromedp.ByQuery),
+			chromedp.KeyEvent(kb.Enter),
+			chromedp.Sleep(100*time.Millisecond),
+			chromedp.Evaluate(`document.querySelector('.owner-token-item details[id^="rotate-token-"]').open`, &linkedRotationOpen),
+		); err != nil {
+			t.Fatalf("open linked-token rotation confirmation without JavaScript: %v", err)
+		}
+	}
+	if !linkedRotationOpen {
+		t.Fatal("linked-token rotation confirmation did not open without JavaScript")
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/rotate"] button[type=submit]`); err != nil {
 		t.Fatalf("submit linked-token rotation without JavaScript: %v", err)
@@ -498,8 +548,23 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	); err != nil {
 		t.Fatalf("read linked-token revoke route: %v", err)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`.owner-token-item button[popovertarget^="revoke-token-"]`, chromedp.ByQuery)); err != nil {
+	var linkedRevokeOpen bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('.owner-token-item details[id^="revoke-token-"]').open`, &linkedRevokeOpen)); err != nil {
 		t.Fatalf("open linked-token revoke confirmation: %v", err)
+	}
+	if !linkedRevokeOpen {
+		if err := chromedp.Run(ctx,
+			chromedp.ScrollIntoView(`.owner-token-item details[id^="revoke-token-"] > summary`, chromedp.ByQuery),
+			chromedp.Focus(`.owner-token-item details[id^="revoke-token-"] > summary`, chromedp.ByQuery),
+			chromedp.KeyEvent(kb.Enter),
+			chromedp.Sleep(100*time.Millisecond),
+			chromedp.Evaluate(`document.querySelector('.owner-token-item details[id^="revoke-token-"]').open`, &linkedRevokeOpen),
+		); err != nil {
+			t.Fatalf("open linked-token revoke confirmation: %v", err)
+		}
+	}
+	if !linkedRevokeOpen {
+		t.Fatal("linked-token revoke confirmation did not open without JavaScript")
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button[type="submit"]`); err != nil {
 		t.Fatalf("submit linked-token revoke without JavaScript: %v", err)
@@ -516,8 +581,25 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 	if !strings.Contains(strings.ToLower(linkedStatus), "revoked") {
 		t.Fatalf("linked token after revocation has status %q", linkedStatus)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`button[popovertarget="rotate-primary-popover"]`, chromedp.ByQuery)); err != nil {
-		t.Fatalf("open primary-token rotation confirmation: %v", err)
+	var primaryPopoverOpen bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('#rotate-primary-popover')?.matches(':popover-open') === true`, &primaryPopoverOpen)); err != nil {
+		t.Fatalf("wait for primary-token rotation confirmation: %v", err)
+	}
+	if !primaryPopoverOpen {
+		if err := chromedp.Run(ctx,
+			chromedp.ScrollIntoView(`button[popovertarget="rotate-primary-popover"]`, chromedp.ByQuery),
+			waitForClickTarget(`button[popovertarget="rotate-primary-popover"]`),
+			chromedp.Click(`button[popovertarget="rotate-primary-popover"]`, chromedp.ByQuery),
+			chromedp.Sleep(50*time.Millisecond),
+			chromedp.Evaluate(`document.querySelector('#rotate-primary-popover')?.matches(':popover-open') === true`, &primaryPopoverOpen),
+		); err != nil {
+			t.Fatalf("open primary-token rotation confirmation: %v", err)
+		}
+	}
+	if !primaryPopoverOpen {
+		var popoverState string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`(() => { const button = document.querySelector('button[popovertarget="rotate-primary-popover"]'); const popover = document.querySelector('#rotate-primary-popover'); const rect = button?.getBoundingClientRect(); const center = rect && document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2); return JSON.stringify({supported: 'showPopover' in HTMLElement.prototype, open: !!popover?.matches(':popover-open'), attribute: popover?.getAttribute('popover'), button: button?.outerHTML, center: center?.outerHTML.slice(0, 160)}); })()`, &popoverState))
+		t.Fatalf("primary-token rotation confirmation did not open without JavaScript: %s", popoverState)
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/token/rotate"] button[type="submit"]`); err != nil {
 		t.Fatalf("submit primary-token rotation without JavaScript: %v", err)
@@ -555,11 +637,15 @@ func TestNoJSOwnerTokenManagementLifecycle(t *testing.T) {
 		t.Fatalf("submit restored owner token without JavaScript: %v", err)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(`.owner-tokens-page h1`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.container-lg h1.page-title`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("restore rotated primary token without JavaScript: %v", err)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`button[popovertarget="forget-owner-popover"]`, chromedp.ByQuery)); err != nil {
+	if err := chromedp.Run(ctx,
+		chromedp.ScrollIntoView(`button[popovertarget="forget-owner-popover"]`, chromedp.ByQuery),
+		waitForClickTarget(`button[popovertarget="forget-owner-popover"]`),
+		chromedp.Click(`button[popovertarget="forget-owner-popover"]`, chromedp.ByQuery),
+	); err != nil {
 		t.Fatalf("open saved-token forget confirmation without JavaScript: %v", err)
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/tokens/forget"] button[type="submit"]`); err != nil {
@@ -724,10 +810,9 @@ func TestNoJSThemeFormAppliesWithoutScript(t *testing.T) {
 	html := runNoJS(t,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/"),
-		chromedp.WaitVisible(`#header-theme-select`, chromedp.ByQuery),
-		chromedp.SetValue(`#header-theme-select`, "light", chromedp.ByQuery),
-		chromedp.Click(`.header-theme-submit`, chromedp.ByQuery),
-		chromedp.WaitVisible(`body`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.theme-toggle`, chromedp.ByQuery),
+		chromedp.Click(`.theme-toggle`, chromedp.ByQuery),
+		chromedp.WaitVisible(`html.theme-light`, chromedp.ByQuery),
 	)
 
 	if !strings.Contains(html, `class="theme-light`) {
@@ -761,8 +846,13 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked = false`, nil),
 		chromedp.Evaluate(`(() => { const controls = Array.from(document.querySelectorAll('input[name="search_pref_engine"][value$=":general"]')); controls.forEach(input => { input.checked = false; }); if (controls[0]) controls[0].checked = true; const rows = Array.from(document.querySelectorAll('.engine-preference-item')).map(row => row.dataset.engineId).reverse(); document.querySelector('#search-pref-engine-order').value = rows.join(','); return rows[0] || ''; })()`, &engineExpectedFirst),
 		chromedp.Evaluate(`document.querySelector('#widget-toggles input[name="widget"][value="clock"]').checked = false`, nil),
-		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
-		chromedp.WaitVisible(`body`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare no-JS preferences: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#save-preferences`); err != nil {
+		t.Fatalf("save preferences without JavaScript: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.OuterHTML("html", &html),
 		chromedp.Navigate(site.URL+"/server/preferences"),
@@ -770,7 +860,7 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked`, &videoPreviewsEnabled),
 		chromedp.Evaluate(`JSON.stringify({selected: Array.from(document.querySelectorAll('input[name="search_pref_engine"][value$=":general"]:checked')).map(input => input.value.split(':')[0]), order: Array.from(document.querySelectorAll('.engine-preference-item')).map(row => row.dataset.engineId)})`, &enginePreferencesState),
 	); err != nil {
-		t.Fatalf("no-JS preferences round trip: %v", err)
+		t.Fatalf("read back no-JS preferences: %v", err)
 	}
 	if strings.Contains(html, `data-widget="clock"`) {
 		t.Errorf("no-JS saved widget selection still renders the removed clock widget")
@@ -778,7 +868,7 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	if !strings.Contains(html, `class="theme-light`) {
 		t.Errorf("no-JS saved theme did not persist to homepage")
 	}
-	if !strings.Contains(html, `font-size-large results-density-compact`) || !strings.Contains(html, `style="--color-accent: #123abc; --color-primary: #123abc"`) {
+	if !strings.Contains(html, `font-size-large results-density-compact`) || !strings.Contains(html, `/static/css/accent.css`) {
 		t.Errorf("no-JS visual preferences did not persist to homepage: %s", snippet(html, `<html`))
 	}
 	if !strings.Contains(html, `<html lang="de"`) || !strings.Contains(html, `aria-label="Suchen"`) {
@@ -805,11 +895,9 @@ func TestNoJSPreferencesFormSavesWithoutScript(t *testing.T) {
 	if len(enginePreferences.Selected) != 1 || len(enginePreferences.Order) == 0 || enginePreferences.Order[0] != engineExpectedFirst {
 		t.Errorf("no-JS engine selection/order did not persist: %#v", enginePreferences)
 	}
-	toolsResponse, toolsHTML := newSession(t).get("/server/preferences/tools")
-	requireStatus(t, toolsResponse, http.StatusOK)
-	for _, marker := range []string{`id="custom-css"`, `id="save-custom-css"`, `id="clear-custom-css"`} {
-		if !strings.Contains(toolsHTML, marker) {
-			t.Errorf("no-JS preferences tools page omitted custom CSS control %q", marker)
+	for _, marker := range []string{`id="custom-css"`, `name="search_pref_custom_css"`, `maxlength="64"`, `action="/server/preferences"`} {
+		if !strings.Contains(preferencesHTML, marker) {
+			t.Errorf("no-JS preferences page omitted custom CSS control %q", marker)
 		}
 	}
 }
@@ -874,13 +962,13 @@ func TestNoJSCookieConsentSettingsSaveFromPreferences(t *testing.T) {
 	}
 }
 
-func TestNoJSMobilePreferencesTriggerNavigatesToFullSettings(t *testing.T) {
+func TestNoJSMobilePreferencesLinkNavigatesToFullSettings(t *testing.T) {
 	site := newTestSite(t)
 	var pageURL string
 	runNoJS(t,
 		chromedp.EmulateViewport(375, 812),
 		chromedp.Navigate(site.URL+"/"),
-		chromedp.Click(`[data-mobile-preferences-trigger]`, chromedp.ByQuery),
+		chromedp.Click(`.header-actions a[href="/server/preferences"]`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#general-settings`, chromedp.ByQuery),
 		chromedp.Location(&pageURL),
 	)
@@ -892,18 +980,18 @@ func TestNoJSMobilePreferencesTriggerNavigatesToFullSettings(t *testing.T) {
 func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
-	code := base64.RawURLEncoding.EncodeToString([]byte("theme=light&lang=de&search_pref_category=images&search_pref_infinite_scroll=0&search_pref_font_size=large&search_pref_results_density=compact&search_pref_accent_color=%23123abc"))
+	code := base64.RawURLEncoding.EncodeToString([]byte("theme=light&lang=de&search_pref_category=images&search_pref_infinite_scroll=0&search_pref_font_size=large&search_pref_results_density=compact&search_pref_accent_color=%23123abc&search_pref_custom_css=html%7B--custom-css-sync-fixture%3Ablue%7D"))
 	var homepage, preferencePage string
 	var infiniteScrollEnabled bool
 	if err := chromedp.Run(ctx,
 		emulation.SetScriptExecutionDisabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.SetValue(`#sync-paste`, code, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/sync"),
+		chromedp.SetValue(`#sync-code-input`, code, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("prepare no-JS cross-device preference import: %v", err)
 	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `#save-preferences`); err != nil {
+	if err := clickAndWaitForMainFrameNavigation(ctx, `form[action="/server/preferences/sync"] button[type="submit"]`); err != nil {
 		t.Fatalf("submit no-JS cross-device preference import: %v", err)
 	}
 	if err := chromedp.Run(ctx,
@@ -918,7 +1006,7 @@ func TestNoJSCrossDevicePreferenceSyncUsesNativeForm(t *testing.T) {
 	if !strings.Contains(homepage, `class="theme-light`) || !strings.Contains(homepage, `<html lang="de"`) {
 		t.Fatalf("imported theme/language were not applied on the receiving device: %s", snippet(homepage, `<html`))
 	}
-	for _, marker := range []string{`font-size-large`, `results-density-compact`, `--color-accent: #123abc`} {
+	for _, marker := range []string{`font-size-large`, `results-density-compact`, `/static/css/accent.css`, `/static/css/custom.css`} {
 		if !strings.Contains(homepage, marker) {
 			t.Errorf("no-JS sync did not apply visual preference %q: %s", marker, snippet(homepage, `<html`))
 		}
@@ -1251,7 +1339,7 @@ func TestNoJSBuiltInBangRedirectsToSearchEngine(t *testing.T) {
 	redirected := make(chan string, 1)
 	chromedp.ListenTarget(ctx, func(event interface{}) {
 		request, ok := event.(*network.EventRequestWillBeSent)
-		if !ok || request.RedirectResponse == nil || !strings.HasPrefix(request.Request.URL, "https://www.google.com/search?") {
+		if !ok || request.RedirectResponse == nil || !strings.HasPrefix(request.Request.URL, "https://duckduckgo.com/?") {
 			return
 		}
 		select {
@@ -1260,7 +1348,7 @@ func TestNoJSBuiltInBangRedirectsToSearchEngine(t *testing.T) {
 		}
 	})
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		_, _, _, _, err := page.Navigate(site.URL + "/search?q=%21g+cats").Do(ctx)
+		_, _, _, _, err := page.Navigate(site.URL + "/search?q=%21ddg+cats").Do(ctx)
 		return err
 	})); err != nil {
 		t.Fatalf("navigate to built-in bang query: %v", err)
@@ -1269,23 +1357,10 @@ func TestNoJSBuiltInBangRedirectsToSearchEngine(t *testing.T) {
 	case target := <-redirected:
 		parsed, err := url.Parse(target)
 		if err != nil || parsed.Query().Get("q") != "cats" {
-			t.Fatalf("bang redirect target = %q, want Google search for cats", target)
+			t.Fatalf("bang redirect target = %q, want DuckDuckGo search for cats", target)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("no-JS bang query did not produce an HTTP redirect to Google")
-	}
-}
-
-func TestNoJSPWAOfflineFallbackIsReadable(t *testing.T) {
-	site := newTestSite(t)
-	html := runNoJS(t,
-		chromedp.Navigate(site.URL+"/offline.html"),
-		chromedp.WaitVisible(".offline-fallback", chromedp.ByQuery),
-	)
-	for _, marker := range []string{"You are offline", "Check your connection and try again.", `href="/"`} {
-		if !strings.Contains(html, marker) {
-			t.Errorf("no-JS offline fallback omitted %q", marker)
-		}
+		t.Fatal("no-JS bang query did not produce an HTTP redirect to DuckDuckGo")
 	}
 }
 

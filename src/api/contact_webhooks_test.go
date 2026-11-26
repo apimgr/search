@@ -7,17 +7,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/search/src/config"
 )
 
-func TestContactWebhookConfigSaveReturnsSecretOnlyWhenCreatedOrRotated(t *testing.T) {
-	base := filepath.Join(os.TempDir(), "apimgr")
+func TestContactWebhookConfigSaveNeverReturnsSecret(t *testing.T) {
+	base := filepath.Join(os.TempDir(), config.ProjectOrg)
 	if err := os.MkdirAll(base, 0755); err != nil {
 		t.Fatal(err)
 	}
-	tempDir, err := os.MkdirTemp(base, "search-")
+	tempDir, err := os.MkdirTemp(base, config.InternalName+"-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func TestContactWebhookConfigSaveReturnsSecretOnlyWhenCreatedOrRotated(t *testin
 	}
 	handler := NewHandler(cfg, nil, nil)
 	secured := handler.requireOperator(handler.handleContactWebhookConfigSave)
-	save := func(target string) (int, map[string]interface{}) {
+	save := func(target string) (int, map[string]interface{}, string) {
 		t.Helper()
 		input, _ := json.Marshal(contactWebhookSaveRequest{Role: "general", Transport: "generic", URL: target})
 		req := httptest.NewRequest(http.MethodPost, APIPrefix+"/server/config/contact/webhooks", bytes.NewReader(input))
@@ -48,26 +49,45 @@ func TestContactWebhookConfigSaveReturnsSecretOnlyWhenCreatedOrRotated(t *testin
 			t.Errorf("Cache-Control = %q, want no-store", response.Header().Get("Cache-Control"))
 		}
 		data, _ := envelope.Data.(map[string]interface{})
-		return response.Code, data
+		return response.Code, data, response.Body.String()
 	}
-	code, created := save("https://hooks.example/first")
-	secret, ok := created["secret"].(string)
-	if code != http.StatusOK || !ok || secret == "" {
-		t.Fatalf("first save must return secret once: status=%d data=%#v", code, created)
+	code, created, createdBody := save("https://hooks.example/first")
+	if code != http.StatusOK || created["secret"] != nil {
+		t.Fatalf("first save exposed the signing secret: status=%d data=%#v", code, created)
 	}
-	if cfg.Get().Contact.General.Webhooks["generic_secret"] != secret {
-		t.Fatal("signing secret was not persisted in server config")
+	secret := cfg.Get().Contact.General.Webhooks["generic_secret"]
+	if secret == "" {
+		t.Fatal("signing secret was not generated")
 	}
-	code, unchanged := save("https://hooks.example/first")
-	if code != http.StatusOK || unchanged["secret"] != nil {
-		t.Fatalf("unchanged save must not return secret again: status=%d data=%#v", code, unchanged)
-	}
-	code, rotated := save("https://hooks.example/second")
-	newSecret, ok := rotated["secret"].(string)
-	if code != http.StatusOK || !ok || newSecret == secret {
-		t.Fatalf("changed URL must return a new secret: status=%d data=%#v", code, rotated)
+	if strings.Contains(createdBody, secret) {
+		t.Fatal("first save response body contained the signing secret")
 	}
 	stored, err := os.ReadFile(filepath.Join(tempDir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(stored, []byte(secret)) {
+		t.Fatal("secrets.yml did not persist the signing secret")
+	}
+	code, unchanged, unchangedBody := save("https://hooks.example/first")
+	if code != http.StatusOK || unchanged["secret"] != nil {
+		t.Fatalf("unchanged save exposed the signing secret: status=%d data=%#v", code, unchanged)
+	}
+	if strings.Contains(unchangedBody, secret) {
+		t.Fatal("unchanged save response body contained the signing secret")
+	}
+	code, rotated, rotatedBody := save("https://hooks.example/second")
+	if code != http.StatusOK || rotated["secret"] != nil {
+		t.Fatalf("changed URL exposed the new signing secret: status=%d data=%#v", code, rotated)
+	}
+	newSecret := cfg.Get().Contact.General.Webhooks["generic_secret"]
+	if newSecret == "" || newSecret == secret {
+		t.Fatal("changed URL did not rotate the signing secret")
+	}
+	if strings.Contains(rotatedBody, newSecret) {
+		t.Fatal("rotated save response body contained the new signing secret")
+	}
+	stored, err = os.ReadFile(filepath.Join(tempDir, "secrets.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,5 +96,12 @@ func TestContactWebhookConfigSaveReturnsSecretOnlyWhenCreatedOrRotated(t *testin
 	}
 	if info, err := os.Stat(configPath); err != nil || info.Mode().Perm()&0077 != 0 {
 		t.Fatalf("config file permissions are not private: info=%v err=%v", info, err)
+	}
+	secretInfo, err := os.Stat(filepath.Join(tempDir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secretInfo.Mode().Perm() != 0600 {
+		t.Fatalf("secrets.yml permissions = %04o, want 0600", secretInfo.Mode().Perm())
 	}
 }

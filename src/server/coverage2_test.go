@@ -32,29 +32,39 @@ func TestPrintBannerCompact(t *testing.T) {
 		},
 		{
 			"https addr only",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				HTTPSAddr: "https://example.com", IsHTTPS: true, ListenAddr: "0.0.0.0:443"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				HTTPSAddr: "https://example.com", IsHTTPS: true, ListenAddr: "0.0.0.0:443",
+			},
 		},
 		{
 			"http addr only",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "development",
-				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "development",
+				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080",
+			},
 		},
 		{
 			"both https and http dual-port",
-			&BannerInfo{AppName: "Search", Version: "2.0.0", Mode: "production",
+			&BannerInfo{
+				AppName: "Search", Version: "2.0.0", Mode: "production",
 				HTTPSAddr: "https://example.com", HTTPAddr: "http://example.com",
-				HTTPSPort: 443, HTTPPort: 80, IsHTTPS: true, ListenAddr: "0.0.0.0:80"},
+				HTTPSPort: 443, HTTPPort: 80, IsHTTPS: true, ListenAddr: "0.0.0.0:80",
+			},
 		},
 		{
 			"tor addr set",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				TorAddr: "http://abc.onion", ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				TorAddr: "http://abc.onion", ListenAddr: "0.0.0.0:8080",
+			},
 		},
 		{
 			"dev mode",
-			&BannerInfo{AppName: "App", Version: "dev", Mode: "development",
-				Debug: true, ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "App", Version: "dev", Mode: "development",
+				Debug: true, ListenAddr: "0.0.0.0:8080",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -82,13 +92,17 @@ func TestPrintBannerMinimal(t *testing.T) {
 		},
 		{
 			"https addr — primaryURLHost returns https",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				HTTPSAddr: "https://example.com", ListenAddr: "0.0.0.0:443"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				HTTPSAddr: "https://example.com", ListenAddr: "0.0.0.0:443",
+			},
 		},
 		{
 			"http addr only — primaryURLHost returns http",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "development",
-				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "development",
+				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080",
+			},
 		},
 		{
 			"empty appname",
@@ -116,8 +130,10 @@ func TestPrintBannerMicro(t *testing.T) {
 	}{
 		{
 			"with https addr — prints addr",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				HTTPSAddr: "https://example.com", ListenAddr: "0.0.0.0:443"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				HTTPSAddr: "https://example.com", ListenAddr: "0.0.0.0:443",
+			},
 		},
 		{
 			"no addr — prints appname only",
@@ -129,8 +145,10 @@ func TestPrintBannerMicro(t *testing.T) {
 		},
 		{
 			"http addr only",
-			&BannerInfo{AppName: "App", Version: "dev", Mode: "development",
-				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "App", Version: "dev", Mode: "development",
+				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -154,24 +172,32 @@ func TestPrintBannerPlain(t *testing.T) {
 	}{
 		{
 			"http only plain",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				HTTPAddr: "http://localhost:8080", ListenAddr: "0.0.0.0:8080",
+			},
 		},
 		{
 			"https only plain",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				HTTPSAddr: "https://example.com", IsHTTPS: true, ListenAddr: "0.0.0.0:443"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				HTTPSAddr: "https://example.com", IsHTTPS: true, ListenAddr: "0.0.0.0:443",
+			},
 		},
 		{
 			"dual-port plain",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
 				HTTPSAddr: "https://example.com", HTTPAddr: "http://example.com",
-				HTTPSPort: 443, HTTPPort: 80, IsHTTPS: true, ListenAddr: "0.0.0.0:80"},
+				HTTPSPort: 443, HTTPPort: 80, IsHTTPS: true, ListenAddr: "0.0.0.0:80",
+			},
 		},
 		{
 			"tor plain",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				TorAddr: "http://abc.onion", ListenAddr: "0.0.0.0:8080"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				TorAddr: "http://abc.onion", ListenAddr: "0.0.0.0:8080",
+			},
 		},
 		{
 			"empty appname defaults to Search",
@@ -179,8 +205,10 @@ func TestPrintBannerPlain(t *testing.T) {
 		},
 		{
 			"is-https sets proto in listen line",
-			&BannerInfo{AppName: "Search", Version: "1.0.0", Mode: "production",
-				IsHTTPS: true, ListenAddr: "0.0.0.0:443"},
+			&BannerInfo{
+				AppName: "Search", Version: "1.0.0", Mode: "production",
+				IsHTTPS: true, ListenAddr: "0.0.0.0:443",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -305,46 +333,6 @@ func TestHandleLlmsTxt_WithTagline(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "Privacy-first search") {
 		t.Error("handleLlmsTxt: tagline not present in output")
-	}
-}
-
-// ---------- server.go – handleServerStatus / handleServerConfig ----------
-
-// TestHandleServerStatus confirms the handler writes a 200 with ok:true and
-// the expected top-level data keys.
-func TestHandleServerStatus(t *testing.T) {
-	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/server/status", nil)
-	rec := httptest.NewRecorder()
-
-	s.handleServerStatus(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("handleServerStatus status = %d, want 200", rec.Code)
-	}
-	body := rec.Body.String()
-	for _, key := range []string{`"ok"`, `"data"`, `"version"`, `"mode"`, `"uptime"`, `"goroutines"`, `"memory"`} {
-		if !strings.Contains(body, key) {
-			t.Errorf("handleServerStatus: body missing key %q; body = %s", key, body)
-		}
-	}
-}
-
-// TestHandleServerConfig confirms the handler writes 200 with ok:true and a
-// data field containing the sanitized configuration.
-func TestHandleServerConfig(t *testing.T) {
-	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/server/config", nil)
-	rec := httptest.NewRecorder()
-
-	s.handleServerConfig(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("handleServerConfig status = %d, want 200", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"ok"`) || !strings.Contains(body, `"data"`) {
-		t.Errorf("handleServerConfig: body missing expected keys; body = %s", body)
 	}
 }
 

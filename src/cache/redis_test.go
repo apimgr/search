@@ -2,9 +2,45 @@ package cache
 
 import (
 	"context"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestParseRedisConnectionURLTLSModes(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		scheme  string
+		enabled bool
+	}{
+		{name: "redis disables TLS", input: "redis://cache:6379", scheme: "redis", enabled: false},
+		{name: "rediss enables TLS", input: "rediss://cache:6379", scheme: "rediss", enabled: true},
+		{name: "valkey alias", input: "valkey://cache:6379", scheme: "redis", enabled: false},
+		{name: "valkeys alias", input: "valkeys://cache:6379", scheme: "rediss", enabled: true},
+		{name: "URL TLS option enables", input: "redis://cache:6379?tls=true", scheme: "redis", enabled: true},
+		{name: "URL TLS option disables", input: "rediss://cache:6379?tls=false", scheme: "rediss", enabled: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, enabled, _, err := parseRedisConnectionURL(tt.input)
+			if err != nil {
+				t.Fatalf("parseRedisConnectionURL() error = %v", err)
+			}
+			parsed, err := url.Parse(raw)
+			if err != nil {
+				t.Fatalf("url.Parse() error = %v", err)
+			}
+			if parsed.Scheme != tt.scheme || enabled != tt.enabled {
+				t.Fatalf("URL = %q, TLS = %v; want scheme %q TLS %v", raw, enabled, tt.scheme, tt.enabled)
+			}
+			if strings.Contains(parsed.RawQuery, "tls=") {
+				t.Fatalf("driver URL retains application TLS option: %q", raw)
+			}
+		})
+	}
+}
 
 // TestRedisCachePrefixKeyMethod tests the prefixKey method directly
 func TestRedisCachePrefixKeyMethod(t *testing.T) {

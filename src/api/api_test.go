@@ -1,14 +1,20 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -18,11 +24,13 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/swagger"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -31,6 +39,7 @@ type testContactCaptcha struct{}
 func (testContactCaptcha) NewContactChallenge(*http.Request) (string, string) {
 	return "test-id", "1 + 1"
 }
+
 func (testContactCaptcha) VerifyContactChallenge(_ *http.Request, id, answer string) bool {
 	return id == "test-id" && answer == "2"
 }
@@ -76,6 +85,7 @@ func (s *testContactSubmitter) SubmitContact(_ context.Context, message ContactM
 func (*testContactSubmitter) ContactReviewToken(url.Values, string) string {
 	return "test-review-token"
 }
+
 func (*testContactSubmitter) ValidateContactReviewToken(_ url.Values, token string, confirmed bool) bool {
 	return token == "test-review-token" && confirmed
 }
@@ -91,6 +101,393 @@ func newTestHandler() *Handler {
 	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	return NewHandler(cfg, registry, aggregator)
+}
+
+func TestOperatorRouteDistinguishesOwnerTokensFromInvalidCredentials(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	handler.config.Server.Token = "operator-test-token"
+
+	primary, primaryToken, err := handler.ownerManager.Issue(context.Background())
+	if err != nil {
+		t.Fatalf("issue primary owner token: %v", err)
+	}
+	_, linkedToken, err := handler.ownerManager.CreateLinked(context.Background(), primary, "automation", nil)
+	if err != nil {
+		t.Fatalf("create linked owner token: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		token      string
+		statusCode int
+	}{
+		{name: "missing", statusCode: http.StatusUnauthorized},
+		{name: "invalid", token: "invalid-token", statusCode: http.StatusUnauthorized},
+		{name: "primary owner", token: primaryToken, statusCode: http.StatusForbidden},
+		{name: "linked owner", token: linkedToken, statusCode: http.StatusForbidden},
+		{name: "operator", token: handler.config.Server.Token, statusCode: http.StatusOK},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/server/status", nil)
+			if tc.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			response := httptest.NewRecorder()
+			handler.requireOperator(handler.handleServerStatus)(response, req)
+			if response.Code != tc.statusCode {
+				t.Fatalf("status = %d, want %d; body=%s", response.Code, tc.statusCode, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestOwnerLinkedCreateReturnsLinkedTokenField(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	_, primaryToken, err := handler.ownerManager.Issue(context.Background())
+	if err != nil {
+		t.Fatalf("issue primary owner token: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens", strings.NewReader(`{"name":"automation","expires":"never"}`))
+	request.Header.Set("Authorization", "Bearer "+primaryToken)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ownerLinkedCreate(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusCreated, response.Body.String())
+	}
+	var result struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	linkedToken, ok := result.Data["linked_token"].(string)
+	if !ok || linkedToken == "" {
+		t.Fatalf("data.linked_token = %#v, want non-empty string", result.Data["linked_token"])
+	}
+	if _, exists := result.Data["token"]; exists {
+		t.Fatal("response contains obsolete data.token field")
+	}
+	id, ok := result.Data["id"].(string)
+	parsedID, parseErr := uuid.Parse(id)
+	if !ok || parseErr != nil || parsedID.Version() != 7 {
+		t.Fatalf("data.id = %#v, want UUIDv7", result.Data["id"])
+	}
+	if result.Data["status"] != "active" || result.Data["token_masked"] == "" || result.Data["name"] != "automation" || result.Data["kind"] != "linked" {
+		t.Fatalf("created token object is incomplete: %#v", result.Data)
+	}
+	if _, exists := result.Data["token_enc"]; exists {
+		t.Fatal("response exposed encrypted token data")
+	}
+}
+
+func TestOwnerPrimaryIssueAPIRejectsExistingValidCredential(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	router := chi.NewRouter()
+	handler.RegisterRoutes(router)
+	issue := func(token string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens/primary", nil)
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		return response
+	}
+	first := issue("")
+	if first.Code != http.StatusCreated {
+		t.Fatalf("issue status = %d, want %d; body=%s", first.Code, http.StatusCreated, first.Body.String())
+	}
+	var issued struct { Data map[string]string `json:"data"` }
+	if err := json.NewDecoder(first.Body).Decode(&issued); err != nil {
+		t.Fatalf("decode issue response: %v", err)
+	}
+	ownerToken := issued.Data["owner_token"]
+	if ownerToken == "" {
+		t.Fatal("issue response omitted data.owner_token")
+	}
+	conflict := issue(ownerToken)
+	if conflict.Code != http.StatusConflict {
+		t.Fatalf("valid existing owner token status = %d, want %d; body=%s", conflict.Code, http.StatusConflict, conflict.Body.String())
+	}
+	var details string
+	if err := db.QueryRow(`SELECT details FROM audit_log WHERE action='token.created' ORDER BY timestamp DESC LIMIT 1`).Scan(&details); err != nil || !strings.Contains(details, `"source":"issue"`) {
+		t.Fatalf("issue audit details = %q, error=%v; want source=issue", details, err)
+	}
+}
+
+func TestOwnerPrimaryRevokeRequiresConfirmationAndDeletesOwnerData(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	router := chi.NewRouter()
+	handler.RegisterRoutes(router)
+	identity, primaryToken, err := handler.ownerManager.Issue(context.Background())
+	if err != nil {
+		t.Fatalf("issue primary owner token: %v", err)
+	}
+	linkedID, _, err := handler.ownerManager.CreateLinked(context.Background(), identity, "automation", nil)
+	if err != nil {
+		t.Fatalf("create linked token: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO search_alerts (id,owner_id,email,query,category,frequency,manage_token_hash,rss_token_hash) VALUES ('alert-1',?,'a@example.test','q','general','daily','manage-hash','rss-hash')`, identity.OwnerID); err != nil {
+		t.Fatalf("insert owner resource: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO search_alert_results (id,alert_id,fingerprint,title,url) VALUES ('result-1','alert-1','f','t','https://example.test')`); err != nil {
+		t.Fatalf("insert owner resource child: %v", err)
+	}
+	post := func(confirm string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{"confirm": confirm})
+		request := httptest.NewRequest(http.MethodDelete, "/api/v1/server/preferences/tokens/primary", bytes.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+primaryToken)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		return response
+	}
+	if response := post("wrong"); response.Code != http.StatusBadRequest {
+		t.Fatalf("wrong confirmation status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	var ownersBefore int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM owners WHERE id=?`, identity.OwnerID).Scan(&ownersBefore); err != nil || ownersBefore != 1 {
+		t.Fatalf("wrong confirmation deleted owner: count=%d error=%v", ownersBefore, err)
+	}
+	response := post(primaryToken[len(primaryToken)-4:])
+	if response.Code != http.StatusOK {
+		t.Fatalf("revoke status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var result struct { Data map[string]float64 `json:"data"` }
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode revoke response: %v", err)
+	}
+	if result.Data["tokens"] != 2 || result.Data["resources"] != 2 {
+		t.Fatalf("revoke counts = %#v, want two tokens and two resource rows", result.Data)
+	}
+	var owners, tokens, alerts, results int
+	for query, target := range map[string]*int{
+		`SELECT COUNT(*) FROM owners WHERE id=?`: &owners,
+		`SELECT COUNT(*) FROM api_tokens WHERE owner_id=?`: &tokens,
+		`SELECT COUNT(*) FROM search_alerts WHERE owner_id=?`: &alerts,
+		`SELECT COUNT(*) FROM search_alert_results WHERE id='result-1'`: &results,
+	} {
+		args := []interface{}{}
+		if strings.Contains(query, "?") { args = append(args, identity.OwnerID) }
+		if err := db.QueryRow(query, args...).Scan(target); err != nil {
+			t.Fatalf("check owner revocation: %v", err)
+		}
+	}
+	if owners+tokens+alerts+results != 0 {
+		t.Fatalf("owner revocation left rows: owners=%d tokens=%d alerts=%d results=%d", owners, tokens, alerts, results)
+	}
+	var action, details string
+	if err := db.QueryRow(`SELECT action,details FROM audit_log WHERE resource_id=? ORDER BY timestamp DESC LIMIT 1`, identity.OwnerID).Scan(&action, &details); err != nil || action != "token.revoked" {
+		t.Fatalf("owner revoke audit action=%q error=%v", action, err)
+	}
+	var auditDetails map[string]interface{}
+	if err := json.Unmarshal([]byte(details), &auditDetails); err != nil || auditDetails["scope"] != "owner" || auditDetails["source"] != "api" || auditDetails["tokens_deleted"] != float64(2) || auditDetails["resources_deleted"] != float64(2) {
+		t.Fatalf("owner revoke audit details=%q error=%v", details, err)
+	}
+	if _, err := handler.ownerManager.Resolve(context.Background(), primaryToken); !errors.Is(err, owner.ErrInvalidToken) {
+		t.Fatalf("primary token remains valid after revoke: %v (linked id %s)", err, linkedID)
+	}
+}
+
+func TestOwnerTokenAPIResponsesUseMaskedTokenObjects(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	identity, primaryToken, err := handler.ownerManager.Issue(context.Background())
+	if err != nil {
+		t.Fatalf("issue primary owner token: %v", err)
+	}
+	primaryAction := func(call http.HandlerFunc) map[string]string {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens/primary", nil)
+		req.Header.Set("Authorization", "Bearer "+primaryToken)
+		response := httptest.NewRecorder()
+		call(response, req)
+		var envelope struct { Data map[string]string `json:"data"` }
+		if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
+			t.Fatalf("decode primary token response: %v", err)
+		}
+		return envelope.Data
+	}
+	if data := primaryAction(handler.ownerPrimaryReveal); data["owner_token"] != primaryToken || data["token"] != "" {
+		t.Errorf("primary reveal response = %#v", data)
+	}
+	rotatedPrimary := primaryAction(handler.ownerPrimaryRotate)["owner_token"]
+	if rotatedPrimary == "" || rotatedPrimary == primaryToken {
+		t.Fatalf("primary rotate response did not return a new owner_token")
+	}
+	primaryToken = rotatedPrimary
+	id, linkedToken, err := handler.ownerManager.CreateLinked(context.Background(), identity, "automation", nil)
+	if err != nil {
+		t.Fatalf("create linked owner token: %v", err)
+	}
+	withID := func(method, body string, call http.HandlerFunc) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/v1/server/preferences/tokens/"+id, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+primaryToken)
+		req.Header.Set("Content-Type", "application/json")
+		routeContext := chi.NewRouteContext()
+		routeContext.URLParams.Add("id", id)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
+		response := httptest.NewRecorder()
+		call(response, req)
+		return response
+	}
+	decodeData := func(t *testing.T, response *httptest.ResponseRecorder) map[string]interface{} {
+		t.Helper()
+		var envelope struct { Data map[string]interface{} `json:"data"` }
+		if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return envelope.Data
+	}
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/server/preferences/tokens", nil)
+	listReq.Header.Set("Authorization", "Bearer "+primaryToken)
+	listResponse := httptest.NewRecorder()
+	handler.ownerTokensList(listResponse, listReq)
+	var listEnvelope struct { Data struct { Primary map[string]interface{} `json:"primary"`; Linked []map[string]interface{} `json:"linked"`; MaxLinked int `json:"max_linked"` } `json:"data"` }
+	if err := json.NewDecoder(listResponse.Body).Decode(&listEnvelope); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if listResponse.Code != http.StatusOK || listEnvelope.Data.Primary["kind"] != "primary" || len(listEnvelope.Data.Linked) != 1 || listEnvelope.Data.MaxLinked != handler.ownerManager.MaxLinked() {
+		t.Fatalf("list response = %#v, status %d", listEnvelope.Data, listResponse.Code)
+	}
+	for _, token := range append([]map[string]interface{}{listEnvelope.Data.Primary}, listEnvelope.Data.Linked...) {
+		if token["token_masked"] == "" || token["status"] != "active" {
+			t.Errorf("token projection missing mask/status: %#v", token)
+		}
+		for _, forbidden := range []string{"token", "linked_token", "token_enc", "token_hash"} {
+			if _, exists := token[forbidden]; exists {
+				t.Errorf("list response exposed %q", forbidden)
+			}
+		}
+	}
+	if data := decodeData(t, withID(http.MethodPost, "", handler.ownerLinkedReveal)); data["linked_token"] != linkedToken || data["id"] != id {
+		t.Errorf("reveal response = %#v", data)
+	}
+	if data := decodeData(t, withID(http.MethodPost, "", handler.ownerLinkedRotate)); data["linked_token"] == linkedToken || data["id"] != id || data["name"] != "automation" {
+		t.Errorf("rotate response = %#v", data)
+	}
+	if data := decodeData(t, withID(http.MethodPatch, `{"name":"renamed"}`, handler.ownerLinkedUpdate)); data["name"] != "renamed" || data["token_masked"] == "" {
+		t.Errorf("update response = %#v", data)
+	}
+	if data := decodeData(t, withID(http.MethodDelete, "", handler.ownerLinkedRevoke)); data["id"] != id || data["status"] != "revoked" {
+		t.Errorf("revoke response = %#v", data)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/preferences/tokens", nil)
+	req.Header.Set("Authorization", "Bearer "+primaryToken)
+	response := httptest.NewRecorder()
+	handler.ownerTokensList(response, req)
+	var afterRevoke struct { Data struct { Linked []map[string]interface{} `json:"linked"` } `json:"data"` }
+	if err := json.NewDecoder(response.Body).Decode(&afterRevoke); err != nil {
+		t.Fatalf("decode list after revoke: %v", err)
+	}
+	if len(afterRevoke.Data.Linked) != 1 || afterRevoke.Data.Linked[0]["status"] != "revoked" || afterRevoke.Data.Linked[0]["token_masked"] == "" {
+		t.Errorf("revoked token was not retained as a masked list item: %#v", afterRevoke.Data.Linked)
+	}
+}
+
+func TestOwnerLinkedCreateRejectsInvalidExpiryShape(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	_, primaryToken, err := handler.ownerManager.Issue(context.Background())
+	if err != nil {
+		t.Fatalf("issue primary owner token: %v", err)
+	}
+	for _, body := range []string{
+		`{"name":"automation","expires":"never","expires_on":"2027-01-31"}`,
+		`{"name":"automation","expires_at":"7d"}`,
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+primaryToken)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.ownerLinkedCreate(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("body %s: status = %d, want %d; response=%s", body, response.Code, http.StatusBadRequest, response.Body.String())
+		}
+	}
+}
+
+func TestOwnerExpiryDateRemainsValidThroughUTCDate(t *testing.T) {
+	date := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	expiry, err := parseOwnerExpiryFields(nil, &date)
+	if err != nil {
+		t.Fatalf("parse expires_on: %v", err)
+	}
+	parsedDate, _ := time.Parse("2006-01-02", date)
+	want := parsedDate.UTC().AddDate(0, 0, 1)
+	if expiry == nil || !expiry.Equal(want) {
+		t.Fatalf("expires_on %s produced %v, want UTC midnight %s", date, expiry, want)
+	}
+}
+
+func TestOwnerLinkedUpdateKeepsOmittedFields(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+	identity, primaryToken, err := handler.ownerManager.Issue(context.Background())
+	if err != nil {
+		t.Fatalf("issue primary owner token: %v", err)
+	}
+	expiry := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
+	id, _, err := handler.ownerManager.CreateLinked(context.Background(), identity, "automation", &expiry)
+	if err != nil {
+		t.Fatalf("create linked token: %v", err)
+	}
+	update := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/server/preferences/tokens/"+id, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+primaryToken)
+		req.Header.Set("Content-Type", "application/json")
+		routeContext := chi.NewRouteContext()
+		routeContext.URLParams.Add("id", id)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
+		response := httptest.NewRecorder()
+		handler.ownerLinkedUpdate(response, req)
+		return response
+	}
+	if response := update(`{"name":"renamed"}`); response.Code != http.StatusOK {
+		t.Fatalf("rename status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	tokens, err := handler.ownerManager.List(context.Background(), identity)
+	if err != nil {
+		t.Fatalf("list linked tokens after rename: %v", err)
+	}
+	var current *owner.Token
+	for i := range tokens {
+		if tokens[i].ID == id {
+			current = &tokens[i]
+		}
+	}
+	if current == nil || current.Name != "renamed" || current.ExpiresAt == nil || !current.ExpiresAt.Equal(expiry) {
+		t.Fatalf("token after name-only update = %#v, expiry should be preserved", current)
+	}
+	if response := update(`{"expires":"never"}`); response.Code != http.StatusOK {
+		t.Fatalf("expiry update status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	tokens, err = handler.ownerManager.List(context.Background(), identity)
+	if err != nil {
+		t.Fatalf("list linked tokens after expiry update: %v", err)
+	}
+	for i := range tokens {
+		if tokens[i].ID == id {
+			if tokens[i].Name != "renamed" || tokens[i].ExpiresAt != nil {
+				t.Fatalf("token after expiry-only update = %#v, name should persist and expiry should be nil", tokens[i])
+			}
+			return
+		}
+	}
+	t.Fatal("linked token disappeared after partial updates")
+}
+
+func cliBinaryTestRequest(filename string) *http.Request {
+	request := httptest.NewRequest(http.MethodGet, "/cli/binaries/"+filename, nil)
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("filename", filename)
+	return request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeContext))
 }
 
 func TestHealthzEndpoint(t *testing.T) {
@@ -563,6 +960,10 @@ func TestAPIErrorResponse(t *testing.T) {
 
 func TestAutodiscoverEndpoint(t *testing.T) {
 	handler := newTestHandler()
+	handler.config.Update(func(server *config.ServerConfig) {
+		server.Tor.Expose = true
+		server.I2P.Expose = true
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/autodiscover", nil)
 	w := httptest.NewRecorder()
@@ -587,24 +988,30 @@ func TestAutodiscoverEndpoint(t *testing.T) {
 		t.Fatal("Expected data to be a map")
 	}
 
-	// Check server info
-	server, ok := data["server"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected server to be a map")
+	if data["name"] != config.ProjectName || data["version"] == nil {
+		t.Errorf("Expected top-level name and version, got %#v", data)
 	}
-
-	if server["name"] == nil {
-		t.Error("Expected server name to be present")
-	}
-
-	// Check API info
 	api, ok := data["api"].(map[string]interface{})
 	if !ok {
 		t.Fatal("Expected api to be a map")
 	}
 
-	if api["version"] != "v1" {
-		t.Errorf("Expected API version 'v1', got %v", api["version"])
+	if api["current_version"] != "v1" {
+		t.Errorf("Expected API current_version 'v1', got %v", api["current_version"])
+	}
+	if _, legacy := data["server"]; legacy {
+		t.Error("Legacy server object must not be included")
+	}
+	if urls, ok := data["urls"].([]interface{}); !ok || len(urls) != 1 {
+		t.Errorf("Expected one resolved public URL, got %#v", data["urls"])
+	}
+	for _, key := range []string{"onion", "i2p", "server", "config", "settings"} {
+		if _, exists := data[key]; exists {
+			t.Errorf("unexpected autodiscover field %q", key)
+		}
+	}
+	if len(data) != 6 {
+		t.Errorf("Expected six autodiscover fields including CLI metadata, got %#v", data)
 	}
 }
 
@@ -618,6 +1025,110 @@ func TestAutodiscoverEndpointMethodNotAllowed(t *testing.T) {
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestCLIBinaryMetadataAndDownload(t *testing.T) {
+	dir := t.TempDir()
+	filename := "search-cli-linux-amd64"
+	binary := []byte("verified cli fixture")
+	if err := os.WriteFile(filepath.Join(dir, filename), binary, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte("1.2.3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(binary)
+	checksums := hex.EncodeToString(digest[:]) + "  " + filename + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "sha256.txt"), []byte(checksums), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler()
+	handler.config.CLI.BinaryDownload.Dir = dir
+	handler.config.Server.Update.CLIMinVersion = "1.0.0"
+	if got := handler.cliBinaryVersions()["linux-amd64"]; got.Version != "1.2.3" || got.SHA256 != hex.EncodeToString(digest[:]) {
+		t.Fatalf("published metadata = %#v", got)
+	}
+	req := cliBinaryTestRequest(filename)
+	response := httptest.NewRecorder()
+	handler.handleCLIBinary(response, req)
+	if response.Code != http.StatusOK || response.Body.String() != string(binary) {
+		t.Fatalf("download status/body = %d/%q", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/octet-stream" {
+		t.Errorf("Content-Type = %q", got)
+	}
+	handler.config.CLI.BinaryDownload.RequireAuth = true
+	handler.config.Server.Token = "operator-token"
+	unauthorized := httptest.NewRecorder()
+	handler.handleCLIBinary(unauthorized, cliBinaryTestRequest(filename))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Errorf("unauthenticated download status = %d, want 401", unauthorized.Code)
+	}
+	authorizedRequest := cliBinaryTestRequest(filename)
+	authorizedRequest.Header.Set("Authorization", "Bearer operator-token")
+	authorized := httptest.NewRecorder()
+	handler.handleCLIBinary(authorized, authorizedRequest)
+	if authorized.Code != http.StatusOK {
+		t.Errorf("authenticated download status = %d, want 200", authorized.Code)
+	}
+}
+
+func TestCLIBinaryMetadataRejectsChecksumMismatch(t *testing.T) {
+	dir := t.TempDir()
+	filename := "search-cli-linux-amd64"
+	if err := os.WriteFile(filepath.Join(dir, filename), []byte("unverified"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte("1.2.3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sha256.txt"), []byte(strings.Repeat("0", 64)+"  "+filename+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler()
+	handler.config.CLI.BinaryDownload.Dir = dir
+	if _, exists := handler.cliBinaryVersions()["linux-amd64"]; exists {
+		t.Fatal("checksum-mismatched CLI binary was published")
+	}
+	req := cliBinaryTestRequest(filename)
+	response := httptest.NewRecorder()
+	handler.handleCLIBinary(response, req)
+	if response.Code != http.StatusNotFound {
+		t.Errorf("download status = %d, want 404", response.Code)
+	}
+}
+
+func TestOpenVerifiedCLIBinaryReturnsHashedRegularFile(t *testing.T) {
+	dir := t.TempDir()
+	filename := "search-cli-linux-amd64"
+	content := []byte("descriptor-specific cli content")
+	if err := os.WriteFile(filepath.Join(dir, filename), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(content)
+	wantDigest := hex.EncodeToString(digest[:])
+	file, info, gotDigest, err := openVerifiedCLIBinary(dir, filename, map[string]string{filename: wantDigest})
+	if err != nil {
+		t.Fatalf("openVerifiedCLIBinary() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("close verified descriptor: %v", err)
+		}
+	})
+	if !info.Mode().IsRegular() {
+		t.Fatalf("opened mode = %v, want regular file", info.Mode())
+	}
+	if gotDigest != wantDigest {
+		t.Fatalf("digest = %q, want %q", gotDigest, wantDigest)
+	}
+	gotContent, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("read verified descriptor: %v", err)
+	}
+	if !bytes.Equal(gotContent, content) {
+		t.Fatalf("verified descriptor content = %q, want %q", gotContent, content)
 	}
 }
 
@@ -1418,6 +1929,9 @@ func TestHealthResponseSerialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to marshal HealthResponse: %v", err)
 	}
+	if strings.Contains(string(data), `"cluster"`) {
+		t.Errorf("HealthResponse must not advertise an unsupported cluster field: %s", data)
+	}
 
 	var unmarshaled HealthResponse
 	if err := json.Unmarshal(data, &unmarshaled); err != nil {
@@ -1427,7 +1941,7 @@ func TestHealthResponseSerialization(t *testing.T) {
 	if unmarshaled.Status != health.Status {
 		t.Errorf("Status mismatch: got %q, want %q", unmarshaled.Status, health.Status)
 	}
-	orderedKeys := []string{`"project"`, `"status"`, `"version"`, `"go_version"`, `"build"`, `"uptime"`, `"mode"`, `"timestamp"`, `"cluster"`, `"features"`, `"checks"`, `"stats"`}
+	orderedKeys := []string{`"project"`, `"status"`, `"version"`, `"go_version"`, `"build"`, `"uptime"`, `"mode"`, `"timestamp"`, `"features"`, `"checks"`, `"stats"`}
 	last := -1
 	for _, key := range orderedKeys {
 		index := strings.Index(string(data), key)
@@ -1435,6 +1949,17 @@ func TestHealthResponseSerialization(t *testing.T) {
 			t.Errorf("health JSON key %s was missing or out of order: %s", key, data)
 		}
 		last = index
+	}
+}
+
+func TestHealthResponseNilI2PProviderIsNone(t *testing.T) {
+	handler := newTestHandler()
+	health := handler.buildHealthResponse()
+	if got := health.Features.Tor.State; got != "disabled" {
+		t.Fatalf("nil Tor provider state = %q, want disabled", got)
+	}
+	if got := health.Features.I2P.Provider; got != "none" {
+		t.Fatalf("nil I2P manager provider = %q, want none", got)
 	}
 }
 
@@ -1453,12 +1978,12 @@ func TestAPIHealthTextGoldenFieldOrder(t *testing.T) {
 		Project: ProjectInfo{Name: "Search", Tagline: "Private", Description: "Metasearch"},
 		Status:  "healthy", Version: "1.2.3", GoVersion: "go1.x",
 		Build: BuildInfo{Commit: "abc123", Date: "2026-01-02T03:04:05Z"}, Uptime: "2h 5m", Mode: "production", Timestamp: "2026-01-02T03:04:05Z",
-		Cluster: ClusterInfo{Enabled: false}, Features: FeaturesInfo{Tor: TorInfo{Status: "disabled"}, I2P: I2PInfo{Status: "disabled"}},
-		Checks: ChecksInfo{Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok", Extra: []health.Check{{Key: "engine_alpha", Status: "ok"}}},
-		Stats:  StatsInfo{RequestsTotal: 1, Requests24h: 1, ActiveConns: 1, Extra: []health.Stat{{Key: "engines_total", Value: 2}}},
+		Features: FeaturesInfo{Tor: TorInfo{Status: "disabled"}, I2P: I2PInfo{Status: "disabled"}},
+		Checks:   ChecksInfo{Database: "ok", Cache: "ok", Disk: "ok", Scheduler: "ok", Extra: []health.Check{{Key: "engine_alpha", Status: "ok"}}},
+		Stats:    StatsInfo{RequestsTotal: 1, Requests24h: 1, ActiveConns: 1, Extra: []health.Stat{{Key: "engines_total", Value: 2}}},
 	})
 	last := -1
-	for _, marker := range []string{"project.name:", "project.tagline:", "project.description:", "status:", "version:", "go_version:", "build.commit:", "build.date:", "uptime:", "mode:", "timestamp:", "cluster.enabled: false", "features.tor:", "features.i2p:", "features.geoip:", "checks.database:", "checks.cache:", "checks.disk:", "checks.scheduler:", "checks.engine_alpha:", "stats.requests_total:", "stats.requests_24h:", "stats.active_connections:", "stats.engines_total:"} {
+	for _, marker := range []string{"project.name:", "project.tagline:", "project.description:", "status:", "version:", "go_version:", "build.commit:", "build.date:", "uptime:", "mode:", "timestamp:", "features.tor:", "features.i2p:", "features.geoip:", "checks.database:", "checks.cache:", "checks.disk:", "checks.scheduler:", "checks.engine_alpha:", "stats.requests_total:", "stats.requests_24h:", "stats.active_connections:", "stats.engines_total:"} {
 		index := strings.Index(body, marker)
 		if index <= last {
 			t.Fatalf("API text marker %q missing or out of order in:\n%s", marker, body)
@@ -2128,15 +2653,12 @@ func TestNewHandlerInitialization(t *testing.T) {
 // Tests for AutodiscoverResponse serialization
 
 func TestAutodiscoverResponseSerialization(t *testing.T) {
-	var resp AutodiscoverResponse
-	resp.Server.Name = "Search Server"
-	resp.Server.Version = "1.0.0"
-	resp.Server.URL = "https://search.example.com"
-	resp.Server.Features.Auth = true
-	resp.Server.Features.Search = true
-	resp.Server.Features.Register = true
-	resp.API.Version = "v1"
-	resp.API.BasePath = "/api/v1"
+	resp := AutodiscoverResponse{
+		Name: "Search Server", Version: "1.0.0",
+		API:         AutodiscoverAPIInfo{CurrentVersion: "v1"},
+		URLs:        []string{"https://search.example.com"},
+		CLIVersions: map[string]CLIBinaryInfo{},
+	}
 
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -2148,14 +2670,14 @@ func TestAutodiscoverResponseSerialization(t *testing.T) {
 		t.Fatalf("Failed to unmarshal AutodiscoverResponse: %v", err)
 	}
 
-	if unmarshaled.Server.Name != resp.Server.Name {
-		t.Errorf("Server.Name mismatch: got %q, want %q", unmarshaled.Server.Name, resp.Server.Name)
+	if unmarshaled.Name != resp.Name || unmarshaled.Version != resp.Version {
+		t.Errorf("identity mismatch: got %q/%q, want %q/%q", unmarshaled.Name, unmarshaled.Version, resp.Name, resp.Version)
 	}
-	if unmarshaled.Server.Version != resp.Server.Version {
-		t.Errorf("Server.Version mismatch: got %q, want %q", unmarshaled.Server.Version, resp.Server.Version)
+	if unmarshaled.API.CurrentVersion != resp.API.CurrentVersion {
+		t.Errorf("API.CurrentVersion = %q, want %q", unmarshaled.API.CurrentVersion, resp.API.CurrentVersion)
 	}
-	if unmarshaled.API.Version != resp.API.Version {
-		t.Errorf("API.Version mismatch: got %q, want %q", unmarshaled.API.Version, resp.API.Version)
+	if !reflect.DeepEqual(unmarshaled.URLs, resp.URLs) {
+		t.Errorf("URLs = %#v, want %#v", unmarshaled.URLs, resp.URLs)
 	}
 }
 
@@ -2233,8 +2755,8 @@ func TestServeSwaggerUISpecURL(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, "//api.example.com/api/swagger") {
-		t.Error("Expected spec URL pointing at /api/swagger in body, but it was not found")
+	if !strings.Contains(body, "http://api.example.com/api/v1/server/swagger") {
+		t.Error("Expected spec URL pointing at the canonical versioned OpenAPI route")
 	}
 	if strings.Contains(body, "/openapi.json") {
 		t.Error("Swagger UI must not reference the removed /openapi.json path")
@@ -2252,7 +2774,7 @@ func TestRegisterOpenAPIRoutes(t *testing.T) {
 		path   string
 		status int
 	}{
-		{"/server/docs/swagger", http.StatusOK},
+		{"/server/docs/swagger", http.StatusNotFound},
 		{APIPrefix + "/server/swagger", http.StatusOK},
 		{"/api/swagger", http.StatusOK},
 		{"/openapi", http.StatusNotFound},
@@ -3066,6 +3588,34 @@ func TestHandleServerHelp(t *testing.T) {
 	}
 	if data["title"] != "Help & Documentation" {
 		t.Errorf("title = %v, want 'Help & Documentation'", data["title"])
+	}
+}
+
+func TestHandleServerHelpUsesAcceptLanguage(t *testing.T) {
+	handler := newTestHandler()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/server/help", nil)
+	request.Header.Set("Accept-Language", "es")
+	response := httptest.NewRecorder()
+	handler.handleServerHelp(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var payload struct {
+		Data struct {
+			Title    string `json:"title"`
+			Sections []struct {
+				Title string `json:"title"`
+			} `json:"sections"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Data.Title != "Ayuda y documentación" {
+		t.Errorf("title = %q, want Spanish help title", payload.Data.Title)
+	}
+	if len(payload.Data.Sections) == 0 || payload.Data.Sections[0].Title != "Primeros pasos" {
+		t.Errorf("first help section = %#v, want Spanish getting-started title", payload.Data.Sections)
 	}
 }
 
@@ -3995,6 +4545,9 @@ func TestHandleAlertsValidCreate(t *testing.T) {
 	if !ok {
 		t.Fatal("data is not a map")
 	}
+	if ownerToken, ok := data["owner_token"].(string); !ok || ownerToken == "" {
+		t.Errorf("owner_token = %#v, want token for newly issued owner", data["owner_token"])
+	}
 	if data["manage_token"] == nil || data["manage_token"] == "" {
 		t.Error("expected manage_token in response")
 	}
@@ -4528,7 +5081,7 @@ func TestErrorResponseWith5xxDetail(t *testing.T) {
 	w := httptest.NewRecorder()
 	w.Header().Set("X-Request-ID", "req-abc123")
 
-	handler.errorResponse(w, http.StatusInternalServerError, "Internal error", "some internal detail")
+	handler.errorResponse(w, http.StatusInternalServerError, "Internal error", "some internal detail", httptest.NewRequest(http.MethodGet, "/", nil))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
@@ -4551,7 +5104,7 @@ func TestErrorResponseWith4xx(t *testing.T) {
 
 	w := httptest.NewRecorder()
 
-	handler.errorResponse(w, http.StatusBadRequest, "Bad request", "detail not logged for 4xx")
+	handler.errorResponse(w, http.StatusBadRequest, "Bad request", "detail not logged for 4xx", httptest.NewRequest(http.MethodGet, "/", nil))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
@@ -4563,6 +5116,52 @@ func TestErrorResponseWith4xx(t *testing.T) {
 	}
 	if resp.OK {
 		t.Error("OK = true, want false")
+	}
+}
+
+func TestErrorResponseUsesRequestLanguage(t *testing.T) {
+	handler := newTestHandler()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=test", nil)
+	request.Header.Set("Accept-Language", "es")
+	response := httptest.NewRecorder()
+
+	handler.errorResponse(response, http.StatusBadRequest, "Invalid request parameters", "", request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	var payload APIResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Error != "BAD_REQUEST" {
+		t.Errorf("error code = %q, want BAD_REQUEST", payload.Error)
+	}
+	if payload.Message != "Solicitud no válida" {
+		t.Errorf("message = %q, want Spanish bad-request translation", payload.Message)
+	}
+}
+
+func TestWriteErrorTranslatesByErrorCode(t *testing.T) {
+	handler := newTestHandler()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", nil)
+	request.Header.Set("Accept-Language", "es")
+	response := httptest.NewRecorder()
+
+	handler.writeError(response, request, "VALIDATION_FAILED", "English-only detail", http.StatusBadRequest)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	var payload APIResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Error != "VALIDATION_FAILED" {
+		t.Errorf("error code = %q, want VALIDATION_FAILED", payload.Error)
+	}
+	if payload.Message != "La información enviada no es válida." {
+		t.Errorf("message = %q, want Spanish validation translation", payload.Message)
 	}
 }
 
@@ -4605,13 +5204,13 @@ func TestSchedulerOperatorEndpoints(t *testing.T) {
 		}
 	}
 
-	for _, action := range []string{"disable", "enable", "run"} {
-		response := request(http.MethodPost, APIPrefix+"/server/scheduler/tasks/test_task/"+action)
-		if response.Code != http.StatusOK {
-			t.Errorf("scheduler %s status = %d, body = %s", action, response.Code, response.Body.String())
-		}
+	if response := request(http.MethodPost, APIPrefix+"/server/scheduler/tasks/test_task/run"); response.Code != http.StatusOK {
+		t.Errorf("scheduler run status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if got := request(http.MethodPost, APIPrefix+"/server/scheduler/tasks/test_task/disable").Code; got != http.StatusOK {
-		t.Errorf("repeat disable status = %d", got)
+	for _, action := range []string{"enable", "disable"} {
+		response := request(http.MethodPost, APIPrefix+"/server/scheduler/tasks/test_task/"+action)
+		if response.Code != http.StatusNotFound {
+			t.Errorf("scheduler %s mutation status = %d, want 404", action, response.Code)
+		}
 	}
 }

@@ -782,6 +782,31 @@ func TestTorServiceGetOnionAddressWhenSet(t *testing.T) {
 	}
 }
 
+func TestTorServiceGetOnionAddressDuringStartupDoesNotWaitForBootstrapLock(t *testing.T) {
+	ts := newTestTorService(t, config.DefaultConfig())
+	ts.starting.Store(true)
+	if err := os.MkdirAll(filepath.Join(ts.dataDir, "site"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Repeat("a", 56) + ".onion"
+	if err := os.WriteFile(filepath.Join(ts.dataDir, "site", "hostname"), []byte(want+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ts.mu.Lock()
+	result := make(chan string, 1)
+	go func() { result <- ts.GetOnionAddress() }()
+	select {
+	case address := <-result:
+		ts.mu.Unlock()
+		if address != want {
+			t.Fatalf("GetOnionAddress() = %q, want %q", address, want)
+		}
+	case <-time.After(100 * time.Millisecond):
+		ts.mu.Unlock()
+		t.Fatal("GetOnionAddress() blocked on Tor bootstrap lock while starting")
+	}
+}
+
 // Test vanity generation prefix validation
 func TestTorServiceGenerateVanityValidation(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -997,7 +1022,7 @@ func TestEnsureTorDirsCreatesDirectories(t *testing.T) {
 		if !info.IsDir() {
 			t.Errorf("%q is not a directory", dir)
 		}
-		if info.Mode().Perm() != 0700 {
+		if info.Mode().Perm() != 0o700 {
 			t.Errorf("directory %q has permissions %o, want 0700", dir, info.Mode().Perm())
 		}
 	}
@@ -1263,7 +1288,7 @@ func TestTorServiceStartFakeBinary(t *testing.T) {
 
 	// Create a minimal fake Tor binary that exits cleanly
 	fakeTor := filepath.Join(tmpDir, "tor")
-	if err := os.WriteFile(fakeTor, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+	if err := os.WriteFile(fakeTor, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("failed to write fake tor binary: %v", err)
 	}
 
@@ -1459,7 +1484,7 @@ func TestEnsureTorDirsFailure(t *testing.T) {
 
 	// Place a regular file at the dataDir path so MkdirAll fails with ENOTDIR.
 	blocker := filepath.Join(tmpDir, "tor")
-	if err := os.WriteFile(blocker, []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(blocker, []byte("block"), 0o644); err != nil {
 		t.Fatalf("failed to write blocker file: %v", err)
 	}
 	ts.dataDir = blocker

@@ -52,7 +52,7 @@ func renderTo(w io.Writer, format string, v view) error {
 	case "csv":
 		cw := csv.NewWriter(w)
 		if len(v.Headers) > 0 {
-			if err := cw.Write(v.Headers); err != nil {
+			if err := cw.Write(localizedHeaders(v.Headers)); err != nil {
 				return err
 			}
 		}
@@ -81,7 +81,7 @@ func renderTo(w io.Writer, format string, v view) error {
 	default:
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		if len(v.Headers) > 0 {
-			if _, err := fmt.Fprintln(tw, strings.Join(v.Headers, "\t")); err != nil {
+			if _, err := fmt.Fprintln(tw, strings.Join(localizedHeaders(v.Headers), "\t")); err != nil {
 				return err
 			}
 		}
@@ -100,6 +100,14 @@ func renderTo(w io.Writer, format string, v view) error {
 		}
 		return nil
 	}
+}
+
+func localizedHeaders(headers []string) []string {
+	localized := make([]string, len(headers))
+	for index, header := range headers {
+		localized[index] = localizedCLIText(header)
+	}
+	return localized
 }
 
 // truncateCell shortens a table cell to width runes with an ellipsis.

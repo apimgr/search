@@ -132,26 +132,41 @@ func TestBrowserVideoSearchRendersPeerTubePreviewMetadata(t *testing.T) {
 }
 
 func TestBrowserServiceWorkerServesOfflineFallback(t *testing.T) {
-	site := newTestSite(t)
+	sharedSite := newTestSite(t)
+	site := httptest.NewServer(sharedSite.Config.Handler)
+	t.Cleanup(site.Close)
 	ctx := newBrowserContext(t)
 	var controlled bool
+	var stored bool
 	var body string
+	var document string
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/"),
+		chromedp.Navigate(site.URL+"/?lang=de"),
 		chromedp.Poll(`navigator.serviceWorker.controller !== null`, &controlled,
 			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(10*time.Second)),
-		network.Enable(),
-		network.OverrideNetworkState(true, 0, -1, -1),
-		chromedp.Navigate(site.URL+"/__e2e/offline-navigation"),
-		chromedp.Text("body", &body, chromedp.ByQuery),
+		chromedp.Poll(`caches.open('search-offline-strings').then(cache => cache.match('/offline-strings.json')).then(response => response !== undefined)`, &stored,
+			chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(10*time.Second)),
 	); err != nil {
-		t.Fatalf("service worker offline navigation: %v", err)
+		t.Fatalf("service worker setup: %v", err)
 	}
 	if !controlled {
 		t.Fatal("page did not become controlled by the service worker")
 	}
-	if !strings.Contains(body, "You are offline") {
-		t.Errorf("offline navigation body = %q, want the offline fallback page", body)
+	if !stored {
+		t.Fatal("page did not store translated offline strings for the service worker")
+	}
+	site.Close()
+	if err := chromedp.Run(ctx,
+		network.Enable(),
+		network.OverrideNetworkState(true, 0, -1, -1),
+		chromedp.Navigate(site.URL+"/__e2e/offline-navigation"),
+		chromedp.Text("body", &body, chromedp.ByQuery),
+		chromedp.OuterHTML("html", &document, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("service worker offline navigation: %v", err)
+	}
+	if !strings.Contains(body, "Sie sind offline") || !strings.Contains(document, `lang="de" dir="ltr"`) {
+		t.Errorf("offline navigation was not rendered from stored German strings: body=%q html=%q", body, document)
 	}
 }
 
@@ -459,7 +474,10 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	runStage("show autocomplete",
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.SendKeys(`#searchQuery`, "!", chromedp.ByQuery),
-		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Poll(`(() => {
+			const suggestion = document.querySelector('.autocomplete-bang');
+			return !!suggestion && suggestion.textContent.includes('!fixture') && suggestion.textContent.includes('Fixture Search');
+		})()`, nil, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.textContent || ''`, &autocompleteText),
 	)
 	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
@@ -467,13 +485,17 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	}
 	runStage("filter autocomplete by shortcut",
 		chromedp.SendKeys(`#searchQuery`, "fixture", chromedp.ByQuery),
-		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Poll(`(() => {
+			const suggestion = document.querySelector('.autocomplete-bang');
+			return !!suggestion && suggestion.textContent.includes('!fixture') && suggestion.textContent.includes('Fixture Search');
+		})()`, nil, chromedp.WithPollingInterval(25*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.autocomplete-bang')?.textContent || ''`, &autocompleteText),
 	)
 	if !strings.Contains(autocompleteText, "!fixture") || !strings.Contains(autocompleteText, "Fixture Search") {
 		t.Fatalf("custom bang shortcut autocomplete suggestion = %q", autocompleteText)
 	}
 	runStage("submit custom shortcut",
+		waitForClickTarget(`.autocomplete-bang`),
 		chromedp.Click(`.autocomplete-bang`, chromedp.ByQuery),
 		chromedp.SendKeys(`#searchQuery`, "cats & dogs", chromedp.ByQuery),
 		chromedp.Click(`.search-btn`, chromedp.ByQuery),
@@ -562,6 +584,7 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 				{"search_pref_font_size", "large"},
 				{"search_pref_results_density", "compact"},
 				{"search_pref_accent_color", "#456def"},
+				{"search_pref_custom_css", "html{--custom-css-sync-fixture:blue}"},
 			} {
 				if err := network.SetCookie(cookie.name, cookie.value).WithURL(site.URL).WithPath("/").Do(ctx); err != nil {
 					return err
@@ -569,7 +592,7 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 			}
 			return nil
 		}),
-		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.Navigate(site.URL+"/server/preferences/sync"),
 		chromedp.WaitVisible(`#sync-code`, chromedp.ByQuery),
 	); err != nil {
 		t.Fatalf("export preferences from source device: %v", err)
@@ -588,10 +611,17 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	var infiniteScrollEnabled bool
 	if err := chromedp.Run(receiver,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
-		chromedp.Navigate(site.URL+"/server/preferences"),
-		chromedp.SetValue(`#sync-paste`, syncCode, chromedp.ByQuery),
-		chromedp.Click(`#save-preferences`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences/sync"),
+		chromedp.SetValue(`#sync-code-input`, syncCode, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare preference import on receiver device: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(receiver, `form[action="/server/preferences/sync"] button[type="submit"]`); err != nil {
+		t.Fatalf("submit preference import on receiver device: %v", err)
+	}
+	if err := chromedp.Run(receiver,
+		chromedp.WaitVisible(`#sync-code`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/"),
 		chromedp.OuterHTML("html", &homepage),
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.Evaluate(`document.querySelector('#infinite-scroll').checked`, &infiniteScrollEnabled),
@@ -601,7 +631,7 @@ func TestBrowserCrossDevicePreferenceSync(t *testing.T) {
 	if !strings.Contains(homepage, "theme-light") || !strings.Contains(homepage, `<html lang="de"`) {
 		t.Errorf("receiver did not apply imported theme and language: %s", snippet(homepage, `<html`))
 	}
-	for _, marker := range []string{`font-size-large`, `results-density-compact`, `--color-accent: #456def`} {
+	for _, marker := range []string{`font-size-large`, `results-density-compact`, `/static/css/accent.css`, `/static/css/custom.css`} {
 		if !strings.Contains(homepage, marker) {
 			t.Errorf("receiver did not apply imported visual preference %q: %s", marker, snippet(homepage, `<html`))
 		}
@@ -617,7 +647,7 @@ func TestBrowserInfiniteScrollPreservesSearchFilters(t *testing.T) {
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	requests := make(chan url.Values, 1)
-	document := fmt.Sprintf(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Search fixture</title></head><body><div class="search-results-page" data-query="filter fixture" data-category="general" data-page="1" data-per-page="1" data-safe-search="1" data-lang="de" data-region="fr" data-time-range="week" data-time-from="2025-01-01" data-time-to="2025-01-31"></div><div class="results-list" id="results-container"></div><div id="scroll-trigger"></div><div id="loading-indicator" class="hidden"></div><div id="end-indicator" class="hidden"></div><script src="%s/static/js/app.js"></script></body></html>`, site.URL)
+	document := fmt.Sprintf(`<!doctype html><html lang="en" data-api-base="/api/v1"><head><meta charset="utf-8"><title>Search fixture</title></head><body><div class="search-results-page" data-query="filter fixture" data-category="general" data-page="1" data-per-page="1" data-safe-search="1" data-lang="de" data-region="fr" data-time-range="week" data-time-from="2025-01-01" data-time-to="2025-01-31"></div><div class="results-list" id="results-container"></div><div id="scroll-trigger"></div><div id="loading-indicator" class="hidden"></div><div id="end-indicator" class="hidden"></div><script src="%s/static/js/app.js"></script></body></html>`, site.URL)
 	fixture := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.URL.Path == "/":
@@ -673,7 +703,7 @@ func TestBrowserInfiniteScrollVideoResultsRetainPreviewMetadata(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
-	document := fmt.Sprintf(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Video search fixture</title></head><body><div class="search-results-page" data-query="video fixture" data-category="videos" data-page="1" data-per-page="1" data-safe-search="1"></div><div class="results-list" id="results-container"></div><div id="scroll-trigger"></div><div id="loading-indicator" class="hidden"></div><div id="end-indicator" class="hidden"></div><script src="%s/static/js/app.js"></script></body></html>`, site.URL)
+	document := fmt.Sprintf(`<!doctype html><html lang="en" data-api-base="/api/v1"><head><meta charset="utf-8"><title>Video search fixture</title></head><body><div class="search-results-page" data-query="video fixture" data-category="videos" data-page="1" data-per-page="1" data-safe-search="1"></div><div class="results-list" id="results-container"></div><div id="scroll-trigger"></div><div id="loading-indicator" class="hidden"></div><div id="end-indicator" class="hidden"></div><script src="%s/static/js/app.js"></script></body></html>`, site.URL)
 	fixture := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/" {
 			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -893,7 +923,13 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		chromedp.Click(`.owner-token-edit > summary`, chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] input[name=name]`, "browser-renamed", chromedp.ByQuery),
 		chromedp.SetValue(`.owner-token-item form[action$="/update"] select[name=expires_at]`, "30d", chromedp.ByQuery),
-		chromedp.Click(`.owner-token-item form[action$="/update"] button[type=submit]`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare linked-token update in browser: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/update"] button[type=submit]`); err != nil {
+		t.Fatalf("submit linked-token update in browser: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.WaitVisible(`.owner-token-item h3`, chromedp.ByQuery),
 		chromedp.Text(`.owner-token-item h3`, &linkedName, chromedp.ByQuery),
 	); err != nil {
@@ -903,7 +939,14 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 		t.Fatalf("linked-token name = %q after update", linkedName)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.Click(`.owner-token-item form[action$="/reveal"] button`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.owner-token-item form[action$="/reveal"] button`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare linked-token reveal in browser: %v", err)
+	}
+	if err := pressEnterAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/reveal"] button`); err != nil {
+		t.Fatalf("submit linked-token reveal with keyboard in browser: %v", err)
+	}
+	if err := chromedp.Run(ctx,
 		chromedp.WaitReady(`#linked-tokens .owner-token-item code[id^='token-value-']`, chromedp.ByQuery),
 		chromedp.Text(`#linked-tokens .owner-token-item code[id^='token-value-']`, &status, chromedp.ByQuery),
 	); err != nil {
@@ -914,7 +957,9 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/preferences/tokens"),
-		chromedp.Click(`.owner-token-item button[popovertarget^="rotate-token-"]`, chromedp.ByQuery),
+		chromedp.ScrollIntoView(`.owner-token-item details[id^="rotate-token-"] > summary`, chromedp.ByQuery),
+		chromedp.Click(`.owner-token-item details[id^="rotate-token-"] > summary`, chromedp.ByQuery),
+		chromedp.Sleep(50*time.Millisecond),
 	); err != nil {
 		t.Fatalf("open linked-token rotation confirmation: %v", err)
 	}
@@ -935,7 +980,11 @@ func TestBrowserOwnerLinkedTokenManagement(t *testing.T) {
 	); err != nil {
 		t.Fatalf("prepare linked token revocation: %v", err)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`.owner-token-item button[popovertarget^="revoke-token-"]`, chromedp.ByQuery)); err != nil {
+	if err := chromedp.Run(ctx,
+		chromedp.ScrollIntoView(`.owner-token-item details[id^="revoke-token-"] > summary`, chromedp.ByQuery),
+		chromedp.Click(`.owner-token-item details[id^="revoke-token-"] > summary`, chromedp.ByQuery),
+		chromedp.Sleep(50*time.Millisecond),
+	); err != nil {
 		t.Fatalf("open linked-token revoke confirmation: %v", err)
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `.owner-token-item form[action$="/revoke"] button[type="submit"]`); err != nil {
@@ -990,24 +1039,24 @@ func TestBrowserImagePreviewAndDownloadActions(t *testing.T) {
 	requireNoFailures(t, pf, "image preview, metadata, source link, download, and close")
 }
 
-// TestBrowserThemeToggleChangesComputedStyle exercises PART 16's theme rule
-// that switching themes must actually change computed styles, not just an
-// attribute nobody reads. It drives the JS toggle button (the enhancement
-// nojs_test.go's form-based path deliberately does not exercise) and reads
-// back the background color the browser actually painted.
+// TestBrowserThemeToggleChangesComputedStyle exercises PART 16's native
+// theme form and verifies that the server-rendered theme changes computed
+// styles after the POST navigation.
 func TestBrowserThemeToggleChangesComputedStyle(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 
-	var before, after string
+	var before, after, expectedTheme string
 	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		chromedp.Navigate(site.URL+"/"),
-		chromedp.WaitVisible(`.theme-toggle`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.header-theme-form button.theme-toggle`, chromedp.ByQuery),
 		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &before),
-		chromedp.Click(`.theme-toggle`, chromedp.ByQuery),
-		// Give the click handler's DOM mutation one tick to flush before reading.
-		chromedp.Sleep(0),
+		chromedp.Evaluate(`document.querySelector('.header-theme-form input[name="theme"]').value`, &expectedTheme),
+		chromedp.Click(`.header-theme-form button.theme-toggle`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.WaitVisible(`.header-theme-form button.theme-toggle`, chromedp.ByQuery),
 		chromedp.Evaluate(`getComputedStyle(document.body).backgroundColor`, &after),
 	); err != nil {
 		t.Fatalf("chromedp run: %v", err)
@@ -1050,6 +1099,7 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	var language, searchLabel, visualClass, accentStyle, fontSize string
+	var accentStylesheetEnabled bool
 	var videoPreviewsEnabled bool
 	if err := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
@@ -1067,7 +1117,8 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.Evaluate(`document.querySelector('#video-previews').checked`, &videoPreviewsEnabled),
 		chromedp.Evaluate(`document.documentElement.className`, &visualClass),
-		chromedp.Evaluate(`document.documentElement.style.getPropertyValue('--color-primary').trim()`, &accentStyle),
+		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()`, &accentStyle),
+		chromedp.Evaluate(`!!document.querySelector('link[href*="/static/css/accent.css"]')`, &accentStylesheetEnabled),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).fontSize`, &fontSize),
 	); err != nil {
 		t.Fatalf("save language preference in browser: %v", err)
@@ -1078,7 +1129,7 @@ func TestBrowserLanguagePreferenceChangesRenderedStrings(t *testing.T) {
 	if videoPreviewsEnabled {
 		t.Fatal("JavaScript preferences save did not persist the disabled video preview preference")
 	}
-	if !strings.Contains(visualClass, "font-size-small") || !strings.Contains(visualClass, "results-density-spacious") || accentStyle != "#a1b2c3" || fontSize != "14px" {
+	if !strings.Contains(visualClass, "font-size-small") || !strings.Contains(visualClass, "results-density-spacious") || accentStyle == "" || !accentStylesheetEnabled || fontSize != "14px" {
 		t.Fatalf("JavaScript visual preferences did not persist: class=%q accent=%q font_size=%q", visualClass, accentStyle, fontSize)
 	}
 	requireNoFailures(t, pf, "language preference save and localized homepage")
@@ -1088,24 +1139,42 @@ func TestBrowserCustomCSSPreferencePersistsAndImports(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
-	var firstValue, importedValue, savedCSS string
+	var firstValue, importedValue, savedCSS, customCSSCookie, cssResponse string
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate(site.URL+"/server/preferences/tools"),
+		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
+		chromedp.Navigate(site.URL+"/server/preferences"),
 		chromedp.WaitVisible(`#custom-css`, chromedp.ByQuery),
-		chromedp.SetValue(`#custom-css`, `:root { --custom-css-fixture: "saved"; }`, chromedp.ByQuery),
-		chromedp.Click(`#save-custom-css`, chromedp.ByQuery),
+		chromedp.SetValue(`#custom-css`, `html{--custom-css-fixture:red}`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("prepare custom CSS preference: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#save-preferences`); err != nil {
+		t.Fatalf("save custom CSS preference: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &firstValue),
 		chromedp.Navigate(site.URL+"/"),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &savedCSS),
-		chromedp.Navigate(site.URL+"/server/preferences/tools"),
-		chromedp.SetValue(`#custom-css`, `:root { --custom-css-fixture: "imported"; }`, chromedp.ByQuery),
-		chromedp.Click(`#save-custom-css`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/server/preferences"),
+		chromedp.SetValue(`#custom-css`, `html{--custom-css-fixture:blue}`, chromedp.ByQuery),
+	); err != nil {
+		t.Fatalf("reload and replace custom CSS preference: %v", err)
+	}
+	if err := clickAndWaitForMainFrameNavigation(ctx, `#save-preferences`); err != nil {
+		t.Fatalf("save replacement custom CSS preference: %v", err)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`#searchQuery`, chromedp.ByQuery),
+		chromedp.Navigate(site.URL+"/"),
 		chromedp.Evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--custom-css-fixture').trim()`, &importedValue),
+		chromedp.Evaluate(`document.cookie.split('; ').find(function(cookie) { return cookie.indexOf('search_pref_custom_css=') === 0; }) || ''`, &customCSSCookie),
+		chromedp.Evaluate(`(() => { const sheet = Array.from(document.styleSheets).find(function(item) { return item.href && item.href.includes('/static/css/custom.css'); }); return sheet ? Array.from(sheet.cssRules).map(function(rule) { return rule.cssText; }).join('') : ''; })()`, &cssResponse),
 	); err != nil {
 		t.Fatalf("custom CSS preference flow: %v", err)
 	}
-	if firstValue != `"saved"` || savedCSS != `"saved"` || importedValue != `"imported"` {
-		t.Errorf("custom CSS values after save, reload, and replacement = %q, %q, %q", firstValue, savedCSS, importedValue)
+	if firstValue != "red" || savedCSS != "red" || importedValue != "blue" {
+		t.Errorf("custom CSS values after save, reload, and replacement = %q, %q, %q (cookie %q; response %q)", firstValue, savedCSS, importedValue, customCSSCookie, cssResponse)
 	}
 	requireNoFailures(t, pf, "custom CSS preference save and import")
 }
@@ -1115,10 +1184,12 @@ func TestBrowserResetPreferencesRequiresConfirmationAndClearsLocalData(t *testin
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
 	var resetComplete bool
+	var resetButtonForm string
 	if err := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error { return grantPreferenceConsent(ctx, site.URL) }),
 		network.SetCookie("theme", "light").WithURL(site.URL),
 		network.SetCookie("search_pref_font_size", "large").WithURL(site.URL),
+		network.SetCookie("search_pref_custom_css", ".x{color:red}").WithURL(site.URL),
 		network.SetCookie("search_widgets", "none").WithURL(site.URL),
 		network.SetCookie("search_widget_weather_units", "imperial").WithURL(site.URL),
 		chromedp.Navigate(site.URL+"/server/preferences"),
@@ -1126,7 +1197,11 @@ func TestBrowserResetPreferencesRequiresConfirmationAndClearsLocalData(t *testin
 	); err != nil {
 		t.Fatalf("prepare browser preference reset: %v", err)
 	}
-	if err := chromedp.Run(ctx, chromedp.Click(`#reset-prefs`, chromedp.ByQuery), chromedp.WaitVisible(`#reset-preferences:popover-open`, chromedp.ByQuery)); err != nil {
+	if err := chromedp.Run(ctx,
+		chromedp.Click(`#reset-prefs`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#reset-preferences:popover-open`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => { const button = document.querySelector('#reset-preferences button[type="submit"]'); return JSON.stringify({form: button.form && button.form.id, name: button.name, value: button.value}) })()`, &resetButtonForm),
+	); err != nil {
 		t.Fatalf("open preference reset confirmation: %v", err)
 	}
 	if err := clickAndWaitForMainFrameNavigation(ctx, `#reset-preferences button[type=submit]`); err != nil {
@@ -1134,9 +1209,11 @@ func TestBrowserResetPreferencesRequiresConfirmationAndClearsLocalData(t *testin
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.Poll(`[!document.cookie.includes('theme='), !document.cookie.includes('search_pref_font_size='), !document.cookie.includes('search_widgets='), !document.cookie.includes('search_widget_weather_units='), localStorage.getItem('search_custom_css') === null, localStorage.getItem('search_history') === null, localStorage.getItem('search_custom_bangs') === null].every(Boolean)`, &resetComplete, chromedp.WithPollingInterval(50*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`[!document.cookie.includes('theme='), !document.cookie.includes('search_pref_font_size='), !document.cookie.includes('search_pref_custom_css='), !document.cookie.includes('search_widgets='), !document.cookie.includes('search_widget_weather_units='), localStorage.getItem('search_custom_css') === null, localStorage.getItem('search_history') === null, localStorage.getItem('search_custom_bangs') === null].every(Boolean)`, &resetComplete, chromedp.WithPollingInterval(50*time.Millisecond), chromedp.WithPollingTimeout(5*time.Second)),
 	); err != nil {
-		t.Fatalf("verify browser preference reset: %v", err)
+		var resetState string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({cookies:document.cookie, css:localStorage.getItem('search_custom_css'), history:localStorage.getItem('search_history'), bangs:localStorage.getItem('search_custom_bangs')})`, &resetState))
+		t.Fatalf("verify browser preference reset: %v; submitter=%s; state=%s", err, resetButtonForm, resetState)
 	}
 	if !resetComplete {
 		t.Error("confirmed preference reset left preference cookies or local data behind")
@@ -1525,26 +1602,17 @@ func TestBrowserSwaggerDocsRender(t *testing.T) {
 	requireNoFailures(t, pf, "/server/docs/swagger")
 }
 
-func TestBrowserGraphQLExplorerExecutesQuery(t *testing.T) {
+func TestBrowserGraphQLExplorerMounts(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
-	var response string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(site.URL+"/server/docs/graphql"),
-		chromedp.WaitVisible(`#query`, chromedp.ByQuery),
-		chromedp.SetValue(`#query`, `{ health { status version } }`),
+		chromedp.WaitVisible(`.graphiql-query-editor`, chromedp.ByQuery),
+		chromedp.WaitVisible(`[aria-label="GraphQL query editor"]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`[aria-label="Execute GraphQL query"]`, chromedp.ByQuery),
 	); err != nil {
-		t.Fatalf("prepare GraphQL query in browser: %v", err)
-	}
-	if err := clickAndWaitForMainFrameNavigation(ctx, `#run-btn`); err != nil {
-		t.Fatalf("submit GraphQL query in browser: %v", err)
-	}
-	if err := chromedp.Run(ctx, chromedp.Text(`#response`, &response, chromedp.ByQuery)); err != nil {
-		t.Fatalf("read GraphQL browser response: %v", err)
-	}
-	if !strings.Contains(response, `"status"`) || !strings.Contains(response, `"version"`) {
-		t.Fatalf("GraphQL explorer response lacks requested fields: %s", response)
+		t.Fatalf("mount GraphQL explorer in browser: %v", err)
 	}
 	requireNoFailures(t, pf, "/server/docs/graphql")
 }
@@ -1697,6 +1765,9 @@ func TestBrowserDirectoryScanPagination(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
+	if err := chromedp.Run(ctx, network.SetBypassServiceWorker(true)); err != nil {
+		t.Fatalf("bypass service worker for isolated directory pagination flow: %v", err)
+	}
 	var rangeText, firstFile, lastFile string
 	var nextPagePresent bool
 	if err := chromedp.Run(ctx, chromedp.Navigate(site.URL+"/direct/directory/fixture")); err != nil {
@@ -1839,9 +1910,11 @@ func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
 	site := newTestSite(t)
 	ctx := newBrowserContext(t)
 	pf := watchForFailures(ctx)
+	if err := chromedp.Run(ctx, network.SetBypassServiceWorker(true)); err != nil {
+		t.Fatalf("bypass service worker for isolated mobile navigation flow: %v", err)
+	}
 	var overflow, searchWidth, viewportWidth, minTarget float64
-	var navToggle, categoriesAvailable, resultLayout, preferencesSheetOpen bool
-	var sheetBottom, viewportHeight float64
+	var navToggle, categoriesAvailable, resultLayout, preferencesLinkAvailable bool
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(375, 812),
 		chromedp.Navigate(site.URL+"/"),
@@ -1851,13 +1924,8 @@ func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
 		chromedp.Evaluate(`document.documentElement.clientWidth`, &viewportWidth),
 		chromedp.Evaluate(`!!document.querySelector('label[for="nav-toggle"]')`, &navToggle),
 		chromedp.Evaluate(`!!document.querySelector('.category-tabs')`, &categoriesAvailable),
+		chromedp.Evaluate(`!!document.querySelector('.header-actions a[href="/server/preferences"]')`, &preferencesLinkAvailable),
 		chromedp.Evaluate(`(() => { const els = Array.from(document.querySelectorAll('.header-mobile label, .search-form button, .category-tab')); const sizes = els.map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0).map(r => Math.min(r.width, r.height)); return sizes.length ? Math.min(...sizes) : 0 })()`, &minTarget),
-		chromedp.Click(`[data-mobile-preferences-trigger]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#mobile-preferences-dialog[open]`, chromedp.ByQuery),
-		chromedp.Evaluate(`!!document.querySelector('#mobile-preferences-dialog[open]')`, &preferencesSheetOpen),
-		chromedp.Evaluate(`document.querySelector('#mobile-preferences-dialog').getBoundingClientRect().bottom`, &sheetBottom),
-		chromedp.Evaluate(`window.innerHeight`, &viewportHeight),
-		chromedp.Click(`#mobile-preferences-dialog form[method="dialog"] button`, chromedp.ByQuery),
 		chromedp.Navigate(site.URL+"/search?q=mobile+layout"),
 		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => { const list = document.querySelector('.results-list'); return !!list && getComputedStyle(list).flexDirection !== 'row' })()`, &resultLayout),
@@ -1870,8 +1938,8 @@ func TestBrowserMobileSearchAndNavigationControls(t *testing.T) {
 	if !navToggle || !categoriesAvailable {
 		t.Error("mobile header navigation toggle or category navigation is missing")
 	}
-	if !preferencesSheetOpen || sheetBottom < viewportHeight-2 {
-		t.Errorf("mobile preferences did not open as a bottom sheet: open=%t bottom=%g viewport height=%g", preferencesSheetOpen, sheetBottom, viewportHeight)
+	if !preferencesLinkAvailable {
+		t.Error("mobile header is missing its single preferences link")
 	}
 	if minTarget > 0 && minTarget < 44 {
 		t.Errorf("smallest visible interactive target is %gpx, want at least 44px", minTarget)

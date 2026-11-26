@@ -363,6 +363,9 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 	if c, err := r.Cookie("search_pref_accent_color"); err == nil && prefsync.ValidAccentColor(c.Value) {
 		prefs.AccentColor = c.Value
 	}
+	if c, err := r.Cookie("search_pref_custom_css"); err == nil && prefsync.ValidCustomCSS(c.Value) {
+		prefs.CustomCSS = c.Value
+	}
 	if c, err := r.Cookie("search_pref_units"); err == nil {
 		if c.Value == "metric" || c.Value == "imperial" {
 			prefs.Units = c.Value
@@ -409,9 +412,9 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 	return prefs
 }
 
-// handleGeneralPreferencesSave handles the single preferences-page form POST
-// (id="general-settings"): theme, units, default category, safe search,
-// results per page, UI toggles, and the homepage widget selection - the
+// handleGeneralPreferencesSave handles preferences form POSTs for theme,
+// units, default category, safe search, results per page, UI toggles, bounded
+// custom CSS, and the homepage widget selection - the
 // widget checkboxes use the HTML form="general-settings" attribute so they
 // submit here too instead of needing a second form/button/route (see AI.md
 // PART 16 "Reuse Before Creating" - one Save action, not two). It validates
@@ -455,6 +458,15 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 		}
 	}
 	if canSetPreferences {
+		if values.Has("search_pref_custom_css") && values.Get("search_pref_custom_css") == "" {
+			http.SetCookie(w, &http.Cookie{
+				Name: "search_pref_custom_css", Value: "", Path: "/", MaxAge: -1,
+				Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r),
+			})
+			values.Del("search_pref_custom_css")
+		} else if values.Has("search_pref_custom_css") && !prefsync.ValidCustomCSS(values.Get("search_pref_custom_css")) {
+			values.Del("search_pref_custom_css")
+		}
 		if values.Has("lang") && values.Get("lang") == "" {
 			http.SetCookie(w, &http.Cookie{Name: "lang", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure(r)})
 			values.Del("lang")
