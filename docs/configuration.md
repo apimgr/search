@@ -457,6 +457,21 @@ file on first run. CLI flags override environment values where both exist.
 | `SMTP_TLS` | `auto`, `starttls`, `tls`, or `none` | `auto` |
 | `I2P_ENABLED` | Explicitly enable or disable the I2P eepsite | `true` in application containers; otherwise `false` |
 
+When `server.notifications.email.smtp.host` is empty on first run, Search probes
+local SMTP servers on ports 25, 465, and 587. It tries loopback, the Docker
+bridge and default gateway, then the detected FQDN, public IPv4 address, and
+`mail.`/`smtp.` hostnames. Each candidate must complete an SMTP EHLO handshake;
+the first working host and port are saved to `server.yml`, with TLS mode left
+at `auto`. If none responds, email notifications stay disabled and startup
+continues. A configured host is checked at startup instead. A failed check
+disables email and logs a warning; the server retries at the next startup or
+configuration reload. These checks do not prevent the server from starting.
+
+With `SMTP_TLS=auto` (the default), port 465 uses implicit TLS. Other ports
+connect in plaintext first and use STARTTLS if the server offers it. SMTP
+credentials are sent only after TLS has been established. Explicit `tls`,
+`starttls`, and `none` modes retain their configured behavior.
+
 ### Init-only connection variables
 
 These variables are read only when the installation first creates its

@@ -68,7 +68,7 @@ search --port 64080
 search --config /etc/apimgr/search
 
 # Start with custom data directory
-search --data /var/lib/search
+search --data /var/lib/apimgr/search
 
 # Start in development mode
 search --mode development
@@ -386,7 +386,9 @@ Results support `table`, `json`, `yaml`, `plain`, and `csv` output through `--ou
 
 ### TUI Mode
 
-The TUI launches automatically when `search-cli` is run interactively with no search query (auto-detected from the terminal environment — there is no `--tui` flag).
+The TUI launches automatically when `search-cli` is run interactively in a
+terminal without a local graphical display and with no search query. A local
+graphical display opens the GUI by default; there is no `--tui` flag.
 
 ```bash
 search-cli
@@ -434,7 +436,7 @@ Output:
 #### JSON
 
 ```bash
-search-cli --format json "privacy"
+search-cli --output json "privacy"
 ```
 
 Output:

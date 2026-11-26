@@ -46,7 +46,18 @@ URL safety answers report related domains only when a one-edit lookalike is pres
 
 ## Direct answers
 
-Use a `type:term` prefix to open a full-page answer. Common types include `tldr:`, `man:`, `wiki:`, `pkg:`, `cve:`, `dns:`, `whois:`, `resolve:`, `cert:`, `headers:`, `safe:`, and `cache:`. See the project IDEA for the full list and each answer's data sources.
+Use a `type:term` prefix to open a full-page answer. The supported prefixes are
+`asn:`, `ascii:`, `beautify:`, `cache:`, `case:`, `cert:`, `cheat:`, `chmod:`,
+`country:`, `cron:`, `cve:`, `dict:`, `diff:`, `directory:`, `dns:`, `emoji:`,
+`escape:`, `expand:`, `feed:`, `headers:`, `html:`, `http:`, `json:`, `jwt:`,
+`license:`, `lorem:`, `man:`, `mime:`, `pkg:`, `port:`, `qr:`, `regex:`,
+`resolve:`, `rfc:`, `robots:`, `rules:`, `safe:`, `sitemap:`, `slang:`,
+`subnet:`, `tech:`, `thesaurus:`, `timestamp:`, `tldr:`, `unicode:`,
+`useragent:`, `whois:`, `wiki:`, and `word:`. Each opens a dedicated result
+page; enter the value after the colon. A space after the colon is optional.
+For example, `dns:example.com` looks up DNS records and `ascii:hello` renders
+an ASCII representation. Data-source details and individual result behavior
+are shown on the relevant result pages.
 
 `wiki:` provides the article summary, a contents list, expandable text-only sections, infobox fields when present, related articles, and a language selector. Parsed Wikimedia markup is converted to escaped text before it reaches the page; if article details are unavailable, the summary remains available.
 

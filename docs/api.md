@@ -58,6 +58,7 @@ Convenience aliases that map to the canonical versioned handlers:
 |-------|-----------|-------------|
 | `/api/healthz` | `/api/v1/server/healthz` | Health check |
 | `/api/v1/server/healthz.txt` | `/api/v1/server/healthz` | Health check (plain text) |
+| `/api/v1/server/auth/check` | — | Validate the bearer credential and identify its kind |
 | `/api/graphql` | `/api/v1/server/graphql` | GraphQL query endpoint |
 | `/api/mcp`, `/mcp` | `/api/v1/server/mcp` | MCP Streamable HTTP endpoint |
 | `/api/autodiscover` | — | Machine-readable server metadata (see [Integrations](integrations.md)) |
@@ -340,6 +341,11 @@ curl -q -LSsf -H "Authorization: Bearer YOUR_OPERATOR_TOKEN" \
   "https://scour.li/api/v1/server/scheduler/tasks"
 ```
 
+`GET /api/v1/server/auth/check` accepts an operator, owner, or linked-token
+bearer credential. A valid credential returns `200` with `data.kind` set to
+`operator` or `owner`; a missing or invalid credential returns `401`. This
+endpoint identifies the credential class but does not grant operator access.
+
 ### Health
 
 #### `GET /api/v1/server/healthz`
@@ -413,11 +419,14 @@ configuration and can only be changed through the server's
 
 #### `GET /api/v1/server/geoip/ips`
 
-Look up the requesting address using the local GeoIP database. The response includes source attribution.
+Look up the requesting address using the local GeoIP database. The response
+includes source attribution. The `.txt` variant returns the same lookup as
+plain text.
 
 #### `GET /api/v1/server/geoip/ips/{ip}`
 
-Look up an explicit IP address. Private addresses are not resolved to public location data.
+Look up an explicit IP address. The `.txt` variant returns the same lookup as
+plain text. Private addresses are not resolved to public location data.
 
 #### Presets
 
@@ -480,6 +489,20 @@ Revoke returns `{ "id": "<uuid>", "status": "revoked" }`. List and update
 responses never contain raw token values, hashes, or encrypted values. Linked tokens
 are intended for individual CLI, automation, or MCP clients and can be revoked
 without rotating the primary token. These routes are never exposed as MCP tools.
+
+| Method | Endpoint | Action |
+|--------|----------|--------|
+| GET | `/api/v1/server/preferences/tokens` | List masked owner and linked tokens |
+| POST | `/api/v1/server/preferences/tokens` | Create a linked token |
+| PATCH | `/api/v1/server/preferences/tokens/{id}` | Update a linked token's name or expiry |
+| DELETE | `/api/v1/server/preferences/tokens/{id}` | Revoke a linked token |
+| POST | `/api/v1/server/preferences/tokens/{id}/reveal` | Reveal a linked token |
+| POST | `/api/v1/server/preferences/tokens/{id}/rotate` | Rotate a linked token |
+| POST | `/api/v1/server/preferences/tokens/primary` | Issue the initial primary owner token |
+| POST | `/api/v1/server/preferences/tokens/primary/reveal` | Reveal the primary token |
+| POST | `/api/v1/server/preferences/tokens/primary/rotate` | Rotate the primary token |
+| DELETE | `/api/v1/server/preferences/tokens/primary` | Revoke the primary token and delete its owner resources |
+
 `POST /api/v1/server/preferences/tokens/primary` issues a new owner credential
 without authentication and returns it as `data.owner_token`; a request presenting
 any already-valid owner token receives `409`. `DELETE

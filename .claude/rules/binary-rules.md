@@ -15,7 +15,7 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 - Skip the client — `search-cli` is REQUIRED for every project, there is no skip case
 
 ## CRITICAL - ALWAYS DO
-- Build two binaries: `search` (server) and `search-cli` (client), from `src/server` and `src/client`
+- Build two binaries: `search` (server) from `./src` and `search-cli` (client) from `./src/client`
 - Let the binary handle ALL initialization: create directories on first run, set permissions from run context, work as root or user
 - Under `TERM=dumb`, emit no ANSI sequences unless `--color=yes` is explicit; that override enables colors only, never cursor control, clearing, emoji, spinners, or TUI
 - Implement the PART 8 flags exactly, including shared `--shell` commands, `--color`, and `--lang`, plus path/listener/mode/status/service/maintenance/update flags
