@@ -327,9 +327,12 @@ display:
   # auto, gui, or tui
   mode: auto
 output:
-  # table, json, yaml, plain, or csv
+  # table, json, or plain
   format: table
   color: auto
+defaults:
+  page: 1
+  limit: 20
 update:
   auto: false
   check_interval: per_invocation
@@ -411,7 +414,7 @@ The client can inspect tasks and trigger a run. Change a task's enabled state
 with the server's local `search --maintenance scheduler enable|disable` command,
 which writes `server.scheduler.tasks.<id>.enabled` in the configuration.
 
-Results support `table`, `json`, `yaml`, `plain`, and `csv` output through `--output`.
+Results support `table`, `json`, and `plain` output through `--output`.
 
 ### TUI Mode
 
@@ -505,6 +508,8 @@ search-cli "!ddg privacy"
 | `SEARCH_TOKEN` | API token |
 | `SEARCH_SERVER_TIMEOUT` | Request timeout in seconds |
 | `SEARCH_OUTPUT_FORMAT` | Default output format (e.g. `table`, `json`) |
+| `SEARCH_PAGE` | Default result page when `--page` is omitted |
+| `SEARCH_LIMIT` | Default results per page when `--limit` is omitted |
 | `SEARCH_LANG` | Output language code (e.g. `en`, `es`, `zh`) |
 | `SEARCH_COLOR` | Color output mode (`auto`, `yes`, or `no`) |
 | `SEARCH_DEBUG` | Enable debug output unless `--debug` explicitly overrides it |

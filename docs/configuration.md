@@ -308,16 +308,21 @@ server:
 
 ### Tor Hidden Service
 
-Tor settings are stored in `yaml.d/tor.yml`.
+Tor settings are stored in `server.yml` under `server.tor`.
 
 ```yaml
 server:
   tor:
-    # Auto-enabled when tor binary is found on PATH
+    # Route application-owned search-engine requests through Tor.
     use_network: false
     # Publish the .onion address in /api/autodiscover only when enabled
     expose: false
 ```
+
+When `use_network` is enabled, search-engine requests use the app-managed Tor
+SOCKS listener. If Tor is unavailable, those requests fail closed instead of
+falling back to the clearnet. User-supplied image proxy destinations use their
+separate SSRF-checked transport and are never sent through the Tor client.
 
 ### I2P Eepsite
 
@@ -642,6 +647,8 @@ Client-side (`search-cli` talking to a remote server):
 | `SEARCH_TOKEN` | Operator token for privileged CLI actions |
 | `SEARCH_SERVER_TIMEOUT` | Request timeout in seconds |
 | `SEARCH_OUTPUT_FORMAT` | Default output format (e.g. `table`, `json`) |
+| `SEARCH_PAGE` | Default client result page when `--page` is omitted |
+| `SEARCH_LIMIT` | Default client results per page when `--limit` is omitted |
 
 ## CLI Flags
 
@@ -1229,7 +1236,6 @@ Example prompt: Search for recent privacy-preserving search engine projects, the
 | `server.tokens.cookie_max_age` | `1y` |
 | `server.tokens.idle_purge_days` | `0` |
 | `server.tokens.max_linked` | `25` |
-| `server.tor.allow_user_preference` | `true` |
 | `server.tor.bandwidth_burst` | `2 MB` |
 | `server.tor.bandwidth_rate` | `1 MB` |
 | `server.tor.binary` | `` |

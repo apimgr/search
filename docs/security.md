@@ -225,6 +225,12 @@ search
 
 The .onion address is displayed in the startup banner.
 
+When `server.tor.use_network` is enabled, Search routes its application-owned
+search-engine requests through the managed Tor SOCKS listener and fails those
+requests closed if Tor is unavailable. Requests to destinations supplied by a
+visitor, including favicon lookup and image proxying, use their separate
+validated direct transports and never use the app's Tor client.
+
 ## GeoIP Blocking
 
 Block or allow traffic from specific countries (as a risk signal, not the sole gate):
