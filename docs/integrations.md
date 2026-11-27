@@ -170,11 +170,13 @@ metrics settings.
 
 ## GraphQL
 
-Search exposes a GraphQL API. The interactive GraphiQL explorer is served at
-`GET /server/docs/graphql`. Both `/api/v1/server/graphql` and the direct
-`/api/graphql` alias accept read-only queries over GET and queries or mutations
-over POST. GET uses `query` and optional JSON `variables` and `operationName`
-URL parameters; GET mutations are rejected.
+Search exposes a read-only GraphQL API. The interactive GraphiQL explorer is
+served at `GET /server/docs/graphql`. Both `/api/v1/server/graphql` and the
+direct `/api/graphql` alias accept queries over GET or POST. GET uses `query`
+and optional JSON `variables` and `operationName` URL parameters. POST accepts
+JSON query requests; the versioned endpoint also accepts the explorer's
+URL-encoded form submission and returns the rendered result page. Mutations
+are unsupported.
 Core search, autocomplete, instant-answer, direct-answer, and health fields use the same services as REST; inspect the live GraphiQL schema for current query arguments and response fields. REST-only operations remain documented in the REST API reference.
 Schema type and field descriptions follow the request language, including in
 GraphQL introspection responses.

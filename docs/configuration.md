@@ -393,7 +393,7 @@ server:
     ttl: 300
 ```
 
-The REST API uses its own `limit` parameter (default 20, maximum 100); it does
+The REST API uses its own `limit` parameter (default 250, maximum 250); it does
 not inherit `search.results_per_page`.
 
 ### Search Alert Settings
@@ -980,16 +980,15 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.notifications.email.smtp.port` | `587` |
 | `server.notifications.email.smtp.tls` | `auto` |
 | `server.notifications.email.smtp.username` | `` |
-| `server.notifications.database_error.check_interval` | `1m` |
 | `server.notifications.database_error.enabled` | `true` |
 | `server.notifications.database_error.failures` | `3` |
 | `server.notifications.database_error.repeat` | `24h` |
-| `server.notifications.disk_low.check_interval` | `5m` |
 | `server.notifications.disk_low.enabled` | `true` |
 | `server.notifications.disk_low.repeat` | `24h` |
 | `server.notifications.disk_low.threshold_percent` | `85` |
-| `server.notifications.webui.duration` | `5` |
+| `server.notifications.webui.duration` | `3` |
 | `server.notifications.webui.position` | `top-right` |
+| `server.notifications.webui.warning_duration` | `5` |
 | `server.pages.about.content` | `` |
 | `server.pages.about.enabled` | `true` |
 | `server.pages.contact.captcha_secret_key` | `<redacted>` |

@@ -10,6 +10,9 @@ Frontend routes honor `Accept` preferences in this order: JSON, HTML, then
 plain text. With no explicit preference, `search-cli` receives JSON, text
 browsers receive JavaScript-free HTML, known HTTP tools (including requests
 with no User-Agent) receive formatted text, and other clients receive HTML.
+The text-browser variant preserves the server-rendered page content, links, and
+forms while omitting script elements; a normal browser still receives the
+interactive page.
 API routes default to JSON; `.txt`, `Accept: text/plain`, or a known HTTP tool
 selects plain text. Supported explicit `Accept` preferences take precedence
 over client detection.
@@ -22,9 +25,9 @@ over client detection.
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI specification (JSON) |
 | `/api/swagger` | GET | OpenAPI specification for the current API version (JSON) |
-| `/server/docs/graphql` | GET, POST | GraphiQL interactive explorer (queries and mutations submit with POST) |
-| `/api/graphql` | GET, POST | Read-only GraphQL queries (GET); queries or mutations (POST), unversioned alias |
-| `/api/v1/server/graphql` | GET, POST | Read-only GraphQL queries (GET); queries or mutations (POST), versioned canonical |
+| `/server/docs/graphql` | GET | GraphiQL interactive explorer for read-only queries |
+| `/api/graphql` | GET, POST | Read-only GraphQL query endpoint, unversioned alias |
+| `/api/v1/server/graphql` | GET, POST | Read-only GraphQL query endpoint, versioned canonical |
 | `/server/help/mcp` | GET | MCP client help page |
 | `/api/mcp`, `/mcp` | POST | MCP direct aliases |
 | `/api/v1/server/mcp` | POST | Versioned MCP endpoint |
@@ -40,7 +43,7 @@ namespaces:
 | `/server/docs/swagger` | GET | Swagger UI |
 | `/api/v1/server/swagger` | GET | Versioned OpenAPI 3 specification |
 | `/api/swagger` | GET | OpenAPI 3 specification for the current API version |
-| `/server/docs/graphql` | GET, POST | GraphiQL explorer (submits queries and mutations with POST) |
+| `/server/docs/graphql` | GET | GraphiQL explorer for read-only queries |
 
 The documentation pages serve bundled Swagger UI 5.36.0 and GraphiQL 6.0.1,
 including their CSS and fonts. GraphiQL's Monaco integration uses bundled
@@ -78,7 +81,7 @@ Perform a search query.
 |-----------|------|----------|-------------|
 | `q` | string | Yes | Search query |
 | `page` | int | No | Page number (default: 1) |
-| `limit` | int | No | Results per page (default: 20, max: 100) |
+| `limit` | int | No | Results per page (default: 250, max: 250) |
 | `category` | string | No | Search category |
 | `lang` | string | No | Language code (e.g., `en`) |
 | `region` | string | No | ISO country or region code |
@@ -596,23 +599,17 @@ version metadata, method headers, and (for named calls) `Mcp-Name`. Legacy
 
 ## GraphQL API
 
-GraphQL uses the same live services and authorization checks as the corresponding REST API. Alert creation, management, private RSS feeds, and operator inventory are available alongside search and server information. GeoIP preset and scheduler task operations are available to authenticated operators through GraphQL, using the same persisted configuration, task manager, and authorization checks as REST.
+GraphQL is query-only. It exposes read operations that share the REST services and authorization checks, including search, public server information, private alert reads, and operator-authorized status, configuration, GeoIP preset, and scheduler reads. Changes remain available through the corresponding REST routes.
 
 GraphQL type and field descriptions are translated for the request language,
 including introspection results.
 
-`apiRequest(method:, path:, input:)` routes any non-GraphQL REST endpoint
-through the registered API router, preserving its HTTP method, bearer token,
-validation, and response status. Paths must be relative `/api/...` routes;
-GraphQL and MCP recursion is rejected. Request JSON is limited to 64 KiB and
-the response is limited to 4 MiB. Use a GraphQL mutation for this field,
-including when invoking a REST GET.
-
 - **GraphiQL UI** — `GET /server/docs/graphql`
-- **Queries** — `GET` for read-only queries or `POST` for queries and mutations
-  at `/api/v1/server/graphql` (versioned canonical); the `/api/graphql`
-  compatibility alias is also available. GET uses `query` and optional JSON
-  `variables` and `operationName` URL parameters; GET mutations are rejected.
+- **Queries** — `GET` accepts a query plus optional JSON `variables` and
+  `operationName` URL parameters. `POST` accepts a GraphQL JSON request body;
+  the server-rendered explorer also submits a URL-encoded form to the same
+  versioned endpoint and receives the rendered explorer with its result.
+  Both `/api/v1/server/graphql` and `/api/graphql` reject mutations.
 - Requests are limited to 64 KiB, 12 nested field levels, and 100 selected
   fields after fragment expansion. Requests exceeding these limits receive
   HTTP 400; bodies larger than 64 KiB receive HTTP 413.
@@ -620,7 +617,8 @@ including when invoking a REST GET.
 ### Query fields
 
 - `search(q:, category:, page:, lang:, limit:, safeSearch:, timeRange:, region:, engines:)`
-  returns result data, pagination, engine names, and suggestions.
+  returns result data, pagination (limit defaults to 250 and is capped at 250),
+  engine names, and suggestions.
 - `autocomplete(q:)` returns provider suggestions.
 - `relatedSearches(q:, limit:)` returns cached, provider-backed, and generated related queries (limit 1–20; default 8).
 - `engines`, `engine(id:)`, `categories`, `bangs(category:, search:)`, and `widgets(category:)` return public catalogs. `widgetData(type:, params:)` fetches data through the same widget manager as REST.
@@ -628,15 +626,12 @@ including when invoking a REST GET.
 - `directAnswer(type:, term:)` runs a named direct-answer handler.
 - `health` reports the current application version and uptime.
 - `serverInfo` returns the same public runtime information as `GET /api/v1/info`.
-- `preferences` and `savePreferences` match the public GET/POST preferences API.
+- `preferences`, `preferencesExport`, and `ownerTokens` expose read-only preference and owner-token data under their documented authorization rules.
 - `geoIPLookup(ip:)` looks up an explicit IP through the same database and attributed response builder as REST.
 - `serverStatus` and `serverConfig` use the same operator bearer-token authorization and redacted payloads as their REST endpoints.
-- `alerts` lists alerts for operators only. `alert(manageToken:)` and `alertFeed(rssToken:)` require the corresponding private token.
-- `createAlert(input:)`, `updateAlert(manageToken:, input:)`, `pauseAlert(manageToken:, paused:)`, and `deleteAlert(manageToken:)` use the same alert manager and lifecycle rules as REST. Supply `input` as a JSON variable object. `alertFeed(rssToken:)` returns only feed items and the feed URL.
-- `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide operator-only scheduler reads. `runSchedulerTask(task:)` triggers an operator-authorized manual run and writes the same audit event as REST. Task enabled state is changed only through the server's local maintenance CLI.
-- `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists. `saveGeoIPPreset(input:)` and `deleteGeoIPPreset(name:)` persist preset changes to `server.yml`; saving or deleting a preset never changes the active allow/deny lists.
-- `apiRequest(method:, path:, input:)` exposes REST endpoints not otherwise represented by a dedicated GraphQL field through the same registered handler and authorization chain.
-- `saveContactWebhook(input:)` configures an operator contact webhook. The signing secret is stored in `secrets.yml` and never returned by the GraphQL or REST API.
+- `alerts` lists alerts for operators only. `alert(manageToken:)` and `alertFeed(rssToken:)` read private data using their corresponding tokens.
+- `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide read-only operator scheduler data.
+- `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists; changes use the REST API.
 
 Search results expose `title`, `url`, `content`, `engine`, `score`, `category`,
 `thumbnail`, `imageUrl`, `imageWidth`, `imageHeight`, `imageFormat`, `fileSize`,
