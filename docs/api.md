@@ -419,6 +419,18 @@ registered dynamically and follow the fixed core fields in registration order;
 disabled component checks are omitted. Tor and I2P include their lifecycle
 `state`; their public `status` uses only the documented four-state values.
 
+Health routes return HTTP 200 for `healthy`, `degraded`, and `restart_required`.
+A `degraded` result means a non-critical dependency is unavailable while the
+server can still do its core job; for example, some search engines may fail
+while at least one remains available. HTTP 503 is reserved for `unhealthy`,
+`maintenance`, and `shutting_down`.
+
+When `status` is `maintenance`, the response includes a `maintenance` object
+with `reason`, `message`, UTC `since`, and `self_healing` details (`enabled`,
+`exhausted`, `attempts`, `last_attempt`, and `next_attempt`). Attempt timestamps
+are UTC RFC 3339 strings, or `null` before the first attempt and after retry
+exhaustion.
+
 ### Scheduler
 
 #### `GET /api/v1/server/scheduler/tasks`

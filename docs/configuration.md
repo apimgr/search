@@ -473,6 +473,11 @@ file on first run. CLI flags override environment values where both exist.
 | `CACHE_DIR` | Cache directory; checked at each startup | platform default |
 | `PID_FILE` | Server PID file path; `--pid` takes precedence and the saved `server.pidfile: false` setting disables it when no path override is supplied | platform default |
 
+`DOMAIN` supplies the primary public hostname for generated URLs. The saved
+`server.fqdn` value is informational and does not override hostname resolution.
+If no hostname or public IP can be resolved, the server omits the public URL
+and logs one warning; it never substitutes `localhost`.
+
 When `server.notifications.email.smtp.host` is empty on first run, Search probes
 local SMTP servers on ports 25, 465, and 587. It tries loopback, the Docker
 bridge and default gateway, then the detected FQDN, public IPv4 address, and

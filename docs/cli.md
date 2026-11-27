@@ -329,9 +329,25 @@ Set `auth.token` for operator-only commands. Public searches do not require a
 token. The client also accepts `--server`, `--token`, `--output`, `--page`, and
 `--limit` flags.
 
+On first launch, the setup wizard selects the native GUI for a local display
+and the TUI for a terminal session. SSH and Mosh sessions use the TUI even when
+X forwarding is available. A `TERM=dumb` or narrower-than-40-column terminal
+uses inline prompts instead; without an interactive terminal, configure
+`server.primary` in `cli.yml` or pass `--server`.
+
+The wizard can test the server URL and optional token, then save both values to
+the active `cli.yml`. When using `--config profile.yml`, “Set as default
+server” also writes those values to the default `cli.yml`; leaving “Save to
+configuration” unchecked applies the values only to the current run. The GUI
+also offers a per-user “Start automatically on login” option on supported
+platforms.
+
 Check for a client update with `search-cli --update check`. Install a verified
 update from the configured server with `search-cli --update yes`; the client
 checks the published SHA-256 before replacing and restarting its binary.
+With `update.auto: true`, the client installs an available update automatically
+only when it is running non-interactively. Interactive runs ask before
+installing.
 
 ### Basic Usage
 

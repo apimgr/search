@@ -41,3 +41,12 @@ are passed as separate process arguments; shell expansion is not performed.
 The interface shows command output and API error messages in the selected
 view. Machine-only endpoints and server maintenance actions are intentionally
 not part of the client inventory.
+
+## First-run setup
+
+The setup wizard offers the same server URL, optional token, save-to-config,
+default-server, and connection-test choices in the GUI and TUI. The GUI also
+offers a per-user autostart entry on Linux, macOS, and Windows. SSH and Mosh
+sessions select the TUI; a `TERM=dumb` or narrow terminal uses the matching
+inline prompts. A non-interactive run without a configured primary server
+reports a usage error rather than attempting to prompt.
