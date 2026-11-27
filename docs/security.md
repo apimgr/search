@@ -244,6 +244,10 @@ server:
       - RU
 ```
 
+Use `allow_countries` instead to allow only the listed ISO 3166-1 alpha-2 codes. If both lists are configured, `allow_countries` takes precedence. Both lists are empty by default. Named country-list presets may be stored under `server.geoip.presets` for reuse, but saving a preset never applies it: copy the codes into the deny or allow list and review them before saving. Presets are edited in `server.yml`; there is no preset API or bundled regulatory list.
+
+Country data comes from the ip-location-db GitHub release assets. Downloads are validated as MMDB files using their type, metadata, and a known public IP lookup; upstream checksum files are not used because they can mismatch the database. A failed or invalid download preserves the installed database and marks that GeoIP check degraded. GeoIP lookup failures fail open and do not bypass authentication or other security checks.
+
 ## Container Security
 
 Run the following Docker command on the host yourself — not by AI.

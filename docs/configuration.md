@@ -889,6 +889,9 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.description` | `Privacy-Respecting Metasearch Engine` |
 | `server.fqdn` | `` |
 | `server.geoip.enabled` | `true` |
+| `server.geoip.deny_countries` | `[]` |
+| `server.geoip.allow_countries` | `[]` |
+| `server.geoip.presets` | `{}` |
 | `server.group` | `search` |
 | `server.healthz.root.enabled` | `false` |
 | `server.https_port` | `0` |

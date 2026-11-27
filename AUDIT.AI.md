@@ -32,3 +32,10 @@ Started: 2026-11-27
 - [x] Email customization: maintenance-recovery notification bypassed the disk-template engine — registered it as an embedded/customizable template and included it in preview validation.
 
 ## Pass 6: Code Flow Trace
+
+## Pass 7: Additional AI.md Crosswalk Findings
+- [x] Homepage fallback SVG had no explicit dimensions and could dominate `/`; bounded bare SVGs and made the configured logo responsive at the required mobile/desktop sizes.
+- [x] Makefile exposed unsupported targets, stripped debug builds, and published releases; aligned it to six targets, debug builds, and local-only release artifacts, with docs updated.
+- [x] Server and CLI build metadata lived outside `main` while CI linker flags targeted stale packages; restored main-package metadata and synchronized runtime consumers across CI and Docker builds.
+- [ ] Component gallery linked to four contexts but rendered only one at a time; also lacked several catalog component variants and the strong-border token.
+- [ ] Service selection defaulted to systemd without detection and did not follow container or no-user-manager behavior on every supported platform.

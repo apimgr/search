@@ -495,16 +495,10 @@ Development instructions are for contributors only.
 git clone https://github.com/apimgr/search.git
 cd search
 
-# Quick current-platform build (Docker, outputs to /tmp/apimgr/search-XXXXXX/)
-make dev
-
-# Versioned local build for production testing
-make local
-
-# Local builds plus all release platforms (and the optional GUI client artifact)
+# Debug builds for the host and all 8 release platforms
 make build
 
-# Manual stable release only (requires a stable X.Y.Z version)
+# Production artifacts for all platforms, source archive, and checksums (local only)
 make release
 
 # Run tests (Docker)

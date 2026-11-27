@@ -20,16 +20,10 @@ cd search
 ### Build
 
 ```bash
-# Quick current-platform development build (writes to the OS temp directory)
-make dev
-
-# Build a versioned local binary for production testing
-make local
-
-# Build the local server, CLI, optional local GUI CLI, and release platforms
+# Build debug binaries for the host and all 8 release platforms
 make build
 
-# Prepare and publish a stable release (requires X.Y.Z)
+# Build production artifacts, source archive, and checksums locally
 make release
 
 # Regenerate the embedded OpenAPI JSON from src/swagger/annotations.go
@@ -46,17 +40,8 @@ make docker
 
 OpenAPI and GraphQL artifacts are generated from their source annotations or
 schema during build steps. Do not edit `src/swagger/openapi.json` by hand; run
-`go generate ./src/swagger/...` after changing the Swagger annotations. CI runs the
-same Go generator explicitly before tests, linting, and binary builds.
-
-### Run in Development Mode
-
-```bash
-# Build into an OS temp directory for a quick check
-make dev
-
-# Build outputs are disposable; use the generated `Built:` path printed by make dev.
-```
+`go generate ./src/swagger/...` after changing the Swagger annotations. The
+build and test targets run this generator before compiling or testing.
 
 ### Run Tests
 
@@ -117,14 +102,18 @@ search/
 
 ### Linting
 
-CI runs `go vet` and `staticcheck` inside the Go toolchain image. Run `make test` for the local Docker-based test suite.
+`make test` runs `go vet`, `staticcheck`, `govulncheck`, `shellcheck`, and
+`shfmt` inside the Go toolchain container before running the Go tests and
+coverage check. The same target then runs `tests/run_tests.sh` for binary and
+integration checks.
 
 ## Testing
 
-`make test` runs the Go package test suite in the maintained Go toolchain
-container and enforces the project coverage threshold. It includes unit and
-route tests, including locale consistency checks. It does not run the separate
-system integration or browser E2E scripts.
+`make test` runs the Go package suite in the maintained Go toolchain container,
+enforces the project coverage threshold, and runs `tests/run_tests.sh`. This
+includes unit and route tests, locale consistency checks, and the configured
+binary integration suite. The separate Incus system integration and browser
+E2E scripts remain manual checks.
 
 ```bash
 make test

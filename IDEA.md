@@ -215,6 +215,10 @@ The following inventory records the API surface implemented by this project, inc
 - **Request Sanitization**: Strip tracking parameters from outgoing requests
 - **Referrer Hiding**: Never leak search queries to result sites
 
+#### GeoIP
+
+GeoIP provides IP country, city, and network-operator details to the lookup pages and direct answers. Operators may optionally block requests by country using `server.geoip.deny_countries` or allow only selected countries using `server.geoip.allow_countries`; this is a risk signal, never authentication. Country lists and reusable named lists are operator-authored in `server.yml`; no preset list ships and presets are never applied automatically. Private and loopback addresses are not looked up or country-blocked.
+
 #### User Preferences
 
 Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, search preference values, and Custom CSS on the separate `/server/preferences/sync` page using a sync URL or code. Custom CSS is stored in a browser cookie and is limited to 64 characters to match the sync contract. Bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import. The preferences page links to the tools, sync, and (when owner tokens are enabled) token pages from its More preferences card.
