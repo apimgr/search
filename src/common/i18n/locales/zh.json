@@ -44,7 +44,8 @@
     "dismiss": "关闭",
     "upload": "Upload",
     "app_name": "Search",
-    "other": "其他"
+    "other": "其他",
+    "details": "详情"
   },
   "auth": {
     "login": "登录",
@@ -300,6 +301,7 @@
       "expired": "已过期",
       "revoked": "已撤销",
       "primary_revealed": "已显示主令牌",
+      "primary_created": "已创建主令牌",
       "primary_rotated": "已轮换主令牌",
       "linked_created": "已创建关联令牌",
       "linked_revealed": "已显示关联令牌",
@@ -309,7 +311,7 @@
       "expiry_90d": "90 天",
       "expiry_1y": "1 年",
       "shown_once": "仅在本次页面加载时显示一次。",
-      "primary_help": "可完全访问你的提醒。请妥善保密此令牌。",
+      "primary_help": "可完全访问你的{resources}。请妥善保密此令牌。",
       "name_help": "例如：MCP 客户端",
       "expiry_custom": "自定义日期",
       "custom_date": "自定义日期",
@@ -317,7 +319,7 @@
       "create": "创建令牌",
       "this_browser": "此浏览器",
       "saved_in_browser": "所有者令牌已保存在此浏览器中。",
-      "forget_note": "忘记此浏览器会移除已保存的所有者令牌 Cookie。你的提醒不会被删除。",
+      "forget_note": "忘记此浏览器会移除已保存的所有者令牌 Cookie。你的{resources}不会被删除。",
       "forget_saved_token": "忘记已保存的令牌",
       "forget_confirm": "要忘记保存在此浏览器中的所有者令牌吗？",
       "no_linked_tokens": "尚无关联令牌。",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "已忘记保存的所有者令牌",
       "linked_revoked": "已撤销关联令牌",
       "linked_updated": "已更新关联令牌",
-      "reveal": "显示令牌"
+      "reveal": "显示令牌",
+      "new_token": "新建令牌",
+      "revoke_primary_heading": "撤销主令牌",
+      "revoke_primary_summary": "将删除 {linked_count} 个关联令牌和 {resource_count} 个{resources}，包括使用关联令牌创建的所有内容。",
+      "revoke_primary_button": "撤销主令牌并删除所有内容",
+      "revoke_primary_confirm": "请输入主令牌的最后 4 个字符（{last4}）以确认",
+      "primary_revoked": "主令牌已撤销"
     },
     "font_size": "字体大小",
     "font_size_small": "小",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "这是什么问题？",
     "message_label": "消息",
     "message_placeholder": "您的消息...",
-    "verification_question": "验证：{a} + {b} 等于多少？",
+    "verification_question": "验证：{a} {operator} {b} 等于多少？",
     "answer_placeholder": "答案",
     "send_message": "发送消息",
     "security_description": "您正在查看协同披露漏洞报告表单。请尽可能提供详细信息。",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "此电子邮件地址正确，且这是一份真实报告，不是广告、商业招揽或垃圾信息。",
     "form_scope_notice": "此表单仅用于安全报告、本网站 URL 上的条款违规、DMCA 通知和隐私请求。请勿用于支持、错误报告、功能请求或一般问题。",
     "honeypot_label": "请将此字段留空",
-    "type_abuse": "滥用行为",
+    "type_abuse": "举报滥用",
     "type_dmca": "DMCA",
     "type_privacy": "隐私请求",
     "reported_url_label": "被报告的 URL",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "如需报告安全漏洞，请参阅我们的",
     "abuse_reports_heading": "滥用行为报告",
     "abuse_reports_intro": "如需报告滥用内容或违反条款，请在上方选择“滥用行为”。如需发送 DMCA 通知，请在上方选择 DMCA。",
-    "abuse_reports_email": "或发送邮件至 {email}"
+    "abuse_reports_email": "或发送邮件至 {email}",
+    "captcha_label": "人工验证",
+    "choose_type_heading": "选择举报类型",
+    "form_details_heading": "举报详情",
+    "purpose_heading": "此表单的用途",
+    "reported_url_help": "此网站上的页面，例如 https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "数据收集",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "汇总并向您展示结果",
     "data_usage_item_preferences": "记住您的偏好（主题、语言）",
     "data_retention_heading": "数据保留",
+    "retention": {
+      "period": "您创建的资源会保留到期或您使用所有者令牌将其删除为止。偏好设置仅存储在您浏览器的 Cookie 中。运行日志最多保留 30 天。匿名分析数据可能保留最多 12 个月。"
+    },
     "data_retention_description": "我们不会保留搜索查询或个人数据。会话数据是临时的，在您关闭浏览器或会话过期时会被删除。",
     "third_parties_heading": "第三方",
     "third_parties_description": "您的搜索查询会转发给上游搜索引擎以获取结果。我们不会与第三方共享任何其他数据。",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "分析数据可能按本政策所述与第三方合作伙伴共享或出售。",
     "analytics_provider": "分析统计由 {provider} 提供。",
     "analytics_none": "未配置第三方分析统计提供商。",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "数据存储与共享",
     "data_storage_intro": "我们保存的任何数据都会被安全存储，且仅保留必要的时长。",
     "data_storage_never_sold": "除提供搜索结果所需之外，我们不会与第三方共享或出售所存储的数据。",
@@ -1645,6 +1669,12 @@
     "last_updated": "最后更新：{date}",
     "acceptance_heading": "1. 接受条款",
     "acceptance_description": "访问或使用 {app_name} (\"the Service\") 即表示您同意受本服务条款约束。如果您不同意这些条款，请不要使用 Service。",
+    "governing_law_description": "除非运营者自己的条款另有规定，否则适用美国法律，不考虑法律冲突规则。",
+    "governing_law_heading": "适用法律",
+    "liability_description": "本服务按现状提供，不作任何形式的保证。在法律允许的范围内，运营者不对因使用本服务产生的损失负责。",
+    "liability_heading": "责任",
+    "acceptable_use_description": "不得违法使用本服务、伤害他人、绕过速率限制或访问控制，也不得超出 /server/security/policy 中安全政策的范围进行测试。",
+    "acceptable_use_heading": "可接受的使用",
     "description_heading": "2. 服务说明",
     "description_body": "{app_name} 是一款注重隐私的元搜索引擎，汇总来自多个搜索引擎的结果。Service 以 \"as is\" 形式提供，不提供任何类型的担保。",
     "user_conduct_heading": "3. 用户行为",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. 服务变更",
     "modifications_description": "我们保留随时修改、暂停或终止 Service 的权利，恕不另行通知。对于任何修改、暂停或终止，我们不对您或任何第三方承担责任。",
-    "changes_heading": "10. 条款变更",
-    "changes_description": "我们可能会不时更新本服务条款。我们会通过更新 \"Last updated\" 日期来通知用户任何重大变更。您在变更后继续使用 Service 即表示接受新条款。",
+    "changes_heading": "变更",
+    "changes_description": "这些条款可能会发生变化。本页面当前文本自发布时起适用。",
     "contact_prefix": "如果您对本服务条款有任何问题，请",
     "contact_suffix": "。"
   },
   "help": {
+    "i2p": {
+      "heading": "I2P 访问",
+      "intro": "本应用可作为 I2P eepsite 使用，以增强隐私保护。",
+      "address_heading": "I2P 地址",
+      "how_to_heading": "连接方法",
+      "step_install": "安装",
+      "step_or": "或",
+      "step_connect": "并等待其接入网络。",
+      "step_proxy": "将浏览器配置为使用 I2P HTTP 代理，地址为",
+      "step_address": "复制上方的 .b32.i2p 地址并粘贴到浏览器地址栏。",
+      "note": "I2P 通过网络路由连接来增强隐私。Eepsite 使用 http:// 提供服务；I2P 隧道会加密传输，因此不使用 TLS 证书。"
+    },
+    "troubleshooting": {
+      "heading": "故障排除",
+      "search": "请尝试更宽泛的查询或移除搜索运算符；所选引擎可能没有匹配结果。若引擎暂时不可用，请稍后重试。",
+      "access": "如果没有 Tor 部分，请使用 search --maintenance tor status 检查服务是否运行且已发布 onion 地址。如果没有 I2P，请管理员检查提供程序和已发布地址。",
+      "alerts": "如果提醒管理链接无法打开，请使用确认消息中的完整链接；令牌可能无效或提醒已删除。请修正表单错误指出的字段并重新提交。"
+    },
     "page_title": "Help",
     "title": "Help & Documentation",
     "subtitle": "Learn how to get the most out of {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "更多信息",
     "policy_title": "披露政策",
     "policy_scope_heading": "范围",
-    "policy_scope_description": "本政策适用于此部署实例及其公开的服务。",
+    "policy_scope_description": "在 {fqdn} 提供的应用及其 API 均属于范围。",
+    "policy_reporting_description": "请通过安全概览私下报告。",
+    "policy_reporting_heading": "报告",
+    "policy_out_of_scope_item_headers": "非敏感页面缺少最佳实践标头",
+    "policy_out_of_scope_item_scanner": "没有证明影响的自动扫描器输出",
+    "policy_in_scope_item_i2p": "I2P 地址：{address}",
+    "policy_in_scope_item_tor": "Tor 地址：{address}",
+    "policy_in_scope_item_host": "其他已配置主机：{host}",
     "policy_disclosure_window_heading": "协同披露期限",
-    "policy_disclosure_window_description": "除非另行约定披露日期，否则我们要求研究人员给予最多 90 天时间来评估和修复所报告的问题，然后再进行任何公开披露。",
+    "policy_disclosure_window_description": "请通过安全概览私下报告，并自报告之日起为协调披露留出 90 天；修复发布后期限提前结束，也可经双方同意延长。",
     "policy_in_scope_heading": "范围内",
     "policy_in_scope_item_deployed": "此部署实例及其公开端点",
     "policy_in_scope_item_api": "公开 API",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "物理安全测试",
     "policy_out_of_scope_item_third_party": "我们无法控制的第三方服务",
     "policy_safe_harbor_heading": "安全港",
-    "policy_safe_harbor_description": "对于本着善意努力遵守本政策、负责任地报告漏洞、并避免侵犯隐私、破坏数据或中断服务的研究人员，我们不会采取法律行动。",
+    "policy_safe_harbor_description": "遵循本政策、避免侵犯隐私和中断服务、仅访问证明问题所需内容并在证明后停止的善意研究均获授权；对此类研究不会采取法律行动。",
     "policy_contact_prefix": "有关本政策的问题可通过",
     "policy_contact_suffix": "页面发送。",
     "thanks_title": "安全致谢",
@@ -2186,6 +2241,8 @@
     "report_status_title": "安全报告状态",
     "report_status_tracking_id_label": "跟踪编号：",
     "report_status_state_label": "状态：",
+    "report_status_comment_label": "维护者评论",
+    "report_status_disclosure_date_label": "预计披露日期",
     "report_status_state_received": "已收到",
     "report_status_state_triaged": "已评估",
     "report_status_state_confirmed": "已确认",
@@ -2232,6 +2289,7 @@
       "label_current_version": "当前版本:",
       "label_new_version": "新版本:",
       "label_release_date": "发布日期:",
+      "label_channel": "发布渠道：",
       "label_release_notes": "发行说明:",
       "label_view_update": "查看更新:",
       "manual_command": "手动更新命令：{command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "已安装更新 - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "更新失败 - {app_name}",
         "body": "更新失败\n\n发件方：{app_name} ({fqdn})\n时间：{timestamp}\n\n无法安装更新 {version}。\n原因：{error}\n\n旧版本仍在运行。\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "更新已暂存 - {app_name}",
+        "body": "更新已暂存\n\n发件方：{app_name} ({fqdn})\n时间：{timestamp}\n\n更新 {version} 已验证并准备安装。\n\n重新启动服务即可应用更新。\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

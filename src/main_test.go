@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -11,6 +12,113 @@ import (
 
 	"github.com/apimgr/search/src/config"
 )
+
+func TestExplicitHelp(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "long help", args: []string{"--help"}, want: true},
+		{name: "short help", args: []string{"-h"}, want: true},
+		{name: "no help", args: []string{"--status"}},
+		{name: "helpful is a different flag", args: []string{"--helpful"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := explicitHelp(tt.args); got != tt.want {
+				t.Fatalf("explicitHelp(%q) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMissingLegacyCommandUsesUsageExit(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{name: "service", arg: "--service", want: "service action is required"},
+		{name: "maintenance", arg: "--maintenance", want: "maintenance action is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldArgs, oldStderr, oldExit := os.Args, os.Stderr, exitFunc
+			readPipe, writePipe, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("create stderr pipe: %v", err)
+			}
+			os.Args = []string{"search", tt.arg}
+			os.Stderr = writePipe
+			var exitCode int
+			exitFunc = func(code int) { exitCode = code }
+			t.Cleanup(func() {
+				os.Args, os.Stderr, exitFunc = oldArgs, oldStderr, oldExit
+				if err := writePipe.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+					t.Errorf("close stderr writer: %v", err)
+				}
+				if err := readPipe.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+					t.Errorf("close stderr reader: %v", err)
+				}
+			})
+
+			handleLegacyArgs()
+			if err := writePipe.Close(); err != nil {
+				t.Fatalf("close stderr writer: %v", err)
+			}
+			stderr, err := io.ReadAll(readPipe)
+			if err != nil {
+				t.Fatalf("read stderr: %v", err)
+			}
+			if exitCode != 2 {
+				t.Fatalf("exit code = %d, want 2", exitCode)
+			}
+			if !strings.Contains(string(stderr), tt.want) || !strings.Contains(string(stderr), "Usage:") {
+				t.Fatalf("stderr = %q, want localized error and usage hint", stderr)
+			}
+		})
+	}
+}
+
+func TestUnknownServiceActionIsUsageError(t *testing.T) {
+	oldArgs, oldStderr, oldExit := os.Args, os.Stderr, exitFunc
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	os.Args = []string{"renamed-search"}
+	os.Stderr = writePipe
+	var exitCode int
+	exitFunc = func(code int) { exitCode = code }
+	t.Cleanup(func() {
+		os.Args, os.Stderr, exitFunc = oldArgs, oldStderr, oldExit
+		if err := writePipe.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Errorf("close stderr writer: %v", err)
+		}
+		if err := readPipe.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Errorf("close stderr reader: %v", err)
+		}
+	})
+
+	stdout := captureStdout(t, func() { runService("invalid") })
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	stderr, err := io.ReadAll(readPipe)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	if exitCode != 2 {
+		t.Fatalf("unknown service action exit code = %d, want 2", exitCode)
+	}
+	if stdout != "" {
+		t.Fatalf("unknown service action wrote to stdout: %q", stdout)
+	}
+	if !strings.Contains(string(stderr), "Unknown service action") || !strings.Contains(string(stderr), "Usage: renamed-search --service --help") {
+		t.Fatalf("stderr = %q, want error and usage hint", stderr)
+	}
+}
 
 func TestMaintenanceBackupConfigRejectsInitializationFailure(t *testing.T) {
 	wantErr := errors.New("invalid server.yml")
@@ -268,6 +376,18 @@ func TestDetectShell(t *testing.T) {
 			wantDescr: "fish",
 		},
 		{
+			name:      "POSIX shell from path",
+			shellEnv:  "/bin/dash",
+			wantFn:    func(got string) bool { return got == "dash" },
+			wantDescr: "dash",
+		},
+		{
+			name:      "Korn shell from path",
+			shellEnv:  "/bin/ksh",
+			wantFn:    func(got string) bool { return got == "ksh" },
+			wantDescr: "ksh",
+		},
+		{
 			name:      "powershell bare name",
 			shellEnv:  "powershell",
 			wantFn:    func(got string) bool { return got == "powershell" },
@@ -280,15 +400,10 @@ func TestDetectShell(t *testing.T) {
 			wantDescr: "pwsh",
 		},
 		{
-			name:     "unknown shell falls back to platform default",
-			shellEnv: "/bin/tcsh",
-			wantFn: func(got string) bool {
-				if runtime.GOOS == "windows" {
-					return got == "powershell"
-				}
-				return got == "bash"
-			},
-			wantDescr: "bash (linux/darwin) or powershell (windows)",
+			name:      "unknown shell remains available for unsupported-shell error",
+			shellEnv:  "/bin/tcsh",
+			wantFn:    func(got string) bool { return got == "tcsh" },
+			wantDescr: "tcsh",
 		},
 		{
 			name:       "empty SHELL falls back to platform default",

@@ -71,7 +71,7 @@ DOCKER_TIMEOUT ?= 3600
 # --rm: never leave an exited container behind; --no-healthcheck: the toolchain image's service HEALTHCHECK must not poll a one-shot build container;
 # timeout: a hung run is stopped after DOCKER_TIMEOUT seconds (the signal is forwarded to the container, which stops)
 GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthcheck \
-	--name $(PROJECT_NAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	--name $(PROJECT_NAME)-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) \
 	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=$(DOCKER_CPU_SHARES) \
 	-v $(PWD):/app \
 	-v $(abspath $(BINDIR)):/build-output \
@@ -83,7 +83,7 @@ GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthchec
 GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
 # CGO_ENABLED=0 and GOFLAGS=-buildvcs=false are casjaysdev/go:latest defaults; set explicitly for clarity
 
-.PHONY: build local release release-check docker test dev clean
+.PHONY: build local release release-check beta docker test dev clean
 
 # =============================================================================
 # BUILD - Build all platforms + local binary (via Docker with cached modules)
@@ -147,6 +147,12 @@ local: clean
 # Stable SemVer only: a devel version (short commit id or "devel") and any prerelease (-beta, -rc) are published by CI, never by this target
 release-check:
 	@echo "$(VERSION)" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' >/dev/null || { echo "ERROR: make release needs a stable SemVer X.Y.Z in release.txt (got '$(VERSION)')" >&2; exit 78; }
+
+# Tag the current main commit with a UTC timestamp; CI publishes the beta from this tag.
+beta:
+	@[ "$$(git branch --show-current)" = main ] || { echo "ERROR: make beta must run on main" >&2; exit 2; }
+	@[ -z "$$(git status --porcelain)" ] || { echo "ERROR: make beta requires a clean working tree" >&2; exit 2; }
+	@tag=$$(date -u +%Y%m%d%H%M%S)-beta; git tag "$$tag" && git push origin "refs/tags/$$tag" && echo "Pushed beta tag $$tag"
 
 release: release-check build
 	@mkdir -p $(RELDIR)
@@ -260,7 +266,9 @@ test:
 		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX\") && \
 		go mod download && \
 		go generate ./src/swagger/... && \
-		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
+		mkdir -p \$$COVDIR/data && \
+		go test -v -cover ./... -args -test.gocoverdir=\$$COVDIR/data && \
+		go tool covdata textfmt -i=\$$COVDIR/data -o=\$$COVDIR/coverage.out && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep '^total:' | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
 		if [ \$$(echo \"\$$COVERAGE < 60\" | bc -l) -eq 1 ]; then \
@@ -296,7 +304,8 @@ dev:
 			if [ -d src/client ]; then go build -buildvcs=false -o /build/$(PROJECT_NAME)-cli ./src/client; fi' && \
 		echo "Built: $$BUILD_DIR/$(PROJECT_NAME)" && \
 		if [ -d "src/client" ]; then echo "Built: $$BUILD_DIR/$(PROJECT_NAME)-cli"; fi && \
-		echo "Test:  docker run --rm --name $(PROJECT_NAME)-test -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECT_NAME) --help"
+		TEST_CONTAINER="$(PROJECT_NAME)-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" && \
+		echo "Test:  docker run --rm --name $$TEST_CONTAINER -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECT_NAME) --help"
 
 # =============================================================================
 # CLEAN - Remove build artifacts

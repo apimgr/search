@@ -22,7 +22,11 @@ func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handlePreferencesSync(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		_ = r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Redirect(w, r, preferenceRedirect(r), http.StatusSeeOther)
+			return
+		}
 		clone := r.Clone(r.Context())
 		urlCopy := *r.URL
 		urlCopy.RawQuery = r.Form.Encode()

@@ -3,14 +3,12 @@ package server
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -96,12 +94,20 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 
 // handlePrivacy renders the privacy page
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(w, r, "", "privacy")
+	data := privacyPageData{
+		PageData:     s.newPageData(w, r, "", "privacy"),
+		RequestSecure: httputil.GetProtoFromRequest(r) == "https",
+	}
 	data.Title = s.getI18nManager().T(data.Lang, "footer.privacy_policy")
 
 	if err := s.renderer.Render(w, "privacy", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
 	}
+}
+
+type privacyPageData struct {
+	*PageData
+	RequestSecure bool
 }
 
 type dpoPageData struct {
@@ -251,26 +257,16 @@ func (s *Server) renderContactFormValues(w http.ResponseWriter, r *http.Request,
 		}
 	}
 	captchaRequired := true
-	var a, b int
-	var captchaID string
+	captchaID, captchaQuestion := s.NewContactChallenge(r)
+	if captchaID == "" || captchaQuestion == "" {
+		s.handleError(w, r, http.StatusServiceUnavailable,
+			i18n.RequestString(r, "errors.server_error_title"),
+			i18n.RequestString(r, "errors.server_error_message"))
+		return
+	}
 	mode, siteKey, secretKey := s.configuredContactCaptcha()
 	onionRequest := isOnionRequest(s.config, r)
 	externalCaptcha := captchaRequired && !onionRequest && (mode == "recaptcha" || mode == "hcaptcha") && siteKey != "" && secretKey != ""
-	if captchaRequired && (mode == "simple" || onionRequest) {
-		captchaA, err := rand.Int(rand.Reader, big.NewInt(10))
-		if err != nil {
-			s.handleInternalError(w, r, "contact captcha challenge", err)
-			return
-		}
-		captchaB, err := rand.Int(rand.Reader, big.NewInt(10))
-		if err != nil {
-			s.handleInternalError(w, r, "contact captcha challenge", err)
-			return
-		}
-		a = int(captchaA.Int64()) + 1
-		b = int(captchaB.Int64()) + 1
-		captchaID = s.signCaptcha(a + b)
-	}
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, "", "contact")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "contact.page_title")
@@ -280,10 +276,10 @@ func (s *Server) renderContactFormValues(w http.ResponseWriter, r *http.Request,
 
 	data := &ContactPageData{
 		PageData:        *baseData,
+		ContactFQDN:     extractHostFromURL(s.getBaseURL(r)),
 		ContactError:    contactError,
-		CaptchaA:        a,
-		CaptchaB:        b,
 		CaptchaID:       captchaID,
+		CaptchaQuestion: captchaQuestion,
 		CaptchaRequired: captchaRequired,
 		CaptchaExternal: externalCaptcha,
 		CaptchaLocal:    captchaRequired && (mode == "simple" || onionRequest),
@@ -294,6 +290,11 @@ func (s *Server) renderContactFormValues(w http.ResponseWriter, r *http.Request,
 		SecurityID:      securityID,
 		ReviewFields:    make(map[string]string),
 	}
+	data.ContactType = values.Get("type")
+	if data.ContactType != "abuse" && data.ContactType != "dmca" && data.ContactType != "privacy" {
+		data.ContactType = ""
+	}
+	data.ContactChooser = !securityMode && data.ContactType == "" && r.URL.Query().Get("success") != "1"
 	for key, entries := range values {
 		if len(entries) > 0 {
 			data.ReviewFields[key] = entries[0]
@@ -476,7 +477,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if reason == "content" {
-				s.renderContactForm(w, r, securityID, securityMode, "Your message could not be sent")
+				s.renderContactFormValues(w, r, securityID, securityMode, "Your message could not be sent", r.PostForm)
 				return
 			}
 			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
@@ -501,13 +502,13 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_field_too_long"), Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
 		} else {
 			s.markContactCaptchaRequired(w, r)
-			s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
+				s.renderContactFormValues(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"), r.PostForm)
 		}
 		return
 	}
 	if name == "" || addressErr != nil || address.Address != strings.TrimSpace(r.PostFormValue("email")) || subject == "" || message == "" || utf8.RuneCountInString(name) > 100 || utf8.RuneCountInString(address.Address) > 254 || utf8.RuneCountInString(subject) > 200 || utf8.RuneCountInString(message) > 5000 {
 		s.markContactCaptchaRequired(w, r)
-		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"))
+		s.renderContactFormValues(w, r, "", false, s.getI18nManager().T(lang, "errors.bad_request"), r.PostForm)
 		return
 	}
 	if reason, retryAfter := s.AcceptContactSubmission(r, getClientIPSimple(r), address.Address, name, subject, message, false); reason != "" {
@@ -527,7 +528,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 				respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_send_failed"), Details: map[string]interface{}{"field": "contact", "rule": "invalid"}})
 			} else {
 				s.markContactCaptchaRequired(w, r)
-				s.renderContactForm(w, r, "", false, "Your message could not be sent")
+				s.renderContactFormValues(w, r, "", false, "Your message could not be sent", r.PostForm)
 			}
 			return
 		}
@@ -546,7 +547,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 		s.ForgetContactSubmission(r, getClientIPSimple(r), address.Address, name, subject, message, false)
 		slog.Error("contact message delivery failed")
 		s.markContactCaptchaRequired(w, r)
-		s.renderContactForm(w, r, "", false, s.getI18nManager().T(lang, "errors.server_error_message"))
+		s.renderContactFormValues(w, r, "", false, s.getI18nManager().T(lang, "errors.server_error_message"), r.PostForm)
 		return
 	}
 	s.clearContactCaptchaRequirement(w, r)
@@ -668,25 +669,6 @@ func (s *Server) respondContactSpamSuccess(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
 }
 
-func (s *Server) validCaptcha(id, answerText string) bool {
-	parts := strings.SplitN(id, ".", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	answer, err := strconv.Atoi(answerText)
-	if err != nil || answer < 2 || answer > 20 {
-		return false
-	}
-	expectedAnswer, err := strconv.Atoi(parts[0])
-	if err != nil || expectedAnswer < 2 || expectedAnswer > 20 || answer != expectedAnswer {
-		return false
-	}
-	mac := hmac.New(sha256.New, s.contactCaptchaSigningKey())
-	_, _ = mac.Write([]byte(parts[0]))
-	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(parts[1]), []byte(expectedSignature))
-}
-
 func (s *Server) contactCaptchaRequired(r *http.Request) bool {
 	cookie, err := r.Cookie("contact_captcha_required")
 	if err != nil {
@@ -745,7 +727,8 @@ func (s *Server) SubmitContact(ctx context.Context, message api.ContactMessage) 
 	if recipient == "" {
 		recipient = s.config.Server.Contact.Admin.Email
 	}
-	mailEnabled := recipient != "" && s.mailer != nil && s.mailer.CanSend()
+	mailer := s.currentMailer()
+	mailEnabled := recipient != "" && mailer != nil && mailer.CanSend()
 	webhookRole := role
 	if role == "privacy" && s.notifyManager != nil && !s.notifyManager.HasWebhook(webhookRole) {
 		webhookRole = "general"
@@ -762,7 +745,7 @@ func (s *Server) SubmitContact(ctx context.Context, message api.ContactMessage) 
 		mailMessage := email.NewMessage([]string{recipient}, "["+appName+" contact] "+message.Subject,
 			contactMessageBody(message))
 		mailMessage.Headers["Reply-To"] = message.Email
-		if err := s.mailer.Send(mailMessage); err != nil {
+		if err := mailer.Send(mailMessage); err != nil {
 			return err
 		}
 	}
@@ -863,7 +846,7 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 	case "handle":
 		if creditHandle == "" || utf8.RuneCountInString(creditHandle) > 100 {
 			s.markContactCaptchaRequired(w, r)
-			s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"))
+			s.renderContactFormValues(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"), r.PostForm)
 			return
 		}
 	case "real_name":
@@ -894,14 +877,14 @@ func (s *Server) handleSecurityReportSubmit(w http.ResponseWriter, r *http.Reque
 			respondJSON(w, http.StatusBadRequest, api.APIResponse{OK: false, Error: "VALIDATION_FAILED", Message: i18n.RequestString(r, "errors.contact_field_too_long"), Details: map[string]interface{}{"field": field.name, "rule": "max_length", "max_length": field.max}})
 		} else {
 			s.markContactCaptchaRequired(w, r)
-			s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "errors.bad_request"))
+			s.renderContactFormValues(w, r, securityID, true, s.getI18nManager().T(lang, "errors.bad_request"), r.PostForm)
 		}
 		return
 	}
 	parsedEmail, emailErr := mail.ParseAddress(researcherEmail)
 	if researcherName == "" || utf8.RuneCountInString(researcherName) > 100 || emailErr != nil || parsedEmail.Address != researcherEmail || utf8.RuneCountInString(researcherEmail) > 254 || summary == "" || severity == "" || affectedComponent == "" || stepsToReproduce == "" || impact == "" || !agreedToDisclosure {
 		s.markContactCaptchaRequired(w, r)
-		s.renderContactForm(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"))
+		s.renderContactFormValues(w, r, securityID, true, s.getI18nManager().T(lang, "contact.security_required_fields"), r.PostForm)
 		return
 	}
 	reportLock, err := security.LockReportMutation(config.GetConfigDir())
@@ -1124,7 +1107,7 @@ func (s *Server) sendSecurityMaintainerNotification(report security.Report, plai
 			}
 		}
 	}
-	if recipient != "" && s.mailer != nil && s.mailer.IsEnabled() {
+	if mailer := s.currentMailer(); recipient != "" && mailer != nil && mailer.IsEnabled() {
 		subject := fmt.Sprintf("[security] %s (%s)", report.Summary, report.TrackingID)
 		body := pgpBody
 		if body == "" {
@@ -1132,7 +1115,7 @@ func (s *Server) sendSecurityMaintainerNotification(report security.Report, plai
 			body = "WARNING: This report is encrypted with the server's AES-256-GCM key because no PGP key is configured. Configure and securely share the key before attempting to decrypt it.\n\n" + body
 		}
 		msg := email.NewMessage([]string{recipient}, subject, body)
-		_ = s.mailer.Send(msg)
+		_ = mailer.Send(msg)
 	}
 	if pgpBody != "" {
 		s.dispatchExactNotification(notify.Event{Role: "security", Name: "security.report_received", Subject: "Security report received", Body: pgpBody, Severity: report.Severity, TrackingID: report.TrackingID, SourceIP: sourceIP})
@@ -1144,7 +1127,8 @@ func (s *Server) sendSecurityMaintainerNotification(report security.Report, plai
 // AI.md PART 11 step 5, containing the tracking id and one-shot status link.
 // Best-effort: a delivery failure does not fail the submission.
 func (s *Server) sendSecurityResearcherAck(r *http.Request, researcherEmail, researcherGPGArmor, trackingID, rawToken string) {
-	if s.mailer == nil || !s.mailer.IsEnabled() {
+	mailer := s.currentMailer()
+	if mailer == nil || !mailer.IsEnabled() {
 		return
 	}
 
@@ -1165,7 +1149,7 @@ func (s *Server) sendSecurityResearcherAck(r *http.Request, researcherEmail, res
 	}
 
 	msg := email.NewMessage([]string{researcherEmail}, subject, body)
-	_ = s.mailer.Send(msg)
+	_ = mailer.Send(msg)
 }
 
 // handleHelp renders the help page
@@ -1877,16 +1861,6 @@ func (s *Server) contactCaptchaSigningKey() []byte {
 		secret = s.startTime.Format(time.RFC3339Nano)
 	}
 	return []byte("contact-captcha:" + secret)
-}
-
-// signCaptcha creates an HMAC-signed captcha ID containing the expected answer.
-func (s *Server) signCaptcha(answer int) string {
-	key := s.contactCaptchaSigningKey()
-	data := strconv.Itoa(answer)
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(data))
-	sig := base64.URLEncoding.EncodeToString(mac.Sum(nil))
-	return data + "." + sig
 }
 
 // getCSRFToken returns the CSRF token for the request and ensures the matching

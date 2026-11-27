@@ -2,11 +2,11 @@
 <div class="container container-sm">
     <header class="page-header">
         <h1 class="page-title">{{.StatusText}}</h1>
-        <p class="page-lead">{{t "common.error"}}</p>
+        <p class="page-lead">{{t "errors.recovery_heading"}}</p>
     </header>
     <section class="section-card error-container" aria-labelledby="error-code">
         <h2 id="error-code" class="error-code">{{.StatusCode}}</h2>
-        <p class="error-message">{{.Message}}</p>
+        <div class="alert alert-danger error-message" role="alert">{{.Message}}</div>
 
         {{if and .Config.IsDevelopment .ErrorDetails}}
         <details class="error-details">

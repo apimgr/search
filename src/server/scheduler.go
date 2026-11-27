@@ -21,6 +21,7 @@ import (
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/security"
 	sigsvc "github.com/apimgr/search/src/signal"
+	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/update"
 )
 
@@ -120,6 +121,11 @@ func (s *Server) installScheduledUpdate(mgr *update.Manager, info *update.Update
 	if s.logManager != nil && s.logManager.Audit() != nil {
 		s.logManager.Audit().LogEvent(logging.AuditAction("update.staged"), logging.AuditCategorySystem, logging.AuditSeverityInfo, logging.AuditActor{Type: "system", Username: "system"}, nil, "success", map[string]interface{}{"version": info.LatestVersion}, "")
 	}
+	if mailer := s.currentMailer(); service.NewServiceManager(s.config).UpdateNeedsManualRestart() && mailer != nil {
+		if err := mailer.SendUpdateStaged(info.LatestVersion); err != nil {
+			slog.Error("failed to send update-staged notification", "latest_version", info.LatestVersion, "err", err)
+		}
+	}
 	sigsvc.SetShutdownExitCode(75)
 	s.SetShutdownReason("update restart")
 	process, err := os.FindProcess(os.Getpid())
@@ -141,8 +147,8 @@ func (s *Server) recordUpdateFailure(version string, cause error) {
 	if s.logManager != nil && s.logManager.Audit() != nil {
 		s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", map[string]interface{}{"version": version}, cause.Error())
 	}
-	if s.mailer != nil {
-		if err := s.mailer.SendUpdateFailed(version, cause.Error()); err != nil {
+	if mailer := s.currentMailer(); mailer != nil {
+		if err := mailer.SendUpdateFailed(version, cause.Error()); err != nil {
 			slog.Error("failed to send update-failed notification", "latest_version", version, "err", err)
 		}
 	}
@@ -387,15 +393,16 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 					"current_version", info.CurrentVersion,
 					"latest_version", info.LatestVersion)
 
-				if s.mailer != nil && s.mailer.IsEnabled() {
+				if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
 					updateURL := s.config.Server.BaseURL + "/update"
 					manualCommand := updateManualCommand(runtime.GOOS, config.StartedElevated())
-					if err := s.mailer.SendUpdateAvailable(
+					if err := mailer.SendUpdateAvailable(
 						info.CurrentVersion,
 						info.LatestVersion,
 						info.PublishedAt.Format("2006-01-02"),
 						info.ReleaseNotes,
 						updateURL,
+						branch,
 						manualCommand,
 					); err != nil {
 						slog.Error("failed to send update-available notification", "err", err)
@@ -421,6 +428,11 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				return err
 			}
 			slog.Info("expired API token cleanup complete", "removed", removed)
+			removedChallenges, err := s.dbManager.ServerDB().CleanupExpiredCaptchaChallenges(ctx, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			slog.Info("expired CAPTCHA challenge cleanup complete", "removed", removedChallenges)
 			return nil
 		},
 
@@ -509,6 +521,11 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			}
 			return s.i2pManager.CheckAndRestart()
 		}
+	}
+	// Tor is auto-enabled when a binary is discovered. Gate its health task on
+	// discovery here because asynchronous Tor startup may not have set config yet.
+	if s.torService == nil || !s.torService.Available() {
+		handlers.TorHealth = nil
 	}
 	return handlers
 }
@@ -626,8 +643,8 @@ func (s *Server) checkDiskLow(ctx context.Context) error {
 		s.diskLowMu.Unlock()
 
 		slog.Warn("Disk space low", "path", path, "used_percent", usedPercent, "free_bytes", freeBytes)
-		if s.mailer != nil && s.mailer.CanSend() {
-			if err := s.mailer.SendDiskLow(path, usedPercent, formatDiskBytes(freeBytes), threshold); err != nil {
+		if mailer := s.currentMailer(); mailer != nil && mailer.CanSend() {
+			if err := mailer.SendDiskLow(path, usedPercent, formatDiskBytes(freeBytes), threshold); err != nil {
 				slog.Error("disk space low notification email failed", "path", path, "err", err)
 				errs = append(errs, err)
 			}
@@ -760,6 +777,8 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 		if err := sched.Enable(scheduler.TaskBackupHourly); err != nil {
 			slog.Warn("failed to enable hourly backup task", "error", err)
 		}
+	} else if err := sched.Disable(scheduler.TaskBackupHourly); err != nil {
+		slog.Warn("failed to disable hourly backup task", "error", err)
 	}
 	if !tasks.GeoIPUpdate.Enabled {
 		if err := sched.Disable(scheduler.TaskGeoIPUpdate); err != nil {
@@ -868,7 +887,7 @@ func (s *Server) handleTaskFailureNotification(notification *scheduler.TaskFailu
 
 	// Send email notification if mailer is configured
 	// Per AI.md PART 17 "Default Templates" -> scheduler_error.
-	if s.mailer != nil && s.mailer.IsEnabled() {
+	if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
 		nextRun := ""
 		if s.scheduler != nil {
 			if info, err := s.scheduler.GetTask(scheduler.TaskID(notification.TaskID)); err == nil {
@@ -876,7 +895,7 @@ func (s *Server) handleTaskFailureNotification(notification *scheduler.TaskFailu
 			}
 		}
 
-		if err := s.mailer.SendSchedulerError(notification.TaskName, notification.Error, nextRun); err != nil {
+		if err := mailer.SendSchedulerError(notification.TaskName, notification.Error, nextRun); err != nil {
 			slog.Error("failed to send task failure notification email", "err", err)
 		} else {
 			slog.Info("task failure notification email sent", "task_id", notification.TaskID)
@@ -1058,8 +1077,8 @@ func (s *Server) sendBackupCompletedNotification(backupPath string) {
 	if stat, err := os.Stat(backupPath); err == nil {
 		size = backup.BackupInfo{Size: stat.Size()}.FormatSize()
 	}
-	if s.mailer != nil && s.mailer.IsEnabled() {
-		if err := s.mailer.SendBackupCompleted(filepath.Base(backupPath), size); err != nil {
+	if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
+		if err := mailer.SendBackupCompleted(filepath.Base(backupPath), size); err != nil {
 			slog.Error("failed to send backup completed notification email", "err", err)
 		}
 	}
@@ -1073,8 +1092,8 @@ func (s *Server) sendBackupCompletedNotification(backupPath string) {
 // generic scheduler_error email for the same backup task execution (handled
 // in handleTaskFailureNotification).
 func (s *Server) sendBackupFailedNotification(filename string, backupErr error) {
-	if s.mailer != nil && s.mailer.IsEnabled() {
-		if err := s.mailer.SendBackupFailed(filename, backupErr.Error()); err != nil {
+	if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
+		if err := mailer.SendBackupFailed(filename, backupErr.Error()); err != nil {
 			slog.Error("failed to send backup failed notification email", "err", err)
 		}
 	}
@@ -1085,8 +1104,8 @@ func (s *Server) sendBackupFailedNotification(filename string, backupErr error) 
 // was successfully renewed. Per AI.md PART 17 "Default Templates" →
 // ssl_renewed and PART 15 (SSL/TLS & Let's Encrypt).
 func (s *Server) sendSSLRenewedNotification(domain string, validUntil time.Time) {
-	if s.mailer != nil && s.mailer.IsEnabled() {
-		if err := s.mailer.SendSSLRenewed(domain, validUntil.Format("2006-01-02")); err != nil {
+	if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
+		if err := mailer.SendSSLRenewed(domain, validUntil.Format("2006-01-02")); err != nil {
 			slog.Error("failed to send SSL renewed notification email", "err", err)
 		}
 	}
@@ -1101,8 +1120,8 @@ func (s *Server) sendSSLExpiringNotification(domain string, daysLeft int, expiry
 	if daysLeft != 1 {
 		expiresIn += "s"
 	}
-	if s.mailer != nil && s.mailer.IsEnabled() {
-		if err := s.mailer.SendSSLExpiring(domain, expiresIn, expiryDate.Format("2006-01-02")); err != nil {
+	if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
+		if err := mailer.SendSSLExpiring(domain, expiresIn, expiryDate.Format("2006-01-02")); err != nil {
 			slog.Error("failed to send SSL expiring notification email", "err", err)
 		}
 	}
@@ -1116,8 +1135,8 @@ func (s *Server) sendSSLExpiringNotification(domain string, daysLeft int, expiry
 // handleTaskFailureNotification). nextRetry is the next scheduled run of the
 // SSLRenewal task (daily 03:00 per PART 18 Built-in Tasks).
 func (s *Server) sendSSLRenewalFailedNotification(domain, errMsg string, daysLeft int, nextRetry time.Time) {
-	if s.mailer != nil && s.mailer.IsEnabled() {
-		if err := s.mailer.SendSSLRenewalFailed(domain, errMsg, daysLeft, nextRetry.Format(time.RFC3339)); err != nil {
+	if mailer := s.currentMailer(); mailer != nil && mailer.IsEnabled() {
+		if err := mailer.SendSSLRenewalFailed(domain, errMsg, daysLeft, nextRetry.Format(time.RFC3339)); err != nil {
 			slog.Error("failed to send SSL renewal failed notification email", "err", err)
 		}
 	}

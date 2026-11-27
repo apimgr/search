@@ -410,6 +410,90 @@ func TestDailyPairUsesOneCapturedArchive(t *testing.T) {
 	}
 }
 
+func TestEncryptedDailyPairHeaderAndPasswordChange(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	backupDir := filepath.Join(root, "backups")
+	for _, dir := range []string{configDir, dataDir, backupDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte("server:\n  title: Test\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stateFile := filepath.Join(dataDir, "state.txt")
+	if err := os.WriteFile(stateFile, []byte("initial"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{backupDir: backupDir, configDir: configDir, dataDir: dataDir, includeData: true, password: "first-password"}
+	t0 := time.Date(2026, 11, 22, 2, 0, 0, 0, time.UTC)
+	_, fullPath, _, _, skipped, err := manager.CreateDailyPairAndVerify("search-daily.tar.gz", "search_backup_2026-11-22.tar.gz", t0)
+	if err != nil || !skipped {
+		t.Fatalf("first CreateDailyPairAndVerify(): skipped=%v err=%v", skipped, err)
+	}
+	if err := os.WriteFile(stateFile, []byte("updated"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	incPath, _, _, _, skipped, err := manager.CreateDailyPairAndVerify("search-daily.tar.gz", "search_backup_2026-11-22.tar.gz", t0.Add(time.Hour))
+	if err != nil || skipped {
+		t.Fatalf("same-password CreateDailyPairAndVerify(): skipped=%v err=%v", skipped, err)
+	}
+	incBytes, err := os.ReadFile(incPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	incHeader, _, err := ReadBackupEncryptionHeader(incBytes)
+	if err != nil {
+		t.Fatalf("ReadBackupEncryptionHeader(incremental): %v", err)
+	}
+	if incHeader.BaseName != filepath.Base(fullPath) {
+		t.Fatalf("incremental header base = %q, want %q", incHeader.BaseName, filepath.Base(fullPath))
+	}
+	fullMetadata, err := manager.GetMetadata(fullPath)
+	if err != nil {
+		t.Fatalf("GetMetadata(full): %v", err)
+	}
+	incMetadata, err := manager.GetMetadata(incPath)
+	if err != nil {
+		t.Fatalf("GetMetadata(incremental): %v", err)
+	}
+	if incMetadata.BaseSHA256 != fullMetadata.SHA256 {
+		t.Fatalf("incremental base_sha256 = %q, want base manifest sha256 %q", incMetadata.BaseSHA256, fullMetadata.SHA256)
+	}
+	if !manager.retainedIncrementalBases()[filepath.Base(fullPath)] {
+		t.Fatal("retention did not protect the encrypted incremental's base")
+	}
+
+	oldIncremental := incPath
+	manager.password = "second-password"
+	newIncremental, newFull, _, _, skipped, err := manager.CreateDailyPairAndVerify("search-daily.tar.gz", "search_backup_2026-11-22.tar.gz", t0.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("rotated-password CreateDailyPairAndVerify(): %v", err)
+	}
+	if !skipped || newIncremental != "" {
+		t.Fatalf("password change must skip incremental: path=%q skipped=%v", newIncremental, skipped)
+	}
+	if newFull == fullPath {
+		t.Fatal("new full after password change overwrote the prior full")
+	}
+	if _, err := os.Stat(oldIncremental); err != nil {
+		t.Fatalf("password change removed the existing incremental pair: %v", err)
+	}
+	newFullBytes, err := os.ReadFile(newFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newHeader, _, err := ReadBackupEncryptionHeader(newFullBytes)
+	if err != nil {
+		t.Fatalf("ReadBackupEncryptionHeader(new full): %v", err)
+	}
+	if newHeader.BaseName != "" {
+		t.Fatalf("new full header base name = %q, want empty", newHeader.BaseName)
+	}
+}
+
 func TestPublishVerifiedBackupPairRestoresBothPreviousFilesOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	fullTarget := filepath.Join(dir, "full.tar.gz")
@@ -4758,10 +4842,9 @@ func TestEnforceMaxTotalSizePrunesOldestFirst(t *testing.T) {
 	}
 }
 
-// TestEnforceMaxTotalSizePrunesIncrementalsLastResort verifies that
-// incremental backups are only pruned once all full backups are gone and
-// the cap is still exceeded, per AI.md PART 21.
-func TestEnforceMaxTotalSizePrunesIncrementalsLastResort(t *testing.T) {
+// TestEnforceMaxTotalSizeKeepsPairWhenProtectedBaseExceedsCap verifies that
+// the size cap does not split an incremental pair when its base is protected.
+func TestEnforceMaxTotalSizeKeepsPairWhenProtectedBaseExceedsCap(t *testing.T) {
 	tempDir := t.TempDir()
 	m := &Manager{backupDir: tempDir}
 
@@ -4783,7 +4866,8 @@ func TestEnforceMaxTotalSizePrunesIncrementalsLastResort(t *testing.T) {
 		t.Fatalf("failed to set fixture mtime: %v", err)
 	}
 
-	// Cap tighter than either single file: both must go, full first.
+	// These archives cannot be parsed, so retention conservatively protects the
+	// full as the incremental's possible base and keeps the pair intact.
 	if err := m.enforceMaxTotalSize("1b"); err != nil {
 		t.Fatalf("enforceMaxTotalSize() error = %v", err)
 	}
@@ -4792,7 +4876,7 @@ func TestEnforceMaxTotalSizePrunesIncrementalsLastResort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(remaining) != 0 {
-		t.Errorf("enforceMaxTotalSize() left %d backups, want 0", len(remaining))
+	if len(remaining) != 2 {
+		t.Errorf("enforceMaxTotalSize() left %d backups, want protected pair of 2", len(remaining))
 	}
 }

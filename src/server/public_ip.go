@@ -52,6 +52,12 @@ func (s *Server) GetPublicIP() (string, time.Time) {
 	return publicIP.ip, publicIP.updatedAt
 }
 
+func cachedPublicIPv4() string {
+	publicIP.mu.RLock()
+	defer publicIP.mu.RUnlock()
+	return publicIP.ip
+}
+
 // refreshPublicIP queries publicIPProviders in order and returns the first
 // well-formed public IPv4 address. On failure it logs a WARN and leaves the
 // cached value untouched, per AI.md PART 8 step 16.

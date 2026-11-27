@@ -1,25 +1,26 @@
 {{define "content"}}
-<div class="direct-answer-page" data-type="{{.Answer.Type}}" data-term="{{.Answer.Term}}">
+<div class="container container-md" data-type="{{.Answer.Type}}" data-term="{{.Answer.Term}}">
     {{/* Header with answer type badge and title */}}
-    <header class="direct-header">
-        <div class="direct-type-badge">{{.Answer.Type}}</div>
-        <h1 class="direct-title">{{.Answer.Title}}</h1>
+    <header class="page-header">
+        <div class="badge direct-type-badge">{{.Answer.Type}}</div>
+        <h1 class="page-title">{{.Answer.Title}}</h1>
         {{if .Answer.Description}}
-        <p class="direct-description">{{.Answer.Description}}</p>
+        <p class="page-lead">{{.Answer.Description}}</p>
         {{end}}
     </header>
 
     {{/* Main content area */}}
-    <div class="direct-content{{if .Answer.Error}} has-error{{end}}">
+    <section class="section-card direct-content{{if .Answer.Error}} has-error{{end}}" aria-labelledby="direct-content-heading">
+        <h2 id="direct-content-heading">{{t "common.details"}}</h2>
         {{if .Answer.Error}}
-        <div class="direct-error">
+        <div class="alert alert-danger direct-error" role="alert">
             <span class="error-icon">!</span>
             <span class="error-message">{{.Answer.Error}}</span>
         </div>
         {{end}}
         {{/* Content is pre-formatted HTML from handlers */}}
         {{.Answer.Content | safeHTML}}
-    </div>
+    </section>
 
     {{/* Source attribution */}}
     {{if or .Answer.Source .Answer.SourceURL}}
@@ -38,7 +39,7 @@
     {{/* Navigation back to home - links to home since direct answer queries
          would redirect back to this page (wiki:Python → /direct/wiki/Python) */}}
     <nav class="direct-nav">
-        <a href="/" class="back-to-search">
+        <a href="/" class="btn btn-secondary back-to-search">
             <span class="back-icon">&larr;</span> {{t "direct.back_to_search"}}
         </a>
         {{/* Quick reference to other direct answer types */}}

@@ -1,12 +1,12 @@
 # Backend Rules (PART 9, 10, 11, 31)
-<!-- Synchronized with AI.md revision 59c37d25e582. -->
+<!-- Synchronized with AI.md revision c2f65bf274b5. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
 Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Security & Logging), PART 31 (Overlay Networks — Tor & I2P).
 
 ## CRITICAL - NEVER DO
-- Use bcrypt for config/backup passwords — Argon2id only
+- Use bcrypt for login passwords — Argon2id hashes login passwords; the backup password is key material stored in `secrets.yml` as `enc:v1:`, never hashed, and Argon2id only derives the archive key
 - Store a raw API token — hash with SHA-256
 - Hardcode credentials anywhere in the code
 - Build SQL by string concatenation — prepared statements only
@@ -23,6 +23,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Set correct `Cache-Control` and `ETag` headers per resource type; serve `/sw.js` and `/manifest.json` `no-cache` with a build-stamp ETag
 - Purge on version change: build-stamp cookie plus `Clear-Site-Data: "cache", "storage"` on mismatch
 - Default to SQLite locally and libsql/Turso remotely, using `CREATE TABLE IF NOT EXISTS` and connection pooling
+- Keep `writeDB` and `readDB` private to the database store; expose only `Write(ctx, fn)` for mutations and query-only `Read(ctx)` access so callers cannot select the wrong handle
 - Honor the configured database driver, URL, optional remote auth token, and pool limits; never silently fall back to SQLite when an explicitly configured remote URL is invalid
 - Set all security headers (CSP, X-Frame-Options, …) and enable HSTS whenever SSL is active
 - Enable configurable rate limiting; auto-revoke tokens after the specified number of consecutive authentication failures
@@ -38,7 +39,7 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
 |----------|--------|-----------|
-| Password hash? | Argon2id (NEVER bcrypt) | PART 11 |
+| Login password? | Argon2id (NEVER bcrypt); backup password is `enc:v1:` key material in `secrets.yml`, not hashed | PART 11, 21 |
 | API token hash? | SHA-256 | PART 11 |
 | Local database? | SQLite (`modernc.org/sqlite`, no CGO) | PART 10 |
 | Remote database? | libsql / Turso | PART 10 |

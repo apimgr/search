@@ -5,9 +5,8 @@
         <h1 class="page-title">{{t "security.thanks_title"}}</h1>
     </header>
 
-    <div class="page-content">
         <section class="section-card" aria-labelledby="security-thanks-heading">
-            <h2 id="security-thanks-heading">{{t "security.thanks_title"}}</h2>
+            <h2 id="security-thanks-heading">{{t "common.details"}}</h2>
             <p>{{t "security.thanks_intro"}}</p>
             {{if .Entries}}
             <ul class="security-thanks-list">
@@ -16,9 +15,12 @@
                 {{end}}
             </ul>
             {{else}}
-            <p class="security-thanks-empty">{{t "security.thanks_empty"}}</p>
+            <div class="empty-state">
+                <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3 14.8 8.7 21 9.6l-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>
+                <h3 class="empty-state-title">{{t "security.thanks_empty"}}</h3>
+                <a class="btn btn-secondary" href="/server/security/policy">{{t "security.policy_title"}}</a>
+            </div>
             {{end}}
         </section>
-    </div>
 </div>
 {{end}}

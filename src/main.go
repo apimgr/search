@@ -59,18 +59,18 @@ var (
 	flagShell       string
 
 	// Required flags per AI.md PART 6 (NON-NEGOTIABLE)
-	flagMode    string
-	flagData    string
-	flagConfig  string
-	flagCache   string
-	flagLog     string
-	flagBackup  string
-	flagPID     string
-	flagAddress string
-	flagPort    string
-	flagBaseURL string
-	flagColor   string
-	flagLang    string
+	flagMode              string
+	flagData              string
+	flagConfig            string
+	flagCache             string
+	flagLog               string
+	flagBackup            string
+	flagPID               string
+	flagAddress           string
+	flagPort              string
+	flagBaseURL           string
+	flagColor             string
+	flagLang              string
 	flagBackupIncludeSSL  bool
 	flagBackupIncludeData bool
 )
@@ -116,12 +116,18 @@ func init() {
 }
 
 func main() {
+	config.SetBuildInfo(Version, CommitID, BuildEpoch, BuildDate, OfficialSite)
 	// Custom usage function
 	flag.Usage = func() {
-		printHelp()
+		printHelpTo(os.Stderr)
 	}
+	flag.CommandLine.SetOutput(os.Stderr)
 	if command, ok := commandHelp(os.Args[1:], "shell", "service", "maintenance", "update"); ok {
 		printCommandHelp(command)
+		return
+	}
+	if explicitHelp(os.Args[1:]) {
+		printHelp()
 		return
 	}
 
@@ -195,6 +201,12 @@ func main() {
 			return
 		}
 	}
+	if args := flag.Args(); len(args) > 0 {
+		fmt.Fprintf(os.Stderr, "Error: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s --help\n", filepath.Base(os.Args[0]))
+		exitFunc(2)
+		return
+	}
 
 	// Start server
 	runServer()
@@ -215,13 +227,20 @@ func applyCliOverrides() {
 		mode.FromEnv()
 	}
 
-	// Set debug mode from CLI flag
-	// Per AI.md PART 6: --debug enables debug mode (verbose logging, debug endpoints)
-	if flagDebug {
-		if err := os.Setenv("DEBUG", "true"); err != nil {
+	// An explicitly supplied --debug boolean overrides DEBUG and MODE=debug,
+	// including when the operator passes --debug=false.
+	debugFlagProvided := flagDebug
+	flag.Visit(func(parsed *flag.Flag) {
+		if parsed.Name == "debug" {
+			debugFlagProvided = true
+		}
+	})
+	if debugFlagProvided {
+		debugValue := strconv.FormatBool(flagDebug)
+		if err := os.Setenv("DEBUG", debugValue); err != nil {
 			slog.Warn("failed to set DEBUG", "error", err)
 		}
-		mode.SetDebugEnabled(true)
+		mode.SetDebugEnabled(flagDebug)
 	}
 	if err := validateCLIPathOverrides(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -287,6 +306,7 @@ func applyCliOverrides() {
 	// Ensure directories exist after CLI overrides are applied
 	// Per AI.md PART 6: All directory flags MUST create directories if they don't exist
 	if flagData != "" || flagConfig != "" || flagCache != "" || flagLog != "" || flagBackup != "" || flagPID != "" {
+		configureStartupPIDFile()
 		if err := config.EnsureDirectories(); err != nil {
 			slog.Warn("Failed to create directories", "err", err)
 		}
@@ -314,6 +334,25 @@ func validateCLIPathOverrides() error {
 			return fmt.Errorf("invalid %s path: %w", path.name, err)
 		}
 		*path.value = safe
+	}
+	for _, envPath := range []struct {
+		name    string
+		flagSet bool
+	}{{"CACHE_DIR", flagCache != ""}, {"PID_FILE", flagPID != ""}} {
+		if envPath.flagSet {
+			continue
+		}
+		value := os.Getenv(envPath.name)
+		if value == "" {
+			continue
+		}
+		safe, err := config.SafeDirPath(value)
+		if err != nil {
+			return fmt.Errorf("invalid %s path: %w", envPath.name, err)
+		}
+		if err := os.Setenv(envPath.name, safe); err != nil {
+			return fmt.Errorf("normalize %s path: %w", envPath.name, err)
+		}
 	}
 	return nil
 }
@@ -366,13 +405,18 @@ func handleLegacyArgs() {
 		if len(os.Args) > 2 {
 			runService(os.Args[2])
 		} else {
-			slog.Error("Missing service subcommand", "usage", "search --service {start,stop,restart,reload,status,--install,--uninstall,--disable,--help}")
+			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.main.service_action_required"))
+			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.main.valid_service_actions"))
+			fmt.Fprintf(os.Stderr, "Usage: %s --service <action>\n", filepath.Base(os.Args[0]))
+			exitFunc(2)
 		}
 	case "--maintenance":
 		if len(os.Args) > 2 {
 			runMaintenance(os.Args[2])
 		} else {
-			slog.Error("Missing maintenance subcommand", "usage", "search --maintenance {backup|restore|update|mode|setup|pgp|security|secret|token|data|compliance|email|scheduler|tor|--help}")
+			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.main.maintenance_action_required"))
+			fmt.Fprintf(os.Stderr, "Usage: %s --maintenance <action>\n", filepath.Base(os.Args[0]))
+			exitFunc(2)
 		}
 	case "--update":
 		subCmd := "yes"
@@ -401,6 +445,25 @@ var (
 	startupListeners        map[int]net.Listener
 	startupRedirectListener net.Listener
 )
+
+func configureStartupPIDFile() {
+	if config.IsRunningInContainer() {
+		config.SetPIDFileEnabled(false)
+		return
+	}
+	if flagPID != "" || os.Getenv("PID_FILE") != "" {
+		config.SetPIDFileEnabled(true)
+		return
+	}
+	enabled, found, err := config.PeekServerPIDFile(config.GetConfigPath())
+	if err == nil && found {
+		config.SetPIDFileEnabled(enabled)
+		return
+	}
+	// A malformed early config file is reported during full config loading;
+	// keep the documented default until that load produces the full error.
+	config.SetPIDFileEnabled(true)
+}
 
 func runServer() {
 	// Per AI.md PART 24: when the Service Control Manager starts the process,
@@ -546,6 +609,7 @@ func runServerServiceBody() {
 		}
 		// Parent exits in daemonize(), only child continues
 	}
+	configureStartupPIDFile()
 
 	// PART 8 step 7b: a root-started process applies service-user staged updates
 	// before creating users, changing ownership, binding ports, or dropping
@@ -621,7 +685,7 @@ func runServerServiceBody() {
 			if flagLog == "" {
 				config.SetLogDirOverride("/var/log/" + config.InternalOrg + "/" + config.InternalName)
 			}
-			if flagCache == "" {
+			if flagCache == "" && os.Getenv("CACHE_DIR") == "" {
 				config.SetCacheDirOverride("/var/cache/" + config.InternalOrg + "/" + config.InternalName)
 			}
 		}
@@ -669,26 +733,25 @@ func runServerServiceBody() {
 
 	// Step 11: Check PID file for existing running instance (stale PID detection)
 	// Per AI.md PART 8: Startup sequence step 11 — check before writing
-	pidFile := config.GetPIDFile()
-	if running, existingPID, err := server.CheckPIDFile(pidFile); err != nil {
-		slog.Error("PID file check failed", "err", err)
-		exitFunc(1)
-	} else if running {
-		slog.Error("Server already running", "pid", existingPID)
-		exitFunc(1)
-	}
-
-	// Step 12: Write PID file
-	// Per AI.md PART 8: Startup sequence step 12 — write after stale check passes
-	if err := server.WritePIDFile(pidFile); err != nil {
-		slog.Error("Failed to write PID file", "err", err)
-		exitFunc(1)
-	}
-	defer func() {
-		if err := server.RemovePIDFile(pidFile); err != nil {
-			slog.Warn("failed to remove server PID file", "error", err)
+	if pidFile := config.GetPIDFile(); pidFile != "" {
+		if running, existingPID, err := server.CheckPIDFile(pidFile); err != nil {
+			slog.Error("PID file check failed", "err", err)
+			exitFunc(1)
+		} else if running {
+			slog.Error("Server already running", "pid", existingPID)
+			exitFunc(1)
 		}
-	}()
+
+		if err := server.WritePIDFile(pidFile); err != nil {
+			slog.Error("Failed to write PID file", "err", err)
+			exitFunc(1)
+		}
+		defer func() {
+			if err := server.RemovePIDFile(pidFile); err != nil {
+				slog.Warn("failed to remove server PID file", "error", err)
+			}
+		}()
+	}
 
 	// Full settings are loaded after PID ownership is established. This keeps
 	// the privileged phase limited to the server.port peek and socket binding.
@@ -844,9 +907,24 @@ func printVersion() {
 }
 
 func printHelp() {
+	printHelpTo(os.Stdout)
+}
+
+func printHelpTo(w io.Writer) {
 	// Per AI.md PART 6: Use actual binary name in help.
 	binaryName := filepath.Base(os.Args[0])
-	fmt.Println(serverCLITf("server_cli.help.full", "binary", binaryName))
+	if _, err := fmt.Fprintln(w, serverCLITf("server_cli.help.full", "binary", binaryName)); err != nil {
+		return
+	}
+}
+
+func explicitHelp(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" || arg == "--help=true" || arg == "-h=true" {
+			return true
+		}
+	}
+	return false
 }
 func showStatus() {
 	// Per AI.md PART 31 - --status output format
@@ -870,15 +948,13 @@ func showStatus() {
 		}
 	}
 
-	fmt.Println()
-
 	if isRunning {
+		fmt.Println()
 		fmt.Println(serverCLIText("server_cli.status.server_running"))
 	} else {
-		fmt.Println(serverCLIText("server_cli.status.server_not_running"))
-		fmt.Println()
-		fmt.Println(serverCLITf("server_cli.status.start_server", "binary", binaryName))
-		fmt.Println(serverCLITf("server_cli.status.install_service", "binary", binaryName))
+		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.status.server_not_running"))
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.status.start_server", "binary", binaryName))
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.status.install_service", "binary", binaryName))
 		// Per AI.md PART 8: --status exits 0 when healthy and 1 when unhealthy.
 		// A server that is not running is unhealthy.
 		exitFunc(1)
@@ -1152,12 +1228,25 @@ func formatUptime(d time.Duration) string {
 }
 
 func runService(action string) {
+	switch action {
+	case "--install", "--uninstall", "start", "stop", "status", "restart", "reload", "--disable", "--help":
+		if action == "--help" {
+			printServiceHelp()
+			return
+		}
+	default:
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.unknown_service_action", "action", action))
+		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.main.valid_service_actions"))
+		fmt.Fprintf(os.Stderr, "Usage: %s --service --help\n", filepath.Base(os.Args[0]))
+		exitFunc(2)
+		return
+	}
 	fmt.Print(display.Emoji("🔧", "[*]") + " " + serverCLITf("server_cli.main.service_heading", "action", action) + "\n\n")
 
 	// Load configuration
 	cfg, err := config.Initialize()
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_load_config", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_load_config", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -1176,19 +1265,19 @@ func runService(action string) {
 		if !config.IsPrivileged() {
 			fmt.Println(serverCLITf("server_cli.main.installing_service", "os", runtime.GOOS))
 			if err := service.HandleEscalation(); err != nil {
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.privilege_escalation_failed", "error", err))
-				exitFunc(1)
+				fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.privilege_escalation_failed", "error", err))
+				exitFunc(77)
 				return
 			}
 			if !config.IsPrivileged() {
 				fmt.Println(serverCLIText("server_cli.main.installing_user_service"))
 				if err := sm.InstallUserService(); err != nil {
-					fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_install_user_service", "error", err))
+					fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_install_user_service", "error", err))
 					exitFunc(1)
 					return
 				}
 				if err := sm.StartAllServices(); err != nil {
-					fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_start_user_service", "error", err))
+					fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_start_user_service", "error", err))
 					exitFunc(1)
 					return
 				}
@@ -1198,12 +1287,12 @@ func runService(action string) {
 		}
 		fmt.Println(serverCLITf("server_cli.main.installing_service", "os", runtime.GOOS))
 		if err := sm.Install(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_install_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_install_service", "error", err))
 			exitFunc(1)
 			return
 		}
 		if err := sm.StartAllServices(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_start_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_start_service", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -1215,8 +1304,8 @@ func runService(action string) {
 		// delete the system user and group, then point the operator at the
 		// binary. Confirmation is required before the destructive action.
 		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.main.requires_elevated_privileges"))
-			exitFunc(1)
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLIText("server_cli.main.requires_elevated_privileges"))
+			exitFunc(77)
 			return
 		}
 		fmt.Print(i18n.TDefault("service.confirm_uninstall"))
@@ -1231,7 +1320,7 @@ func runService(action string) {
 		}
 		fmt.Println(serverCLIText("server_cli.main.uninstalling_service"))
 		if err := sm.Uninstall(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_uninstall_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_uninstall_service", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -1258,7 +1347,7 @@ func runService(action string) {
 			}
 		}
 		if err := errors.Join(cleanupErrors...); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.service_uninstall_incomplete", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.service_uninstall_incomplete", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -1267,71 +1356,70 @@ func runService(action string) {
 	case "start":
 		fmt.Println(serverCLIText("server_cli.main.starting_service"))
 		if err := sm.StartAllServices(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_start_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_start_service", "error", err))
 			exitFunc(1)
+			return
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_started"))
 
 	case "stop":
 		fmt.Println(serverCLIText("server_cli.main.stopping_service"))
 		if err := sm.StopAllServices(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_stop_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_stop_service", "error", err))
 			exitFunc(1)
+			return
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_stopped"))
 
 	case "status":
 		status, err := sm.Status()
 		if err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_service_status", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_service_status", "error", err))
 			exitFunc(1)
+			return
 		}
 		fmt.Println(serverCLITf("server_cli.main.service_status", "status", status))
 
 	case "restart":
 		fmt.Println(serverCLIText("server_cli.main.restarting_service"))
 		if err := sm.RestartAllServices(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_restart_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_restart_service", "error", err))
 			exitFunc(1)
+			return
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_restarted"))
 
 	case "reload":
 		fmt.Println(serverCLIText("server_cli.main.reloading_service"))
 		if err := sm.Reload(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_reload_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_reload_service", "error", err))
 			exitFunc(1)
+			return
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_reloaded"))
 
 	case "--disable":
 		status, err := sm.Status()
 		if err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_service_status", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_service_status", "error", err))
 			exitFunc(1)
 			return
 		}
 		if status == "active" || status == "running" || status == "started" {
 			fmt.Println(serverCLIText("server_cli.main.stopping_service"))
 			if err := sm.StopAllServices(); err != nil {
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_stop_service", "error", err))
+				fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_stop_service", "error", err))
 				exitFunc(1)
 				return
 			}
 		}
 		fmt.Println(serverCLIText("server_cli.main.disabling_service"))
 		if err := sm.Disable(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.failed_disable_service", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.main.failed_disable_service", "error", err))
 			exitFunc(1)
+			return
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLIText("server_cli.main.service_disabled"))
-
-	case "--help":
-		printServiceHelp()
-
-	default:
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.main.unknown_service_action", "action", action))
-		fmt.Println(serverCLIText("server_cli.main.valid_service_actions"))
 	}
 }
 
@@ -1409,7 +1497,20 @@ func maintenanceArgs(start int) []string {
 }
 
 func runMaintenance(action string) {
-	if action != "data" || !maintenanceDataWritesStdout(maintenanceArgs(4)) {
+	helpRequested := action == "--help" || action == "help" || (action == "email" && (maintenanceArg(3) == "help" || maintenanceArg(3) == "--help"))
+	switch action {
+	case "pgp", "secret", "token", "data", "compliance", "scheduler":
+		subcommand := maintenanceArg(3)
+		helpRequested = subcommand == "" || subcommand == "help" || subcommand == "--help" || subcommand == "-h"
+	case "security":
+		helpRequested = true
+	case "tor":
+		subcommand := maintenanceArg(3)
+		helpRequested = subcommand == "help" || subcommand == "--help" || subcommand == "-h"
+	case "update":
+		helpRequested = maintenanceArg(3) == "help" || maintenanceArg(3) == "--help"
+	}
+	if !helpRequested && !maintenanceUsageError(action) && (action != "data" || !maintenanceDataWritesStdout(maintenanceArgs(4))) {
 		fmt.Printf(display.Emoji("🔧", "[*]")+" Maintenance: %s\n\n", action)
 	}
 
@@ -1420,13 +1521,14 @@ func runMaintenance(action string) {
 		backupArgs := maintenanceArgs(3)
 		if len(backupArgs) > 0 && backupArgs[0] == "test" {
 			if len(backupArgs) > 2 || (len(backupArgs) == 2 && strings.HasPrefix(backupArgs[1], "-")) {
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " Usage: search --maintenance backup test [backup-file]")
-				exitFunc(1)
+				fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Invalid backup test arguments")
+				fmt.Fprintf(os.Stderr, "Usage: %s --maintenance backup test [backup-file]\n", filepath.Base(os.Args[0]))
+				exitFunc(2)
 				return
 			}
 			filename := maintenanceArg(4)
 			if err := runMaintenanceBackupTest(filename); err != nil {
-				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup test failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Backup test failed: %v\n", err)
 				exitFunc(1)
 				return
 			}
@@ -1435,9 +1537,9 @@ func runMaintenance(action string) {
 		}
 		backupOptions, optionsErr := parseMaintenanceBackupOptions(backupArgs)
 		if optionsErr != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" %v\n", optionsErr)
-			fmt.Println("Usage: search --maintenance backup [filename] [--include-ssl] [--include-data]")
-			exitFunc(1)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" %v\n", optionsErr)
+			fmt.Fprintf(os.Stderr, "Usage: %s --maintenance backup [filename] [--include-ssl] [--include-data]\n", filepath.Base(os.Args[0]))
+			exitFunc(2)
 			return
 		}
 		backupOptions.IncludeSSL = backupOptions.IncludeSSL || flagBackupIncludeSSL
@@ -1448,7 +1550,7 @@ func runMaintenance(action string) {
 		// backup creation never prompts.
 		cfg, cfgErr := maintenanceBackupConfig(config.Initialize)
 		if cfgErr != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not load configuration for backup: %v\n", cfgErr)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Could not load configuration for backup: %v\n", cfgErr)
 			exitFunc(1)
 			return
 		}
@@ -1460,7 +1562,7 @@ func runMaintenance(action string) {
 			Lifetime: 300,
 		})
 		if dbErr != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not open server database for backup: %v\n", dbErr)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Could not open server database for backup: %v\n", dbErr)
 			exitFunc(1)
 			return
 		}
@@ -1470,7 +1572,7 @@ func runMaintenance(action string) {
 			}
 		}()
 		if err := database.InitSchema(context.Background(), dbMgr); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not initialize server database for backup: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Could not initialize server database for backup: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1480,8 +1582,8 @@ func runMaintenance(action string) {
 		complianceEnabled := cfg.Server.Compliance.AnyEnabled()
 		password := cfg.Server.Backup.EncryptionPassword
 		if complianceEnabled && password == "" {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Compliance mode requires backup encryption")
-			fmt.Println("   Set server.backup.encryption_password in secrets.yml, and try again.")
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Compliance mode requires backup encryption")
+			fmt.Fprintln(os.Stderr, "   Set server.backup.encryption_password in secrets.yml, and try again.")
 			exitFunc(1)
 			return
 		}
@@ -1506,7 +1608,7 @@ func runMaintenance(action string) {
 			backupPath, verifyResult, err = bm.CreateAndVerify(filename)
 		}
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Backup failed: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1532,18 +1634,23 @@ func runMaintenance(action string) {
 
 	case "restore":
 		if len(os.Args) < 4 {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify backup file to restore")
-			fmt.Println("Usage: search --maintenance restore <backup-file>")
-			fmt.Println()
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Please specify backup file to restore")
+			fmt.Fprintf(os.Stderr, "Usage: %s --maintenance restore <backup-file>\n", filepath.Base(os.Args[0]))
 
 			// List available backups
-			backups, _ := bm.List()
+			backups, err := bm.List()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: failed to list backups: %v\n", err)
+				exitFunc(1)
+				return
+			}
 			if len(backups) > 0 {
-				fmt.Println("Available backups:")
+				fmt.Fprintln(os.Stderr, "Available backups:")
 				for _, b := range backups {
-					fmt.Printf("  - %s (%s, %s)\n", b.Filename, b.FormatSize(), b.CreatedAt.Format("2006-01-02 15:04"))
+					fmt.Fprintf(os.Stderr, "  - %s (%s, %s)\n", b.Filename, b.FormatSize(), b.CreatedAt.Format("2006-01-02 15:04"))
 				}
 			}
+			exitFunc(2)
 			return
 		}
 		filename := os.Args[3]
@@ -1553,13 +1660,13 @@ func runMaintenance(action string) {
 		// user needs the operator token (server.token); any other user is denied.
 		authCfg, err := config.Initialize()
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 			exitFunc(1)
 			return
 		}
 		restoreLimits, limitsErr := backup.RestoreLimitsFromConfig(authCfg.Server.Restore)
 		if limitsErr != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Invalid restore limits: %v\n", limitsErr)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Invalid restore limits: %v\n", limitsErr)
 			exitFunc(1)
 			return
 		}
@@ -1579,7 +1686,7 @@ func runMaintenance(action string) {
 		}
 
 		if authErr := authorizeRestore(isFirstRun, isRoot, isServiceUser, authCfg.Server.Token, presentedToken); authErr != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Restore denied: " + authErr.Error())
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Restore denied: "+authErr.Error())
 			exitFunc(1)
 			return
 		}
@@ -1593,8 +1700,8 @@ func runMaintenance(action string) {
 		if isEncryptedFile {
 			password = readBackupPassword("Enter backup password: ")
 			if password == "" {
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " This backup is encrypted — a password is required")
-				fmt.Println("   Enter the backup password when prompted, and try again.")
+				fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" This backup is encrypted — a password is required")
+				fmt.Fprintln(os.Stderr, "   Enter the backup password when prompted, and try again.")
 				exitFunc(1)
 				return
 			}
@@ -1606,13 +1713,13 @@ func runMaintenance(action string) {
 		fmt.Println("Verifying backup integrity...")
 		verifyResult, err := bm.VerifyBackup(filename)
 		if err != nil || verifyResult == nil || !verifyResult.AllPassed {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Backup verification failed")
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Backup verification failed")
 			if err != nil {
-				fmt.Printf("   %v\n", err)
+				fmt.Fprintf(os.Stderr, "   %v\n", err)
 			}
 			if verifyResult != nil {
 				for _, verifyErr := range verifyResult.Errors {
-					fmt.Printf("   - %s\n", verifyErr)
+					fmt.Fprintf(os.Stderr, "   - %s\n", verifyErr)
 				}
 			}
 			exitFunc(1)
@@ -1638,7 +1745,7 @@ func runMaintenance(action string) {
 			Lifetime: 300,
 		})
 		if dbErr != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Could not open server database for pre-restore backup: %v\n", dbErr)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Could not open server database for pre-restore backup: %v\n", dbErr)
 			exitFunc(1)
 			return
 		}
@@ -1663,7 +1770,7 @@ func runMaintenance(action string) {
 			err = bm.Restore(filename)
 		}
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1683,14 +1790,14 @@ func runMaintenance(action string) {
 		fmt.Println("Toggling maintenance mode...")
 		cfg, err := config.Initialize()
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 			exitFunc(1)
 			return
 		}
 		// Toggle maintenance mode
 		cfg.Server.MaintenanceMode = !cfg.Server.MaintenanceMode
 		if err := cfg.Save(config.GetConfigPath()); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
 			exitFunc(1)
 		}
 		if cfg.Server.MaintenanceMode {
@@ -1738,7 +1845,7 @@ func runMaintenance(action string) {
 		// Check authorization
 		cfg, err := config.Initialize()
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1747,18 +1854,17 @@ func runMaintenance(action string) {
 		isRoot := config.IsPrivileged()
 
 		if !isFirstRun && !isRoot {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Setup already completed.")
-			fmt.Println()
-			fmt.Println("To reconfigure:")
-			fmt.Println("  1. Edit server.yml directly and restart the server")
-			fmt.Println("  2. Run as root: sudo search --maintenance setup")
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Setup already completed.")
+			fmt.Fprintln(os.Stderr, "To reconfigure:")
+			fmt.Fprintln(os.Stderr, "  1. Edit server.yml directly and restart the server")
+			fmt.Fprintln(os.Stderr, "  2. Run as root: sudo search --maintenance setup")
 			exitFunc(1)
 			return
 		}
 
 		if !isFirstRun {
 			// Root user re-running setup - confirm
-			fmt.Println(display.Emoji("⚠️", "[WARN]") + " This will reset configuration to defaults!")
+			fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]")+" This will reset configuration to defaults!")
 			fmt.Print("Type 'RESET' to confirm: ")
 			var confirm string
 			if _, err := fmt.Scanln(&confirm); err != nil && !errors.Is(err, io.EOF) {
@@ -1777,7 +1883,7 @@ func runMaintenance(action string) {
 			newCfg.Server.Token = cfg.Server.Token
 		}
 		if err := newCfg.Save(config.GetConfigPath()); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1818,8 +1924,9 @@ func runMaintenance(action string) {
 			case "private":
 				runPGPExportPrivate(exportPath)
 			default:
-				fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.export_key_type_required"))
-				fmt.Println(serverCLITf("server_cli.pgp.export_usage", "project", config.ProjectName))
+				fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLIText("server_cli.pgp.export_key_type_required"))
+				fmt.Fprintln(os.Stderr, serverCLITf("server_cli.pgp.export_usage", "project", config.ProjectName))
+				exitFunc(2)
 			}
 
 		case "import":
@@ -1836,14 +1943,16 @@ func runMaintenance(action string) {
 			fmt.Println(serverCLITf("server_cli.pgp.help", "project", config.ProjectName, "config_dir", config.GetConfigDir()))
 
 		default:
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.unknown_action", "action", pgpAction))
-			fmt.Println(serverCLIText("server_cli.pgp.valid_actions"))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.pgp.unknown_action", "action", pgpAction))
+			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.pgp.valid_actions"))
+			fmt.Fprintf(os.Stderr, "Usage: %s --maintenance pgp help\n", filepath.Base(os.Args[0]))
+			exitFunc(2)
 		}
 
 	// Help text follows AI.md PART 8 "Maintenance Help Output" (AI.md:31554)
 	// verbatim, extended with the pgp/secret/token/data/compliance actions
 	// that the frozen --maintenance flag list (AI.md:10204) also carries.
-	case "--help":
+	case "--help", "help":
 		binaryName := filepath.Base(os.Args[0])
 		fmt.Println("Maintenance commands:")
 		fmt.Println()
@@ -1892,8 +2001,127 @@ func runMaintenance(action string) {
 		fmt.Println("  " + binaryName + " --maintenance setup")
 
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
-		fmt.Println("Valid actions: backup, restore, update, mode, setup, pgp, security, secret, token, data, compliance, email, scheduler, tor, help")
+		fmt.Fprintf(os.Stderr, "Error: unknown maintenance action %q\n", action)
+		fmt.Fprintf(os.Stderr, "Usage: %s --maintenance --help\n", filepath.Base(os.Args[0]))
+		exitFunc(2)
+	}
+}
+
+func maintenanceUsageError(action string) bool {
+	switch action {
+	case "backup":
+		args := maintenanceArgs(3)
+		if len(args) > 0 && args[0] == "test" {
+			return len(args) > 2 || (len(args) == 2 && strings.HasPrefix(args[1], "-"))
+		}
+		_, err := parseMaintenanceBackupOptions(args)
+		return err != nil
+	case "restore":
+		return len(os.Args) < 4
+	case "update":
+		subcommand := maintenanceArg(3)
+		if subcommand == "branch" {
+			branch := updateBranchArg()
+			return branch == "" || !update.IsValidBranch(branch)
+		}
+		return subcommand != "" && subcommand != "check" && subcommand != "yes" && subcommand != "help" && subcommand != "--help"
+	case "pgp":
+		subcommand := maintenanceArg(3)
+		if subcommand == "export" {
+			keyType := maintenanceArg(4)
+			if keyType != "public" && keyType != "private" {
+				return true
+			}
+			return keyType == "private" && maintenanceArg(5) == ""
+		}
+		if subcommand == "import" {
+			return maintenanceArg(4) == ""
+		}
+		return subcommand != "" && subcommand != "generate" && subcommand != "rotate" && subcommand != "publish" && subcommand != "export" && subcommand != "import" && subcommand != "delete" && subcommand != "help" && subcommand != "--help"
+	case "email":
+		subcommand := maintenanceArg(3)
+		if subcommand == "" || subcommand == "help" || subcommand == "--help" {
+			return false
+		}
+		if subcommand != "test" {
+			return true
+		}
+		_, _, err := parseMaintenanceEmailArgs(maintenanceArgs(4))
+		return err != nil
+	case "secret":
+		subcommand, name := maintenanceArg(3), maintenanceArg(4)
+		if subcommand == "" || subcommand == "help" || subcommand == "--help" {
+			return false
+		}
+		return subcommand != "rotate" || (name != database.SecretInstallation && name != "encryption_key")
+	case "token":
+		subcommand, prefix := maintenanceArg(3), maintenanceArg(4)
+		if subcommand == "" || subcommand == "help" || subcommand == "--help" {
+			return false
+		}
+		return subcommand != "list" && (subcommand != "revoke" || prefix == "")
+	case "data":
+		subcommand := maintenanceArg(3)
+		if subcommand == "" || subcommand == "help" || subcommand == "--help" || subcommand == "-h" {
+			return false
+		}
+		if subcommand != "export" && subcommand != "delete" {
+			return true
+		}
+		flags, err := parseDataActionFlags(subcommand, maintenanceArgs(4))
+		return err != nil || flags.help || flags.ownerPrefix == "" || (subcommand == "export" && flags.yes) || (subcommand == "delete" && flags.output != "")
+	case "compliance":
+		subcommand := maintenanceArg(3)
+		return subcommand != "" && subcommand != "help" && subcommand != "--help" && subcommand != "report"
+	case "scheduler":
+		subcommand, taskID := maintenanceArg(3), maintenanceArg(4)
+		if subcommand == "" || subcommand == "help" || subcommand == "--help" {
+			return false
+		}
+		needsID := subcommand == "show" || subcommand == "run" || subcommand == "enable" || subcommand == "disable" || subcommand == "history"
+		return subcommand != "list" && !needsID || needsID != (taskID != "")
+	case "security":
+		return false
+	case "tor":
+		args := make([]string, 0, len(os.Args))
+		for _, arg := range maintenanceArgs(3) {
+			if arg != "--yes" {
+				args = append(args, arg)
+			}
+		}
+		if len(args) == 0 {
+			return true
+		}
+		if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+			return false
+		}
+		switch args[0] {
+		case "status", "validate", "restart", "regenerate":
+			return len(args) != 1
+		case "import-keys":
+			return len(args) != 2
+		case "vanity":
+			if len(args) < 2 {
+				return true
+			}
+			switch args[1] {
+			case "start":
+				_, _, err := parseTorVanityStartArgs(args[2:])
+				return err != nil
+			case "apply":
+				return len(args) > 3
+			case "stop":
+				return len(args) > 2
+			default:
+				return true
+			}
+		default:
+			return true
+		}
+	case "--help", "help", "mode", "setup", "":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -1938,7 +2166,7 @@ func runUpdate(subCmd string) {
 		// release; defer_days gates only the scheduled update_check task
 		info, err := um.CheckForUpdates(branch)
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1960,8 +2188,8 @@ func runUpdate(subCmd string) {
 
 	case "yes", "":
 		if !config.IsPrivileged() {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Update installation requires elevated privileges")
-			fmt.Println("   Use --update check to check without privileges")
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Update installation requires elevated privileges")
+			fmt.Fprintln(os.Stderr, "   Use --update check to check without privileges")
 			exitFunc(1)
 			return
 		}
@@ -1971,7 +2199,7 @@ func runUpdate(subCmd string) {
 		fmt.Printf("Update channel:  %s\n", branch)
 		info, err := um.CheckForUpdates(branch)
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -1982,7 +2210,7 @@ func runUpdate(subCmd string) {
 		}
 
 		if info.DownloadURL == "" {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Release %s has no binary for %s/%s\n",
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Release %s has no binary for %s/%s\n",
 				info.LatestVersion, runtime.GOOS, runtime.GOARCH)
 			exitFunc(1)
 			return
@@ -1999,14 +2227,14 @@ func runUpdate(subCmd string) {
 		fmt.Println()
 
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Download failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Download failed: %v\n", err)
 			exitFunc(1)
 			return
 		}
 
 		fmt.Println("Installing update...")
 		if err := um.InstallUpdate(downloadPath, info.AssetName, info.ChecksumURL); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Installation failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Installation failed: %v\n", err)
 			exitFunc(1)
 			return
 		}
@@ -2030,8 +2258,8 @@ func runUpdate(subCmd string) {
 		// re-executes itself so the CLI applies the update immediately.
 		fmt.Println("Restarting...")
 		if err := update.Restart(); err != nil {
-			fmt.Printf(display.Emoji("⚠️", "[WARN]")+" Restart failed: %v\n", err)
-			fmt.Println("   Restart the service or running instance manually to apply the update")
+			fmt.Fprintf(os.Stderr, display.Emoji("⚠️", "[WARN]")+" Restart failed: %v\n", err)
+			fmt.Fprintln(os.Stderr, "   Restart the service or running instance manually to apply the update")
 			exitFunc(1)
 			return
 		}
@@ -2040,15 +2268,15 @@ func runUpdate(subCmd string) {
 	case "branch":
 		branch := updateBranchArg()
 		if branch == "" {
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify branch name")
-			fmt.Println("Usage: search --update branch <stable|beta|devel>")
-			exitFunc(1)
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" Please specify branch name")
+			fmt.Fprintf(os.Stderr, "Usage: %s --update branch <stable|beta|devel>\n", filepath.Base(os.Args[0]))
+			exitFunc(2)
 			return
 		}
 		if !update.IsValidBranch(branch) {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Invalid branch: %s\n", branch)
-			fmt.Println("Valid branches: stable, beta, devel (aliases: daily, rolling, dev, development)")
-			exitFunc(1)
+			fmt.Fprintf(os.Stderr, "%s\n", display.Emoji("❌", "[ERROR]")+" Invalid branch: "+branch)
+			fmt.Fprintln(os.Stderr, "Valid branches: stable, beta, devel (aliases: daily, rolling, dev, development)")
+			exitFunc(2)
 			return
 		}
 
@@ -2057,14 +2285,14 @@ func runUpdate(subCmd string) {
 		configPath := config.GetConfigPath()
 		cfg, err := config.Load(configPath)
 		if err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load %s: %v\n", configPath, err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to load %s: %v\n", configPath, err)
 			exitFunc(1)
 			return
 		}
 		branch = update.NormalizeBranch(branch)
 		cfg.Server.Update.Branch = branch
 		if err := cfg.Save(configPath); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to write %s: %v\n", configPath, err)
+			fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Failed to write %s: %v\n", configPath, err)
 			exitFunc(1)
 			return
 		}
@@ -2091,8 +2319,10 @@ func runUpdate(subCmd string) {
 		fmt.Println("  search --update branch beta")
 
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown subcommand: %s\n", subCmd)
-		fmt.Println("Valid subcommands: check, yes, branch <stable|beta|devel>, help")
+		fmt.Fprintf(os.Stderr, "%s\n", display.Emoji("❌", "[ERROR]")+" Unknown subcommand: "+subCmd)
+		fmt.Fprintln(os.Stderr, "Valid subcommands: check, yes, branch <stable|beta|devel>, help")
+		fmt.Fprintf(os.Stderr, "Usage: %s --update --help\n", filepath.Base(os.Args[0]))
+		exitFunc(2)
 	}
 }
 
@@ -2226,9 +2456,10 @@ func runShell(subCmd string) {
 	case "help", "--help":
 		printShellHelp(binaryName)
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown shell subcommand: %s\n", subCmd)
-		fmt.Println("Valid subcommands: completions, init, --help")
-		exitFunc(1)
+		fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Unknown shell subcommand: %s\n", subCmd)
+		fmt.Fprintln(os.Stderr, "Valid subcommands: completions, init, --help")
+		fmt.Fprintf(os.Stderr, "Usage: %s --shell <completions|init> [shell]\n", binaryName)
+		exitFunc(2)
 	}
 }
 
@@ -2238,10 +2469,10 @@ func detectShell() string {
 	shell := os.Getenv("SHELL")
 	if shell != "" {
 		shell = filepath.Base(shell)
-		switch shell {
-		case "bash", "zsh", "fish", "powershell", "pwsh":
-			return shell
+		if idx := strings.LastIndex(shell, "\\"); idx >= 0 {
+			shell = shell[idx+1:]
 		}
+		return strings.TrimSuffix(strings.ToLower(shell), ".exe")
 	}
 
 	// Check parent process on Unix
@@ -2446,6 +2677,9 @@ complete -c %s -n '__fish_seen_subcommand_from security' -l disclosure-date -d '
 complete -c %s -n '__fish_seen_subcommand_from security' -l severity -d 'Report severity' -xa 'critical high medium low informational'
 `, "%s", binaryName))
 
+	case "sh", "dash", "ksh":
+		fmt.Print(generatePosixCompletions(binaryName, shell))
+
 	case "powershell", "pwsh":
 		fmt.Printf(`# PowerShell completions for %s
 # Add to $PROFILE: Invoke-Expression (&%s --shell init powershell)
@@ -2477,19 +2711,19 @@ Register-ArgumentCompleter -CommandName %s -ScriptBlock {
         @{Name='--shell'; Description='Shell integration'}
     )
 
-    if ($commandAst.ToString() -match '--maintenance backup\\s*$') {
+    if ($commandAst.ToString() -match '--maintenance backup\s*$') {
         $commands = @(
             @{Name='--include-ssl'; Description='Include optional config SSL files'}
             @{Name='--include-data'; Description='Include optional data files'}
             @{Name='test'; Description='Verify a backup without restoring it'}
         )
-    } elseif ($commandAst.ToString() -match '--maintenance tor vanity\\s*$') {
+    } elseif ($commandAst.ToString() -match '--maintenance tor vanity\s*$') {
         $commands = @(
             @{Name='start'; Description='Start vanity address search'}
             @{Name='stop'; Description='Stop vanity address search'}
             @{Name='apply'; Description='Apply a found vanity candidate'}
         )
-    } elseif ($commandAst.ToString() -match '--maintenance tor\\s*$') {
+    } elseif ($commandAst.ToString() -match '--maintenance tor\s*$') {
         $commands = @(
             @{Name='status'; Description='View Tor hidden service status'}
             @{Name='validate'; Description='Validate Tor configuration'}
@@ -2508,10 +2742,41 @@ Register-ArgumentCompleter -CommandName %s -ScriptBlock {
 `, binaryName, binaryName, binaryName)
 
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
-		fmt.Println("Supported shells: bash, zsh, fish, powershell")
-		exitFunc(1)
+		fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
+		fmt.Fprintln(os.Stderr, "Supported shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh")
+		exitFunc(2)
 	}
+}
+
+func generatePosixCompletions(binaryName, shell string) string {
+	functionName := "_"
+	for _, char := range strings.ToLower(binaryName) {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+			functionName += string(char)
+		} else {
+			functionName += "_"
+		}
+	}
+	functionName += "_completion_candidates"
+	return fmt.Sprintf(`# POSIX completion candidates for %s (%s)
+# Call %s PREFIX [PREVIOUS-ARGUMENT] to list matching options.
+%s() {
+    _completion_prefix=${1-}
+    _completion_previous=${2-}
+    case "$_completion_previous" in
+        --update) _completion_items='check yes branch' ;;
+        --shell) _completion_items='completions init --help' ;;
+        --service) _completion_items='start restart stop reload --install --uninstall --disable --help' ;;
+        --maintenance) _completion_items='backup restore update mode setup pgp secret token data compliance scheduler email tor --help' ;;
+        *) _completion_items='--help --version --status --daemon --debug --i2p --mode --config --data --cache --log --backup --pid --address --port --service --maintenance --update --shell' ;;
+    esac
+    for _completion_item in $_completion_items; do
+        case "$_completion_item" in
+            "$_completion_prefix"*) printf '%%s\\n' "$_completion_item" ;;
+        esac
+    done
+}
+`, binaryName, shell, functionName, functionName)
 }
 
 // printShellInit prints the shell initialization command
@@ -2523,12 +2788,14 @@ func printShellInit(binaryName, shell string) {
 		fmt.Printf("source <(%s --shell completions zsh)\n", binaryName)
 	case "fish":
 		fmt.Printf("%s --shell completions fish | source\n", binaryName)
+	case "sh", "dash", "ksh":
+		fmt.Printf("eval \"$(%s --shell completions %s)\"\n", binaryName, shell)
 	case "powershell", "pwsh":
 		fmt.Printf("Invoke-Expression (&%s --shell completions powershell)\n", binaryName)
 	default:
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
-		fmt.Println("Supported shells: bash, zsh, fish, powershell")
-		exitFunc(1)
+		fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
+		fmt.Fprintln(os.Stderr, "Supported shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh")
+		exitFunc(2)
 	}
 }
 
@@ -2545,7 +2812,11 @@ Supported Shells:
   bash        Bash shell (default on Linux)
   zsh         Zsh shell (default on macOS)
   fish        Fish shell
+  sh          POSIX shell
+  dash        POSIX shell
+  ksh         Korn shell
   powershell  PowerShell (Windows)
+  pwsh        PowerShell Core
 
 Setup Instructions:
 
@@ -2558,10 +2829,13 @@ Setup Instructions:
   Fish (~/.config/fish/config.fish):
     %s --shell init fish | source
 
+  POSIX shell (~/.profile):
+    eval "$(%s --shell init sh)"
+
   PowerShell ($PROFILE):
     Invoke-Expression (&%s --shell init powershell)
 
 The shell will be auto-detected if not specified.
 `, binaryName, binaryName, binaryName, binaryName,
-		binaryName, binaryName, binaryName, binaryName)
+		binaryName, binaryName, binaryName, binaryName, binaryName)
 }

@@ -44,7 +44,8 @@
     "dismiss": "Sluiten",
     "upload": "Uploaden",
     "app_name": "Search",
-    "other": "Overig"
+    "other": "Overig",
+    "details": "Details"
   },
   "auth": {
     "login": "Inloggen",
@@ -300,6 +301,7 @@
       "expired": "Verlopen",
       "revoked": "Ingetrokken",
       "primary_revealed": "Primair token getoond",
+      "primary_created": "Primair token aangemaakt",
       "primary_rotated": "Primair token vernieuwd",
       "linked_created": "Gekoppeld token gemaakt",
       "linked_revealed": "Gekoppeld token getoond",
@@ -309,7 +311,7 @@
       "expiry_90d": "90 dagen",
       "expiry_1y": "1 jaar",
       "shown_once": "Eenmalig getoond bij het laden van deze pagina.",
-      "primary_help": "Volledige toegang tot uw waarschuwingen. Houd dit token privé.",
+      "primary_help": "Volledige toegang tot uw {resources}. Houd dit token privé.",
       "name_help": "Bijvoorbeeld: MCP-client",
       "expiry_custom": "Aangepaste datum",
       "custom_date": "Aangepaste datum",
@@ -317,7 +319,7 @@
       "create": "Token maken",
       "this_browser": "Deze browser",
       "saved_in_browser": "Het eigenaarstoken is in deze browser opgeslagen.",
-      "forget_note": "Deze browser vergeten verwijdert de opgeslagen cookie met het eigenaarstoken. Uw waarschuwingen worden niet verwijderd.",
+      "forget_note": "Deze browser vergeten verwijdert de opgeslagen cookie met het eigenaarstoken. Uw {resources} worden niet verwijderd.",
       "forget_saved_token": "Opgeslagen token vergeten",
       "forget_confirm": "Het in deze browser opgeslagen eigenaarstoken vergeten?",
       "no_linked_tokens": "Nog geen gekoppelde tokens.",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "Opgeslagen eigenaarstoken vergeten",
       "linked_revoked": "Gekoppeld token ingetrokken",
       "linked_updated": "Gekoppeld token bijgewerkt",
-      "reveal": "Token tonen"
+      "reveal": "Token tonen",
+      "new_token": "Nieuw token",
+      "revoke_primary_heading": "Primair token intrekken",
+      "revoke_primary_summary": "{linked_count} gekoppelde tokens en {resource_count} {resources} worden verwijderd, inclusief alles wat met een gekoppeld token is gemaakt.",
+      "revoke_primary_button": "Primair token intrekken en alles verwijderen",
+      "revoke_primary_confirm": "Typ ter bevestiging de laatste 4 tekens van uw primaire token ({last4})",
+      "primary_revoked": "Primair token ingetrokken"
     },
     "font_size": "Lettergrootte",
     "font_size_small": "Klein",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "Waar gaat het over?",
     "message_label": "Bericht",
     "message_placeholder": "Je bericht...",
-    "verification_question": "Verificatie: wat is {a} + {b}?",
+    "verification_question": "Verificatie: wat is {a} {operator} {b}?",
     "answer_placeholder": "Antwoord",
     "send_message": "Bericht verzenden",
     "security_description": "U bekijkt het formulier voor gecoördineerde openbaarmaking van kwetsbaarheden. Geef zoveel mogelijk details op.",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "Dit e-mailadres is correct en dit is een echte melding, geen advertentie, verzoek of spam.",
     "form_scope_notice": "Dit formulier is alleen bedoeld voor beveiligingsmeldingen, schendingen van de voorwaarden op een URL van deze site, DMCA-meldingen en privacyverzoeken. Gebruik het niet voor ondersteuning, bugmeldingen, functieverzoeken of algemene vragen.",
     "honeypot_label": "Laat dit veld leeg",
-    "type_abuse": "Misbruik",
+    "type_abuse": "Misbruik melden",
     "type_dmca": "DMCA",
     "type_privacy": "Privacyverzoek",
     "reported_url_label": "Gemelde URL",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "Raadpleeg ons beleid om een beveiligingslek te melden:",
     "abuse_reports_heading": "Misbruikmeldingen",
     "abuse_reports_intro": "Kies hierboven Misbruik om misbruikende inhoud of een schending van de voorwaarden te melden. Kies DMCA om een DMCA-melding te sturen.",
-    "abuse_reports_email": "of stuur een e-mail naar {email}"
+    "abuse_reports_email": "of stuur een e-mail naar {email}",
+    "captcha_label": "Menselijke verificatie",
+    "choose_type_heading": "Kies een meldingstype",
+    "form_details_heading": "Meldingsgegevens",
+    "purpose_heading": "Waarvoor dit formulier is bedoeld",
+    "reported_url_help": "Een pagina op deze site, bijvoorbeeld https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "Gegevensverzameling",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "Resultaten te verzamelen en aan je te tonen",
     "data_usage_item_preferences": "Je voorkeuren (thema, taal) te onthouden",
     "data_retention_heading": "Bewaren van gegevens",
+    "retention": {
+      "period": "Bronnen die u maakt, worden bewaard totdat ze verlopen of totdat u ze met uw eigenaarstoken verwijdert. Voorkeuren worden alleen in cookies in uw browser opgeslagen. Operationele logboeken worden maximaal 30 dagen bewaard. Geanonimiseerde analysegegevens kunnen maximaal 12 maanden worden bewaard."
+    },
     "data_retention_description": "We bewaren geen zoekopdrachten of persoonlijke gegevens. Sessiedata is tijdelijk en wordt verwijderd wanneer je je browser sluit of je sessie verloopt.",
     "third_parties_heading": "Derden",
     "third_parties_description": "Je zoekopdrachten worden doorgestuurd naar upstream-zoekmachines om resultaten op te halen. We delen geen andere gegevens met derden.",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "Analysegegevens kunnen worden gedeeld met of verkocht aan externe partners zoals beschreven in dit beleid.",
     "analytics_provider": "Analyse wordt geleverd via {provider}.",
     "analytics_none": "Er is geen externe analyseprovider geconfigureerd.",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "Gegevensopslag & delen",
     "data_storage_intro": "Alle gegevens die we bewaren, worden veilig opgeslagen en slechts zo lang als nodig bewaard.",
     "data_storage_never_sold": "We delen of verkopen opgeslagen gegevens niet aan derden, behalve voor zover nodig om zoekresultaten te leveren.",
@@ -1645,6 +1669,12 @@
     "last_updated": "Laatst bijgewerkt: {date}",
     "acceptance_heading": "1. Aanvaarding van de voorwaarden",
     "acceptance_description": "Door {app_name} (\"the Service\") te bezoeken of te gebruiken, ga je ermee akkoord gebonden te zijn aan deze Servicevoorwaarden. Als je niet akkoord gaat met deze voorwaarden, gebruik de Service dan niet.",
+    "governing_law_description": "Het recht van de Verenigde Staten is van toepassing, zonder rekening te houden met conflictenrechtelijke regels, tenzij de eigen voorwaarden van de beheerder een ander rechtsgebied noemen.",
+    "governing_law_heading": "Toepasselijk recht",
+    "liability_description": "De dienst wordt geleverd zoals deze is, zonder enige garantie. Voor zover wettelijk toegestaan is de beheerder niet aansprakelijk voor verlies door het gebruik ervan.",
+    "liability_heading": "Aansprakelijkheid",
+    "acceptable_use_description": "Gebruik de dienst niet onwettig, benadeel anderen niet, omzeil geen snelheidslimieten of toegangscontroles en test niet buiten het beveiligingsbeleid op /server/security/policy.",
+    "acceptable_use_heading": "Aanvaardbaar gebruik",
     "description_heading": "2. Beschrijving van de service",
     "description_body": "{app_name} is een privacyvriendelijke metazoekmachine die resultaten van meerdere zoekmachines samenvoegt. De Service wordt geleverd \"as is\" zonder enige vorm van garantie.",
     "user_conduct_heading": "3. Gebruikersgedrag",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. Wijzigingen aan de service",
     "modifications_description": "We behouden ons het recht voor om de Service op elk moment en zonder voorafgaande kennisgeving te wijzigen, op te schorten of stop te zetten. We zijn niet aansprakelijk jegens jou of derden voor enige wijziging, opschorting of stopzetting.",
-    "changes_heading": "10. Wijzigingen van de voorwaarden",
-    "changes_description": "We kunnen deze Servicevoorwaarden van tijd tot tijd bijwerken. We zullen gebruikers op de hoogte stellen van materiële wijzigingen door de datum \"Last updated\" bij te werken. Je voortgezet gebruik van de Service na wijzigingen houdt aanvaarding van de nieuwe voorwaarden in.",
+    "changes_heading": "Wijzigingen",
+    "changes_description": "Deze voorwaarden kunnen veranderen. De huidige tekst op deze pagina geldt vanaf het moment van publicatie.",
     "contact_prefix": "Als je vragen hebt over deze Servicevoorwaarden, neem dan ",
     "contact_suffix": "."
   },
   "help": {
+    "i2p": {
+      "heading": "I2P-toegang",
+      "intro": "Deze toepassing is beschikbaar als I2P-eepsite voor extra privacy.",
+      "address_heading": "I2P-adres",
+      "how_to_heading": "Verbinding maken",
+      "step_install": "Installeer",
+      "step_or": "of",
+      "step_connect": "en wacht totdat deze verbinding met het netwerk heeft gemaakt.",
+      "step_proxy": "Configureer uw browser om de I2P-HTTP-proxy te gebruiken op",
+      "step_address": "Kopieer het .b32.i2p-adres hierboven en plak het in de adresbalk van uw browser.",
+      "note": "I2P biedt extra privacy door uw verbinding via het netwerk te routeren. Eepsites worden via http:// aangeboden; de I2P-tunnel versleutelt het transport, dus er wordt geen TLS-certificaat gebruikt."
+    },
+    "troubleshooting": {
+      "heading": "Problemen oplossen",
+      "search": "Probeer een bredere zoekopdracht of verwijder operatoren; een geselecteerde zoekmachine vindt mogelijk geen resultaten. Probeer het later opnieuw als een machine tijdelijk niet beschikbaar is.",
+      "access": "Ontbreekt Tor, controleer dan met search --maintenance tor status of de dienst actief is en een onion-adres heeft gepubliceerd. Ontbreekt I2P, vraag de beheerder de provider en het adres te controleren.",
+      "alerts": "Als een link voor meldingsbeheer niet opent, gebruik dan de volledige link uit het bevestigingsbericht; het token kan ongeldig zijn of de melding is verwijderd. Corrigeer het veld uit de formulierfout en verzend opnieuw."
+    },
     "page_title": "Help",
     "title": "Help en documentatie",
     "subtitle": "Leer hoe u het meeste uit {app_name} haalt",
@@ -2164,9 +2212,16 @@
     "links_heading": "Meer informatie",
     "policy_title": "Openbaarmakingsbeleid",
     "policy_scope_heading": "Reikwijdte",
-    "policy_scope_description": "Dit beleid is van toepassing op deze geïmplementeerde instantie en de diensten die deze aanbiedt.",
+    "policy_scope_description": "De applicatie op {fqdn}, inclusief de API, valt binnen de scope.",
+    "policy_reporting_description": "Meld problemen privé via het beveiligingsoverzicht.",
+    "policy_reporting_heading": "Melden",
+    "policy_out_of_scope_item_headers": "Ontbrekende aanbevolen headers op niet-gevoelige pagina’s",
+    "policy_out_of_scope_item_scanner": "Geautomatiseerde scannerresultaten zonder aangetoonde impact",
+    "policy_in_scope_item_i2p": "I2P-adres: {address}",
+    "policy_in_scope_item_tor": "Tor-adres: {address}",
+    "policy_in_scope_item_host": "Andere geconfigureerde host: {host}",
     "policy_disclosure_window_heading": "Termijn voor gecoördineerde openbaarmaking",
-    "policy_disclosure_window_description": "We vragen onderzoekers ons tot 90 dagen de tijd te geven om een gemeld probleem te beoordelen en op te lossen voordat het openbaar wordt gemaakt, tenzij een andere afgestemde datum is overeengekomen.",
+    "policy_disclosure_window_description": "Meld problemen privé via het beveiligingsoverzicht en geef vanaf de melding 90 dagen voor gecoördineerde openbaarmaking; de termijn eindigt eerder zodra een oplossing is uitgebracht en kan in overleg worden verlengd.",
     "policy_in_scope_heading": "Binnen bereik",
     "policy_in_scope_item_deployed": "Deze geïmplementeerde instantie en de openbare endpoints ervan",
     "policy_in_scope_item_api": "De openbare API",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "Fysieke beveiligingstests",
     "policy_out_of_scope_item_third_party": "Diensten van derden waarover wij geen controle hebben",
     "policy_safe_harbor_heading": "Vrijwaring",
-    "policy_safe_harbor_description": "We zullen geen juridische stappen ondernemen tegen onderzoekers die te goeder trouw proberen dit beleid na te leven, kwetsbaarheden verantwoord melden en privacyschendingen, gegevensvernietiging of dienstonderbrekingen vermijden.",
+    "policy_safe_harbor_description": "Onderzoek te goeder trouw dat dit beleid volgt, privacyschendingen en dienstonderbrekingen voorkomt, alleen toegang krijgt tot wat nodig is om het probleem aan te tonen en daarna stopt, is toegestaan. Hiervoor ondernemen we geen juridische stappen.",
     "policy_contact_prefix": "Vragen over dit beleid kunnen worden gestuurd via de pagina",
     "policy_contact_suffix": ".",
     "thanks_title": "Beveiligingsdankbetuigingen",
@@ -2186,6 +2241,8 @@
     "report_status_title": "Status van beveiligingsmelding",
     "report_status_tracking_id_label": "Volg-ID:",
     "report_status_state_label": "Status:",
+    "report_status_comment_label": "Opmerking van de beheerder",
+    "report_status_disclosure_date_label": "Verwachte openbaarmakingsdatum",
     "report_status_state_received": "Ontvangen",
     "report_status_state_triaged": "Beoordeeld",
     "report_status_state_confirmed": "Bevestigd",
@@ -2232,6 +2289,7 @@
       "label_current_version": "Huidige versie:",
       "label_new_version": "Nieuwe versie:",
       "label_release_date": "Releasedatum:",
+      "label_channel": "Releasekanaal:",
       "label_release_notes": "Release-opmerkingen:",
       "label_view_update": "Update bekijken:",
       "manual_command": "Handmatige updateopdracht: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "Update geïnstalleerd - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "Update mislukt - {app_name}",
         "body": "UPDATE MISLUKT\n\nVan: {app_name} ({fqdn})\nTijd: {timestamp}\n\nUpdate {version} kon niet worden geïnstalleerd.\nReden: {error}\n\nDe vorige versie blijft actief.\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "Update klaargezet - {app_name}",
+        "body": "UPDATE KLAARGEZET\n\nVan: {app_name} ({fqdn})\nTijd: {timestamp}\n\nUpdate {version} is gecontroleerd en klaargezet voor installatie.\n\nHerstart de service om de update toe te passen.\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

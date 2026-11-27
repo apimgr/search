@@ -1,5 +1,5 @@
 # Docker Rules (PART 26)
-<!-- Synchronized with AI.md revision 59c37d25e582. -->
+<!-- Synchronized with AI.md revision c2f65bf274b5. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -15,6 +15,7 @@ Read: `AI.md` PART 26 (Docker).
 - Add Dockerfile `LABEL` blocks; CI supplies OCI labels and multi-arch manifest annotations at build time
 - Add `USER`, create service users in the Dockerfile, or change `ENTRYPOINT`/`CMD`
 - Add `build:` or `version:` to Compose files, or require an `.env` file
+- Run automated Compose tests from the project directory, use `--network host`, or mount project/runtime data into test containers
 
 ## CRITICAL - ALWAYS DO
 - Keep `docker/Dockerfile`, `docker/Dockerfile.dev`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, and `docker/docker-compose.test.yml`
@@ -27,7 +28,9 @@ Read: `AI.md` PART 26 (Docker).
 - Mount volumes for config and data; listen on internal port 80
 - Use the container path layout: `/config/{project_name}/`, `/data/{project_name}/`, `/data/log/{project_name}/`, `/data/db/sqlite/`, `/data/backups/{project_name}/`
 - Keep runtime volumes outside the source overlay, use map-style environment variables with sane defaults, and attach the shared logging anchor to every Compose service
+- For automated Compose tests, copy `docker-compose.test.yml` to the scoped temp workspace, use a named bridge network, and keep Valkey state in `tmpfs`; test and dev Compose files must never adopt production containers
 - Use the required `tini` signal-forwarding entrypoint and let the application create its service account and drop privileges
+- Exclude version control, CI, local config/secrets, caches/temp files, tests, docs, and build products from the Docker build context while keeping `src/`, module files, and `docker/rootfs/`
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |

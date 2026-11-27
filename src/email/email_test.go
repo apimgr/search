@@ -3,6 +3,8 @@ package email
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +29,19 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.SMTP.TLS != "auto" {
 		t.Errorf("SMTP.TLS = %q, want auto", cfg.SMTP.TLS)
+	}
+}
+
+func TestSMTPProbePortsFollowSpecificationPriority(t *testing.T) {
+	ports := smtpProbePorts()
+	want := []int{25, 465, 587}
+	if len(ports) != len(want) {
+		t.Fatalf("smtpProbePorts() returned %d ports, want %d", len(ports), len(want))
+	}
+	for i, port := range want {
+		if ports[i].port != port {
+			t.Errorf("smtpProbePorts()[%d].port = %d, want %d", i, ports[i].port, port)
+		}
 	}
 }
 
@@ -58,6 +73,17 @@ func TestConfigStruct(t *testing.T) {
 	}
 }
 
+func TestNewMailerDefaultsUnknownTLSModeToAuto(t *testing.T) {
+	cfg := &Config{SMTP: SMTPConfig{TLS: "unrecognized"}}
+	mailer := NewMailer(cfg)
+	if got := mailer.config.SMTP.TLS; got != "auto" {
+		t.Fatalf("mailer TLS mode = %q, want auto", got)
+	}
+	if got := cfg.SMTP.TLS; got != "unrecognized" {
+		t.Fatalf("input config TLS mode changed to %q", got)
+	}
+}
+
 // Tests for Mailer
 
 func TestNewMailer(t *testing.T) {
@@ -77,8 +103,8 @@ func TestNewMailer(t *testing.T) {
 	if ml == nil {
 		t.Fatal("NewMailer() returned nil")
 	}
-	if ml.config != cfg {
-		t.Error("config should be set")
+	if ml.config == cfg || ml.config.SMTP.Host != cfg.SMTP.Host || ml.config.SMTP.Port != cfg.SMTP.Port || ml.config.From.Email != cfg.From.Email {
+		t.Error("mailer should retain a normalized copy of the provided config")
 	}
 }
 
@@ -96,6 +122,102 @@ func TestNewMailerNilConfig(t *testing.T) {
 	}
 }
 
+func TestNewMailerFromConfigRequiresFQDN(t *testing.T) {
+	for _, customFrom := range []string{"", "operator@example.net"} {
+		cfg := &config.Config{}
+		cfg.Server.Notifications.Email.SMTP.Host = "smtp.example.net"
+		cfg.Server.BaseURL = "https://example.net"
+		cfg.Server.Notifications.Email.From.Email = customFrom
+		mailer, ok := NewMailerFromConfig(cfg)
+		if ok || mailer != nil {
+			t.Errorf("NewMailerFromConfig(FQDN empty, from %q) = (%v, %v), want (nil, false)", customFrom, mailer, ok)
+		}
+	}
+}
+
+func TestNewMailerFromConfigUsesConfiguredFQDN(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.FQDN = "search.example.net"
+	cfg.Server.Notifications.Email.SMTP.Host = "smtp.example.net"
+	mailer, ok := NewMailerFromConfig(cfg)
+	if !ok || mailer == nil {
+		t.Fatalf("NewMailerFromConfig() = (%v, %v), want configured mailer", mailer, ok)
+	}
+	if got, want := mailer.config.From.Email, "no-reply@search.example.net"; got != want {
+		t.Errorf("From.Email = %q, want %q", got, want)
+	}
+}
+
+func TestAutoDetectSMTPPersistsDetectedRelay(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.FQDN = "search.example.net"
+	path := filepath.Join(t.TempDir(), "server.yml")
+	cfg.SetPath(path)
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("save initial config: %v", err)
+	}
+
+	originalDetector := detectSMTP
+	detectSMTP = func(fqdn, globalIPv4 string) *DetectedSMTP {
+		if fqdn != "search.example.net" || globalIPv4 != "192.0.2.10" {
+			t.Fatalf("detectSMTP(%q, %q), want configured FQDN and cached public IP", fqdn, globalIPv4)
+		}
+		return &DetectedSMTP{Host: "127.0.0.1", Port: 25}
+	}
+	t.Cleanup(func() { detectSMTP = originalDetector })
+
+	available, err := AutoDetectSMTP(cfg, "192.0.2.10")
+	if err != nil || !available {
+		t.Fatalf("AutoDetectSMTP() = (%t, %v), want (true, nil)", available, err)
+	}
+	if got := cfg.Get().Notifications.Email.SMTP; got.Host != "127.0.0.1" || got.Port != 25 || got.TLS != "auto" {
+		t.Fatalf("in-memory SMTP config = %+v, want detected host, port, and auto TLS", got)
+	}
+	persisted, err := os.ReadFile(filepath.Join(filepath.Dir(path), "yaml.d", "notifications.yml"))
+	if err != nil {
+		t.Fatalf("read persisted config: %v", err)
+	}
+	if !strings.Contains(string(persisted), "host: 127.0.0.1") || !strings.Contains(string(persisted), "port: 25") {
+		t.Fatalf("persisted config is missing detected relay settings:\n%s", persisted)
+	}
+}
+
+func TestBootstrapMailerDisablesUnreachableSMTP(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.FQDN = "search.example.net"
+	cfg.Server.Notifications.Email.SMTP.Host = "127.0.0.1"
+	cfg.Server.Notifications.Email.SMTP.Port = 587
+	cfg.Server.Notifications.Email.SMTP.TLS = "auto"
+
+	originalDial := netDialTimeout
+	netDialTimeout = func(network, addr string, timeout time.Duration) (net.Conn, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+	t.Cleanup(func() { netDialTimeout = originalDial })
+
+	mailer, configured, err := BootstrapMailer(cfg)
+	if err == nil || configured || mailer != nil {
+		t.Fatalf("BootstrapMailer() = (%v, %t, %v), want disabled mailer and handshake error", mailer, configured, err)
+	}
+}
+
+func TestBootstrapMailerSkipsWhenFQDNIsEmpty(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Notifications.Email.SMTP.Host = "127.0.0.1"
+
+	originalDetector := detectSMTP
+	detectSMTP = func(string, string) *DetectedSMTP {
+		t.Fatal("SMTP detection must not run without the configured FQDN")
+		return nil
+	}
+	t.Cleanup(func() { detectSMTP = originalDetector })
+
+	mailer, configured, err := BootstrapMailer(cfg)
+	if err != nil || configured || mailer != nil {
+		t.Fatalf("BootstrapMailer() = (%v, %t, %v), want suppressed mailer", mailer, configured, err)
+	}
+}
+
 func TestMailerIsEnabled(t *testing.T) {
 	cfg := &Config{Enabled: true}
 	ml := NewMailer(cfg)
@@ -104,7 +226,7 @@ func TestMailerIsEnabled(t *testing.T) {
 		t.Error("IsEnabled() should return true when enabled")
 	}
 
-	cfg.Enabled = false
+	ml.config.Enabled = false
 	if ml.IsEnabled() {
 		t.Error("IsEnabled() should return false when disabled")
 	}
@@ -801,6 +923,7 @@ func TestEmailTemplateRenderUpdateAvailable(t *testing.T) {
 		"current_version": "1.2.3",
 		"new_version":     "1.3.0",
 		"release_date":    "2026-06-13",
+		"channel":         "stable",
 		"release_notes":   "Bug fixes and improvements",
 		"update_url":      "https://example.com/releases/1.3.0",
 	}
@@ -815,6 +938,24 @@ func TestEmailTemplateRenderUpdateAvailable(t *testing.T) {
 	}
 	if !strings.Contains(body, "1.3.0") {
 		t.Error("Body should contain new version")
+	}
+	if !strings.Contains(body, "stable") {
+		t.Error("Body should contain selected release channel")
+	}
+}
+
+func TestUpdateAvailableTemplateIncludesChannelAcrossSupportedLocales(t *testing.T) {
+	et := NewEmailTemplate()
+	for _, locale := range []string{"en", "ar", "de", "es", "fa", "fr", "he", "it", "ja", "nl", "pl", "pt", "ru", "ur", "zh"} {
+		t.Run(locale, func(t *testing.T) {
+			_, body, err := et.PreviewTemplateLocalized(TemplateUpdateAvailable, locale, "TestApp", "https://example.com")
+			if err != nil {
+				t.Fatalf("PreviewTemplateLocalized(): %v", err)
+			}
+			if !strings.Contains(body, "stable") || strings.Contains(body, "{channel}") || strings.Contains(body, "{label_channel}") {
+				t.Fatalf("localized update-available template omitted channel: %q", body)
+			}
+		})
 	}
 }
 
@@ -835,6 +976,32 @@ func TestEmailTemplateRenderUpdateFailedAcrossSupportedLocales(t *testing.T) {
 				t.Fatalf("invalid localized update failure template: subject=%q body=%q", subject, body)
 			}
 		})
+	}
+}
+
+func TestEmailTemplateRenderUpdateStagedAcrossSupportedLocales(t *testing.T) {
+	et := NewEmailTemplate()
+	for _, locale := range []string{"en", "ar", "de", "es", "fa", "fr", "he", "it", "ja", "nl", "pl", "pt", "ru", "ur", "zh"} {
+		t.Run(locale, func(t *testing.T) {
+			subject, body, err := et.PreviewTemplateLocalized(TemplateUpdateStaged, locale, "TestApp", "https://example.com")
+			if err != nil {
+				t.Fatalf("PreviewTemplateLocalized(): %v", err)
+			}
+			if subject == "" || !strings.Contains(body, "1.0.0") || strings.Contains(body, "{version}") {
+				t.Fatalf("invalid localized staged-update template: subject=%q body=%q", subject, body)
+			}
+		})
+	}
+}
+
+func TestSendUpdateStagedHonorsEventSetting(t *testing.T) {
+	mailer := NewMailer(&Config{
+		Enabled: true,
+		SMTP:    SMTPConfig{Host: "smtp.example.com", Port: 587, TLS: "auto"},
+		Events:  config.EmailEventsConfig{UpdateStaged: false},
+	})
+	if err := mailer.SendUpdateStaged("1.2.3"); err != nil {
+		t.Fatalf("SendUpdateStaged() with event disabled error = %v", err)
 	}
 }
 
@@ -943,6 +1110,7 @@ func TestGetAllTemplateTypes(t *testing.T) {
 		TemplateSchedulerError,
 		TemplateBackupCompleted,
 		TemplateUpdateFailed,
+		TemplateUpdateStaged,
 	}
 
 	for _, tt := range expectedTypes {
@@ -1599,6 +1767,7 @@ func TestGetAllTemplateTypesIncludesOperatorTemplates(t *testing.T) {
 		TemplateSSLExpiring,
 		TemplateSSLRenewed,
 		TemplateSchedulerError,
+		TemplateUpdateStaged,
 		TemplateTest,
 	}
 

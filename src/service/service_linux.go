@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -49,6 +48,17 @@ func (sm *ServiceManager) detectInitSystem() initSystem {
 		return initSysVinit
 	}
 	return initSystemd
+}
+
+// UpdateNeedsManualRestart reports whether exit status 75 requires an
+// operator-driven restart to apply a staged update on the detected init
+// system.
+func (sm *ServiceManager) UpdateNeedsManualRestart() bool {
+	return updateNeedsManualRestart(sm.detectInitSystem())
+}
+
+func updateNeedsManualRestart(system initSystem) bool {
+	return system == initOpenRC || system == initSysVinit
 }
 
 // Install installs the system service on Linux.
@@ -285,34 +295,31 @@ func (sm *ServiceManager) hasSystemd() bool {
 // Per AI.md PART 24 SysVinit "Detection": chosen only when openrc-run and
 // systemctl are absent and /etc/init.d exists with update-rc.d or chkconfig.
 func (sm *ServiceManager) hasSysVinit() bool {
-	if sm.hasOpenRC() || sm.hasSystemd() {
-		return false
-	}
-	if info, err := os.Stat("/etc/init.d"); err != nil || !info.IsDir() {
-		return false
-	}
-	if _, err := exec.LookPath("update-rc.d"); err == nil {
-		return true
-	}
-	if _, err := exec.LookPath("chkconfig"); err == nil {
-		return true
-	}
-	return false
+	_, systemctlErr := exec.LookPath("systemctl")
+	info, initDirErr := os.Stat("/etc/init.d")
+	_, updateRCErr := exec.LookPath("update-rc.d")
+	_, chkconfigErr := exec.LookPath("chkconfig")
+	return isSysVinitEligible(
+		sm.hasOpenRC(),
+		sm.hasSystemd(),
+		systemctlErr == nil,
+		initDirErr == nil && info.IsDir(),
+		updateRCErr == nil || chkconfigErr == nil,
+	)
+}
+
+func isSysVinitEligible(hasOpenRC, hasSystemd, hasSystemctl, hasInitDir, hasBootTool bool) bool {
+	return !hasOpenRC && !hasSystemd && !hasSystemctl && hasInitDir && hasBootTool
 }
 
 // ensureSystemUser creates the system user and group if they don't exist.
 // Per AI.md PART 23/25: System user keyed on the frozen {internal_name}
 // identity, with home in /var/lib/{internal_org}/{internal_name}.
 func (sm *ServiceManager) ensureSystemUser() error {
-	userName := config.InternalName
-
-	if _, err := user.Lookup(userName); err == nil {
-		return nil
-	}
-
-	// createLinuxSystemUser applies the PART 23 UID/GID selection rules
-	// (matching UID==GID in the safe 200-899 range, reserved IDs skipped).
-	if _, err := createLinuxSystemUser(userName); err != nil {
+	// CreateSystemUser applies PART 23's account rules and records ownership
+	// when this application creates the account, so uninstall can remove only
+	// an account the application owns.
+	if _, err := CreateSystemUser(config.InternalName); err != nil {
 		return err
 	}
 	return nil
@@ -425,6 +432,13 @@ exec svlogd -tt /var/log/apimgr/search
 `
 
 func (sm *ServiceManager) installRunit() error {
+	if err := sm.ensureSystemUser(); err != nil {
+		return fmt.Errorf("failed to create system user: %w", err)
+	}
+	if err := sm.createServiceDirectories(); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
+	}
+
 	serviceDir := sm.getRunitServiceDir()
 	logDir := filepath.Join(serviceDir, "log")
 

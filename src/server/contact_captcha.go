@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -16,65 +16,54 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/common/closeutil"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 )
 
-type apiContactCaptcha struct {
-	answer    string
-	expiresAt time.Time
-}
-
 func (s *Server) NewContactChallenge(r *http.Request) (string, string) {
-	mode, _, _ := s.configuredContactCaptcha()
-	if mode != "simple" && !isOnionRequest(s.config, r) {
-		return "", ""
-	}
-	a, errA := rand.Int(rand.Reader, big.NewInt(10))
-	b, errB := rand.Int(rand.Reader, big.NewInt(10))
+	a, errA := rand.Int(rand.Reader, big.NewInt(20))
+	b, errB := rand.Int(rand.Reader, big.NewInt(20))
+	operation, errOperation := rand.Int(rand.Reader, big.NewInt(2))
 	idBytes := make([]byte, 16)
-	if errA != nil || errB != nil {
+	if errA != nil || errB != nil || errOperation != nil {
 		return "", ""
 	}
 	if _, err := rand.Read(idBytes); err != nil {
 		return "", ""
 	}
 	aInt, bInt := int(a.Int64())+1, int(b.Int64())+1
+	operator := "+"
+	answer := aInt + bInt
+	if operation.Int64() == 1 {
+		operator = "-"
+		if bInt > aInt {
+			aInt, bInt = bInt, aInt
+		}
+		answer = aInt - bInt
+	}
 	id := hex.EncodeToString(idBytes)
-	s.apiCaptchasMu.Lock()
-	if s.apiCaptchas == nil {
-		s.apiCaptchas = make(map[string]apiContactCaptcha)
+	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return "", ""
 	}
-	now := time.Now()
-	for key, challenge := range s.apiCaptchas {
-		if now.After(challenge.expiresAt) {
-			delete(s.apiCaptchas, key)
-		}
+	answerHash := captchaAnswerHash(strconv.Itoa(answer))
+	if err := s.dbManager.ServerDB().CreateCaptchaChallenge(r.Context(), id, answerHash, time.Now().UTC().Add(10*time.Minute)); err != nil {
+		return "", ""
 	}
-	if len(s.apiCaptchas) >= 500 {
-		var oldestID string
-		var oldestExpiry time.Time
-		for key, challenge := range s.apiCaptchas {
-			if oldestID == "" || challenge.expiresAt.Before(oldestExpiry) {
-				oldestID, oldestExpiry = key, challenge.expiresAt
-			}
-		}
-		delete(s.apiCaptchas, oldestID)
-	}
-	s.apiCaptchas[id] = apiContactCaptcha{answer: strconv.Itoa(aInt + bInt), expiresAt: now.Add(10 * time.Minute)}
-	s.apiCaptchasMu.Unlock()
-	return id, fmt.Sprintf("What is %d + %d?", aInt, bInt)
+	question := i18n.RequestString(r, "contact.verification_question", strconv.Itoa(aInt), operator, strconv.Itoa(bInt))
+	return id, question
 }
 
 func (s *Server) VerifyContactChallenge(r *http.Request, id, answer string) bool {
-	mode, siteKey, secretKey := s.configuredContactCaptcha()
-	if mode != "simple" && !isOnionRequest(s.config, r) {
+	mode, _, _ := s.configuredContactCaptcha()
+	if mode != "simple" && !isOnionRequest(s.config, r) && !isI2PRequest(r) {
+		_, siteKey, secretKey := s.configuredContactCaptcha()
 		if (mode != "recaptcha" && mode != "hcaptcha") || siteKey == "" || secretKey == "" || strings.TrimSpace(answer) == "" {
 			return false
 		}
 		verifier := newContactCaptchaVerifier(nil, "https://www.google.com/recaptcha/api/siteverify", "https://api.hcaptcha.com/siteverify")
 		return verifier.verify(r.Context(), mode, secretKey, answer, getClientIPSimple(r))
 	}
-	return s.verifySimpleContactChallenge(id, answer)
+	return s.verifySimpleContactChallenge(r.Context(), id, answer)
 }
 
 func (s *Server) VerifyContactProof(r *http.Request, providerToken, id, answer string) bool {
@@ -87,18 +76,33 @@ func (s *Server) VerifyContactProof(r *http.Request, providerToken, id, answer s
 		verifier := newContactCaptchaVerifier(nil, "https://www.google.com/recaptcha/api/siteverify", "https://api.hcaptcha.com/siteverify")
 		return verifier.verify(r.Context(), mode, secretKey, providerToken, getClientIPSimple(r))
 	}
-	return s.verifySimpleContactChallenge(id, answer)
+	return s.verifySimpleContactChallenge(r.Context(), id, answer)
 }
 
-func (s *Server) verifySimpleContactChallenge(id, answer string) bool {
-	s.apiCaptchasMu.Lock()
-	challenge, ok := s.apiCaptchas[id]
-	delete(s.apiCaptchas, id)
-	s.apiCaptchasMu.Unlock()
-	if !ok || time.Now().After(challenge.expiresAt) {
+func (s *Server) verifySimpleContactChallenge(ctx context.Context, id, answer string) bool {
+	answer = strings.TrimSpace(answer)
+	if answer == "" || len(answer) > 2 {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(challenge.answer), []byte(strings.TrimSpace(answer))) == 1
+	for _, digit := range answer {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return false
+	}
+	answerHash, found, err := s.dbManager.ServerDB().ConsumeCaptchaChallenge(ctx, id, time.Now().UTC())
+	if err != nil || !found {
+		return false
+	}
+	submittedHash := captchaAnswerHash(answer)
+	return subtle.ConstantTimeCompare([]byte(answerHash), []byte(submittedHash)) == 1
+}
+
+func captchaAnswerHash(answer string) string {
+	hash := sha256.Sum256([]byte(strings.TrimSpace(answer)))
+	return hex.EncodeToString(hash[:])
 }
 
 const maxCaptchaResponseBytes = 16 << 10
@@ -179,23 +183,15 @@ func contactCaptchaConfig(cfg *config.Config) (string, string, string) {
 
 func (s *Server) verifyConfiguredContactCaptcha(r *http.Request) bool {
 	mode, siteKey, secretKey := s.configuredContactCaptcha()
-	answer := r.PostFormValue("captcha")
-	id := r.PostFormValue("captcha_id")
-	if mode == "simple" || isOnionRequest(s.config, r) {
-		return s.validCaptcha(id, answer)
-	}
-	if mode != "recaptcha" && mode != "hcaptcha" {
-		return false
-	}
-	if siteKey == "" || secretKey == "" {
-		return false
-	}
 	tokenField := "g-recaptcha-response"
 	if mode == "hcaptcha" {
 		tokenField = "h-captcha-response"
 	}
-	verifier := newContactCaptchaVerifier(nil, "https://www.google.com/recaptcha/api/siteverify", "https://api.hcaptcha.com/siteverify")
-	return verifier.verify(r.Context(), mode, secretKey, r.PostFormValue(tokenField), "")
+	if mode != "simple" && !isOnionRequest(s.config, r) && !isI2PRequest(r) &&
+		((mode != "recaptcha" && mode != "hcaptcha") || siteKey == "" || secretKey == "") {
+		return false
+	}
+	return s.VerifyContactProof(r, r.PostFormValue(tokenField), r.PostFormValue("captcha_id"), r.PostFormValue("captcha_answer"))
 }
 
 func contactCaptchaCSP(csp, mode string) string {

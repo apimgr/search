@@ -13,6 +13,9 @@ func resetState(t *testing.T) {
 	// Clear env vars that affect auto-detection before calling InitOutput.
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
+	previousTerminal := isTerminalFunc
+	isTerminalFunc = func(int) bool { return true }
+	t.Cleanup(func() { isTerminalFunc = previousTerminal })
 	InitOutput("auto")
 }
 
@@ -43,7 +46,7 @@ func setEnv(t *testing.T, key, value string) {
 }
 
 func TestInitOutputAlways(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	InitOutput("always")
 
@@ -56,7 +59,7 @@ func TestInitOutputAlways(t *testing.T) {
 }
 
 func TestInitOutputNever(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	InitOutput("never")
 
@@ -69,7 +72,7 @@ func TestInitOutputNever(t *testing.T) {
 }
 
 func TestInitOutputAutoNoColor(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	setEnv(t, "NO_COLOR", "1")
 	setEnv(t, "TERM", "xterm-256color")
@@ -84,7 +87,7 @@ func TestInitOutputAutoNoColor(t *testing.T) {
 }
 
 func TestInitOutputAutoDumbTerm(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	setEnv(t, "NO_COLOR", "")
 	setEnv(t, "TERM", "dumb")
@@ -99,7 +102,7 @@ func TestInitOutputAutoDumbTerm(t *testing.T) {
 }
 
 func TestInitOutputAutoEmptyTerm(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	setEnv(t, "NO_COLOR", "")
 	setEnv(t, "TERM", "")
@@ -111,7 +114,7 @@ func TestInitOutputAutoEmptyTerm(t *testing.T) {
 }
 
 func TestInitOutputAutoNormalTerm(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	setEnv(t, "TERM", "xterm-256color")
 	setEnv(t, "NO_COLOR", "")
@@ -125,8 +128,49 @@ func TestInitOutputAutoNormalTerm(t *testing.T) {
 	}
 }
 
+func TestInitOutputAutoRequiresTerminal(t *testing.T) {
+	resetState(t)
+	setEnv(t, "TERM", "xterm-256color")
+	setEnv(t, "NO_COLOR", "")
+	previousTerminal := isTerminalFunc
+	isTerminalFunc = func(int) bool { return false }
+	InitOutput("auto")
+	if ColorEnabled() || EmojiEnabled() {
+		t.Fatalf("auto output enabled for a redirected stream: color=%v emoji=%v", ColorEnabled(), EmojiEnabled())
+	}
+	isTerminalFunc = previousTerminal
+}
+
+func TestInitOutputForcedColorStillRequiresTerminal(t *testing.T) {
+	resetState(t)
+	previousTerminal := isTerminalFunc
+	isTerminalFunc = func(int) bool { return false }
+	InitOutput("yes")
+	if ColorEnabled() {
+		t.Fatal("forced color enabled for a redirected stream")
+	}
+	isTerminalFunc = previousTerminal
+}
+
+func TestEmojiRequiresBothOutputStreamsToBeTerminals(t *testing.T) {
+	resetState(t)
+	setEnv(t, "TERM", "xterm-256color")
+	setEnv(t, "NO_COLOR", "")
+	stdoutFD := int(os.Stdout.Fd())
+	previousTerminal := isTerminalFunc
+	isTerminalFunc = func(fd int) bool { return fd == stdoutFD }
+	InitOutput("auto")
+	if !ColorEnabled() {
+		t.Fatal("color should remain enabled for the terminal stdout stream")
+	}
+	if EmojiEnabled() {
+		t.Fatal("emoji should be disabled when the stderr stream is redirected")
+	}
+	isTerminalFunc = previousTerminal
+}
+
 func TestColorEnabledWithForce(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	InitOutput("always")
 	if !ColorEnabled() {
@@ -148,7 +192,7 @@ func TestColorEnabledWithForce(t *testing.T) {
 }
 
 func TestEmojiFunction(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	InitOutput("always")
 	got := Emoji("🔍", "search")
@@ -164,7 +208,7 @@ func TestEmojiFunction(t *testing.T) {
 }
 
 func TestColorEnabledReflectsForceFlag(t *testing.T) {
-	t.Cleanup(func() { resetState(t) })
+	resetState(t)
 
 	// colorForce=always overrides env
 	setEnv(t, "NO_COLOR", "1")

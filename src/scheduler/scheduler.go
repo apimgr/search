@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -41,7 +42,7 @@ const (
 	TaskCVEUpdate       TaskID = "cve_update"
 	TaskUpdateCheck     TaskID = "update_check"
 	TaskSecurityCleanup TaskID = "security_cleanup"
-	TaskKeyserverRetry TaskID = "keyserver_retry"
+	TaskKeyserverRetry  TaskID = "keyserver_retry"
 	TaskTokenCleanup    TaskID = "token_cleanup"
 	TaskLogRotation     TaskID = "log_rotation"
 	TaskBackupDaily     TaskID = "backup_daily"
@@ -96,7 +97,7 @@ const shutdownGracePeriod = 30 * time.Second
 // historyRetainPerTask is how many execution history rows are kept per task.
 // Per AI.md PART 18 the CLI shows recent history (`scheduler history <id>`);
 // older rows are pruned so the table cannot grow without bound.
-const historyRetainPerTask = 50
+const historyRetainPerTask = 100
 
 // slowTaskRetryDelay is the retry delay for tasks whose AI.md PART 18 config
 // block sets retry_on_fail with retry_delay: 1h (blocklist_update, cve_update).
@@ -221,17 +222,20 @@ type TaskHistoryEntry struct {
 // Scheduler manages periodic tasks per AI.md PART 18
 // The scheduler is ALWAYS RUNNING - no enable/disable option exists
 type Scheduler struct {
-	mu            sync.RWMutex
-	tasks         map[TaskID]*Task
-	db            *sql.DB
-	writer        *database.DB
-	nodeID        string
-	ctx           context.Context
-	cancel        context.CancelFunc
-	running       bool
-	wg            sync.WaitGroup
-	timezone      *time.Location
-	catchUpWindow time.Duration
+	mu                   sync.RWMutex
+	tasks                map[TaskID]*Task
+	db                   database.Reader
+	legacyDB             *sql.DB
+	writer               *database.DB
+	historyTextID        bool
+	historySuccessColumn bool
+	nodeID               string
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	running              bool
+	wg                   sync.WaitGroup
+	timezone             *time.Location
+	catchUpWindow        time.Duration
 	// Per AI.md PART 18: Task failure notifications
 	notifyFunc NotifyFunc
 	// Per AI.md PART 18: every task execution is written to the audit log
@@ -251,18 +255,18 @@ type Scheduler struct {
 
 // NewScheduler creates a new scheduler
 // Per AI.md PART 18: Scheduler is ALWAYS RUNNING
-func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
-	return newScheduler(db, nil, nodeID)
+func NewScheduler(db database.Reader, nodeID string) *Scheduler {
+	return newScheduler(db, nil, nil, nodeID)
 }
 
 func NewSchedulerWithDB(db *database.DB, nodeID string) *Scheduler {
 	if db == nil {
 		return NewScheduler(nil, nodeID)
 	}
-	return newScheduler(db.ReadSQL(), db, nodeID)
+	return newScheduler(db.Read(context.Background()), db, nil, nodeID)
 }
 
-func newScheduler(db *sql.DB, writer *database.DB, nodeID string) *Scheduler {
+func newScheduler(db database.Reader, writer *database.DB, legacyDB *sql.DB, nodeID string) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Default to America/New_York per spec
@@ -275,6 +279,7 @@ func newScheduler(db *sql.DB, writer *database.DB, nodeID string) *Scheduler {
 	s := &Scheduler{
 		tasks:    make(map[TaskID]*Task),
 		db:       db,
+		legacyDB: legacyDB,
 		writer:   writer,
 		nodeID:   nodeID,
 		ctx:      ctx,
@@ -295,12 +300,15 @@ func newScheduler(db *sql.DB, writer *database.DB, nodeID string) *Scheduler {
 
 func (s *Scheduler) execWrite(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	if s.writer == nil {
-		return s.db.ExecContext(ctx, query, args...)
+		if s.legacyDB == nil {
+			return nil, errors.New("scheduler write store unavailable")
+		}
+		return database.ExecContext(ctx, s.legacyDB, query, args...)
 	}
 	var result sql.Result
 	err := s.writer.Write(ctx, func(tx *sql.Tx) error {
 		var err error
-		result, err = tx.ExecContext(ctx, query, args...)
+		result, err = database.ExecContext(ctx, tx, query, args...)
 		return err
 	})
 	return result, err
@@ -422,7 +430,9 @@ func (s *Scheduler) Register(task *Task) error {
 	// the lock-free variant — the non-recursive RWMutex would otherwise
 	// self-deadlock when calculateNextRun re-acquires the read lock.
 	task.NextRun = s.calculateNextRunLocked(task.Schedule)
-	task.Enabled = true
+	if !task.Skippable {
+		task.Enabled = true
+	}
 
 	s.tasks[task.ID] = task
 
@@ -599,8 +609,6 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Skippable:   true,
 		}
 		s.registerBuiltinTask(task)
-		// Disable after registration (Register sets Enabled=true by default)
-		task.Enabled = false
 	}
 
 	if handlers.DiskCheck != nil {
@@ -805,7 +813,18 @@ func (s *Scheduler) StartTaskScheduler() {
 	s.wg.Add(1)
 	go s.run()
 
-	slog.Info("Scheduler started - always running per AI.md PART 18")
+	slog.Info("Scheduler started", "registered_tasks", s.registeredTaskIDs())
+}
+
+func (s *Scheduler) registeredTaskIDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.tasks))
+	for id := range s.tasks {
+		ids = append(ids, string(id))
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // run is the main scheduler loop.
@@ -1048,7 +1067,7 @@ func (s *Scheduler) runTask(task *Task) {
 			s.recordHistory(task, attemptStart, attemptEnd, StatusSuccess, "")
 			s.emitAudit(task, StatusSuccess, "", attempt+1, attemptStart, attemptEnd.Sub(attemptStart))
 
-			slog.Info("Task completed successfully", "task", task.ID)
+			slog.Debug("Task completed successfully", "task", task.ID)
 			return
 		}
 
@@ -1319,8 +1338,8 @@ func (s *Scheduler) initDatabase() {
 
 	query := `
 		CREATE TABLE IF NOT EXISTS scheduler_tasks (
-			task_id TEXT PRIMARY KEY,
-			task_name TEXT NOT NULL,
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
 			schedule TEXT NOT NULL,
 			last_run DATETIME,
 			last_status TEXT,
@@ -1338,11 +1357,14 @@ func (s *Scheduler) initDatabase() {
 	if _, err := s.execWrite(initCtx, query); err != nil {
 		slog.Error("Failed to create tasks table", "err", err)
 	}
+	if err := s.renameLegacyTaskColumns(initCtx); err != nil {
+		slog.Error("Failed to migrate scheduler task column names", "err", err)
+	}
 
 	// Idempotent schema updates — add columns missing from older schema versions
 	// SQLite silently errors if the column already exists; errors are intentionally ignored
 	for _, column := range []struct{ name, definition string }{
-		{"task_name", "TEXT"},
+		{"name", "TEXT"},
 		{"schedule", "TEXT"},
 		{"last_status", "TEXT"},
 		{"fail_count", "INTEGER DEFAULT 0"},
@@ -1362,32 +1384,149 @@ func (s *Scheduler) initDatabase() {
 	// scheduler_history schema in src/database/schema.go.
 	historyQuery := `
 		CREATE TABLE IF NOT EXISTS scheduler_history (
-			id TEXT PRIMARY KEY,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			task_id TEXT NOT NULL,
-			started_at DATETIME NOT NULL,
-			finished_at DATETIME,
-			success INTEGER NOT NULL DEFAULT 0,
-			error TEXT
+			started_at INTEGER NOT NULL,
+			finished_at INTEGER,
+			status TEXT NOT NULL,
+			error TEXT,
+			duration_ms INTEGER
 		)
 	`
 	if _, err := s.execWrite(initCtx, historyQuery); err != nil {
 		slog.Error("Failed to create scheduler history table", "err", err)
 	}
 
-	// Idempotent schema update — status distinguishes skipped runs from failures,
-	// which the table's success flag alone cannot express
-	if _, err := s.execWrite(initCtx, "ALTER TABLE scheduler_history ADD COLUMN status TEXT"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-		slog.Warn("failed to add scheduler history status column", "error", err)
+	if err := s.migrateSchedulerHistory(initCtx); err != nil {
+		slog.Error("Failed to migrate scheduler history schema", "err", err)
 	}
-	if _, err := s.execWrite(initCtx, "CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id, started_at)"); err != nil {
-		slog.Warn("failed to create scheduler history index", "error", err)
+}
+
+func (s *Scheduler) renameLegacyTaskColumns(ctx context.Context) error {
+	if s.db == nil {
+		return nil
 	}
+	rows, err := database.QueryContext(ctx, s.db, database.TimeoutMigration, "PRAGMA table_info(scheduler_tasks)")
+	if err != nil {
+		return fmt.Errorf("inspect scheduler task columns: %w", err)
+	}
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue interface{}
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return errors.Join(fmt.Errorf("scan scheduler task columns: %w", err), rows.Close())
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Join(fmt.Errorf("read scheduler task columns: %w", err), rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close scheduler task columns: %w", err)
+	}
+	for _, rename := range [][2]string{{"task_id", "id"}, {"task_name", "name"}} {
+		oldName, newName := rename[0], rename[1]
+		if columns[oldName] && columns[newName] {
+			return fmt.Errorf("scheduler_tasks contains both legacy %s and canonical %s columns", oldName, newName)
+		}
+		if !columns[oldName] {
+			continue
+		}
+		if _, err := s.execWrite(ctx, "ALTER TABLE scheduler_tasks RENAME COLUMN "+oldName+" TO "+newName); err != nil {
+			return fmt.Errorf("rename scheduler_tasks.%s to %s: %w", oldName, newName, err)
+		}
+		columns[newName] = true
+		delete(columns, oldName)
+	}
+	return nil
+}
+
+func (s *Scheduler) migrateSchedulerHistory(ctx context.Context) error {
+	if s.db == nil {
+		return nil
+	}
+	columns, err := s.inspectTableColumns(ctx, "scheduler_history")
+	if err != nil {
+		return err
+	}
+	if columns["ran_at"] != "" && columns["started_at"] != "" {
+		return errors.New("scheduler_history contains both ran_at and started_at columns")
+	}
+	if columns["ran_at"] != "" {
+		if _, err := s.execWrite(ctx, "ALTER TABLE scheduler_history RENAME COLUMN ran_at TO started_at"); err != nil {
+			return fmt.Errorf("rename scheduler_history.ran_at to started_at: %w", err)
+		}
+	}
+	for _, column := range []struct{ name, definition string }{
+		{"finished_at", "INTEGER"},
+		{"status", "TEXT"},
+		{"error", "TEXT"},
+		{"duration_ms", "INTEGER"},
+	} {
+		if columns[column.name] != "" {
+			continue
+		}
+		if _, err := s.execWrite(ctx, "ALTER TABLE scheduler_history ADD COLUMN "+column.name+" "+column.definition); err != nil {
+			return fmt.Errorf("add scheduler_history.%s: %w", column.name, err)
+		}
+	}
+	if columns["success"] != "" {
+		if _, err := s.execWrite(ctx, `UPDATE scheduler_history SET status = CASE WHEN success = 1 THEN 'success' ELSE 'failed' END WHERE status IS NULL OR status = ''`); err != nil {
+			return fmt.Errorf("backfill scheduler history status: %w", err)
+		}
+	} else if _, err := s.execWrite(ctx, `UPDATE scheduler_history SET status = CASE WHEN finished_at IS NULL THEN 'running' ELSE 'failed' END WHERE status IS NULL OR status = ''`); err != nil {
+		return fmt.Errorf("initialize scheduler history status: %w", err)
+	}
+	if _, err := s.execWrite(ctx, `UPDATE scheduler_history SET duration_ms = CAST(ROUND((julianday(finished_at) - julianday(started_at)) * 86400000) AS INTEGER) WHERE duration_ms IS NULL AND finished_at IS NOT NULL AND started_at IS NOT NULL`); err != nil {
+		return fmt.Errorf("backfill scheduler history duration: %w", err)
+	}
+	columns, err = s.inspectTableColumns(ctx, "scheduler_history")
+	if err != nil {
+		return err
+	}
+	s.historyTextID = !strings.Contains(strings.ToUpper(columns["id"]), "INT")
+	s.historySuccessColumn = columns["success"] != ""
+	for _, index := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id)",
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_history_started ON scheduler_history(started_at)",
+	} {
+		if _, err := s.execWrite(ctx, index); err != nil {
+			return fmt.Errorf("create scheduler history index: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Scheduler) inspectTableColumns(ctx context.Context, table string) (map[string]string, error) {
+	rows, err := database.QueryContext(ctx, s.db, database.TimeoutMigration, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s columns: %w", table, err)
+	}
+	columns := make(map[string]string)
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue interface{}
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return nil, errors.Join(fmt.Errorf("scan %s columns: %w", table, err), rows.Close())
+		}
+		columns[name] = columnType
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Join(fmt.Errorf("read %s columns: %w", table, err), rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close %s columns: %w", table, err)
+	}
+	return columns, nil
 }
 
 // loadTaskState loads persisted state for a task
 func (s *Scheduler) loadTaskState(task *Task) {
 	query := `SELECT last_run, last_status, last_error, next_run, run_count, fail_count, enabled, retry_count, next_retry
-		FROM scheduler_tasks WHERE task_id = ?`
+		FROM scheduler_tasks WHERE id = ?`
 
 	var lastRun, nextRun, nextRetry sql.NullTime
 	var lastStatus, lastError sql.NullString
@@ -1398,7 +1537,7 @@ func (s *Scheduler) loadTaskState(task *Task) {
 	// Per AI.md PART 10: SELECT queries must use context with 5s timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := s.db.QueryRowContext(ctx, query, string(task.ID)).Scan(
+	err := database.QueryRowContext(ctx, s.db, database.TimeoutSimpleQuery, query, string(task.ID)).Scan(
 		&lastRun, &lastStatus, &lastError, &nextRun, &runCount, &failCount, &enabled, &retryCount, &nextRetry,
 	)
 
@@ -1441,7 +1580,7 @@ func (s *Scheduler) loadTaskState(task *Task) {
 // saveTaskState persists task state to database
 func (s *Scheduler) saveTaskState(task *Task) {
 	query := `INSERT OR REPLACE INTO scheduler_tasks
-		(task_id, task_name, schedule, last_run, last_status, last_error, next_run, run_count, fail_count, enabled, retry_count, next_retry)
+		(id, name, schedule, last_run, last_status, last_error, next_run, run_count, fail_count, enabled, retry_count, next_retry)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// Handle zero time for next_retry
@@ -1474,8 +1613,8 @@ func (s *Scheduler) saveTaskState(task *Task) {
 	}
 }
 
-// newHistoryID generates the random identifier for a history row. The
-// scheduler_history table keys on a TEXT id (see src/database/schema.go).
+// newHistoryID supplies a key only for installations whose legacy history table
+// has a TEXT primary key. New databases use an integer autoincrement key.
 func newHistoryID() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -1498,14 +1637,30 @@ func (s *Scheduler) recordHistory(task *Task, startedAt, finishedAt time.Time, s
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	insert := `INSERT INTO scheduler_history (id, task_id, started_at, finished_at, success, error, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
-	success := 0
-	if status == StatusSuccess {
-		success = 1
+	var finishedAtValue, durationValue any
+	if !finishedAt.IsZero() {
+		finishedAtValue = finishedAt.Unix()
+		durationValue = finishedAt.Sub(startedAt).Milliseconds()
 	}
-
-	if _, err := s.execWrite(ctx, insert, newHistoryID(), string(task.ID), startedAt, finishedAt, success, errMsg, string(status)); err != nil {
+	insert := `INSERT INTO scheduler_history (task_id, started_at, finished_at, status, error, duration_ms)
+		VALUES (?, ?, ?, ?, ?, ?)`
+	args := []any{string(task.ID), startedAt.Unix(), finishedAtValue, string(status), errMsg, durationValue}
+	if s.historyTextID {
+		if s.historySuccessColumn {
+			insert = `INSERT INTO scheduler_history (id, task_id, started_at, finished_at, success, status, error, duration_ms)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+			args = []any{newHistoryID(), string(task.ID), startedAt.Unix(), finishedAtValue, status == StatusSuccess, string(status), errMsg, durationValue}
+		} else {
+			insert = `INSERT INTO scheduler_history (id, task_id, started_at, finished_at, status, error, duration_ms)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`
+			args = append([]any{newHistoryID()}, args...)
+		}
+	} else if s.historySuccessColumn {
+		insert = `INSERT INTO scheduler_history (task_id, started_at, finished_at, success, status, error, duration_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`
+		args = []any{string(task.ID), startedAt.Unix(), finishedAtValue, status == StatusSuccess, string(status), errMsg, durationValue}
+	}
+	if _, err := s.execWrite(ctx, insert, args...); err != nil {
 		slog.Error("Failed to record task history", "task", task.ID, "err", err)
 		return
 	}
@@ -1530,10 +1685,10 @@ func (s *Scheduler) GetHistory(id TaskID, limit int) ([]*TaskHistoryEntry, error
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT started_at, finished_at, success, error, status
+	query := `SELECT started_at, finished_at, status, error, duration_ms
 		FROM scheduler_history WHERE task_id = ? ORDER BY started_at DESC LIMIT ?`
 
-	rows, err := s.db.QueryContext(ctx, query, string(id), limit)
+	rows, err := database.QueryContext(ctx, s.db, database.TimeoutSimpleQuery, query, string(id), limit)
 	if err != nil {
 		return nil, fmt.Errorf("query task history: %w", err)
 	}
@@ -1541,31 +1696,38 @@ func (s *Scheduler) GetHistory(id TaskID, limit int) ([]*TaskHistoryEntry, error
 
 	entries := make([]*TaskHistoryEntry, 0, limit)
 	for rows.Next() {
-		var startedAt time.Time
-		var finishedAt sql.NullTime
-		var success int
+		var startedValue, finishedValue any
 		var errMsg, status sql.NullString
+		var duration sql.NullInt64
 
-		if err := rows.Scan(&startedAt, &finishedAt, &success, &errMsg, &status); err != nil {
+		if err := rows.Scan(&startedValue, &finishedValue, &status, &errMsg, &duration); err != nil {
 			return nil, fmt.Errorf("scan task history: %w", err)
+		}
+		startedAt, err := historyTimestamp(startedValue)
+		if err != nil {
+			return nil, fmt.Errorf("parse task history start time: %w", err)
 		}
 
 		entry := &TaskHistoryEntry{
 			TaskID:    string(id),
 			StartedAt: startedAt,
-			Success:   success == 1,
+			Success:   status.String == string(StatusSuccess),
 			Status:    status.String,
 			Error:     errMsg.String,
 		}
-		if finishedAt.Valid {
-			entry.FinishedAt = finishedAt.Time
-			entry.Duration = finishedAt.Time.Sub(startedAt)
+		if finishedValue != nil {
+			entry.FinishedAt, err = historyTimestamp(finishedValue)
+			if err != nil {
+				return nil, fmt.Errorf("parse task history finish time: %w", err)
+			}
+			if duration.Valid {
+				entry.Duration = time.Duration(duration.Int64) * time.Millisecond
+			} else {
+				entry.Duration = entry.FinishedAt.Sub(startedAt)
+			}
 		}
 		if entry.Status == "" {
-			entry.Status = string(StatusFailed)
-			if entry.Success {
-				entry.Status = string(StatusSuccess)
-			}
+			entry.Status = string(StatusRunning)
 		}
 		entries = append(entries, entry)
 	}
@@ -1575,6 +1737,37 @@ func (s *Scheduler) GetHistory(id TaskID, limit int) ([]*TaskHistoryEntry, error
 	}
 
 	return entries, nil
+}
+
+func historyTimestamp(value any) (time.Time, error) {
+	switch timestamp := value.(type) {
+	case int64:
+		return time.Unix(timestamp, 0), nil
+	case int:
+		return time.Unix(int64(timestamp), 0), nil
+	case float64:
+		return time.Unix(int64(timestamp), 0), nil
+	case time.Time:
+		return timestamp, nil
+	case []byte:
+		return parseHistoryTimestamp(string(timestamp))
+	case string:
+		return parseHistoryTimestamp(timestamp)
+	default:
+		return time.Time{}, fmt.Errorf("unsupported stored timestamp type %T", value)
+	}
+}
+
+func parseHistoryTimestamp(value string) (time.Time, error) {
+	if unixSeconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return time.Unix(unixSeconds, 0), nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05.999999999", "2006-01-02 15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized stored timestamp %q", value)
 }
 
 // emitAudit hands a completed execution to the audit callback.
@@ -1609,7 +1802,7 @@ func (s *Scheduler) acquireTaskLock(task *Task) bool {
 	// Try to acquire lock or take over expired lock
 	query := `UPDATE scheduler_tasks
 		SET locked_by = ?, locked_at = ?
-		WHERE task_id = ? AND (locked_by IS NULL OR locked_by = ? OR locked_at < ?)`
+		WHERE id = ? AND (locked_by IS NULL OR locked_by = ? OR locked_at < ?)`
 
 	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
 	lockCtx, lockCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1626,7 +1819,7 @@ func (s *Scheduler) acquireTaskLock(task *Task) bool {
 
 // releaseTaskLock releases the distributed lock for a task
 func (s *Scheduler) releaseTaskLock(task *Task) {
-	query := `UPDATE scheduler_tasks SET locked_by = NULL, locked_at = NULL WHERE task_id = ? AND locked_by = ?`
+	query := `UPDATE scheduler_tasks SET locked_by = NULL, locked_at = NULL WHERE id = ? AND locked_by = ?`
 	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
 	relCtx, relCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer relCancel()

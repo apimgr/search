@@ -13,6 +13,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/search"
@@ -39,13 +40,19 @@ func (e *alertTestEngine) Search(ctx context.Context, query *model.Query) ([]mod
 	return []model.Result{}, nil
 }
 
-func setupAlertAPITestDB(t *testing.T) *sql.DB {
+func setupAlertAPITestDB(t *testing.T) *database.DatabaseManager {
 	t.Helper()
 
-	db, err := sql.Open("sqlite", ":memory:")
+	dm, err := database.NewDatabaseManager(&database.Config{Driver: "sqlite", DataDir: t.TempDir(), MaxOpen: 2, MaxIdle: 2})
 	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+		t.Fatalf("open database manager: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := dm.Close(); err != nil {
+			t.Errorf("close database manager: %v", err)
+		}
+	})
+	db := dm.ServerDB()
 
 	schema := `
 		CREATE TABLE search_alerts (
@@ -106,17 +113,21 @@ func setupAlertAPITestDB(t *testing.T) *sql.DB {
 		);
 		CREATE INDEX idx_search_alert_results_alert ON search_alert_results(alert_id, first_seen_at);
 	`
-	if _, err := db.Exec(schema); err != nil {
+	if err := db.Write(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(schema)
+		return err
+	}); err != nil {
 		t.Fatalf("create schema: %v", err)
 	}
 
-	return db
+	return dm
 }
 
-func newAlertAPIHandler(t *testing.T) (*Handler, *alert.Manager, *sql.DB) {
+func newAlertAPIHandler(t *testing.T) (*Handler, *alert.Manager, *database.DatabaseManager) {
 	t.Helper()
 
-	db := setupAlertAPITestDB(t)
+	dm := setupAlertAPITestDB(t)
+	db := dm.ServerDB()
 	cfg := config.DefaultConfig()
 	engines := []search.Engine{newAlertTestEngine("google", "general")}
 	aggregator := search.NewAggregator(engines, search.AggregatorConfig{
@@ -127,15 +138,15 @@ func newAlertAPIHandler(t *testing.T) (*Handler, *alert.Manager, *sql.DB) {
 
 	handler := NewHandler(cfg, nil, aggregator)
 	cfg.Server.Security.EncryptionKey = base64.StdEncoding.EncodeToString(make([]byte, 32))
-	ownerManager, err := owner.NewManager(db, "", cfg.Server.Security.EncryptionKey, 25)
+	ownerManager, err := owner.NewManagerWithDB(db, "", cfg.Server.Security.EncryptionKey, 25)
 	if err != nil {
 		t.Fatalf("create owner manager: %v", err)
 	}
 	handler.SetOwnerManager(ownerManager)
-	manager := alert.NewManager(db, cfg, aggregator, nil)
+	manager := alert.NewManagerWithDB(db, cfg, aggregator, nil)
 	handler.SetAlertManager(manager)
 
-	return handler, manager, db
+	return handler, manager, dm
 }
 
 func TestHandleAlertPauseCanResume(t *testing.T) {

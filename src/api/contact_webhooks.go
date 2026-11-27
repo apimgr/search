@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,6 +18,7 @@ type contactWebhookSaveRequest struct {
 }
 
 func (h *Handler) handleContactWebhookConfigSave(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	var input contactWebhookSaveRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -68,6 +70,7 @@ func (h *Handler) handleContactWebhookConfigSave(w http.ResponseWriter, r *http.
 		role.Webhooks[input.Transport+"_secret"] = secret
 	})
 	if err := h.saveConfig(); err != nil {
+		slog.Error("failed to persist contact webhook configuration", "err", err)
 		h.config.Update(func(server *config.ServerConfig) {
 			role := contactRole(&server.Contact, input.Role)
 			if role.Webhooks == nil {

@@ -46,6 +46,7 @@ const (
 	TemplateUpdateAvailable  TemplateType = "update_available"
 	TemplateUpdateInstalled  TemplateType = "update_installed"
 	TemplateUpdateFailed     TemplateType = "update_failed"
+	TemplateUpdateStaged     TemplateType = "update_staged"
 	TemplateTest             TemplateType = "test"
 )
 
@@ -65,6 +66,7 @@ var AllTemplateTypes = []TemplateType{
 	TemplateUpdateAvailable,
 	TemplateUpdateInstalled,
 	TemplateUpdateFailed,
+	TemplateUpdateStaged,
 	TemplateTest,
 }
 
@@ -302,6 +304,7 @@ func (et *EmailTemplate) PreviewTemplateLocalized(templateType TemplateType, lan
 		"current_version":       "1.0.0",
 		"new_version":           "1.1.0",
 		"release_date":          "2026-06-13",
+		"channel":               "stable",
 		"release_notes":         "Bug fixes and performance improvements.",
 		"update_url":            siteURL + "/update",
 		"scheduled_at":          "2026-06-14 02:00:00 UTC",
@@ -325,6 +328,17 @@ func (et *EmailTemplate) PreviewTemplateLocalized(templateType TemplateType, lan
 		vars["label_details"] = i18n.T(lang, "email.security_alert.label_details")
 		vars["label_from"] = i18n.T(lang, "email.common.label_from")
 		vars["label_time"] = i18n.T(lang, "email.common.label_time")
+	}
+	if templateType == TemplateUpdateAvailable {
+		vars["subject_prefix"] = i18n.T(lang, "email.update_available.subject_prefix")
+		vars["heading"] = i18n.T(lang, "email.update_available.heading")
+		vars["intro"] = i18n.T(lang, "email.update_available.intro", siteName)
+		vars["label_current_version"] = i18n.T(lang, "email.update_available.label_current_version")
+		vars["label_new_version"] = i18n.T(lang, "email.update_available.label_new_version")
+		vars["label_release_date"] = i18n.T(lang, "email.update_available.label_release_date")
+		vars["label_channel"] = i18n.T(lang, "email.update_available.label_channel")
+		vars["label_release_notes"] = i18n.T(lang, "email.update_available.label_release_notes")
+		vars["label_view_update"] = i18n.T(lang, "email.update_available.label_view_update")
 	}
 	for key, value := range previewVariableNames(siteName, siteURL) {
 		if _, exists := vars[key]; !exists {
@@ -431,7 +445,8 @@ func previewVariableNames(siteName, siteURL string) map[string]string {
 		"heading": "Sample notification", "intro": "A sample notification is available.",
 		"label_details": "Details", "label_from": "From", "label_source_ip": "Source IP",
 		"label_time": "Time", "label_current_version": "Current version", "label_new_version": "New version",
-		"label_release_date": "Release date", "label_release_notes": "Release notes", "label_view_update": "View update",
+		"label_release_date": "Release date", "label_channel": "Release channel",
+		"label_release_notes": "Release notes", "label_view_update": "View update",
 		"manual_update_command": "search --update yes", "subject_prefix": "[Search]",
 		"size": "12.5 MB", "error": "sample error", "since": "2026-06-14 02:00:00 UTC",
 		"expires_in": "14 days", "expiry_date": "2026-07-01", "valid_until": "2027-07-01",
@@ -476,6 +491,7 @@ func GetAllTemplateTypes() []TemplateInfo {
 		{TemplateUpdateAvailable, "Update Available", "New version available notification", false},
 		{TemplateUpdateInstalled, "Update Installed", "Self-update completion notification", false},
 		{TemplateUpdateFailed, "Update Failed", "Self-update failure notification", false},
+		{TemplateUpdateStaged, "Update Staged", "Verified update staged; restart applies it", false},
 		{TemplateTest, "Test Email", "Test email to verify SMTP configuration", false},
 	}
 }

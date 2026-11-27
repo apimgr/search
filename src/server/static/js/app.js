@@ -2001,7 +2001,7 @@ const API_BASE_PATH = document.documentElement.dataset.apiBase;
     function initInfiniteScroll() {
         // Search results page infinite scroll
         // Per AI.md PART 16: NO inline JS - all in external files
-        var container = document.querySelector('.search-results-page');
+        var container = document.querySelector('[data-search-results]');
         if (!container) return;
         if (!getActiveSearchPreferences().infinite_scroll) return;
 
@@ -3223,7 +3223,7 @@ const API_BASE_PATH = document.documentElement.dataset.apiBase;
     }
 
     function recordSearchHistory() {
-        var page = document.querySelector('.search-results-page');
+        var page = document.querySelector('[data-search-results]');
         if (!page || !getStoredSearchPreferences().save_history) return;
         var query = (page.dataset.query || '').trim();
         if (!query) return;
@@ -3271,61 +3271,6 @@ const API_BASE_PATH = document.documentElement.dataset.apiBase;
         var prefsPage = document.querySelector('#general-settings, #add-custom-bang');
         if (!prefsPage) return;
         prefsPage = prefsPage.closest('.container') || prefsPage;
-
-        var preferencesTabs = prefsPage.querySelector('.preferences-tabs');
-        if (preferencesTabs) {
-            var tabButtons = Array.from(preferencesTabs.querySelectorAll('[role="tab"]'));
-            var tabGroups = {
-                general: ['lang', 'default-category', 'safe-search', 'units', 'weather-units'],
-                interface: ['theme', 'font-size', 'results-density', 'accent-color', 'results-per-page', 'new-tab', 'infinite-scroll', 'keyboard-shortcuts', 'video-previews'],
-                privacy: ['save-history', 'clear-search-history']
-            };
-            Object.keys(tabGroups).forEach(function(tabName) {
-                tabGroups[tabName].forEach(function(controlID) {
-                    var control = document.getElementById(controlID);
-                    var group = control && control.closest('.form-group');
-                    if (group) group.dataset.preferenceTab = tabName;
-                });
-            });
-            var setPreferencesTab = function(tabName, focusTab) {
-                tabButtons.forEach(function(button) {
-                    var selected = button.dataset.preferencesTab === tabName;
-                    button.setAttribute('aria-selected', selected ? 'true' : 'false');
-                    button.tabIndex = selected ? 0 : -1;
-                    if (focusTab && selected) button.focus();
-                });
-                prefsPage.querySelectorAll('[data-preference-tab]').forEach(function(panel) {
-                    panel.hidden = panel.dataset.preferenceTab !== tabName;
-                    if (!panel.hasAttribute('role')) panel.setAttribute('role', 'tabpanel');
-                    panel.setAttribute('aria-labelledby', 'preferences-tab-' + panel.dataset.preferenceTab);
-                });
-                var settingsForm = document.getElementById('general-settings');
-                var settingsSection = document.getElementById('preferences-settings-section');
-                var generalHeading = document.getElementById('preferences-general-heading');
-                if (settingsSection) settingsSection.hidden = tabName !== 'general' && tabName !== 'interface' && tabName !== 'privacy';
-                if (settingsSection) {
-                    settingsSection.setAttribute('role', 'tabpanel');
-                    settingsSection.setAttribute('aria-labelledby', 'preferences-tab-' + tabName);
-                }
-                if (generalHeading) generalHeading.hidden = tabName !== 'general';
-                if (settingsForm) {
-                    settingsForm.querySelectorAll('.form-group[data-preference-tab]').forEach(function(group) {
-                        group.hidden = group.dataset.preferenceTab !== tabName;
-                    });
-                }
-            };
-            preferencesTabs.hidden = false;
-            tabButtons.forEach(function(button, index) {
-                button.addEventListener('click', function() { setPreferencesTab(button.dataset.preferencesTab, false); });
-                button.addEventListener('keydown', function(event) {
-                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
-                    event.preventDefault();
-                    var nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabButtons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabButtons.length) % tabButtons.length;
-                    setPreferencesTab(tabButtons[nextIndex].dataset.preferencesTab, true);
-                });
-            });
-            setPreferencesTab('general', false);
-        }
 
         // Storage keys (widgets are server-side cookie — no WIDGETS_KEY here)
 
@@ -3378,12 +3323,12 @@ const API_BASE_PATH = document.documentElement.dataset.apiBase;
         function renderCustomBangs(bangs) {
             var list = document.getElementById('custom-bangs-list');
             if (!list) return;
-            list.innerHTML = '';
-
-            if (bangs.length === 0) {
-                list.innerHTML = '<p class="help-text">' + escapeHtml(t('preferences.custom_bangs_empty', 'No custom bangs defined.')) + '</p>';
-                return;
-            }
+            var emptyState = document.getElementById('custom-bangs-empty-state');
+            var items = document.getElementById('custom-bangs-items');
+            if (!items) return;
+            items.innerHTML = '';
+            if (emptyState) emptyState.hidden = bangs.length > 0;
+            if (bangs.length === 0) return;
 
             bangs.forEach(function(bang, index) {
                 var item = document.createElement('div');
@@ -3393,7 +3338,7 @@ const API_BASE_PATH = document.documentElement.dataset.apiBase;
                     '<span class="bang-name">' + escapeHtmlLocal(bang.name) + '</span>' +
                 '</div>' +
                 '<button class="delete-btn" data-bang-index="' + index + '">' + escapeHtml(t('common.delete', 'Delete')) + '</button>';
-                list.appendChild(item);
+                items.appendChild(item);
             });
         }
 
@@ -3824,37 +3769,42 @@ const API_BASE_PATH = document.documentElement.dataset.apiBase;
     // ========================================================================
     function initCookieConsent() {
         var consentBanner = document.getElementById('cookie-consent');
-        if (!consentBanner) return;
-
-        var consent = readConsentCookie();
-        if (consent === null) {
-            consentBanner.classList.add('visible');
-        } else {
-            consentBanner.remove();
-            return;
+        if (consentBanner) {
+            var consent = readConsentCookie();
+            if (consent === null) {
+                consentBanner.classList.add('visible');
+            } else {
+                consentBanner.remove();
+                consentBanner = null;
+            }
         }
 
-        // Intercept the banner forms to skip the page reload
-        consentBanner.querySelectorAll('form').forEach(function(form) {
-            form.addEventListener('submit', function(event) {
-                event.preventDefault();
-                var choiceEl = form.elements.choice;
-                var accepted = choiceEl && choiceEl.value === 'accept';
-                var newConsent = {
-                    essential: true,
-                    preferences: accepted,
-                    analytics: accepted,
-                    timestamp: Date.now()
-                };
-                saveAndApplyConsent(newConsent);
+        if (consentBanner) {
+            consentBanner.querySelectorAll('form').forEach(function(form) {
+                form.addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    var choiceEl = form.elements.choice;
+                    var accepted = choiceEl && choiceEl.value === 'accept';
+                    var newConsent = {
+                        essential: true,
+                        preferences: accepted,
+                        analytics: accepted,
+                        timestamp: Math.floor(Date.now() / 1000)
+                    };
+                    saveAndApplyConsent(newConsent);
+                });
+            });
+        }
+
+        var preferencesModal = document.getElementById('cookie-preferences-modal');
+        document.querySelectorAll('[data-action="cookie-preferences"]').forEach(function(el) {
+            el.addEventListener('click', function() {
+                if (preferencesModal) preferencesModal.showModal();
             });
         });
-
-        // Intercept the granular preferences button
-        consentBanner.querySelectorAll('[data-action="cookie-preferences"]').forEach(function(el) {
+        document.querySelectorAll('[data-action="cookie-preferences-close"]').forEach(function(el) {
             el.addEventListener('click', function() {
-                var modal = document.getElementById('cookie-preferences-modal');
-                if (modal) modal.showModal();
+                if (preferencesModal) preferencesModal.close();
             });
         });
     }

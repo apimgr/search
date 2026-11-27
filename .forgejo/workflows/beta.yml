@@ -2,8 +2,8 @@ name: Beta Build
 
 on:
   push:
-    branches:
-      - beta
+    tags:
+      - '*-beta'
   workflow_dispatch:
 
 permissions:
@@ -19,19 +19,28 @@ env:
 
 jobs:
   # Compute VERSION once — matrix legs must never each compute their own value.
-  # Beta identity is a UTC timestamp, independent of local build metadata.
+  # A pushed beta tag is the version; manual runs receive a generated timestamp.
   version:
     name: Compute version
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.set.outputs.version }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Compute version
         id: set
         run: |
-          echo "version=$(date -u +%Y%m%d%H%M%S)-beta" >> "$FORGEJO_OUTPUT"
+          if [[ "$FORGEJO_REF_TYPE" == "tag" ]]; then
+            VERSION="$FORGEJO_REF_NAME"
+            if [[ ! "$VERSION" =~ ^[0-9]{14}-beta$ ]]; then
+              echo "ERROR: beta tag must match YYYYMMDDHHMMSS-beta" >&2
+              exit 2
+            fi
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+          fi
+          echo "version=${VERSION}" >> "$FORGEJO_OUTPUT"
 
   build:
     name: Beta build (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -66,7 +75,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Generate API specifications
         run: |
@@ -78,7 +87,8 @@ jobs:
         run: |
           {
             echo "VERSION=${{ needs.version.outputs.version }}"
-            echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)"
+            COMMIT_SHA="${{ forgejo.sha }}"
+            echo "COMMIT_ID=${COMMIT_SHA:0:7}"
             echo "BUILD_EPOCH=$(date -u +%s)"
             if [ -f site.txt ]; then
               echo "OFFICIAL_SITE=$(cat site.txt)"
@@ -120,7 +130,25 @@ jobs:
             -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-          go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client
+          go build -buildvcs=false -trimpath -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client
+
+      - name: Build GUI client
+        if: hashFiles('src/client/gui/**') != '' && matrix.goos != 'freebsd'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          CLI_LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
+            -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+          go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" \
+            -o "${PROJECTNAME}-cli-gui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -135,6 +163,14 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.CLI_OUTPUT }}
           retention-days: 7
+
+      - name: Upload GUI client artifact
+        if: hashFiles('src/client/gui/**') != '' && matrix.goos != 'freebsd'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECTNAME }}-cli-gui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-gui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          retention-days: 7
   release:
     name: Publish beta release
     needs: [version, build]
@@ -146,7 +182,7 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -185,22 +221,14 @@ jobs:
         with:
           subject-path: binaries/${{ env.PROJECTNAME }}-*
 
-      - name: Delete previous beta release
-        env:
-          GH_TOKEN: ${{ forgejo.token }}
-        run: |
-          gh release delete beta --yes 2>/dev/null || true
-          git push origin :refs/tags/beta 2>/dev/null || true
-
       - name: Create Release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
-          tag_name: beta
-          name: "Beta Build ${{ env.VERSION }}"
+          tag_name: ${{ needs.version.outputs.version }}
+          name: ${{ needs.version.outputs.version }}
           files: binaries/*
           prerelease: true
           generate_release_notes: true
-          body: "Beta build: ${{ env.VERSION }}"
         env:
           GITHUB_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
           GITHUB_API_URL: ${{ forgejo.server_url }}/api/v1

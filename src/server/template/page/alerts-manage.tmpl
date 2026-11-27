@@ -1,32 +1,33 @@
 {{define "content"}}
-<section class="page-section alert-page">
-    <div class="page-header">
-        <h1>{{t "alerts.manage_title"}}</h1>
-        <p>{{t "alerts.manage_subtitle"}}</p>
-    </div>
+<div class="container container-sm">
+    <header class="page-header">
+        <h1 class="page-title">{{t "alerts.manage_title"}}</h1>
+    </header>
+    <section class="section-card" aria-labelledby="alert-manage-heading">
+        <h2 id="alert-manage-heading">{{t "alerts.manage_subtitle"}}</h2>
     {{if .Error}}
-    <div class="search-error"><p>{{.Error}}</p></div>
+    <div class="alert alert-danger" role="alert"><p>{{.Error}}</p></div>
     {{end}}
     {{if .Success}}
-    <div class="search-info"><span>{{.Success}}</span></div>
+    <div class="alert alert-success" role="status"><span>{{.Success}}</span></div>
     {{end}}
     {{if .WebhookSecret}}
     <div class="owner-token-issued" role="status">
-        <h2>{{t "alerts.webhook_secret_label"}}</h2>
+        <h3>{{t "alerts.webhook_secret_label"}}</h3>
         <p>{{t "alerts.webhook_secret_help"}}</p>
         <code class="copy-value">{{.WebhookSecret}}</code>
     </div>
     {{end}}
-    <form method="POST" action="{{.ManagePath}}/update" class="alert-form">
+    <form method="POST" action="{{.ManagePath}}/update">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <div class="form-group">
             <label for="query">{{t "alerts.search_query_label"}}</label>
-            <input id="query" name="query" type="text" value="{{.Alert.Query}}" required>
+            <input class="form-input" id="query" name="query" type="text" value="{{.Alert.Query}}" required>
         </div>
         <div class="form-row">
             <div class="form-group">
                 <label for="category">{{t "search.category"}}</label>
-                <select id="category" name="category">
+                <select class="form-input" id="category" name="category">
                     <option value="general" {{if eq .Alert.Category "general"}}selected{{end}}>{{t "preferences.default_category_general"}}</option>
                     <option value="images" {{if eq .Alert.Category "images"}}selected{{end}}>{{t "search.categories.images"}}</option>
                     <option value="videos" {{if eq .Alert.Category "videos"}}selected{{end}}>{{t "search.categories.videos"}}</option>
@@ -41,15 +42,15 @@
             </div>
             <div class="form-group">
                 <label for="language">{{t "search.language"}}</label>
-                <input id="language" name="language" type="text" value="{{.Alert.Language}}" placeholder="en" autocapitalize="off" spellcheck="false">
+                <input class="form-input" id="language" name="language" type="text" value="{{.Alert.Language}}" placeholder="en" autocapitalize="off" spellcheck="false">
             </div>
             <div class="form-group">
                 <label for="region">{{t "search.region"}}</label>
-                <input id="region" name="region" type="text" value="{{.Alert.Region}}" placeholder="us" autocapitalize="off" spellcheck="false">
+                <input class="form-input" id="region" name="region" type="text" value="{{.Alert.Region}}" placeholder="us" autocapitalize="off" spellcheck="false">
             </div>
             <div class="form-group">
                 <label for="frequency">{{t "alerts.frequency_label"}}</label>
-                <select id="frequency" name="frequency">
+                <select class="form-input" id="frequency" name="frequency">
                     <option value="immediate" {{if eq .Alert.Frequency "immediate"}}selected{{end}}>{{t "admin.settings_page.frequency_immediate"}}</option>
                     <option value="daily" {{if eq .Alert.Frequency "daily"}}selected{{end}}>{{t "admin.settings_page.frequency_daily"}}</option>
                     <option value="weekly" {{if eq .Alert.Frequency "weekly"}}selected{{end}}>{{t "admin.settings_page.frequency_weekly"}}</option>
@@ -57,23 +58,23 @@
             </div>
             <div class="form-group">
                 <label for="safe_search">{{t "search.safe_search"}}</label>
-                <select id="safe_search" name="safe_search">
+                <select class="form-input" id="safe_search" name="safe_search">
                     <option value="0" {{if eq .Alert.SafeSearch 0}}selected{{end}}>{{t "search.safe_search_off"}}</option>
                     <option value="1" {{if eq .Alert.SafeSearch 1}}selected{{end}}>{{t "search.safe_search_moderate"}}</option>
                     <option value="2" {{if eq .Alert.SafeSearch 2}}selected{{end}}>{{t "search.safe_search_strict"}}</option>
                 </select>
             </div>
         </div>
-        <fieldset class="alert-channels">
+        <fieldset>
             <legend>{{t "alerts.engine_filters_legend"}}</legend>
             <p class="form-help">{{t "alerts.engine_filters_help"}}</p>
-            <div class="alert-engine-grid">
+            <div>
                 {{range .AvailableEngines}}
                 <label><input type="checkbox" name="engines" value="{{.Name}}" {{if .Selected}}checked{{end}}> {{.DisplayName}}</label>
                 {{end}}
             </div>
         </fieldset>
-        <fieldset class="alert-channels">
+        <fieldset>
             <legend>{{t "alerts.delivery_channels_legend"}}</legend>
             <label><input type="checkbox" name="deliver_email" {{if .Alert.DeliverEmail}}checked{{end}}> {{t "alerts.delivery_email_digest"}}</label>
             <label><input type="checkbox" name="deliver_rss" {{if .Alert.DeliverRSS}}checked{{end}}> {{t "alerts.delivery_private_rss"}}</label>
@@ -81,23 +82,33 @@
         </fieldset>
         <div class="form-group">
             <label for="webhook_url">{{t "alerts.webhook_url_label"}}</label>
-            <input id="webhook_url" name="webhook_url" type="url" value="{{.Alert.WebhookURL}}">
+            <input class="form-input" id="webhook_url" name="webhook_url" type="url" value="{{.Alert.WebhookURL}}">
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn-primary">{{t "alerts.save_changes"}}</button>
+            <button type="submit" class="btn btn-primary">{{t "alerts.save_changes"}}</button>
             {{if .Alert.DeliverRSS}}
-            <a href="{{.FeedURL}}" class="btn-secondary">{{t "alerts.rss_feed"}}</a>
+            <a href="{{.FeedURL}}" class="btn btn-secondary">{{t "alerts.rss_feed"}}</a>
             {{end}}
         </div>
     </form>
-    <form method="POST" action="{{.ManagePath}}/pause" class="alert-inline-form">
+    <form method="POST" action="{{.ManagePath}}/pause" class="form-actions">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="paused" value="{{if eq .Alert.Status "paused"}}0{{else}}1{{end}}">
-        <button type="submit" class="btn-secondary">{{if eq .Alert.Status "paused"}}{{t "alerts.resume_alert"}}{{else}}{{t "alerts.pause_alert"}}{{end}}</button>
+        <button type="submit" class="btn btn-secondary">{{if eq .Alert.Status "paused"}}{{t "alerts.resume_alert"}}{{else}}{{t "alerts.pause_alert"}}{{end}}</button>
     </form>
-    <form method="POST" action="{{.ManagePath}}/delete" class="alert-inline-form">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-danger">{{t "alerts.delete_alert"}}</button>
-    </form>
-</section>
+    <div class="form-actions">
+        <button type="button" class="btn btn-danger" popovertarget="delete-alert-popover">{{t "alerts.delete_alert"}}</button>
+    </div>
+    <div id="delete-alert-popover" class="popover-panel" popover>
+        <p>{{t "alerts.delete_alert"}}?</p>
+        <form method="POST" action="{{.ManagePath}}/delete">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="actions">
+                <button type="button" class="btn btn-secondary" popovertarget="delete-alert-popover" popovertargetaction="hide">{{t "common.cancel"}}</button>
+                <button type="submit" class="btn btn-danger">{{t "alerts.delete_alert"}}</button>
+            </div>
+        </form>
+    </div>
+    </section>
+</div>
 {{end}}

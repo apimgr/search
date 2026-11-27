@@ -1,14 +1,15 @@
 {{define "content"}}
-<div class="home-container">
-    <div class="logo-section">
+<div class="container container-md">
+    <header class="page-header">
         {{if .Config.Server.Branding.Logo}}
-        <img src="{{.Config.Server.Branding.Logo}}" alt="{{.Config.Server.Title}}" class="home-logo-img">
-        {{else}}
-        <h1 class="home-logo"><svg class="home-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 6 6"></path></svg>{{if .Config.Server.Branding.Title}}{{.Config.Server.Branding.Title}}{{else}}{{t "home.brand_fallback"}}{{end}}</h1>
+        <img src="{{.Config.Server.Branding.Logo}}" alt="" class="home-logo-img">
         {{end}}
+        <h1 class="page-title home-logo">{{if not .Config.Server.Branding.Logo}}<svg class="home-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 6 6"></path></svg>{{end}}{{if .Config.Server.Branding.Title}}{{.Config.Server.Branding.Title}}{{else}}{{t "home.brand_fallback"}}{{end}}</h1>
         <p class="home-tagline">{{.Config.Server.Description}}</p>
-    </div>
+    </header>
 
+    <section class="section-card" aria-labelledby="home-search-heading">
+    <h2 id="home-search-heading">{{t "search.button"}}</h2>
     <form action="/search" method="GET" class="search-form" id="searchForm">
         <noscript>
             <label for="nojs-category">{{t "search.category"}}</label>
@@ -92,6 +93,7 @@
             </button>
         </div>
     </form>
+    </section>
 
     <noscript>
         <form action="/search" method="GET" class="advanced-search-fallback">
@@ -157,7 +159,7 @@
         </form>
     </noscript>
 
-    <section class="search-history" id="search-history" hidden aria-labelledby="search-history-title">
+    <section class="section-card search-history" id="search-history" hidden aria-labelledby="search-history-title">
         <div class="search-history-heading">
             <h2 id="search-history-title">{{t "preferences.recent_searches"}}</h2>
             <button type="button" class="btn btn-secondary" id="clear-search-history">{{t "preferences.clear_history"}}</button>
@@ -168,7 +170,9 @@
     {{/* Widget Grid Section */}}
     {{template "widgets" .}}
 
-    <div class="home-features">
+    <section class="section-card" aria-labelledby="home-features-heading">
+        <h2 id="home-features-heading">{{t "about.features_heading"}}</h2>
+        <div class="home-features">
         <div class="feature">
             <span class="feature-icon">🔒</span>
             <span class="feature-text">{{t "home.feature_no_tracking"}}</span>
@@ -181,7 +185,8 @@
             <span class="feature-icon">🧅</span>
             <span class="feature-text">{{t "home.feature_tor_support"}}</span>
         </div>
-    </div>
+        </div>
+    </section>
 </div>
 
 {{/* Advanced Search Modal - per AI.md PART 16: Server-side rendering with progressive enhancement */}}

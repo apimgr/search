@@ -17,6 +17,8 @@ import (
 // ignored — never DROP TABLE, DROP COLUMN, or DELETE.
 // Safe to call on every startup — never drops data.
 func InitSchema(ctx context.Context, dm *DatabaseManager) error {
+	ctx, cancel := context.WithTimeout(ctx, TimeoutMigration)
+	defer cancel()
 	if err := initServerSchema(ctx, dm.ServerDB()); err != nil {
 		return fmt.Errorf("server database schema init failed: %w", err)
 	}
@@ -53,8 +55,8 @@ func initServerSchema(ctx context.Context, db *DB) error {
 		)`,
 		// Scheduler task definitions — must match scheduler.go schema exactly
 		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_tasks (
-			task_id TEXT PRIMARY KEY,
-			task_name TEXT,
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
 			schedule TEXT,
 			last_run DATETIME,
 			last_status TEXT,
@@ -70,14 +72,14 @@ func initServerSchema(ctx context.Context, db *DB) error {
 		)`,
 		// Scheduler execution history
 		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_history (
-			id TEXT PRIMARY KEY,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			task_id TEXT NOT NULL,
-			started_at DATETIME NOT NULL,
-			finished_at DATETIME,
-			success INTEGER NOT NULL DEFAULT 0,
-			error TEXT
+			started_at INTEGER NOT NULL,
+			finished_at INTEGER,
+			status TEXT NOT NULL,
+			error TEXT,
+			duration_ms INTEGER
 		)`,
-		`CREATE INDEX IF NOT EXISTS {prefix}idx_scheduler_history_task ON {prefix}scheduler_history(task_id, started_at)`,
 		// Audit log
 		`CREATE TABLE IF NOT EXISTS {prefix}audit_log (
 			id TEXT PRIMARY KEY,
@@ -117,6 +119,12 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			window_start DATETIME NOT NULL,
 			PRIMARY KEY (ip, endpoint)
 		)`,
+		`CREATE TABLE IF NOT EXISTS {prefix}captcha_challenges (
+			id VARCHAR(32) PRIMARY KEY,
+			answer_hash VARCHAR(64) NOT NULL,
+			expires_at TIMESTAMP NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_captcha_challenges_expires ON {prefix}captcha_challenges(expires_at)`,
 		// Backup metadata
 		`CREATE TABLE IF NOT EXISTS {prefix}backups (
 			id TEXT PRIMARY KEY,
@@ -313,9 +321,49 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	}
 	for _, stmt := range statements {
 		sql := applyPrefix(stmt)
-		if _, err := db.Exec(ctx, sql); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, sql); err != nil {
 			return fmt.Errorf("schema statement failed: %w\nSQL: %s", err, sql)
 		}
+	}
+	if err := renameColumnIfNeeded(ctx, db, prefix+"scheduler_tasks", "task_id", "id"); err != nil {
+		return fmt.Errorf("rename scheduler task identifier: %w", err)
+	}
+	if err := renameColumnIfNeeded(ctx, db, prefix+"scheduler_tasks", "task_name", "name"); err != nil {
+		return fmt.Errorf("rename scheduler task name: %w", err)
+	}
+	historyTable := prefix + "scheduler_history"
+	if err := renameColumnIfNeeded(ctx, db, historyTable, "ran_at", "started_at"); err != nil {
+		return fmt.Errorf("rename scheduler history start time: %w", err)
+	}
+	for _, column := range []struct{ name, definition string }{
+		{"finished_at", "INTEGER"},
+		{"status", "TEXT"},
+		{"error", "TEXT"},
+		{"duration_ms", "INTEGER"},
+	} {
+		if err := ensureColumn(ctx, db, historyTable, column.name, column.definition); err != nil {
+			return fmt.Errorf("add scheduler history column %s: %w", column.name, err)
+		}
+	}
+	historyColumns, err := tableColumns(ctx, db, historyTable)
+	if err != nil {
+		return fmt.Errorf("inspect scheduler history columns: %w", err)
+	}
+	if historyColumns["success"] != "" {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+historyTable+` SET status = CASE WHEN success = 1 THEN 'success' ELSE 'failed' END WHERE status IS NULL OR status = ''`); err != nil {
+			return fmt.Errorf("backfill scheduler history statuses: %w", err)
+		}
+	} else if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+historyTable+` SET status = CASE WHEN finished_at IS NULL THEN 'running' ELSE 'failed' END WHERE status IS NULL OR status = ''`); err != nil {
+		return fmt.Errorf("initialize scheduler history statuses: %w", err)
+	}
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+historyTable+` SET duration_ms = CAST(ROUND((julianday(finished_at) - julianday(started_at)) * 86400000) AS INTEGER) WHERE duration_ms IS NULL AND finished_at IS NOT NULL AND started_at IS NOT NULL`); err != nil {
+		return fmt.Errorf("backfill scheduler history durations: %w", err)
+	}
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_scheduler_history_task ON `+historyTable+`(task_id)`); err != nil {
+		return fmt.Errorf("create scheduler history task index: %w", err)
+	}
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_scheduler_history_started ON `+historyTable+`(started_at)`); err != nil {
+		return fmt.Errorf("create scheduler history start index: %w", err)
 	}
 	if err := ensureColumn(ctx, db, prefix+"search_alerts", "owner_id", "TEXT REFERENCES "+prefix+"owners(id)"); err != nil {
 		return fmt.Errorf("add search alert owner column: %w", err)
@@ -323,13 +371,13 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	if err := ensureSecurityReportColumns(ctx, db, prefix); err != nil {
 		return err
 	}
-	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_security_reports_status ON `+prefix+`security_reports(status, created_at)`); err != nil {
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_security_reports_status ON `+prefix+`security_reports(status, created_at)`); err != nil {
 		return fmt.Errorf("create security report status index: %w", err)
 	}
-	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_security_reports_token ON `+prefix+`security_reports(token_hash)`); err != nil {
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_security_reports_token ON `+prefix+`security_reports(token_hash)`); err != nil {
 		return fmt.Errorf("create security report token index: %w", err)
 	}
-	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_search_alerts_owner ON `+prefix+`search_alerts(owner_id)`); err != nil {
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE INDEX IF NOT EXISTS `+prefix+`idx_search_alerts_owner ON `+prefix+`search_alerts(owner_id)`); err != nil {
 		return fmt.Errorf("create search alert owner index: %w", err)
 	}
 	apiTokens := prefix + "api_tokens"
@@ -357,7 +405,7 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	if active, err := hasColumn(ctx, db, apiTokens, "active"); err != nil {
 		return fmt.Errorf("inspect legacy owner token activity: %w", err)
 	} else if active {
-		if _, err := db.Exec(ctx, `UPDATE `+apiTokens+` SET revoked_at = COALESCE(revoked_at, strftime('%s', 'now')), revoked_reason = COALESCE(revoked_reason, 'legacy_inactive') WHERE active = 0`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+apiTokens+` SET revoked_at = COALESCE(revoked_at, strftime('%s', 'now')), revoked_reason = COALESCE(revoked_reason, 'legacy_inactive') WHERE active = 0`); err != nil {
 			return fmt.Errorf("preserve legacy inactive owner token state: %w", err)
 		}
 	}
@@ -367,11 +415,30 @@ func initServerSchema(ctx context.Context, db *DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS ` + prefix + `idx_api_tokens_primary_owner ON ` + apiTokens + `(owner_id) WHERE kind = 'primary' AND revoked_at IS NULL AND owner_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ` + prefix + `idx_api_tokens_linked_name ON ` + apiTokens + `(owner_id, name) WHERE kind = 'linked' AND revoked_at IS NULL`,
 	} {
-		if _, err := db.Exec(ctx, stmt); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, stmt); err != nil {
 			return fmt.Errorf("owner token index failed: %w\nSQL: %s", err, stmt)
 		}
 	}
 	return nil
+}
+
+// renameColumnIfNeeded upgrades a known legacy column in place and keeps every
+// stored value. Column and table names are internal schema constants.
+func renameColumnIfNeeded(ctx context.Context, db *DB, table, oldName, newName string) error {
+	columns, err := tableColumns(ctx, db, table)
+	if err != nil {
+		return err
+	}
+	_, hasOld := columns[oldName]
+	_, hasNew := columns[newName]
+	if hasOld && hasNew {
+		return fmt.Errorf("%s contains both legacy %s and canonical %s columns", table, oldName, newName)
+	}
+	if !hasOld {
+		return nil
+	}
+	_, err = db.ExecWithTimeout(ctx, TimeoutMigration, "ALTER TABLE "+table+" RENAME COLUMN "+oldName+" TO "+newName)
+	return err
 }
 
 // migrateOwnerTokenIdentifiers moves legacy sequential token IDs out of the
@@ -388,14 +455,14 @@ func migrateOwnerTokenIdentifiers(ctx context.Context, db *DB, table string) err
 	}
 	if strings.EqualFold(idType, "INTEGER") {
 		if _, hasLegacyID := columns["legacy_id"]; !hasLegacyID {
-			if _, err := db.Exec(ctx, `ALTER TABLE `+table+` RENAME COLUMN id TO legacy_id`); err != nil {
+			if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `ALTER TABLE `+table+` RENAME COLUMN id TO legacy_id`); err != nil {
 				return fmt.Errorf("preserve legacy integer token IDs: %w", err)
 			}
 			delete(columns, "id")
 			columns["legacy_id"] = idType
 		}
 		if _, hasPublicID := columns["id"]; !hasPublicID {
-			if _, err := db.Exec(ctx, `ALTER TABLE `+table+` ADD COLUMN id TEXT`); err != nil {
+			if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `ALTER TABLE `+table+` ADD COLUMN id TEXT`); err != nil {
 				return fmt.Errorf("add public UUID token ID: %w", err)
 			}
 			columns["id"] = "TEXT"
@@ -408,7 +475,7 @@ func migrateOwnerTokenIdentifiers(ctx context.Context, db *DB, table string) err
 	if _, hasLegacyID := columns["legacy_id"]; hasLegacyID {
 		orderColumn = "legacy_id"
 	}
-	rows, err := db.Query(ctx, `SELECT `+orderColumn+` FROM `+table+` WHERE id IS NULL OR id = '' ORDER BY `+orderColumn)
+	rows, err := db.QueryWithTimeout(ctx, TimeoutMigration, `SELECT `+orderColumn+` FROM `+table+` WHERE id IS NULL OR id = '' ORDER BY `+orderColumn)
 	if err != nil {
 		return fmt.Errorf("read token rows needing UUID IDs: %w", err)
 	}
@@ -431,18 +498,18 @@ func migrateOwnerTokenIdentifiers(ctx context.Context, db *DB, table string) err
 		if err != nil {
 			return fmt.Errorf("generate UUIDv7 token identifier: %w", err)
 		}
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET id = ? WHERE `+orderColumn+` = ? AND (id IS NULL OR id = '')`, id.String(), legacyID); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET id = ? WHERE `+orderColumn+` = ? AND (id IS NULL OR id = '')`, id.String(), legacyID); err != nil {
 			return fmt.Errorf("backfill UUIDv7 token identifier: %w", err)
 		}
 	}
-	if _, err := db.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS `+table+`_public_id ON `+table+`(id)`); err != nil {
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE UNIQUE INDEX IF NOT EXISTS `+table+`_public_id ON `+table+`(id)`); err != nil {
 		return fmt.Errorf("index public UUID token identifiers: %w", err)
 	}
 	return nil
 }
 
 func tableColumns(ctx context.Context, db *DB, table string) (map[string]string, error) {
-	rows, err := db.Query(ctx, `PRAGMA table_info(`+table+`)`)
+	rows, err := db.QueryWithTimeout(ctx, TimeoutMigration, `PRAGMA table_info(`+table+`)`)
 	if err != nil {
 		return nil, err
 	}
@@ -500,37 +567,37 @@ func ensureSecurityReportColumns(ctx context.Context, db *DB, prefix string) err
 		legacy[column] = exists
 	}
 	if legacy["encrypted_body"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET body_enc = encrypted_body WHERE body_enc IS NULL AND encrypted_body IS NOT NULL`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET body_enc = encrypted_body WHERE body_enc IS NULL AND encrypted_body IS NOT NULL`); err != nil {
 			return fmt.Errorf("copy legacy security report body: %w", err)
 		}
 	}
 	if legacy["encryption_method"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET body_alg = encryption_method WHERE encryption_method IS NOT NULL AND (body_enc = encrypted_body OR body_alg = 'aes-256-gcm')`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET body_alg = encryption_method WHERE encryption_method IS NOT NULL AND (body_enc = encrypted_body OR body_alg = 'aes-256-gcm')`); err != nil {
 			return fmt.Errorf("copy legacy security report body algorithm: %w", err)
 		}
 	}
 	if legacy["affected_component"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET component = affected_component WHERE component = '' AND affected_component IS NOT NULL`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET component = affected_component WHERE component = '' AND affected_component IS NOT NULL`); err != nil {
 			return fmt.Errorf("copy legacy security report component: %w", err)
 		}
 	}
 	if legacy["report_token_hash"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET token_hash = report_token_hash WHERE token_hash = '' AND report_token_hash IS NOT NULL`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET token_hash = report_token_hash WHERE token_hash = '' AND report_token_hash IS NOT NULL`); err != nil {
 			return fmt.Errorf("copy legacy security report token hash: %w", err)
 		}
 	}
 	if legacy["last_status_access_date"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET token_last_used = last_status_access_date WHERE token_last_used IS NULL`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET token_last_used = last_status_access_date WHERE token_last_used IS NULL`); err != nil {
 			return fmt.Errorf("copy legacy security report access date: %w", err)
 		}
 	}
 	if legacy["credit_preference"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET credit_pref = CASE credit_preference WHEN 'real_name' THEN 'name' WHEN 'anonymous' THEN 'anon' ELSE credit_preference END WHERE credit_preference IS NOT NULL`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET credit_pref = CASE credit_preference WHEN 'real_name' THEN 'name' WHEN 'anonymous' THEN 'anon' ELSE credit_preference END WHERE credit_preference IS NOT NULL`); err != nil {
 			return fmt.Errorf("copy legacy security report credit preference: %w", err)
 		}
 	}
 	if legacy["disclosure_days"] {
-		if _, err := db.Exec(ctx, `UPDATE `+table+` SET disclosure_date = date(created_at, '+' || disclosure_days || ' days') WHERE disclosure_date IS NULL AND disclosure_days > 0`); err != nil {
+		if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `UPDATE `+table+` SET disclosure_date = date(created_at, '+' || disclosure_days || ' days') WHERE disclosure_date IS NULL AND disclosure_days > 0`); err != nil {
 			return fmt.Errorf("copy legacy security report disclosure date: %w", err)
 		}
 	}
@@ -538,7 +605,7 @@ func ensureSecurityReportColumns(ctx context.Context, db *DB, prefix string) err
 }
 
 func hasColumn(ctx context.Context, db *DB, table, column string) (bool, error) {
-	rows, err := db.Query(ctx, "PRAGMA table_info("+table+")")
+	rows, err := db.QueryWithTimeout(ctx, TimeoutMigration, "PRAGMA table_info("+table+")")
 	if err != nil {
 		return false, err
 	}
@@ -571,7 +638,7 @@ func ensureColumn(ctx context.Context, db *DB, table, column, definition string)
 	if found {
 		return nil
 	}
-	_, err = db.Exec(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
+	_, err = db.ExecWithTimeout(ctx, TimeoutMigration, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
 	return err
 }
 

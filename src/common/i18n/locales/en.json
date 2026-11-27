@@ -44,7 +44,8 @@
     "dismiss": "Dismiss",
     "upload": "Upload",
     "app_name": "Search",
-    "other": "Other"
+    "other": "Other",
+    "details": "Details"
   },
   "auth": {
     "login": "Log In",
@@ -300,6 +301,7 @@
       "expired": "Expired",
       "revoked": "Revoked",
       "primary_revealed": "Primary token revealed",
+      "primary_created": "Primary token created",
       "primary_rotated": "Primary token rotated",
       "linked_created": "Linked token created",
       "linked_revealed": "Linked token revealed",
@@ -309,7 +311,7 @@
       "expiry_90d": "90 days",
       "expiry_1y": "1 year",
       "shown_once": "Shown once, on this page load.",
-      "primary_help": "Full access to your alerts. Keep this token private.",
+      "primary_help": "Full access to your {resources}. Keep this token private.",
       "name_help": "For example: MCP client",
       "expiry_custom": "Custom date",
       "custom_date": "Custom date",
@@ -317,7 +319,7 @@
       "create": "Create token",
       "this_browser": "This browser",
       "saved_in_browser": "The owner token is saved in this browser.",
-      "forget_note": "Forgetting this browser removes its saved owner-token cookie. Your alerts are not deleted.",
+      "forget_note": "Forgetting this browser removes its saved owner-token cookie. Your {resources} are not deleted.",
       "forget_saved_token": "Forget saved token",
       "forget_confirm": "Forget the owner token saved in this browser?",
       "no_linked_tokens": "No linked tokens yet.",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "Saved owner token forgotten",
       "linked_revoked": "Linked token revoked",
       "linked_updated": "Linked token updated",
-      "reveal": "Reveal"
+      "reveal": "Reveal",
+      "new_token": "New token",
+      "revoke_primary_heading": "Revoke primary token",
+      "revoke_primary_summary": "{linked_count} linked tokens and {resource_count} {resources} will be deleted, including anything created with a linked token.",
+      "revoke_primary_button": "Revoke primary token and delete everything",
+      "revoke_primary_confirm": "Type the last 4 characters of your primary token ({last4}) to confirm",
+      "primary_revoked": "Primary token revoked"
     },
     "font_size": "Font Size",
     "font_size_small": "Small",
@@ -1446,7 +1454,7 @@
     "subject_placeholder": "What is this about?",
     "message_label": "Message",
     "message_placeholder": "Your message...",
-    "verification_question": "Verification: What is {a} + {b}?",
+    "verification_question": "Verification: What is {a} {operator} {b}?",
     "answer_placeholder": "Answer",
     "send_message": "Send Message",
     "security_description": "You are viewing the coordinated-disclosure vulnerability report form. Please fill in as much detail as you can.",
@@ -1487,8 +1495,13 @@
     "type_label": "Type",
     "confirm_email_statement": "This email address is correct, and this is a genuine report, not an advertisement, a solicitation, or spam.",
     "form_scope_notice": "This form is only for security reports, terms violations at a URL on this site, DMCA notices, and privacy requests. It cannot be used for support, bug reports, feature requests, or general questions.",
+    "purpose_heading": "What this form is for",
+    "choose_type_heading": "Choose a report type",
+    "form_details_heading": "Report details",
+    "reported_url_help": "A page on this site, for example https://{fqdn}/...",
+    "captcha_label": "Human verification",
     "honeypot_label": "Leave this field empty",
-    "type_abuse": "Abuse",
+    "type_abuse": "Report abuse",
     "type_dmca": "DMCA",
     "type_privacy": "Privacy request",
     "reported_url_label": "Reported URL",
@@ -1528,6 +1541,9 @@
     "data_usage_item_aggregate": "Aggregate and display results to you",
     "data_usage_item_preferences": "Remember your preferences (theme, language)",
     "data_retention_heading": "Data Retention",
+    "retention": {
+      "period": "Resources you create are kept until they expire or you delete them with your owner token. Preferences are stored only in cookies in your browser. Operational logs are kept for up to 30 days. Anonymized analytics data may be retained for up to 12 months."
+    },
     "data_retention_description": "We do not retain search queries or personal data. Session data is temporary and is deleted when you close your browser or your session expires.",
     "third_parties_heading": "Third Parties",
     "third_parties_description": "Your search queries are forwarded to upstream search engines to retrieve results. We do not share any other data with third parties.",
@@ -1559,6 +1575,14 @@
     "analytics_suffix_sold": "Analytics data may be shared with or sold to third-party partners as described in this policy.",
     "analytics_provider": "Analytics are provided through {provider}.",
     "analytics_none": "No third-party analytics provider is configured.",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "Data Storage & Sharing",
     "data_storage_intro": "Any data we hold is stored securely and retained only as long as necessary.",
     "data_storage_never_sold": "We do not share or sell stored data with third parties beyond what is required to deliver search results.",
@@ -1592,6 +1616,12 @@
     "last_updated": "Last updated: {date}",
     "acceptance_heading": "1. Acceptance of Terms",
     "acceptance_description": "By accessing or using {app_name} (\"the Service\"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service.",
+    "governing_law_description": "The laws of the United States apply without regard to conflict-of-law rules, unless the operator’s own terms name another jurisdiction.",
+    "governing_law_heading": "Governing law",
+    "liability_description": "The service is provided as is, without warranty of any kind. To the extent the law allows, the operator is not liable for loss arising from its use.",
+    "liability_heading": "Liability",
+    "acceptable_use_description": "Do not use the service unlawfully, abuse other people, bypass rate limits or access controls, or test beyond the security policy at /server/security/policy.",
+    "acceptable_use_heading": "Acceptable use",
     "description_heading": "2. Description of Service",
     "description_body": "{app_name} is a privacy-respecting metasearch engine that aggregates results from multiple search engines. The Service is provided \"as is\" without warranty of any kind.",
     "user_conduct_heading": "3. User Conduct",
@@ -1618,8 +1648,8 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. Modifications to Service",
     "modifications_description": "We reserve the right to modify, suspend, or discontinue the Service at any time without notice. We shall not be liable to you or any third party for any modification, suspension, or discontinuation.",
-    "changes_heading": "10. Changes to Terms",
-    "changes_description": "We may update these Terms of Service from time to time. We will notify users of any material changes by updating the \"Last updated\" date. Your continued use of the Service after changes constitutes acceptance of the new terms.",
+    "changes_heading": "Changes",
+    "changes_description": "These terms may change. The current text on this page applies from the moment it is published.",
     "contact_prefix": "If you have questions about these Terms of Service, please ",
     "contact_suffix": "."
   },
@@ -1677,6 +1707,24 @@
     "learn_more": "Learn more"
   },
   "help": {
+    "i2p": {
+      "heading": "I2P Access",
+      "intro": "This application is available as an I2P eepsite for enhanced privacy.",
+      "address_heading": "I2P Address",
+      "how_to_heading": "How to Connect",
+      "step_install": "Install",
+      "step_or": "or",
+      "step_connect": "and wait for it to integrate with the network.",
+      "step_proxy": "Configure your browser to use the I2P HTTP proxy at",
+      "step_address": "Copy the .b32.i2p address above and paste it into your browser address bar.",
+      "note": "I2P provides additional privacy by routing your connection through the network. Eepsites are served over http://; the I2P tunnel provides transport encryption, so no TLS certificate is used."
+    },
+    "troubleshooting": {
+      "heading": "Troubleshooting",
+      "search": "Try a broader query or remove search operators; a selected engine may not find matches. If an engine is temporarily unavailable, try again later.",
+      "access": "If the Tor section is absent, check that the service is running and an onion address is published with search --maintenance tor status. If I2P is absent, ask the operator to check that its provider is running and its address is published.",
+      "alerts": "If an alert management link will not open, use the complete link from its confirmation message; the token may be invalid or the alert deleted. Correct the field named in any form error and submit again."
+    },
     "page_title": "Help",
     "title": "Help & Documentation",
     "subtitle": "Learn how to get the most out of {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "More Information",
     "policy_title": "Disclosure Policy",
     "policy_scope_heading": "Scope",
-    "policy_scope_description": "This policy applies to this deployed instance and the services it exposes.",
+    "policy_scope_description": "The application served at {fqdn}, including its API, is in scope.",
+    "policy_reporting_description": "Please report privately through the security overview.",
+    "policy_reporting_heading": "Reporting",
+    "policy_out_of_scope_item_headers": "Missing best-practice headers on non-sensitive pages",
+    "policy_out_of_scope_item_scanner": "Automated scanner output without demonstrated impact",
+    "policy_in_scope_item_i2p": "I2P address: {address}",
+    "policy_in_scope_item_tor": "Tor address: {address}",
+    "policy_in_scope_item_host": "Other configured host: {host}",
     "policy_disclosure_window_heading": "Coordinated Disclosure Window",
-    "policy_disclosure_window_description": "We ask researchers to allow up to 90 days for us to triage and remediate a reported issue before any public disclosure, unless a different coordinated date is agreed.",
+    "policy_disclosure_window_description": "Please report privately through the security overview and allow 90 days from the report for coordinated disclosure; the window ends early when a fix is released and may be extended by agreement.",
     "policy_in_scope_heading": "In Scope",
     "policy_in_scope_item_deployed": "This deployed instance and its public endpoints",
     "policy_in_scope_item_api": "The public API",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "Physical security testing",
     "policy_out_of_scope_item_third_party": "Third-party services we do not control",
     "policy_safe_harbor_heading": "Safe Harbor",
-    "policy_safe_harbor_description": "We will not pursue legal action against researchers who make a good-faith effort to comply with this policy, report vulnerabilities responsibly, and avoid privacy violations, data destruction, or service disruption.",
+    "policy_safe_harbor_description": "Good-faith research that follows this policy, avoids privacy violations and service disruption, accesses only what is needed to demonstrate the issue, and stops once demonstrated is authorized. No legal action will be taken for that research.",
     "policy_contact_prefix": "Questions about this policy can be sent via the",
     "policy_contact_suffix": " page.",
     "thanks_title": "Security Acknowledgments",
@@ -2186,6 +2241,8 @@
     "report_status_title": "Security Report Status",
     "report_status_tracking_id_label": "Tracking id:",
     "report_status_state_label": "Status:",
+    "report_status_comment_label": "Maintainer comment",
+    "report_status_disclosure_date_label": "Expected disclosure date",
     "report_status_state_received": "Received",
     "report_status_state_triaged": "Triaged",
     "report_status_state_confirmed": "Confirmed",
@@ -2232,6 +2289,7 @@
       "label_current_version": "Current version:",
       "label_new_version": "New version:",
       "label_release_date": "Release date:",
+      "label_channel": "Release channel:",
       "label_release_notes": "Release notes:",
       "label_view_update": "View update:",
       "manual_command": "Manual update command: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version}     {new_version}\n{label_release_date}    {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version}     {new_version}\n{label_channel}         {channel}\n{label_release_date}    {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "Update Installed - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "Update Failed - {app_name}",
         "body": "UPDATE FAILED\n\nFrom: {app_name} ({fqdn})\nTime: {timestamp}\n\nUpdate {version} could not be installed.\nReason: {error}\n\nThe previous version is still running.\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "Update Staged - {app_name}",
+        "body": "UPDATE STAGED\n\nFrom: {app_name} ({fqdn})\nTime: {timestamp}\n\nUpdate {version} has been verified and staged for installation.\n\nRestart the service to apply the update.\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3299,6 +3361,9 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
+      "valid_service_actions": "Valid actions: --install, --uninstall, start, stop, status, restart, reload, --disable",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",
@@ -3333,7 +3398,6 @@
       "failed_disable_service": "Failed to disable service: {error}",
       "service_disabled": "Service disabled successfully",
       "unknown_service_action": "Unknown service action: {action}",
-      "valid_service_actions": "Valid actions: --install, --uninstall, start, stop, status, restart, reload, --disable",
       "service_help": "Service management commands:\n  --install     Install, enable, and start the system service\n  --uninstall   Stop and remove the service and application data\n  start         Start the service\n  stop          Stop the service\n  status        Show service status\n  restart       Restart the service\n  reload        Reload service configuration\n  --disable     Stop the service and disable autostart\n\nUse --install to re-enable a disabled service."
     },
     "help": {

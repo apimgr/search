@@ -2,6 +2,7 @@
 # Build Stage - Compile Go binary (debug build, no strip)
 # =============================================================================
 FROM --platform=$BUILDPLATFORM casjaysdev/go:latest AS builder
+ENV CGO_ENABLED=0
 
 # Install git and bash (git: required for go mod download; bash: for build scripts)
 RUN apk add --no-cache git bash

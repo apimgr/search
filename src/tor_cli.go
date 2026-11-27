@@ -100,8 +100,10 @@ func runTor(args []string) {
 	}
 	args = filtered
 	if len(args) == 0 {
-		printTorHelp()
-		os.Exit(1)
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.tor.error", "error", "a Tor action is required"))
+		printTorHelpTo(os.Stderr)
+		exitFunc(2)
+		return
 	}
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		printTorHelp()
@@ -124,8 +126,10 @@ func runTor(args []string) {
 		runTorRegenerate(yes)
 	case "vanity":
 		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, serverCLITf("server_cli.tor.error", "error", "a vanity action is required"))
 			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.tor.usage_vanity"))
-			os.Exit(1)
+			exitFunc(2)
+			return
 		}
 		requireRunningServer()
 		switch args[1] {
@@ -133,7 +137,8 @@ func runTor(args []string) {
 			prefix, workers, err := parseTorVanityStartArgs(args[2:])
 			if err != nil {
 				fmt.Fprintln(os.Stderr, serverCLITf("server_cli.tor.error", "error", err))
-				os.Exit(2)
+				exitFunc(2)
+				return
 			}
 			runTorVanityStart(prefix, workers)
 		case "apply":
@@ -143,52 +148,69 @@ func runTor(args []string) {
 			}
 			if len(args) > 3 {
 				fmt.Fprintln(os.Stderr, serverCLIText("server_cli.tor.usage_vanity"))
-				os.Exit(2)
+				exitFunc(2)
+				return
 			}
 			runTorVanityApply(address, yes)
 		case "stop":
 			if len(args) > 2 {
 				fmt.Fprintln(os.Stderr, serverCLIText("server_cli.tor.usage_vanity_stop"))
-				os.Exit(2)
+				exitFunc(2)
+				return
 			}
 			runTorVanityStop()
 		default:
+			fmt.Fprintln(os.Stderr, serverCLITf("server_cli.tor.unknown_subcommand", "command", args[1]))
 			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.tor.usage_vanity"))
-			os.Exit(1)
+			exitFunc(2)
+			return
 		}
 	case "import-keys":
 		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, serverCLITf("server_cli.tor.error", "error", "a key directory path is required"))
 			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.tor.usage_import_keys"))
-			os.Exit(1)
+			exitFunc(2)
+			return
 		}
 		requireRunningServer()
 		if len(args) > 2 {
 			fmt.Fprintln(os.Stderr, serverCLIText("server_cli.tor.usage_import_keys"))
-			os.Exit(2)
+			exitFunc(2)
+			return
 		}
 		runTorImportKeys(args[1], yes)
 	case "--help", "-h", "help":
 		printTorHelp()
 	default:
 		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.tor.unknown_subcommand", "command", args[0]))
-		printTorHelp()
-		os.Exit(1)
+		printTorHelpTo(os.Stderr)
+		exitFunc(2)
 	}
 }
 
 // printTorHelp prints the tor subcommand usage table (AI.md PART 31).
 func printTorHelp() {
-	fmt.Println(serverCLIText("server_cli.tor.help_usage"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.tor.help_subcommands"))
-	fmt.Println(serverCLIText("server_cli.tor.help_status"))
-	fmt.Println(serverCLIText("server_cli.tor.help_validate"))
-	fmt.Println(serverCLIText("server_cli.tor.help_restart"))
-	fmt.Println(serverCLIText("server_cli.tor.help_regenerate"))
-	fmt.Println(serverCLIText("server_cli.tor.help_vanity_start"))
-	fmt.Println(serverCLIText("server_cli.tor.help_vanity_stop"))
-	fmt.Println(serverCLIText("server_cli.tor.help_vanity_apply"))
-	fmt.Println(serverCLIText("server_cli.tor.help_import_keys"))
+	printTorHelpTo(os.Stdout)
+}
+
+func printTorHelpTo(w io.Writer) {
+	for _, line := range []string{
+		serverCLIText("server_cli.tor.help_usage"),
+		"",
+		serverCLIText("server_cli.tor.help_subcommands"),
+		serverCLIText("server_cli.tor.help_status"),
+		serverCLIText("server_cli.tor.help_validate"),
+		serverCLIText("server_cli.tor.help_restart"),
+		serverCLIText("server_cli.tor.help_regenerate"),
+		serverCLIText("server_cli.tor.help_vanity_start"),
+		serverCLIText("server_cli.tor.help_vanity_stop"),
+		serverCLIText("server_cli.tor.help_vanity_apply"),
+		serverCLIText("server_cli.tor.help_import_keys"),
+	} {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return
+		}
+	}
 }
 
 // runTorStatus handles `search --maintenance tor status`, falling back to on-disk state

@@ -44,7 +44,8 @@
     "dismiss": "Ignorer",
     "upload": "Téléverser",
     "app_name": "Search",
-    "other": "Autre"
+    "other": "Autre",
+    "details": "Détails"
   },
   "auth": {
     "login": "Connexion",
@@ -300,6 +301,7 @@
       "expired": "Expiré",
       "revoked": "Révoqué",
       "primary_revealed": "Jeton principal affiché",
+      "primary_created": "Jeton principal créé",
       "primary_rotated": "Jeton principal renouvelé",
       "linked_created": "Jeton associé créé",
       "linked_revealed": "Jeton associé affiché",
@@ -309,7 +311,7 @@
       "expiry_90d": "90 jours",
       "expiry_1y": "1 an",
       "shown_once": "Affiché une seule fois lors du chargement de cette page.",
-      "primary_help": "Accès complet à vos alertes. Gardez ce jeton privé.",
+      "primary_help": "Accès complet à vos {resources}. Gardez ce jeton privé.",
       "name_help": "Par exemple : client MCP",
       "expiry_custom": "Date personnalisée",
       "custom_date": "Date personnalisée",
@@ -317,7 +319,7 @@
       "create": "Créer un jeton",
       "this_browser": "Ce navigateur",
       "saved_in_browser": "Le jeton propriétaire est enregistré dans ce navigateur.",
-      "forget_note": "Oublier ce navigateur supprime le cookie du jeton propriétaire enregistré. Vos alertes ne sont pas supprimées.",
+      "forget_note": "Oublier ce navigateur supprime le cookie du jeton propriétaire enregistré. Vos {resources} ne sont pas supprimées.",
       "forget_saved_token": "Oublier le jeton enregistré",
       "forget_confirm": "Oublier le jeton propriétaire enregistré dans ce navigateur ?",
       "no_linked_tokens": "Aucun jeton associé pour le moment.",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "Jeton propriétaire enregistré oublié",
       "linked_revoked": "Jeton associé révoqué",
       "linked_updated": "Jeton associé mis à jour",
-      "reveal": "Afficher le jeton"
+      "reveal": "Afficher le jeton",
+      "new_token": "Nouveau jeton",
+      "revoke_primary_heading": "Révoquer le jeton principal",
+      "revoke_primary_summary": "{linked_count} jetons associés et {resource_count} {resources} seront supprimés, y compris tout ce qui a été créé avec un jeton associé.",
+      "revoke_primary_button": "Révoquer le jeton principal et tout supprimer",
+      "revoke_primary_confirm": "Saisissez les 4 derniers caractères de votre jeton principal ({last4}) pour confirmer",
+      "primary_revoked": "Jeton principal révoqué"
     },
     "font_size": "Taille de police",
     "font_size_small": "Petit",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "De quoi s’agit-il ?",
     "message_label": "Message",
     "message_placeholder": "Votre message...",
-    "verification_question": "Vérification : combien font {a} + {b} ?",
+    "verification_question": "Vérification : combien font {a} {operator} {b} ?",
     "answer_placeholder": "Réponse",
     "send_message": "Envoyer le message",
     "security_description": "Vous consultez le formulaire de signalement de vulnérabilité en divulgation coordonnée. Veuillez fournir autant de détails que possible.",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "Cette adresse e-mail est correcte et il s’agit d’un véritable signalement, et non d’une publicité, d’une sollicitation ou d’un spam.",
     "form_scope_notice": "Ce formulaire est réservé aux signalements de sécurité, aux violations des conditions à une URL de ce site, aux avis DMCA et aux demandes de confidentialité. Il ne doit pas servir à demander de l’assistance, signaler des bogues, proposer des fonctionnalités ou poser des questions générales.",
     "honeypot_label": "Laissez ce champ vide",
-    "type_abuse": "Abus",
+    "type_abuse": "Signaler un abus",
     "type_dmca": "DMCA",
     "type_privacy": "Demande de confidentialité",
     "reported_url_label": "URL signalée",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "Pour signaler une vulnérabilité de sécurité, consultez notre",
     "abuse_reports_heading": "Signalements d’abus",
     "abuse_reports_intro": "Pour signaler un contenu abusif ou une violation des conditions, choisissez Abus ci-dessus. Pour envoyer un avis DMCA, choisissez DMCA ci-dessus.",
-    "abuse_reports_email": "ou écrivez à {email}"
+    "abuse_reports_email": "ou écrivez à {email}",
+    "captcha_label": "Vérification humaine",
+    "choose_type_heading": "Choisissez un type de signalement",
+    "form_details_heading": "Détails du signalement",
+    "purpose_heading": "Objet de ce formulaire",
+    "reported_url_help": "Une page de ce site, par exemple https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "Collecte de données",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "Agréger et afficher les résultats pour vous",
     "data_usage_item_preferences": "Mémoriser vos préférences (thème, langue)",
     "data_retention_heading": "Conservation des données",
+    "retention": {
+      "period": "Les ressources que vous créez sont conservées jusqu'à leur expiration ou jusqu'à ce que vous les supprimiez avec votre jeton propriétaire. Les préférences sont stockées uniquement dans les cookies de votre navigateur. Les journaux opérationnels sont conservés jusqu'à 30 jours. Les données analytiques anonymisées peuvent être conservées jusqu'à 12 mois."
+    },
     "data_retention_description": "Nous ne conservons ni les requêtes de recherche ni les données personnelles. Les données de session sont temporaires et sont supprimées lorsque vous fermez votre navigateur ou lorsque votre session expire.",
     "third_parties_heading": "Tiers",
     "third_parties_description": "Vos requêtes de recherche sont transmises aux moteurs de recherche en amont afin de récupérer des résultats. Nous ne partageons aucune autre donnée avec des tiers.",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "Les données analytiques peuvent être partagées ou vendues à des partenaires tiers comme décrit dans cette politique.",
     "analytics_provider": "L'analytique est fournie via {provider}.",
     "analytics_none": "Aucun fournisseur d'analyse tiers n'est configuré.",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "Stockage et partage des données",
     "data_storage_intro": "Toutes les données que nous détenons sont stockées en toute sécurité et conservées uniquement le temps nécessaire.",
     "data_storage_never_sold": "Nous ne partageons ni ne vendons les données stockées à des tiers au-delà de ce qui est nécessaire pour fournir les résultats de recherche.",
@@ -1645,6 +1669,12 @@
     "last_updated": "Dernière mise à jour : {date}",
     "acceptance_heading": "1. Acceptation des conditions",
     "acceptance_description": "En accédant à {app_name} (\"the Service\") ou en l'utilisant, vous acceptez d'être lié par les présentes conditions d'utilisation. Si vous n'acceptez pas ces conditions, veuillez ne pas utiliser le Service.",
+    "governing_law_description": "Le droit des États-Unis s’applique, sans égard aux règles de conflit de lois, sauf si les conditions propres de l’opérateur désignent une autre juridiction.",
+    "governing_law_heading": "Droit applicable",
+    "liability_description": "Le service est fourni en l’état, sans garantie d’aucune sorte. Dans les limites autorisées par la loi, l’opérateur n’est pas responsable des pertes liées à son utilisation.",
+    "liability_heading": "Responsabilité",
+    "acceptable_use_description": "N’utilisez pas le service illégalement, ne portez pas atteinte à autrui, ne contournez pas les limites de débit ou les contrôles d’accès et ne testez pas au-delà de la politique de sécurité sur /server/security/policy.",
+    "acceptable_use_heading": "Utilisation acceptable",
     "description_heading": "2. Description du service",
     "description_body": "{app_name} est un métamoteur de recherche respectueux de la vie privée qui agrège des résultats provenant de plusieurs moteurs de recherche. Le Service est fourni \"as is\" sans aucune garantie.",
     "user_conduct_heading": "3. Comportement de l'utilisateur",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. Modifications du service",
     "modifications_description": "Nous nous réservons le droit de modifier, suspendre ou interrompre le Service à tout moment et sans préavis. Nous ne serons pas responsables envers vous ou tout tiers de toute modification, suspension ou interruption.",
-    "changes_heading": "10. Modifications des conditions",
-    "changes_description": "Nous pouvons mettre à jour les présentes conditions d'utilisation de temps à autre. Nous informerons les utilisateurs de toute modification importante en mettant à jour la date \"Last updated\". Le fait de continuer à utiliser le Service après des modifications constitue une acceptation des nouvelles conditions.",
+    "changes_heading": "Modifications",
+    "changes_description": "Ces conditions peuvent être modifiées. Le texte actuel de cette page s’applique dès sa publication.",
     "contact_prefix": "Si vous avez des questions sur les présentes conditions d'utilisation, veuillez ",
     "contact_suffix": "."
   },
   "help": {
+    "i2p": {
+      "heading": "Accès I2P",
+      "intro": "Cette application est disponible sous forme d’eepsite I2P pour une meilleure confidentialité.",
+      "address_heading": "Adresse I2P",
+      "how_to_heading": "Comment se connecter",
+      "step_install": "Installez",
+      "step_or": "ou",
+      "step_connect": "et attendez sa connexion au réseau.",
+      "step_proxy": "Configurez votre navigateur pour utiliser le proxy HTTP I2P à",
+      "step_address": "Copiez l’adresse .b32.i2p ci-dessus et collez-la dans la barre d’adresse de votre navigateur.",
+      "note": "I2P offre davantage de confidentialité en acheminant votre connexion par le réseau. Les eepsites sont servis en http:// ; le tunnel I2P chiffre le transport, aucun certificat TLS n’est donc utilisé."
+    },
+    "troubleshooting": {
+      "heading": "Dépannage",
+      "search": "Essayez une requête plus large ou supprimez les opérateurs ; un moteur sélectionné peut ne rien trouver. Si un moteur est temporairement indisponible, réessayez plus tard.",
+      "access": "Si la section Tor est absente, vérifiez avec search --maintenance tor status que le service fonctionne et qu’une adresse onion est publiée. Si I2P est absent, demandez à l’opérateur de vérifier le fournisseur et l’adresse publiée.",
+      "alerts": "Si un lien de gestion d’alerte ne s’ouvre pas, utilisez le lien complet du message de confirmation ; le jeton peut être invalide ou l’alerte supprimée. Corrigez le champ indiqué dans l’erreur et renvoyez le formulaire."
+    },
     "page_title": "Aide",
     "title": "Aide et documentation",
     "subtitle": "Apprenez à tirer le meilleur parti de {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "Plus d'informations",
     "policy_title": "Politique de divulgation",
     "policy_scope_heading": "Périmètre",
-    "policy_scope_description": "Cette politique s'applique à cette instance déployée et aux services qu'elle expose.",
+    "policy_scope_description": "L’application servie sur {fqdn}, y compris son API, entre dans le périmètre.",
+    "policy_reporting_description": "Veuillez signaler les problèmes en privé via la page de sécurité.",
+    "policy_reporting_heading": "Signalement",
+    "policy_out_of_scope_item_headers": "Absence d’en-têtes recommandés sur les pages non sensibles",
+    "policy_out_of_scope_item_scanner": "Résultats de scanners automatisés sans impact démontré",
+    "policy_in_scope_item_i2p": "Adresse I2P : {address}",
+    "policy_in_scope_item_tor": "Adresse Tor : {address}",
+    "policy_in_scope_item_host": "Autre hôte configuré : {host}",
     "policy_disclosure_window_heading": "Fenêtre de divulgation coordonnée",
-    "policy_disclosure_window_description": "Nous demandons aux chercheurs de nous laisser jusqu'à 90 jours pour évaluer et corriger un problème signalé avant toute divulgation publique, sauf accord sur une autre date coordonnée.",
+    "policy_disclosure_window_description": "Veuillez signaler les problèmes en privé via la page de sécurité et accorder 90 jours à compter du signalement pour une divulgation coordonnée ; ce délai prend fin plus tôt à la publication d’un correctif et peut être prolongé d’un commun accord.",
     "policy_in_scope_heading": "Dans le périmètre",
     "policy_in_scope_item_deployed": "Cette instance déployée et ses points de terminaison publics",
     "policy_in_scope_item_api": "L'API publique",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "Tests de sécurité physique",
     "policy_out_of_scope_item_third_party": "Services tiers que nous ne contrôlons pas",
     "policy_safe_harbor_heading": "Zone de non-poursuite",
-    "policy_safe_harbor_description": "Nous n'engagerons pas de poursuites judiciaires contre les chercheurs qui font un effort de bonne foi pour respecter cette politique, signalent les vulnérabilités de manière responsable et évitent toute atteinte à la vie privée, destruction de données ou interruption de service.",
+    "policy_safe_harbor_description": "Les recherches de bonne foi qui respectent cette politique, évitent les atteintes à la vie privée et les interruptions de service, n’accèdent qu’au nécessaire pour démontrer le problème et s’arrêtent après cette démonstration sont autorisées. Aucune action en justice ne sera engagée pour ces recherches.",
     "policy_contact_prefix": "Les questions relatives à cette politique peuvent être envoyées via la page",
     "policy_contact_suffix": ".",
     "thanks_title": "Remerciements sécurité",
@@ -2186,6 +2241,8 @@
     "report_status_title": "Statut du signalement de sécurité",
     "report_status_tracking_id_label": "Identifiant de suivi :",
     "report_status_state_label": "Statut :",
+    "report_status_comment_label": "Commentaire de la maintenance",
+    "report_status_disclosure_date_label": "Date de divulgation prévue",
     "report_status_state_received": "Reçu",
     "report_status_state_triaged": "Trié",
     "report_status_state_confirmed": "Confirmé",
@@ -2232,6 +2289,7 @@
       "label_current_version": "Version actuelle :",
       "label_new_version": "Nouvelle version :",
       "label_release_date": "Date de sortie :",
+      "label_channel": "Canal de publication :",
       "label_release_notes": "Notes de version :",
       "label_view_update": "Voir la mise à jour :",
       "manual_command": "Commande de mise à jour manuelle : {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "Mise à jour installée - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "Échec de la mise à jour - {app_name}",
         "body": "ÉCHEC DE LA MISE À JOUR\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nLa mise à jour {version} n’a pas pu être installée.\nMotif : {error}\n\nLa version précédente reste en cours d’exécution.\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "Mise à jour prête - {app_name}",
+        "body": "MISE À JOUR PRÊTE\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nLa mise à jour {version} a été vérifiée et préparée pour installation.\n\nRedémarrez le service pour appliquer la mise à jour.\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

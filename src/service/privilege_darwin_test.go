@@ -3,6 +3,7 @@
 package service
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -27,6 +28,25 @@ func TestFindAvailableMacOSSystemID(t *testing.T) {
 	// ID should be in valid range (200-399)
 	if id < 200 || id >= 400 {
 		t.Errorf("ID %d not in range 200-399", id)
+	}
+}
+
+func TestParseMacOSAccountIDsIncludesUserAndGroupIDs(t *testing.T) {
+	got := parseMacOSAccountIDs("_legacy 398\nsearch 397\n", "_legacy 396\nsearch 395\n")
+	want := map[int]bool{395: true, 396: true, 397: true, 398: true}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseMacOSAccountIDs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestMacOSAccountDeleteCommandsUseCanonicalName(t *testing.T) {
+	got := macOSAccountDeleteCommands("search")
+	want := [][]string{
+		{"dscl", ".", "-delete", "/Users/search"},
+		{"dscl", ".", "-delete", "/Groups/search"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("macOSAccountDeleteCommands() = %#v, want %#v", got, want)
 	}
 }
 

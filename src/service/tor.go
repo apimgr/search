@@ -112,6 +112,12 @@ func NewTorService(cfg *config.Config) *TorService {
 	}
 }
 
+// Available reports whether a Tor binary can be discovered using the configured
+// path, PATH, or the standard installation locations.
+func (t *TorService) Available() bool {
+	return t != nil && t.config != nil && findTorBinary(t.config.Server.Tor.Binary) != ""
+}
+
 // ensureTorDirs creates all required Tor directories with proper permissions
 // Per AI.md PART 31: Server binary owns all Tor files
 func (t *TorService) ensureTorDirs() error {

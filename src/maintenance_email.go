@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -12,16 +13,20 @@ import (
 )
 
 func runMaintenanceEmail(action string, args []string) {
+	if action == "" || action == "help" || action == "--help" {
+		printMaintenanceEmailHelp()
+		return
+	}
 	if action != "test" {
 		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.unknown_email_action", "action", action))
-		printMaintenanceEmailHelp()
+		printMaintenanceEmailHelpTo(os.Stderr)
 		exitFunc(2)
 		return
 	}
 	dryRun, to, err := parseMaintenanceEmailArgs(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.error", "error", err))
-		printMaintenanceEmailHelp()
+		printMaintenanceEmailHelpTo(os.Stderr)
 		exitFunc(2)
 		return
 	}
@@ -126,6 +131,16 @@ func errString(err error) string {
 }
 
 func printMaintenanceEmailHelp() {
-	fmt.Println(serverCLIText("server_cli.maintenance.email_help_usage"))
-	fmt.Println(serverCLIText("server_cli.maintenance.email_help_description"))
+	printMaintenanceEmailHelpTo(os.Stdout)
+}
+
+func printMaintenanceEmailHelpTo(w io.Writer) {
+	for _, line := range []string{
+		serverCLIText("server_cli.maintenance.email_help_usage"),
+		serverCLIText("server_cli.maintenance.email_help_description"),
+	} {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return
+		}
+	}
 }

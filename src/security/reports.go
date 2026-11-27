@@ -97,7 +97,7 @@ func StorePreviousEncryptionKey(ctx context.Context, db *database.DB, currentKey
 	table := database.ServerTableName(db, "app_secrets")
 	return db.Write(ctx, func(tx *sql.Tx) error {
 		for _, item := range []struct{ name, value string }{{database.SecretEncryptionKeyPrevious, wrapped}, {database.SecretEncryptionKeyPreviousUntil, expires}} {
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (name,value,created_at,rotated_at) VALUES (?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(name) DO UPDATE SET value=excluded.value,rotated_at=CURRENT_TIMESTAMP`, table), item.name, item.value); err != nil {
+			if _, err := database.ExecContext(ctx, tx, fmt.Sprintf(`INSERT INTO %s (name,value,created_at,rotated_at) VALUES (?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(name) DO UPDATE SET value=excluded.value,rotated_at=CURRENT_TIMESTAMP`, table), item.name, item.value); err != nil {
 				return fmt.Errorf("store %s: %w", item.name, err)
 			}
 		}
@@ -121,7 +121,7 @@ func ReencryptAESReportData(ctx context.Context, db *database.DB, currentKey, pr
 			alg           string
 		}
 		err := db.Write(ctx, func(tx *sql.Tx) error {
-			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`SELECT tracking_id,body_enc,body_alg,contact_enc FROM %s WHERE tracking_id>? AND (body_alg=? OR contact_enc IS NOT NULL) ORDER BY tracking_id LIMIT 500`, table), cursor, EncryptionMethodAESGCM)
+			rows, err := database.QueryContext(ctx, tx, database.TimeoutBulk, fmt.Sprintf(`SELECT tracking_id,body_enc,body_alg,contact_enc FROM %s WHERE tracking_id>? AND (body_alg=? OR contact_enc IS NOT NULL) ORDER BY tracking_id LIMIT 500`, table), cursor, EncryptionMethodAESGCM)
 			if err != nil {
 				return err
 			}
@@ -189,7 +189,7 @@ func ReencryptAESReportData(ctx context.Context, db *database.DB, currentKey, pr
 				if bytes.Equal(body, item.body) && bytes.Equal(contact, item.contact) {
 					continue
 				}
-				result, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET body_enc=?,contact_enc=?,updated_at=CURRENT_TIMESTAMP WHERE tracking_id=? AND body_enc=? AND COALESCE(contact_enc,X'')=COALESCE(?,X'')", table), body, nullableReportCipher(contact), item.id, item.body, nullableReportCipher(item.contact))
+				result, err := database.ExecContext(ctx, tx, fmt.Sprintf("UPDATE %s SET body_enc=?,contact_enc=?,updated_at=CURRENT_TIMESTAMP WHERE tracking_id=? AND body_enc=? AND COALESCE(contact_enc,X'')=COALESCE(?,X'')", table), body, nullableReportCipher(contact), item.id, item.body, nullableReportCipher(item.contact))
 				if err != nil {
 					return fmt.Errorf("update security report %s: %w", item.id, err)
 				}
@@ -229,7 +229,7 @@ func MigrateLegacyReportPlaintext(ctx context.Context, db *database.DB, encrypti
 	}
 	table := database.ServerTableName(db, "security_reports")
 	columns := map[string]bool{}
-	rows, err := db.Query(ctx, "PRAGMA table_info("+table+")")
+	rows, err := db.QueryWithTimeout(ctx, database.TimeoutMigration, "PRAGMA table_info("+table+")")
 	if err != nil {
 		return 0, err
 	}
@@ -269,7 +269,7 @@ func MigrateLegacyReportPlaintext(ctx context.Context, db *database.DB, encrypti
 			legacyBodyCondition = "(encrypted_body IS NOT NULL AND body_enc = encrypted_body)"
 		}
 		query := fmt.Sprintf("SELECT tracking_id,body_enc,body_alg,%s,%s FROM %s WHERE COALESCE(%s,'')<>'' OR COALESCE(%s,'')<>'' OR %s", legacyExpr("summary"), legacyExpr("affected_endpoint"), table, legacyExpr("summary"), legacyExpr("affected_endpoint"), legacyBodyCondition)
-		rows, err := tx.QueryContext(ctx, query)
+		rows, err := database.QueryContext(ctx, tx, database.TimeoutMigration, query)
 		if err != nil {
 			return err
 		}
@@ -375,7 +375,7 @@ func MigrateLegacyReportPlaintext(ctx context.Context, db *database.DB, encrypti
 			if columns["encryption_method"] {
 				clearSQL += ", encryption_method = ''"
 			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET body_enc=?,body_alg=?,contact_enc=COALESCE(contact_enc,?),updated_at=CURRENT_TIMESTAMP%s WHERE tracking_id=?", table, clearSQL), []byte(encrypted), algorithm, contactCipher, r.id); err != nil {
+			if _, err := database.ExecContext(ctx, tx, fmt.Sprintf("UPDATE %s SET body_enc=?,body_alg=?,contact_enc=COALESCE(contact_enc,?),updated_at=CURRENT_TIMESTAMP%s WHERE tracking_id=?", table, clearSQL), []byte(encrypted), algorithm, contactCipher, r.id); err != nil {
 				return fmt.Errorf("migrate legacy report %s: %w", r.id, err)
 			}
 			migrated++
@@ -398,7 +398,7 @@ func MigrateSecurityThanks(ctx context.Context, db *database.DB) (int, error) {
 	thanks := database.ServerTableName(db, "security_thanks")
 	inserted := 0
 	err := db.Write(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, fmt.Sprintf(`SELECT r.tracking_id,r.credit_pref,r.credit_name,r.severity,COALESCE(date(r.closed_at),date(r.created_at),date('now'))
+		rows, err := database.QueryContext(ctx, tx, database.TimeoutReport, fmt.Sprintf(`SELECT r.tracking_id,r.credit_pref,r.credit_name,r.severity,COALESCE(date(r.closed_at),date(r.created_at),date('now'))
 			FROM %s r LEFT JOIN %s t ON t.tracking_id=r.tracking_id
 			WHERE r.status='disclosed' AND r.credit_pref<>'no' AND t.tracking_id IS NULL
 			ORDER BY COALESCE(r.closed_at,r.created_at),r.tracking_id`, reports, thanks))
@@ -425,7 +425,7 @@ func MigrateSecurityThanks(ctx context.Context, db *database.DB) (int, error) {
 			if item.pref == "anon" {
 				var count int
 				countQuery := "SELECT COUNT(*) FROM " + thanks + " WHERE credit LIKE 'Anonymous Researcher #%'"
-				if err := tx.QueryRowContext(ctx, countQuery).Scan(&count); err != nil {
+				if err := database.QueryRowContext(ctx, tx, database.TimeoutReport, countQuery).Scan(&count); err != nil {
 					return err
 				}
 				credit = fmt.Sprintf("Anonymous Researcher #%d", count+1)
@@ -433,7 +433,7 @@ func MigrateSecurityThanks(ctx context.Context, db *database.DB) (int, error) {
 			if credit == "" {
 				continue
 			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (tracking_id,credit,severity,disclosed_on) VALUES (?,?,?,?) ON CONFLICT(tracking_id) DO NOTHING", thanks), item.id, credit, item.severity, item.date); err != nil {
+			if _, err := database.ExecContext(ctx, tx, fmt.Sprintf("INSERT INTO %s (tracking_id,credit,severity,disclosed_on) VALUES (?,?,?,?) ON CONFLICT(tracking_id) DO NOTHING", thanks), item.id, credit, item.severity, item.date); err != nil {
 				return err
 			}
 			inserted++
@@ -548,7 +548,7 @@ func InsertReport(ctx context.Context, db *database.DB, report Report) error {
 // and is intentionally untouched.
 func ReencryptPGPReportBodiesTx(ctx context.Context, tx *sql.Tx, db *database.DB, oldKey *crypto.Key, newPublic string) (int, error) {
 	table := database.ServerTableName(db, "security_reports")
-	rows, err := tx.QueryContext(ctx, fmt.Sprintf("SELECT tracking_id, body_enc FROM %s WHERE body_alg = ?", table), EncryptionMethodPGP)
+	rows, err := database.QueryContext(ctx, tx, database.TimeoutBulk, fmt.Sprintf("SELECT tracking_id, body_enc FROM %s WHERE body_alg = ?", table), EncryptionMethodPGP)
 	if err != nil {
 		return 0, fmt.Errorf("select PGP security report bodies: %w", err)
 	}
@@ -581,7 +581,7 @@ func ReencryptPGPReportBodiesTx(ctx context.Context, tx *sql.Tx, db *database.DB
 	}
 	for _, item := range updates {
 		query := fmt.Sprintf("UPDATE %s SET body_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE tracking_id = ? AND body_alg = ?", table)
-		if _, err := tx.ExecContext(ctx, query, []byte(item.body), item.trackingID, EncryptionMethodPGP); err != nil {
+		if _, err := database.ExecContext(ctx, tx, query, []byte(item.body), item.trackingID, EncryptionMethodPGP); err != nil {
 			return 0, fmt.Errorf("update PGP security report %s: %w", item.trackingID, err)
 		}
 	}
@@ -593,6 +593,8 @@ func ReencryptPGPReportBodiesTx(ctx context.Context, tx *sql.Tx, db *database.DB
 type ReportStatus struct {
 	TrackingID      string
 	Status          string
+	ResearcherComment string
+	DisclosureDate string
 	ReportTokenHash string
 	ClosedAt        *time.Time
 	LastAccessDate  string
@@ -603,12 +605,12 @@ type ReportStatus struct {
 // Returns (nil, nil) if no report exists with that tracking id.
 func LookupReportStatus(ctx context.Context, db *database.DB, trackingID string) (*ReportStatus, error) {
 	table := database.ServerTableName(db, "security_reports")
-	query := fmt.Sprintf("SELECT tracking_id, status, token_hash, closed_at, token_last_used FROM %s WHERE tracking_id = ?", table)
+	query := fmt.Sprintf("SELECT tracking_id, status, COALESCE(researcher_comment, ''), COALESCE(disclosure_date, ''), token_hash, closed_at, token_last_used FROM %s WHERE tracking_id = ?", table)
 	row := db.QueryRow(ctx, query, trackingID)
 
 	var status ReportStatus
 	var closedAt, lastAccessDate *string
-	if err := row.Scan(&status.TrackingID, &status.Status, &status.ReportTokenHash, &closedAt, &lastAccessDate); err != nil {
+	if err := row.Scan(&status.TrackingID, &status.Status, &status.ResearcherComment, &status.DisclosureDate, &status.ReportTokenHash, &closedAt, &lastAccessDate); err != nil {
 		return nil, err
 	}
 	if lastAccessDate != nil {
@@ -654,7 +656,7 @@ func DeleteClosedReportsBefore(ctx context.Context, db *database.DB, cutoff time
 		var deleted int64
 		err := db.Write(ctx, func(tx *sql.Tx) error {
 			query := fmt.Sprintf("DELETE FROM %s WHERE tracking_id IN (SELECT tracking_id FROM %s WHERE closed_at IS NOT NULL AND datetime(closed_at) < datetime(?) ORDER BY closed_at LIMIT 500)", table, table)
-			result, err := tx.ExecContext(ctx, query, cutoff.UTC().Format(time.RFC3339))
+			result, err := database.ExecContext(ctx, tx, query, cutoff.UTC().Format(time.RFC3339))
 			if err != nil {
 				return fmt.Errorf("delete expired security reports: %w", err)
 			}

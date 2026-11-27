@@ -56,7 +56,7 @@ func Launch(client *api.Client) error {
 	}
 	values := make([]state.Signal[string], maxArguments)
 	labels := make([]state.Signal[string], maxArguments)
-	fields := make([]*primitives.BoxWidget, 0, len(values))
+	fields := make([]widget.Widget, 0, len(values))
 	for i := range values {
 		values[i] = state.NewSignal("")
 		labels[i] = state.NewSignal("")
@@ -88,7 +88,7 @@ func Launch(client *api.Client) error {
 		}
 		status.Set(surface.DescriptionText(command))
 	}
-	menuItems := make([]*primitives.BoxWidget, 0, len(commands))
+	menuItems := make([]widget.Widget, 0, len(commands))
 	for i, command := range commands {
 		index := i
 		menuItems = append(menuItems, primitives.Box(button.New(

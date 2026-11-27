@@ -1,5 +1,5 @@
 # Config Rules (PART 5, 6, 12)
-<!-- Synchronized with AI.md revision 59c37d25e582. -->
+<!-- Synchronized with AI.md revision c2f65bf274b5. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -23,7 +23,8 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 - Hot-reload safe settings via the config file watcher (`src/config/config.go`)
 - Document clearly which settings require a restart
 - Default to production mode; normalize `prod`/`production` and `dev`/`development`
-- Keep every server setting in `server.yml` (PART 12), including Valkey/Redis when used
+- Keep operator configuration file-based across `server.yml`, the ordered `yaml.d/` area files, and `secrets.yml`; store credentials only in `secrets.yml`, never in the database or a runtime config API
+- Keep every server setting in its owning `server.yml` or `yaml.d/` area, including Valkey/Redis when used; hot-reload `server.yml`, `yaml.d/`, `secrets.yml`, and watched assets
 - Use the canonical contact recipient keys only; Tor responses use `server.tor.contact_email`, and test-email recipient defaults to `server.notifications.email.reply_to`
 - Normalize paths and validate all configured values before they are used; persisted port selection is 64000–64999 when the server chooses a first-run port
 - Trust forwarded host/proto/IP headers only from configured trusted proxies; arbitrary clients cannot supply trusted proxy identity
@@ -59,7 +60,7 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 |-------|--------|-----------|
 | 1 | CLI flags | everything |
 | 2 | Explicitly documented environment variable names | file, defaults |
-| 3 | `server.yml` | defaults |
+| 3 | `server.yml` + ordered `yaml.d/` area files + `secrets.yml` | defaults |
 | 4 | Built-in defaults | — |
 
 - Mode dispatch: `src/mode/mode.go`, `src/config/env.go`

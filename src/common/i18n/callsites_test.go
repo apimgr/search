@@ -118,6 +118,7 @@ func TestOwnerTokenTranslationsExistInEveryLocale(t *testing.T) {
 		"preferences.owner_tokens.restore_owner",
 		"preferences.owner_tokens.revoke_linked_confirm",
 		"preferences.owner_tokens.primary_revealed",
+		"preferences.owner_tokens.primary_created",
 		"preferences.owner_tokens.primary_rotated",
 		"preferences.owner_tokens.linked_created",
 		"preferences.owner_tokens.linked_revealed",
@@ -148,8 +149,11 @@ func TestOwnerTokenTranslationsExistInEveryLocale(t *testing.T) {
 		translations := make(map[string]string)
 		flattenTranslations("", raw, translations)
 		for _, key := range keys {
-			if _, ok := translations[key]; !ok {
+			value, ok := translations[key]
+			if !ok {
 				t.Errorf("%s: missing owner-token translation %q", locale.Name(), key)
+			} else if locale.Name() != "en.json" && value == key {
+				t.Errorf("%s: owner-token translation %q is untranslated", locale.Name(), key)
 			}
 		}
 	}

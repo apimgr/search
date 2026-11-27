@@ -1,6 +1,7 @@
 {{define "widgets"}}
 {{if and .WidgetsEnabled (gt (len .EnabledWidgets) 0)}}
-<section class="widgets-section">
+<section class="section-card" aria-labelledby="homepage-widgets-heading">
+    <h2 id="homepage-widgets-heading">{{t "preferences.homepage_widgets_heading"}}</h2>
     <div class="widget-grid" id="widget-grid">
         {{range .EnabledWidgets}}
         <div class="widget widget-{{.}}" data-widget="{{.}}" data-loaded="false" draggable="true">

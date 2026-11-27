@@ -52,15 +52,15 @@ pipeline {
             steps {
                 script {
                     // Determine build type and version
-                    if (env.TAG_NAME) {
+                    if (env.TAG_NAME && env.TAG_NAME ==~ /^\d{14}-beta$/) {
+                        // Beta identity is the pushed YYYYMMDDHHMMSS-beta tag.
+                        env.BUILD_TYPE = 'beta'
+                        env.VERSION = env.TAG_NAME
+                    } else if (env.TAG_NAME) {
                         // Release build (tag push) - matches release.yml
                         env.BUILD_TYPE = 'release'
                         env.VERSION = env.TAG_NAME.replaceFirst('^v', '')
-                    } else if (env.BRANCH_NAME == 'beta') {
-                        // Beta build - matches beta.yml
-                        env.BUILD_TYPE = 'beta'
-                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
-                    } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+                    } else if (env.BRANCH_NAME == 'main') {
                         // Devel build - matches devel.yml
                         // Devel identity is the commit being built, not a timestamp
                         env.BUILD_TYPE = 'devel'
@@ -418,18 +418,140 @@ pipeline {
             }
         }
 
+        // The GUI has separate artifacts because goffi loads platform graphics libraries at runtime.
+        // Keep it out of the static CLI and omit BSD, where the windowing layer is unavailable.
+        stage('Build GUI client') {
+            when {
+                expression { env.HAS_CLI == 'true' && fileExists('src/client/gui') }
+            }
+            parallel {
+                stage('GUI Linux AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=linux \
+                                -e GOARCH=amd64 \
+                                casjaysdev/go:latest \
+                                go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-gui-linux-amd64 ./src/client
+                        '''
+                    }
+                }
+                stage('GUI Linux ARM64') {
+                    agent { label 'arm64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=linux \
+                                -e GOARCH=arm64 \
+                                casjaysdev/go:latest \
+                                go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-gui-linux-arm64 ./src/client
+                        '''
+                    }
+                }
+                stage('GUI Darwin AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=darwin \
+                                -e GOARCH=amd64 \
+                                casjaysdev/go:latest \
+                                go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-gui-darwin-amd64 ./src/client
+                        '''
+                    }
+                }
+                stage('GUI Darwin ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=darwin \
+                                -e GOARCH=arm64 \
+                                casjaysdev/go:latest \
+                                go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-gui-darwin-arm64 ./src/client
+                        '''
+                    }
+                }
+                stage('GUI Windows AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=windows \
+                                -e GOARCH=amd64 \
+                                casjaysdev/go:latest \
+                                go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-gui-windows-amd64.exe ./src/client
+                        '''
+                    }
+                }
+                stage('GUI Windows ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=windows \
+                                -e GOARCH=arm64 \
+                                casjaysdev/go:latest \
+                                go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-gui-windows-arm64.exe ./src/client
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Test') {
             agent { label 'amd64' }
             steps {
                 sh '''
-                    docker run --rm \
-                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                    mkdir -p "/tmp/${PROJECT_ORG}"
+                    COVDIR=$(mktemp -d "/tmp/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
+                    trap 'rm -rf "$COVDIR"' EXIT
+                    docker run --rm --user 0:0 \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \\n' | cut -c1-8)" \
                         -v ${WORKSPACE}:/app \
+                        -v "$COVDIR":/cov \
                         -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                         -v ${GO_BUILD}:/usr/local/share/go/cache \
                         -w /app \
                         casjaysdev/go:latest \
-                        go test -v -cover ./...
+                        sh -c 'mkdir -p /cov/data && go test -v -cover ./... -args -test.gocoverdir=/cov/data && go tool covdata textfmt -i=/cov/data -o=/cov/coverage.out && PCT=$(go tool cover -func=/cov/coverage.out | awk "/^total:/ {gsub(\"%\",\"\",\$3); print int(\$3)}") && echo "Coverage: ${PCT}% (threshold: 60%)" && [ "$PCT" -ge 60 ]'
                 '''
             }
         }
@@ -442,10 +564,10 @@ pipeline {
                     steps {
                         sh '''
                             if [ "${SECRET_SCAN_FULL_HISTORY}" = "true" ]; then
-                                docker run --rm -v ${WORKSPACE}:/repo -w /repo trufflesecurity/trufflehog:latest \
+                                docker run --rm -v ${WORKSPACE}:/repo -w /repo trufflesecurity/trufflehog:latest@sha256:9c7a8325d43a4af2960d3f21d61a08981d8a1bf0542e007efa2e47097e386452 \
                                     git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
                             else
-                                docker run --rm -v ${WORKSPACE}:/repo -w /repo trufflesecurity/trufflehog:latest \
+                                docker run --rm -v ${WORKSPACE}:/repo -w /repo trufflesecurity/trufflehog:latest@sha256:9c7a8325d43a4af2960d3f21d61a08981d8a1bf0542e007efa2e47097e386452 \
                                     git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
                             fi
                         '''
@@ -475,6 +597,22 @@ pipeline {
                         '''
                     }
                 }
+                stage('License check') {
+                    when { expression { fileExists('go.mod') } }
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm --no-healthcheck --user 0:0 \
+                                --name "${PROJECT_NAME}-$(head -c4 /dev/urandom | od -An -tx1 | tr -d '[:space:]')" \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                casjaysdev/go:latest \
+                                bash scripts/verify-licenses.sh
+                        '''
+                    }
+                }
                 stage('Image scan') {
                     when { expression { fileExists('docker/Dockerfile') } }
                     agent { label 'amd64' }
@@ -482,7 +620,7 @@ pipeline {
                         sh '''
                             docker build -t local/scan-target:ci -f docker/Dockerfile .
                             bash tests/docker-image-check.sh local/scan-target:ci
-                            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+                            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
                                 image --exit-code 1 --severity CRITICAL,HIGH local/scan-target:ci
                         '''
                     }
@@ -535,7 +673,7 @@ pipeline {
             }
         }
 
-        // Beta Release - matches beta.yml (beta branch only)
+        // Beta Release - matches beta.yml (*-beta tag only)
         stage('Release: Beta') {
             agent { label 'amd64' }
             when {
@@ -575,7 +713,7 @@ pipeline {
             }
         }
 
-        // Devel Release - matches devel.yml (main/master + scheduled)
+        // Devel Release - matches devel.yml (main + scheduled)
         stage('Release: Devel') {
             agent { label 'amd64' }
             when {
@@ -695,15 +833,15 @@ pipeline {
             }
         }
 
-        // Docker Devel - matches docker.yml build-devel job (main/master push + daily cron, never the main Docker stage)
+        // Docker Devel - matches docker.yml build-devel job (main push + daily cron, never the main Docker stage)
         stage('Docker: Devel') {
             agent { label 'amd64' }
             when {
-                anyOf { branch 'main'; branch 'master' }
+                branch 'main'
             }
             steps {
                 script {
-                    // Runs on every push to main/master (this pipeline's global cron trigger above
+                    // Runs on every push to main (this pipeline's global cron trigger above
                     // also fires it devel) and always builds Dockerfile.dev with a
                     // single static :devel tag - MODE=development is baked into
                     // Dockerfile.dev via ENV, no extra build-arg needed here.

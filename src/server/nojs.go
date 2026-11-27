@@ -116,8 +116,12 @@ func (s *Server) renderNoJSSearch(w http.ResponseWriter, r *http.Request, data *
 	}
 
 	if len(results) == 0 {
-		noResultsMsg := im.T(lang, "search.no_results_found")
-		b.WriteString(`<p class="no-results">` + html.EscapeString(noResultsMsg) + `</p>` + "\n")
+		noResultsMsg := im.Tf(lang, "search.no_results_for", "query", data.Query)
+		b.WriteString(`<div class="empty-state">` + "\n")
+		b.WriteString(`<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>` + "\n")
+		b.WriteString(`<h2 class="empty-state-title">` + html.EscapeString(noResultsMsg) + `</h2>` + "\n")
+		b.WriteString(`<p class="empty-state-message">` + html.EscapeString(im.T(lang, "search.no_results_hint")) + `</p>` + "\n")
+		b.WriteString(`<a class="btn btn-secondary" href="/search?q=` + html.EscapeString(url.QueryEscape(data.Query)) + `">` + html.EscapeString(im.T(lang, "common.clear")) + `</a>` + "\n</div>\n")
 	} else {
 		b.WriteString("<ol class=\"results\">\n")
 		for _, result := range results {

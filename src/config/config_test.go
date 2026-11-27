@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"encoding/base64"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,8 +11,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apimgr/search/src/version"
 	"gopkg.in/yaml.v3"
 )
+
+func TestSetBuildInfoSynchronizesRuntimeMetadata(t *testing.T) {
+	previous := []string{Version, CommitID, BuildEpoch, BuildDate, OfficialSite, version.Version, version.CommitID, version.BuildEpoch, version.BuildDate}
+	t.Cleanup(func() {
+		Version, CommitID, BuildEpoch, BuildDate, OfficialSite = previous[0], previous[1], previous[2], previous[3], previous[4]
+		version.Version, version.CommitID, version.BuildEpoch, version.BuildDate = previous[5], previous[6], previous[7], previous[8]
+	})
+	SetBuildInfo("1.2.3", "abc1234", "1765112713", "2025-12-07T09:05:13Z", "https://scour.li")
+	if Version != "1.2.3" || CommitID != "abc1234" || BuildEpoch != "1765112713" || BuildDate != "2025-12-07T09:05:13Z" || OfficialSite != "https://scour.li" {
+		t.Fatalf("config build info = (%q, %q, %q, %q, %q), unexpected values", Version, CommitID, BuildEpoch, BuildDate, OfficialSite)
+	}
+	if version.Version != Version || version.CommitID != CommitID || version.BuildEpoch != BuildEpoch || version.BuildDate != BuildDate {
+		t.Fatal("shared version package does not reflect embedded server build info")
+	}
+}
 
 func TestI18nConfigLanguageKeys(t *testing.T) {
 	for _, test := range []struct {
@@ -35,6 +52,83 @@ func TestI18nConfigLanguageKeys(t *testing.T) {
 			}
 			if !strings.Contains(string(encoded), "available_languages:") || strings.Contains(string(encoded), "supported:") {
 				t.Fatalf("encoded i18n config uses non-canonical key: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestEmailEventUpdateDefaultsAndYAMLKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.Server.Notifications.Email.Events.UpdateFailed || !cfg.Server.Notifications.Email.Events.UpdateStaged {
+		t.Fatalf("update email event defaults = %+v, want failed and staged enabled", cfg.Server.Notifications.Email.Events)
+	}
+	var events EmailEventsConfig
+	if err := yaml.Unmarshal([]byte("update_failed: true\nupdate_staged: true\n"), &events); err != nil {
+		t.Fatalf("decode update event settings: %v", err)
+	}
+	if !events.UpdateFailed || !events.UpdateStaged {
+		t.Fatalf("decoded update event settings = %+v, want both enabled", events)
+	}
+	encoded, err := yaml.Marshal(events)
+	if err != nil {
+		t.Fatalf("encode update event settings: %v", err)
+	}
+	if !strings.Contains(string(encoded), "update_failed: true") || !strings.Contains(string(encoded), "update_staged: true") {
+		t.Fatalf("encoded update events missing canonical YAML keys: %s", encoded)
+	}
+}
+
+func TestPIDFileConfigAcceptsBooleanAndDefaultsInvalidValues(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		want  string
+		warn  bool
+	}{{"true", "true", false}, {"false", "false", false}, {"/custom/search.pid", "true", true}} {
+		cfg := DefaultConfig()
+		cfg.Server.PIDFile = test.value
+		warnings := cfg.ValidateAndApplyDefaults()
+		if cfg.Server.PIDFile != test.want {
+			t.Errorf("PIDFile for %q = %q, want %q", test.value, cfg.Server.PIDFile, test.want)
+		}
+		found := false
+		for _, warning := range warnings {
+			if warning.Field == "server.pidfile" {
+				found = true
+				break
+			}
+		}
+		if found != test.warn {
+			t.Errorf("server.pidfile warning for %q = %t, want %t", test.value, found, test.warn)
+		}
+	}
+}
+
+func TestPrivacyRetentionPeriodSupportsLocalizedValues(t *testing.T) {
+	if got := DefaultConfig().Server.Privacy.Retention.PeriodForLanguage("en"); got != "" {
+		t.Fatalf("default retention period = %q, want empty translated fallback", got)
+	}
+	for _, test := range []struct {
+		name string
+		yaml string
+		lang string
+		want string
+	}{
+		{"scalar applies to every language", "period: Keep data for one year", "fr", "Keep data for one year"},
+		{"language entry wins", "period:\n  fr: Un an\n  default: One year", "fr", "Un an"},
+		{"default entry applies when language is absent", "period:\n  de: Ein Jahr\n  default: One year", "fr", "One year"},
+		{"empty localized entry falls back to default", "period:\n  fr: \"\"\n  default: One year", "fr", "One year"},
+		{"empty mapping leaves built-in fallback", "period: \"\"", "en", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var cfg struct {
+				Period any `yaml:"period"`
+			}
+			if err := yaml.Unmarshal([]byte(test.yaml), &cfg); err != nil {
+				t.Fatalf("decode retention config: %v", err)
+			}
+			got := (PrivacyRetention{Period: cfg.Period}).PeriodForLanguage(test.lang)
+			if got != test.want {
+				t.Fatalf("PeriodForLanguage(%q) = %q, want %q", test.lang, got, test.want)
 			}
 		})
 	}
@@ -369,6 +463,9 @@ func TestConfigApplyEnv(t *testing.T) {
 	env := &EnvConfig{
 		Port:            "9090",
 		ApplicationName: "TestApp",
+		DatabaseDriver:  "sqlite3",
+		DatabaseURL:     "file:/tmp/search-test.db",
+		CacheURL:        "valkey://cache.example.com:6379",
 	}
 
 	cfg.ApplyEnv(env)
@@ -379,14 +476,56 @@ func TestConfigApplyEnv(t *testing.T) {
 	if cfg.Server.Title != "TestApp" {
 		t.Errorf("After ApplyEnv, Server.Title = %q, want TestApp", cfg.Server.Title)
 	}
+	if cfg.Server.Database.Driver != "sqlite" || cfg.Server.Database.URL != "file:/tmp/search-test.db" {
+		t.Errorf("database settings after ApplyEnv = %#v, want sqlite and first-run URL", cfg.Server.Database)
+	}
+	if cfg.Server.Cache.Type != "valkey" || cfg.Server.Cache.URL != "valkey://cache.example.com:6379" {
+		t.Errorf("cache settings after ApplyEnv = %#v, want valkey and first-run URL", cfg.Server.Cache)
+	}
 }
 
 func TestLogValidationWarnings(t *testing.T) {
 	warnings := []ValidationWarning{
 		{Field: "test.field", Message: "test warning", Default: "default"},
 	}
-	// Just verify it doesn't panic
+	stdout, err := os.CreateTemp(t.TempDir(), "stdout-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdout.Close()
+	stderr, err := os.CreateTemp(t.TempDir(), "stderr-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stderr.Close()
+	previousStdout, previousStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = stdout, stderr
+	t.Cleanup(func() {
+		os.Stdout, os.Stderr = previousStdout, previousStderr
+	})
 	LogValidationWarnings(warnings)
+	os.Stdout, os.Stderr = previousStdout, previousStderr
+
+	if _, err := stdout.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	stdoutContent, err := io.ReadAll(stdout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stdoutContent) != 0 {
+		t.Fatalf("validation warnings wrote to stdout: %q", stdoutContent)
+	}
+	if _, err := stderr.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	stderrContent, err := io.ReadAll(stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(stderrContent, []byte("test.field: test warning")) {
+		t.Fatalf("stderr = %q, want validation warning", stderrContent)
+	}
 }
 
 func TestConfigServerBaseURL(t *testing.T) {
@@ -765,6 +904,11 @@ func TestConfigIsProduction(t *testing.T) {
 }
 
 func TestConfigIsDebug(t *testing.T) {
+	originalOverride, originalOverrideSet := debugOverride, debugOverrideSet
+	debugOverride, debugOverrideSet = false, false
+	defer func() {
+		debugOverride, debugOverrideSet = originalOverride, originalOverrideSet
+	}()
 	// Save and restore original env var
 	original := os.Getenv("DEBUG")
 	defer os.Setenv("DEBUG", original)
@@ -791,6 +935,39 @@ func TestConfigIsDebug(t *testing.T) {
 				t.Errorf("IsDebug() = %v, want %v (DEBUG=%q)", got, tt.want, tt.debugEnv)
 			}
 		})
+	}
+}
+
+func TestConfigDebugFalseOverrideWinsDebugMode(t *testing.T) {
+	originalDebug, hadDebug := os.LookupEnv("DEBUG")
+	if err := os.Unsetenv("DEBUG"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if hadDebug {
+			if err := os.Setenv("DEBUG", originalDebug); err != nil {
+				t.Errorf("restore DEBUG environment: %v", err)
+			}
+			return
+		}
+		if err := os.Unsetenv("DEBUG"); err != nil {
+			t.Errorf("clear DEBUG environment: %v", err)
+		}
+	})
+	cfg := DefaultConfig()
+	cfg.Server.Mode = "debug"
+	cfg.SetDebug(false)
+	if cfg.IsDebug() {
+		t.Fatal("explicit false debug override enabled debug mode")
+	}
+}
+
+func TestConfigDebugModeUsesDefaultForEmptyDebugEnv(t *testing.T) {
+	t.Setenv("DEBUG", "")
+	cfg := DefaultConfig()
+	cfg.Server.Mode = "debug"
+	if !cfg.IsDebug() {
+		t.Fatal("empty DEBUG should behave as unset under debug mode")
 	}
 }
 
@@ -1088,6 +1265,9 @@ func TestApplyEnvComprehensive(t *testing.T) {
 		ApplicationName:    "TestInstance",
 		ApplicationTagline: "Test tagline",
 		Listen:             "0.0.0.0:9090",
+		DatabaseDriver:     "sqlite",
+		DatabaseURL:        "file:/data/db/server.db",
+		CacheURL:           "redis://cache.example.com:6379",
 	}
 
 	cfg.ApplyEnv(env)
@@ -1103,6 +1283,12 @@ func TestApplyEnvComprehensive(t *testing.T) {
 	}
 	if cfg.Server.Address != "0.0.0.0:9090" {
 		t.Errorf("Address not applied, got %q", cfg.Server.Address)
+	}
+	if cfg.Server.Database.Driver != "sqlite" || cfg.Server.Database.URL != "file:/data/db/server.db" {
+		t.Errorf("Database settings not applied, got %#v", cfg.Server.Database)
+	}
+	if cfg.Server.Cache.Type != "redis" || cfg.Server.Cache.URL != "redis://cache.example.com:6379" {
+		t.Errorf("Cache settings not applied, got %#v", cfg.Server.Cache)
 	}
 }
 
@@ -1270,6 +1456,43 @@ func TestEmailConfigDefaults(t *testing.T) {
 	}
 	if cfg.Server.Notifications.Email.SMTP.TLS != "auto" {
 		t.Errorf("Email.SMTP.TLS = %q, want %q", cfg.Server.Notifications.Email.SMTP.TLS, "auto")
+	}
+}
+
+func TestInvalidSMTPModeFallsBackToAuto(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.Notifications.Email.SMTP.TLS = "opportunistic"
+
+	warnings := cfg.ValidateAndApplyDefaults()
+	if got := cfg.Server.Notifications.Email.SMTP.TLS; got != "auto" {
+		t.Fatalf("Email.SMTP.TLS = %q, want auto", got)
+	}
+	for _, warning := range warnings {
+		if warning.Field == "server.notifications.email.smtp.tls" {
+			if warning.Default != "auto" {
+				t.Fatalf("SMTP TLS warning default = %v, want auto", warning.Default)
+			}
+			return
+		}
+	}
+	t.Fatal("ValidateAndApplyDefaults() did not warn about invalid SMTP TLS mode")
+}
+
+func TestSMTPModeValidationAcceptsSupportedValues(t *testing.T) {
+	for _, mode := range []string{"auto", "starttls", "tls", "none"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Server.Notifications.Email.SMTP.TLS = mode
+			warnings := cfg.ValidateAndApplyDefaults()
+			if got := cfg.Server.Notifications.Email.SMTP.TLS; got != mode {
+				t.Fatalf("Email.SMTP.TLS = %q, want %q", got, mode)
+			}
+			for _, warning := range warnings {
+				if warning.Field == "server.notifications.email.smtp.tls" {
+					t.Fatalf("valid SMTP TLS mode %q produced warning: %+v", mode, warning)
+				}
+			}
+		})
 	}
 }
 

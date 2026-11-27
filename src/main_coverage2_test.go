@@ -28,7 +28,7 @@ func TestShowStatusNotRunning(t *testing.T) {
 	// the real os.Exit(1) would kill the whole test binary.
 	withExitFunc(t)
 	withArgs(t, []string{"search"})
-	out := captureStdout(t, showStatus)
+	out := captureStderr(t, showStatus)
 	if out == "" {
 		t.Error("showStatus produced no output")
 	}
@@ -65,7 +65,7 @@ func TestRunShellHelp(t *testing.T) {
 func TestRunShellUnknown(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--shell", "unknown-xyz"})
-	out := captureStdout(t, func() { runShell("unknown-xyz") })
+	out := captureStderr(t, func() { runShell("unknown-xyz") })
 	if out == "" {
 		t.Error("runShell(unknown-xyz) expected error output, got none")
 	}
@@ -85,7 +85,7 @@ func TestRunMaintenanceHelp(t *testing.T) {
 func TestRunMaintenanceDefault(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "unknown-xyz-action"})
-	out := captureStdout(t, func() { runMaintenance("unknown-xyz-action") })
+	out := captureStderr(t, func() { runMaintenance("unknown-xyz-action") })
 	if out == "" {
 		t.Error("runMaintenance(unknown-xyz-action) expected error output, got none")
 	}
@@ -95,7 +95,7 @@ func TestRunMaintenanceDefault(t *testing.T) {
 func TestRunMaintenanceRestoreNoFile(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "restore"})
-	out := captureStdout(t, func() { runMaintenance("restore") })
+	out := captureStderr(t, func() { runMaintenance("restore") })
 	if !strings.Contains(out, "restore") && !strings.Contains(out, "backup") && !strings.Contains(out, "specify") {
 		t.Errorf("runMaintenance(restore) no-file unexpected output: %q", out)
 	}
@@ -186,7 +186,7 @@ func TestRunServiceHelp(t *testing.T) {
 func TestRunServiceDefault(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--service", "unknown-xyz"})
-	out := captureStdout(t, func() { runService("unknown-xyz") })
+	out := captureStderr(t, func() { runService("unknown-xyz") })
 	if out == "" {
 		t.Error("runService(unknown-xyz) expected error output, got none")
 	}
@@ -254,7 +254,7 @@ func TestRunServiceUninstall(t *testing.T) {
 func TestRunServiceEnableIsRejected(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--service", "enable"})
-	out := captureStdout(t, func() { runService("enable") })
+	out := captureStderr(t, func() { runService("enable") })
 	if !strings.Contains(out, "Unknown service action") {
 		t.Fatalf("runService(enable) output = %q, want unsupported-action message", out)
 	}

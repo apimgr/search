@@ -28,14 +28,16 @@ var (
 // colorFlag: "auto", "yes", or "no" (from --color flag)
 // Also accepts "always"/"never" for backwards compatibility
 func InitOutput(colorFlag string) {
+	stdoutIsTerminal := isTerminalFunc(int(os.Stdout.Fd()))
+	stderrIsTerminal := isTerminalFunc(int(os.Stderr.Fd()))
 	// Handle --color flag (highest priority)
 	// Per AI.md PART 8: --color {auto|yes|no}
 	switch colorFlag {
 	case "yes", "always":
 		t := true
 		colorForce = &t
-		colorEnabled = true
-		emojiEnabled = true
+		colorEnabled = stdoutIsTerminal
+		emojiEnabled = stdoutIsTerminal && stderrIsTerminal && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
 		return
 	case "no", "never":
 		f := false
@@ -48,7 +50,7 @@ func InitOutput(colorFlag string) {
 	colorForce = nil
 
 	// Check NO_COLOR environment variable (standard)
-	if os.Getenv("NO_COLOR") != "" {
+	if os.Getenv("NO_COLOR") != "" || !stdoutIsTerminal {
 		colorEnabled = false
 		emojiEnabled = false
 		return
@@ -64,14 +66,14 @@ func InitOutput(colorFlag string) {
 
 	// Default: enabled
 	colorEnabled = true
-	emojiEnabled = true
+	emojiEnabled = stdoutIsTerminal && stderrIsTerminal
 }
 
 // ColorEnabled returns whether color output is enabled
 // Per AI.md PART 8: NO_COLOR disables colors
 func ColorEnabled() bool {
 	if colorForce != nil {
-		return *colorForce
+		return *colorForce && isTerminalFunc(int(os.Stdout.Fd()))
 	}
 	return colorEnabled
 }

@@ -21,6 +21,36 @@ func TestServiceManagerHasRunit(t *testing.T) {
 	_ = result
 }
 
+func TestUpdateNeedsManualRestart(t *testing.T) {
+	tests := []struct {
+		name   string
+		system initSystem
+		want   bool
+	}{
+		{name: "systemd", system: initSystemd},
+		{name: "runit", system: initRunit},
+		{name: "s6", system: initS6},
+		{name: "openrc", system: initOpenRC, want: true},
+		{name: "sysvinit", system: initSysVinit, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := updateNeedsManualRestart(tt.system); got != tt.want {
+				t.Errorf("updateNeedsManualRestart(%q) = %t, want %t", tt.system, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsSysVinitEligibleRequiresSystemctlAbsent(t *testing.T) {
+	if !isSysVinitEligible(false, false, false, true, true) {
+		t.Fatal("expected a legacy init host without systemctl to qualify for SysVinit")
+	}
+	if isSysVinitEligible(false, false, true, true, true) {
+		t.Fatal("a host with systemctl must not be classified as SysVinit")
+	}
+}
+
 func TestServiceManagerGetRunitServiceDir(t *testing.T) {
 	cfg := config.DefaultConfig()
 	sm := NewServiceManager(cfg)

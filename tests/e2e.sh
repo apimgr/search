@@ -4,7 +4,7 @@
 # browser end-to-end suite (all three tiers). Standalone, developer-initiated
 # (beta testing, pre-release, after major frontend work) — NOT invoked by
 # run_tests.sh and NOT part of the commit gate. No Makefile target exists for
-# it; the six-target set (PART 25) is fixed.
+# it; the seven-target set (PART 25) is fixed.
 #
 # The suite runs `go test -tags e2e ./tests/e2e/...` inside a casjaysdev/go
 # container and drives Chromium through a chromedp/headless-shell sidecar:
@@ -12,25 +12,50 @@
 #   - Tiers 2/3 (chromedp): attach to the sidecar over CDP via CHROMEDP_WS.
 # Chromium in the test container itself is not required — the browser lives in
 # the sidecar image and the tests talk to it over the shared Docker network.
-set -euo pipefail
+set -eo pipefail
 
-PROJECTNAME=$(basename "$PWD")
-PROJECTORG=$(basename "$(dirname "$PWD")")
-random_suffix() {
-  printf '%08x' "$(((RANDOM << 15) | RANDOM))"
+read_idea_value() {
+  [ -r IDEA.md ] || return 0
+  sed -n "/^$1:[[:space:]]*/ { s/^$1:[[:space:]]*//; p; q; }" IDEA.md | tr -d '[:space:]'
 }
-NET="${PROJECTNAME}-e2e-$$-$(random_suffix)"
+
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || true)
+PROJECTNAME=$(read_idea_value project_name)
+PROJECTORG=$(read_idea_value project_org)
+if [ -z "$PROJECTNAME" ]; then
+  PROJECTNAME=$(printf '%s\n' "$ORIGIN_URL" | sed -E 's|.*/([^/]+)$|\1|; s/\.git$//')
+fi
+if [ -z "$PROJECTORG" ]; then
+  PROJECTORG=$(printf '%s\n' "$ORIGIN_URL" | sed -E 's|.*[:/]([^/:]+)/[^/]+(\.git)?$|\1|')
+fi
+PROJECTNAME=${PROJECTNAME:-$(basename "$PWD")}
+PROJECTORG=${PROJECTORG:-$(basename "$(dirname "$PWD")")}
+INTERNAL_NAME=$(read_idea_value internal_name)
+INTERNAL_NAME=${INTERNAL_NAME:-$PROJECTNAME}
+random_suffix() {
+  head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8
+}
+NET="${PROJECTNAME}-e2e-$(random_suffix)"
 SIDECAR="${PROJECTNAME}-$(random_suffix)"
 TEST_CONTAINER="${PROJECTNAME}-$(random_suffix)"
 
 # Org-structured temp dir per AI.md PART 29 for the suite's ephemeral output.
 mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-E2E_TMP=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-e2e-XXXXXX")
-trap 'docker rm -f "$SIDECAR" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; rm -rf "$E2E_TMP"' EXIT
+E2E_TMP=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${INTERNAL_NAME}-XXXXXX")
+chmod 0700 "$E2E_TMP"
+cleanup() {
+  docker rm -f "$SIDECAR" >/dev/null 2>&1 || true
+  docker network rm "$NET" >/dev/null 2>&1 || true
+  case "$E2E_TMP" in
+    "${TMPDIR:-/tmp}/${PROJECTORG}/${INTERNAL_NAME}-"*) rm -rf -- "$E2E_TMP" ;;
+    *) printf 'Refusing to remove unexpected test directory: %s\n' "$E2E_TMP" >&2; return 1 ;;
+  esac
+}
+trap cleanup EXIT INT TERM
 
 # Resolve Go modules before creating the isolated network. The test process
 # itself runs with GOPROXY=off and cannot reach external hosts.
-docker run --rm --name "${PROJECTNAME}-e2e-modules-$(random_suffix)" \
+docker run --rm --name "${PROJECTNAME}-$(random_suffix)" \
   -v "$PWD:/app" \
   -v "${HOME}/go/pkg/mod:/usr/local/share/go/pkg/mod" \
   -w /app \
@@ -86,7 +111,7 @@ docker run --rm --name "$TEST_CONTAINER" \
   -e GOFLAGS=-buildvcs=false \
   -e GOPROXY=off \
   -e CHROMEDP_WS \
-  -e PWA_SCREENSHOT_DIR \
+  -e "PWA_SCREENSHOT_DIR=${PWA_SCREENSHOT_DIR:+/out/screenshots}" \
   casjaysdev/go:latest \
   go test -tags e2e -count=1 -v "$@" ./tests/e2e/... || EXIT=$?
 

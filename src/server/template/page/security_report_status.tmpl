@@ -6,12 +6,16 @@
     </header>
 
     <section class="section-card" aria-labelledby="security-report-status-heading">
-        <h2 id="security-report-status-heading">{{t "security.report_status_title"}}</h2>
+        <h2 id="security-report-status-heading">{{t "common.details"}}</h2>
         <dl>
             <dt>{{t "security.report_status_tracking_id_label"}}</dt>
             <dd>{{.TrackingID}}</dd>
             <dt>{{t "security.report_status_state_label"}}</dt>
             <dd>{{t (printf "security.report_status_state_%s" .Status)}}</dd>
+        <dt>{{t "security.report_status_comment_label"}}</dt>
+        <dd>{{if .ResearcherComment}}{{.ResearcherComment}}{{else}}{{t "common.none"}}{{end}}</dd>
+        <dt>{{t "security.report_status_disclosure_date_label"}}</dt>
+        <dd>{{if .DisclosureDate}}{{.DisclosureDate}}{{else}}{{t "common.none"}}{{end}}</dd>
         </dl>
     </section>
 </div>

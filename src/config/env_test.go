@@ -289,30 +289,19 @@ func TestGetAllDomains(t *testing.T) {
 	_ = domains
 }
 
-func TestGetDatabaseDriver(t *testing.T) {
-	driver := GetDatabaseDriver()
-	// Just verify it doesn't panic
-	_ = driver
-}
-
-func TestGetDatabaseURL(t *testing.T) {
-	url := GetDatabaseURL()
-	// Just verify it doesn't panic
-	_ = url
-}
-
 // TestGetEnvWithFallback removed - getEnv variadic function is no longer in env.go
 // Per AI.md PART 5: Only documented env vars are supported, no fallback chains
 
 func TestLoadFromEnvWithEnvVars(t *testing.T) {
 	// Per AI.md PART 5: Only documented env vars are tested
-	// Runtime Variables: DOMAIN, MODE, DATABASE_DRIVER, DATABASE_URL, SMTP_*
-	// Init-Only Variables: CONFIG_DIR, DATA_DIR, LOG_DIR, DATABASE_DIR, BACKUP_DIR, PORT, LISTEN, APPLICATION_NAME, APPLICATION_TAGLINE
+	// Runtime Variables: DOMAIN, MODE, SMTP_*
+	// Init-Only Variables: DATABASE_DRIVER, DATABASE_URL, CACHE_URL, CONFIG_DIR, DATA_DIR, LOG_DIR, DATABASE_DIR, BACKUP_DIR, PORT, LISTEN, APPLICATION_NAME, APPLICATION_TAGLINE
 	envVars := []string{
 		"DOMAIN",
 		"MODE",
 		"DATABASE_DRIVER",
 		"DATABASE_URL",
+		"CACHE_URL",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
 		"SMTP_TLS", "SMTP_FROM_NAME", "SMTP_FROM_EMAIL",
 		"CONFIG_DIR", "DATA_DIR", "LOG_DIR", "DATABASE_DIR", "BACKUP_DIR",
@@ -339,6 +328,7 @@ func TestLoadFromEnvWithEnvVars(t *testing.T) {
 	os.Setenv("MODE", "development")
 	os.Setenv("DATABASE_DRIVER", "sqlite")
 	os.Setenv("DATABASE_URL", "file:test.db")
+	os.Setenv("CACHE_URL", "valkey://cache.example.com:6379")
 	os.Setenv("SMTP_HOST", "smtp.example.com")
 	os.Setenv("SMTP_PORT", "587")
 	os.Setenv("SMTP_USERNAME", "user")
@@ -370,6 +360,9 @@ func TestLoadFromEnvWithEnvVars(t *testing.T) {
 	}
 	if cfg.DatabaseURL != "file:test.db" {
 		t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, "file:test.db")
+	}
+	if cfg.CacheURL != "valkey://cache.example.com:6379" {
+		t.Errorf("CacheURL = %q, want %q", cfg.CacheURL, "valkey://cache.example.com:6379")
 	}
 	if cfg.SMTPHost != "smtp.example.com" {
 		t.Errorf("SMTPHost = %q, want %q", cfg.SMTPHost, "smtp.example.com")
@@ -530,42 +523,6 @@ func TestGetAllDomainsWithEnvVar(t *testing.T) {
 	got = GetAllDomains()
 	if got != nil {
 		t.Errorf("GetAllDomains() empty = %v, want nil", got)
-	}
-}
-
-func TestGetDatabaseDriverWithEnvVar(t *testing.T) {
-	// Save and restore env var
-	original := os.Getenv("DATABASE_DRIVER")
-	defer os.Setenv("DATABASE_DRIVER", original)
-
-	os.Setenv("DATABASE_DRIVER", "postgres")
-	got := GetDatabaseDriver()
-	if got != "postgres" {
-		t.Errorf("GetDatabaseDriver() = %q, want %q", got, "postgres")
-	}
-
-	os.Setenv("DATABASE_DRIVER", "")
-	got = GetDatabaseDriver()
-	if got != "" {
-		t.Errorf("GetDatabaseDriver() empty = %q, want empty", got)
-	}
-}
-
-func TestGetDatabaseURLWithEnvVar(t *testing.T) {
-	// Save and restore env var
-	original := os.Getenv("DATABASE_URL")
-	defer os.Setenv("DATABASE_URL", original)
-
-	os.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	got := GetDatabaseURL()
-	if got != "postgres://user:pass@localhost/db" {
-		t.Errorf("GetDatabaseURL() = %q, want %q", got, "postgres://user:pass@localhost/db")
-	}
-
-	os.Setenv("DATABASE_URL", "")
-	got = GetDatabaseURL()
-	if got != "" {
-		t.Errorf("GetDatabaseURL() empty = %q, want empty", got)
 	}
 }
 

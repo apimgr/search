@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -57,7 +58,7 @@ func TestHandleLegacyArgsStatus(t *testing.T) {
 	// the real os.Exit(1) would kill the whole test binary.
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--status"})
-	out := captureStdout(t, handleLegacyArgs)
+	out := captureStderr(t, handleLegacyArgs)
 	if strings.TrimSpace(out) == "" {
 		t.Error("handleLegacyArgs(--status) produced no output")
 	}
@@ -173,7 +174,7 @@ func TestRunUpdateHelpAlias(t *testing.T) {
 func TestRunUpdateRejectsRollbackSubcommand(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "rollback"})
-	out := captureStdout(t, func() { runUpdate("rollback") })
+	out := captureStderr(t, func() { runUpdate("rollback") })
 	if !strings.Contains(out, "Unknown subcommand") {
 		t.Errorf("runUpdate(rollback) output = %q, want unknown subcommand", out)
 	}
@@ -182,6 +183,27 @@ func TestRunUpdateRejectsRollbackSubcommand(t *testing.T) {
 func TestRunUpdateBranchDailyAliasStoresCanonicalChannel(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "branch", "daily"})
+	parent := filepath.Join(os.TempDir(), config.ProjectOrg)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	configDir, err := os.MkdirTemp(parent, config.InternalName+"-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(configDir); err != nil {
+			t.Errorf("remove test config directory: %v", err)
+		}
+	})
+	if err := config.DefaultConfig().Save(filepath.Join(configDir, "server.yml")); err != nil {
+		t.Fatal(err)
+	}
+	config.SetConfigDirOverride(configDir)
+	t.Cleanup(func() { config.SetConfigDirOverride("") })
 	out := captureStdout(t, func() { runUpdate("branch") })
 	if !strings.Contains(out, "devel (nightly build") {
 		t.Errorf("runUpdate(branch daily) expected canonical devel description, got: %q", out)
@@ -249,7 +271,7 @@ func TestRunMaintenancePGPExportPublic(t *testing.T) {
 func TestRunMaintenancePGPExportPrivate(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "export", "private"})
-	out := captureStdout(t, func() { runMaintenance("pgp") })
+	out := captureStderr(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
 		t.Error("runMaintenance(pgp export private) produced no output")
 	}
@@ -258,7 +280,7 @@ func TestRunMaintenancePGPExportPrivate(t *testing.T) {
 func TestRunMaintenancePGPExportNoKeyType(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "export"})
-	out := captureStdout(t, func() { runMaintenance("pgp") })
+	out := captureStderr(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
 		t.Error("runMaintenance(pgp export) with no key type produced no output")
 	}
@@ -267,7 +289,7 @@ func TestRunMaintenancePGPExportNoKeyType(t *testing.T) {
 func TestRunMaintenancePGPImport(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "import"})
-	out := captureStdout(t, func() { runMaintenance("pgp") })
+	out := captureStderr(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
 		t.Error("runMaintenance(pgp import) produced no output")
 	}
@@ -285,7 +307,7 @@ func TestRunMaintenancePGPDelete(t *testing.T) {
 func TestRunMaintenancePGPUnknown(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "unknown-action"})
-	out := captureStdout(t, func() { runMaintenance("pgp") })
+	out := captureStderr(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
 		t.Error("runMaintenance(pgp unknown-action) produced no output")
 	}
@@ -361,7 +383,7 @@ func TestRunShellHelpAlias(t *testing.T) {
 
 func TestPrintShellInitUnsupported(t *testing.T) {
 	withExitFunc(t)
-	out := captureStdout(t, func() { printShellInit("search", "tcsh") })
+	out := captureStderr(t, func() { printShellInit("search", "tcsh") })
 	if strings.TrimSpace(out) == "" {
 		t.Error("printShellInit(tcsh) expected error output, got none")
 	}
@@ -409,7 +431,7 @@ func TestRunUpdateCheck(t *testing.T) {
 func TestRunUpdateListIsRejected(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--update", "list"})
-	out := captureStdout(t, func() { runUpdate("list") })
+	out := captureStderr(t, func() { runUpdate("list") })
 	if !strings.Contains(out, "Unknown subcommand") {
 		t.Fatalf("runUpdate(list) output = %q, want unsupported-subcommand message", out)
 	}
@@ -449,6 +471,9 @@ func TestRunMaintenanceBackupWithPassword(t *testing.T) {
 // ============================================================
 
 func TestShowStatusRunningProcess(t *testing.T) {
+	if config.IsRunningInContainer() {
+		t.Skip("PID files are disabled in containers by specification")
+	}
 	withArgs(t, []string{"search"})
 	withExitFunc(t)
 
@@ -464,6 +489,9 @@ func TestShowStatusRunningProcess(t *testing.T) {
 
 	config.SetPIDFileOverride(pidFile)
 	t.Cleanup(func() { config.SetPIDFileOverride("") })
+	originalPIDEnabled := config.PIDFileEnabled()
+	config.SetPIDFileEnabled(true)
+	t.Cleanup(func() { config.SetPIDFileEnabled(originalPIDEnabled) })
 
 	out := captureStdout(t, showStatus)
 	if strings.TrimSpace(out) == "" {
@@ -497,7 +525,7 @@ func pidIntToString(pid int) string {
 func TestRunMaintenanceRestoreNoFileShowsHelp(t *testing.T) {
 	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "restore"})
-	out := captureStdout(t, func() { runMaintenance("restore") })
+	out := captureStderr(t, func() { runMaintenance("restore") })
 	if strings.TrimSpace(out) == "" {
 		t.Error("runMaintenance(restore) with no file produced no output")
 	}

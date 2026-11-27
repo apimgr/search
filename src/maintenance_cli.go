@@ -64,9 +64,9 @@ func runMaintenanceSecret(action, name string) {
 		printMaintenanceSecretHelp()
 		return
 	default:
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_secret_action", "action", action))
-		printMaintenanceSecretHelp()
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_secret_action", "action", action))
+		printMaintenanceSecretHelpTo(os.Stderr)
+		exitFunc(2)
 		return
 	}
 
@@ -74,20 +74,22 @@ func runMaintenanceSecret(action, name string) {
 	case database.SecretInstallation, "encryption_key":
 		// rotatable
 	case database.SecretCookieSigning, database.SecretCSRFToken:
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.secret_auto_rotated", "name", name))
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.secret_auto_rotated", "name", name))
+		printMaintenanceSecretHelpTo(os.Stderr)
+		exitFunc(2)
 		return
 	default:
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_secret", "name", name))
-		fmt.Println(serverCLIText("server_cli.maintenance.rotatable_secrets"))
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_secret", "name", name))
+		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.maintenance.rotatable_secrets"))
+		printMaintenanceSecretHelpTo(os.Stderr)
+		exitFunc(2)
 		return
 	}
 
 	cfg := pgpRequireAuthorized()
-	reasonText, ok := pgpSensitiveConfirm(cfg)
-	if !ok {
-		exitFunc(1)
+	reasonText, exitCode := pgpSensitiveConfirm(cfg)
+	if exitCode != 0 {
+		exitFunc(exitCode)
 		return
 	}
 
@@ -98,22 +100,32 @@ func runMaintenanceSecret(action, name string) {
 		err = rotateEncryptionKey(cfg, reasonText)
 	}
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.rotation_failed", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.rotation_failed", "error", err))
 		exitFunc(1)
 		return
 	}
-	fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.secret_rotated", "name", name))
+	fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLITf("server_cli.maintenance.secret_rotated", "name", name))
 }
 
 // printMaintenanceSecretHelp documents the secret subcommand.
 func printMaintenanceSecretHelp() {
-	fmt.Println(serverCLIText("server_cli.maintenance.secret_rotation_heading"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.maintenance.help_rotate_installation_secret"))
-	fmt.Println(serverCLIText("server_cli.maintenance.help_rotate_encryption_key"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.maintenance.help_auto_rotated_secrets"))
-	fmt.Println(serverCLIText("server_cli.maintenance.help_auto_rotated_secrets_continued"))
+	printMaintenanceSecretHelpTo(os.Stdout)
+}
+
+func printMaintenanceSecretHelpTo(w io.Writer) {
+	for _, line := range []string{
+		serverCLIText("server_cli.maintenance.secret_rotation_heading"),
+		"",
+		serverCLIText("server_cli.maintenance.help_rotate_installation_secret"),
+		serverCLIText("server_cli.maintenance.help_rotate_encryption_key"),
+		"",
+		serverCLIText("server_cli.maintenance.help_auto_rotated_secrets"),
+		serverCLIText("server_cli.maintenance.help_auto_rotated_secrets_continued"),
+	} {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return
+		}
+	}
 }
 
 // rotateInstallationSecret generates a new installation_secret, re-encrypts the
@@ -175,47 +187,89 @@ func rotateEncryptionKey(cfg *config.Config, reasonText string) error {
 		return fmt.Errorf("current encryption key is unavailable")
 	}
 	dm, err := pgpOpenDB()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer closeutil.Close(dm)
 	db := dm.ServerDB()
-	if err := cfg.ImportLegacyAppSecrets(ctx, db); err != nil { return fmt.Errorf("import legacy secrets: %w", err) }
+	if err := cfg.ImportLegacyAppSecrets(ctx, db); err != nil {
+		return fmt.Errorf("import legacy secrets: %w", err)
+	}
 	prefix := ""
-	if db.Driver() == "libsql" { prefix = "srv_" }
+	if db.Driver() == "libsql" {
+		prefix = "srv_"
+	}
 	previousKey, previousUntil, err := security.EnsurePreviousEncryptionKey(ctx, db, oldKey, cfg.Server.Security.EncryptionKeyPrevious, cfg.Server.Security.EncryptionKeyPreviousExpires)
-	if err != nil { return fmt.Errorf("load previous encryption key: %w", err) }
-	if _, err := owner.ReencryptTokenCopies(ctx, db, prefix, previousKey, oldKey); err != nil { return fmt.Errorf("finish prior owner-token rotation: %w", err) }
-	if err := pgpMigrateLegacyReports(cfg, dm); err != nil { return fmt.Errorf("migrate legacy security reports: %w", err) }
-	if _, err := security.ReencryptAESReportData(ctx, db, oldKey, previousKey); err != nil { return fmt.Errorf("finish prior security-report rotation: %w", err) }
-	if _, err := security.ReencryptQRShortlinks(ctx, db, oldKey, previousKey); err != nil { return fmt.Errorf("finish prior QR short-link rotation: %w", err) }
+	if err != nil {
+		return fmt.Errorf("load previous encryption key: %w", err)
+	}
+	if _, err := owner.ReencryptTokenCopies(ctx, db, prefix, previousKey, oldKey); err != nil {
+		return fmt.Errorf("finish prior owner-token rotation: %w", err)
+	}
+	if err := pgpMigrateLegacyReports(cfg, dm); err != nil {
+		return fmt.Errorf("migrate legacy security reports: %w", err)
+	}
+	if _, err := security.ReencryptAESReportData(ctx, db, oldKey, previousKey); err != nil {
+		return fmt.Errorf("finish prior security-report rotation: %w", err)
+	}
+	if _, err := security.ReencryptQRShortlinks(ctx, db, oldKey, previousKey); err != nil {
+		return fmt.Errorf("finish prior QR short-link rotation: %w", err)
+	}
 	changed, err := cfg.ReencryptDNSCredentials(oldKey, previousKey)
-	if err != nil { return fmt.Errorf("finish prior DNS credential rotation: %w", err) }
-	if changed { if err := cfg.Save(config.GetConfigPath()); err != nil { return fmt.Errorf("save migrated DNS credentials: %w", err) } }
+	if err != nil {
+		return fmt.Errorf("finish prior DNS credential rotation: %w", err)
+	}
+	if changed {
+		if err := cfg.Save(config.GetConfigPath()); err != nil {
+			return fmt.Errorf("save migrated DNS credentials: %w", err)
+		}
+	}
 	if previousKey != "" {
 		if previousUntil.After(time.Now().UTC()) {
 			return fmt.Errorf("a previous encryption key is still within its 30-day grace period")
 		}
-		if err := database.DeleteAppSecretValue(ctx, db, database.SecretEncryptionKeyPrevious); err != nil { return err }
-		if err := database.DeleteAppSecretValue(ctx, db, database.SecretEncryptionKeyPreviousUntil); err != nil { return err }
+		if err := database.DeleteAppSecretValue(ctx, db, database.SecretEncryptionKeyPrevious); err != nil {
+			return err
+		}
+		if err := database.DeleteAppSecretValue(ctx, db, database.SecretEncryptionKeyPreviousUntil); err != nil {
+			return err
+		}
 	}
 	newKey := config.GenerateBase64Secret()
 	expires := time.Now().UTC().Add(encryptionKeyGrace)
-	if err := security.BeginEncryptionKeyRotation(ctx, db, oldKey, newKey, expires, reasonText); err != nil { return fmt.Errorf("stage encryption key rotation: %w", err) }
+	if err := security.BeginEncryptionKeyRotation(ctx, db, oldKey, newKey, expires, reasonText); err != nil {
+		return fmt.Errorf("stage encryption key rotation: %w", err)
+	}
 	cfg.Server.Security.EncryptionKey = newKey
 	cfg.Server.Security.EncryptionKeyPrevious = ""
 	cfg.Server.Security.EncryptionKeyPreviousExpires = ""
 	if err := cfg.Save(config.GetConfigPath()); err != nil {
 		return fmt.Errorf("persist new encryption key; rotation will resume at next startup: %w", err)
 	}
-	if err := pgpMigrateLegacyReports(cfg, dm); err != nil { return fmt.Errorf("migrate legacy security reports: %w", err) }
+	if err := pgpMigrateLegacyReports(cfg, dm); err != nil {
+		return fmt.Errorf("migrate legacy security reports: %w", err)
+	}
 	tokenCount, err := owner.ReencryptTokenCopies(ctx, db, prefix, oldKey, newKey)
-	if err != nil { return fmt.Errorf("re-encrypt owner and linked API tokens: %w", err) }
+	if err != nil {
+		return fmt.Errorf("re-encrypt owner and linked API tokens: %w", err)
+	}
 	reportCount, err := security.ReencryptAESReportData(ctx, db, newKey, oldKey)
-	if err != nil { return fmt.Errorf("re-encrypt security reports: %w", err) }
+	if err != nil {
+		return fmt.Errorf("re-encrypt security reports: %w", err)
+	}
 	shortlinkCount, err := security.ReencryptQRShortlinks(ctx, db, newKey, oldKey)
-	if err != nil { return fmt.Errorf("re-encrypt QR short links: %w", err) }
+	if err != nil {
+		return fmt.Errorf("re-encrypt QR short links: %w", err)
+	}
 	dnsChanged, err := cfg.ReencryptDNSCredentials(newKey, oldKey)
-	if err != nil { return fmt.Errorf("re-encrypt DNS credentials: %w", err) }
-	if dnsChanged { if err := cfg.Save(config.GetConfigPath()); err != nil { return fmt.Errorf("save re-encrypted DNS credentials: %w", err) } }
+	if err != nil {
+		return fmt.Errorf("re-encrypt DNS credentials: %w", err)
+	}
+	if dnsChanged {
+		if err := cfg.Save(config.GetConfigPath()); err != nil {
+			return fmt.Errorf("save re-encrypted DNS credentials: %w", err)
+		}
+	}
 
 	pgpAuditLogger().LogEvent(
 		logging.AuditActionEncryptionKeyRotated,
@@ -225,15 +279,17 @@ func rotateEncryptionKey(cfg *config.Config, reasonText string) error {
 		&logging.AuditTarget{Type: "secret", Name: "encryption_key"},
 		"success",
 		map[string]interface{}{
-			"tokens_reencrypted": tokenCount,
-			"reports_reencrypted": reportCount,
+			"tokens_reencrypted":     tokenCount,
+			"reports_reencrypted":    reportCount,
 			"shortlinks_reencrypted": shortlinkCount,
-			"grace_expires":       expires.Format(time.RFC3339),
+			"grace_expires":          expires.Format(time.RFC3339),
 		},
 		reasonText,
 	)
-	if err := security.CompleteEncryptionKeyRotation(ctx, db); err != nil { return fmt.Errorf("finish encryption-key recovery marker: %w", err) }
-	fmt.Println("   "+serverCLITf("server_cli.maintenance.encryption_rotation_summary", "tokens", tokenCount, "reports", reportCount, "shortlinks", shortlinkCount))
+	if err := security.CompleteEncryptionKeyRotation(ctx, db); err != nil {
+		return fmt.Errorf("finish encryption-key recovery marker: %w", err)
+	}
+	fmt.Println("   " + serverCLITf("server_cli.maintenance.encryption_rotation_summary", "tokens", tokenCount, "reports", reportCount, "shortlinks", shortlinkCount))
 	fmt.Println("   " + serverCLIText("server_cli.maintenance.previous_encryption_key_grace"))
 	return nil
 }
@@ -249,9 +305,16 @@ func runMaintenanceToken(action, prefix string) {
 		printMaintenanceTokenHelp()
 		return
 	default:
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_token_action", "action", action))
-		printMaintenanceTokenHelp()
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_token_action", "action", action))
+		printMaintenanceTokenHelpTo(os.Stderr)
+		exitFunc(2)
+		return
+	}
+	if action == "revoke" && prefix == "" {
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLIText("server_cli.maintenance.token_prefix_required"))
+		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.token_revoke_usage", "project", config.ProjectName))
+		printMaintenanceTokenHelpTo(os.Stderr)
+		exitFunc(2)
 		return
 	}
 
@@ -259,7 +322,7 @@ func runMaintenanceToken(action, prefix string) {
 
 	dm, err := pgpOpenDB()
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_open_database", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_open_database", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -273,7 +336,7 @@ func runMaintenanceToken(action, prefix string) {
 		rows, err := db.Query(ctx, fmt.Sprintf(
 			"SELECT token_prefix, COALESCE(owner_id, ''), kind, name, created_at, expires_at, revoked_at FROM %s WHERE owner_id IS NOT NULL ORDER BY created_at", table))
 		if err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_list_tokens", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_list_tokens", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -284,7 +347,7 @@ func runMaintenanceToken(action, prefix string) {
 			var tokenPrefix, ownerID, kind, name string
 			var createdAt, expiresAt, revokedAt sql.NullInt64
 			if err := rows.Scan(&tokenPrefix, &ownerID, &kind, &name, &createdAt, &expiresAt, &revokedAt); err != nil {
-				fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_read_token", "error", err))
+				fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_read_token", "error", err))
 				exitFunc(1)
 				return
 			}
@@ -305,7 +368,7 @@ func runMaintenanceToken(action, prefix string) {
 			fmt.Println()
 		}
 		if err := rows.Err(); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_read_tokens", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_read_tokens", "error", err))
 			exitFunc(1)
 			return
 		}
@@ -315,44 +378,47 @@ func runMaintenanceToken(action, prefix string) {
 		return
 	}
 
-	if prefix == "" {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.maintenance.token_prefix_required"))
-		fmt.Println(serverCLITf("server_cli.maintenance.token_revoke_usage", "project", config.ProjectName))
-		exitFunc(1)
-		return
-	}
-
 	result, err := db.Exec(ctx,
 		fmt.Sprintf("UPDATE %s SET revoked_at = ?, revoked_reason = 'operator_action' WHERE token_prefix = ? AND owner_id IS NOT NULL AND revoked_at IS NULL", table), time.Now().Unix(), prefix)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_revoke_token", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.failed_revoke_token", "error", err))
 		exitFunc(1)
 		return
 	}
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.no_matching_active_token", "prefix", prefix))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.no_matching_active_token", "prefix", prefix))
 		exitFunc(1)
 		return
 	}
 	if affected > 0 {
 		if _, err := db.Exec(ctx, "INSERT INTO "+database.ServerTableName(db, "audit_log")+" (id, timestamp, actor_type, action, resource_type, resource_id, details) VALUES (?, ?, 'operator', 'token.revoked', 'api_token', ?, ?)", uuid.NewString(), time.Now().Unix(), prefix, `{"reason":"operator_action"}`); err != nil {
-			fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.token_revoked_audit_failed", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.token_revoked_audit_failed", "error", err))
 			exitFunc(1)
 			return
 		}
 	}
 
 	pgpAuditLogger().LogTokenRevoke(pgpActor(), pgpAuditIP, prefix)
-	fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.tokens_revoked", "count", affected, "prefix", prefix))
+	fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLITf("server_cli.maintenance.tokens_revoked", "count", affected, "prefix", prefix))
 }
 
 // printMaintenanceTokenHelp documents the token subcommand.
 func printMaintenanceTokenHelp() {
-	fmt.Println(serverCLIText("server_cli.maintenance.token_management_heading"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.maintenance.help_token_list"))
-	fmt.Println(serverCLIText("server_cli.maintenance.help_token_revoke"))
+	printMaintenanceTokenHelpTo(os.Stdout)
+}
+
+func printMaintenanceTokenHelpTo(w io.Writer) {
+	for _, line := range []string{
+		serverCLIText("server_cli.maintenance.token_management_heading"),
+		"",
+		serverCLIText("server_cli.maintenance.help_token_list"),
+		serverCLIText("server_cli.maintenance.help_token_revoke"),
+	} {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return
+		}
+	}
 }
 
 type personalDataOwner struct {
@@ -404,7 +470,7 @@ func runMaintenanceData(action string, args []string) {
 	}
 	if action != "export" && action != "delete" {
 		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.unknown_data_action", "action", action))
-		printMaintenanceDataHelp()
+		printMaintenanceDataHelpTo(os.Stderr)
 		exitFunc(2)
 		return
 	}
@@ -416,19 +482,19 @@ func runMaintenanceData(action string, args []string) {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.error", "error", err))
-		printMaintenanceDataHelp()
+		printMaintenanceDataHelpTo(os.Stderr)
 		exitFunc(2)
 		return
 	}
 	if flags.ownerPrefix == "" {
 		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.maintenance.owner_prefix_required"))
-		printMaintenanceDataHelp()
+		printMaintenanceDataHelpTo(os.Stderr)
 		exitFunc(2)
 		return
 	}
 	if action == "export" && flags.yes || action == "delete" && flags.output != "" {
 		fmt.Fprintln(os.Stderr, serverCLITf("server_cli.maintenance.data_option_unsupported", "action", action))
-		printMaintenanceDataHelp()
+		printMaintenanceDataHelpTo(os.Stderr)
 		exitFunc(2)
 		return
 	}
@@ -484,14 +550,24 @@ func parseDataActionFlags(action string, args []string) (dataActionFlags, error)
 }
 
 func printMaintenanceDataHelp() {
-	fmt.Println(serverCLIText("server_cli.maintenance.data_subject_heading"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.maintenance.help_data_export"))
-	fmt.Println(serverCLIText("server_cli.maintenance.help_data_export_description"))
-	fmt.Println(serverCLIText("server_cli.maintenance.help_data_delete"))
-	fmt.Println(serverCLIText("server_cli.maintenance.help_data_delete_description"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.maintenance.help_data_security_note"))
+	printMaintenanceDataHelpTo(os.Stdout)
+}
+
+func printMaintenanceDataHelpTo(w io.Writer) {
+	for _, line := range []string{
+		serverCLIText("server_cli.maintenance.data_subject_heading"),
+		"",
+		serverCLIText("server_cli.maintenance.help_data_export"),
+		serverCLIText("server_cli.maintenance.help_data_export_description"),
+		serverCLIText("server_cli.maintenance.help_data_delete"),
+		serverCLIText("server_cli.maintenance.help_data_delete_description"),
+		"",
+		serverCLIText("server_cli.maintenance.help_data_security_note"),
+	} {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return
+		}
+	}
 }
 
 func resolveDataOwner(ctx context.Context, db *database.DB, prefix string) (personalDataOwner, error) {
@@ -500,7 +576,7 @@ func resolveDataOwner(ctx context.Context, db *database.DB, prefix string) (pers
 	}
 	tableOwners := database.ServerTableName(db, "owners")
 	tableTokens := database.ServerTableName(db, "api_tokens")
-	rows, err := db.Query(ctx, fmt.Sprintf(`
+	rows, err := db.QueryWithTimeout(ctx, database.TimeoutComplexQuery, fmt.Sprintf(`
 		SELECT DISTINCT o.id, o.created_at, o.last_seen_at
 		FROM %s AS o
 		JOIN %s AS t ON t.owner_id = o.id
@@ -648,7 +724,7 @@ func exportPersonalData(ctx context.Context, cfg *config.Config, dm *database.Da
 		"resources": len(alerts) + len(results),
 	})
 	if path != "-" {
-		fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.data_export_written", "path", path))
+		fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLITf("server_cli.maintenance.data_export_written", "path", path))
 	}
 	return nil
 }
@@ -656,7 +732,7 @@ func exportPersonalData(ctx context.Context, cfg *config.Config, dm *database.Da
 func loadOwnerAlertResults(ctx context.Context, db *database.DB, ownerID string) ([]alert.AlertResult, error) {
 	resultsTable := database.ServerTableName(db, "search_alert_results")
 	alertsTable := database.ServerTableName(db, "search_alerts")
-	rows, err := db.Query(ctx, fmt.Sprintf(`
+	rows, err := db.QueryWithTimeout(ctx, database.TimeoutComplexQuery, fmt.Sprintf(`
 		SELECT r.id, r.title, r.url, r.content, r.engine, r.published_at, r.first_seen_at,
 		       r.notified_email_at, r.notified_webhook_at
 		FROM %s AS r
@@ -714,7 +790,7 @@ func deletePersonalData(ctx context.Context, dm *database.DatabaseManager, dataO
 		return err
 	}
 	if !skipPrompt {
-			fmt.Print(serverCLITf("server_cli.maintenance.delete_owner_confirm", "owner", dataOwner.ID, "tokens", counts.tokens, "resources", counts.alerts))
+		fmt.Print(serverCLITf("server_cli.maintenance.delete_owner_confirm", "owner", dataOwner.ID, "tokens", counts.tokens, "resources", counts.alerts))
 		var confirmation string
 		if _, err := fmt.Scanln(&confirmation); err != nil && !errors.Is(err, io.EOF) {
 			return fmt.Errorf("read owner deletion confirmation: %w", err)
@@ -735,7 +811,7 @@ func deletePersonalData(ctx context.Context, dm *database.DatabaseManager, dataO
 		"tokens_deleted":    counts.tokens,
 		"resources_deleted": counts.alerts + counts.results,
 	})
-	fmt.Println(display.Emoji("✅", "[OK]")+" "+serverCLITf("server_cli.maintenance.data_deleted", "deleted", counts.deleted, "anonymized", counts.anonymized))
+	fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLITf("server_cli.maintenance.data_deleted", "deleted", counts.deleted, "anonymized", counts.anonymized))
 	return nil
 }
 
@@ -767,7 +843,7 @@ func countOwnerData(ctx context.Context, db *database.DB, ownerID string) (owner
 	if err := db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE owner_id = ?", alerts), ownerID).Scan(&counts.alerts); err != nil {
 		return counts, err
 	}
-	if err := db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)", results, alerts), ownerID).Scan(&counts.results); err != nil {
+	if err := db.QueryRowWithTimeout(ctx, database.TimeoutComplexQuery, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)", results, alerts), ownerID).Scan(&counts.results); err != nil {
 		return counts, err
 	}
 	var ownerCount int
@@ -790,14 +866,14 @@ func deleteOwnerData(ctx context.Context, db *database.DB, ownerID, requestID st
 	counts := ownerDeletionCounts{}
 	err := db.Write(ctx, func(tx *sql.Tx) error {
 		var exists int
-		if err := tx.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = ?", owners), ownerID).Scan(&exists); err != nil {
+		if err := database.QueryRowContext(ctx, tx, database.TimeoutSimpleQuery, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = ?", owners), ownerID).Scan(&exists); err != nil {
 			return err
 		}
 		if exists != 1 {
 			return errors.New("owner no longer exists")
 		}
 
-		result, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)", results, alerts), ownerID)
+		result, err := database.ExecContext(ctx, tx, fmt.Sprintf("DELETE FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)", results, alerts), ownerID)
 		if err != nil {
 			return err
 		}
@@ -805,7 +881,7 @@ func deleteOwnerData(ctx context.Context, db *database.DB, ownerID, requestID st
 		if err != nil {
 			return err
 		}
-		result, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE owner_id = ?", alerts), ownerID)
+		result, err = database.ExecContext(ctx, tx, fmt.Sprintf("DELETE FROM %s WHERE owner_id = ?", alerts), ownerID)
 		if err != nil {
 			return err
 		}
@@ -813,7 +889,7 @@ func deleteOwnerData(ctx context.Context, db *database.DB, ownerID, requestID st
 		if err != nil {
 			return err
 		}
-		result, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE owner_id = ?", tokens), ownerID)
+		result, err = database.ExecContext(ctx, tx, fmt.Sprintf("DELETE FROM %s WHERE owner_id = ?", tokens), ownerID)
 		if err != nil {
 			return err
 		}
@@ -821,7 +897,7 @@ func deleteOwnerData(ctx context.Context, db *database.DB, ownerID, requestID st
 		if err != nil {
 			return err
 		}
-		result, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", owners), ownerID)
+		result, err = database.ExecContext(ctx, tx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", owners), ownerID)
 		if err != nil {
 			return err
 		}
@@ -840,7 +916,7 @@ func deleteOwnerData(ctx context.Context, db *database.DB, ownerID, requestID st
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, fmt.Sprintf(`
+		_, err = database.ExecContext(ctx, tx, fmt.Sprintf(`
 			INSERT INTO %s (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details, severity, category)
 			VALUES (?, ?, 'operator', ?, ?, 'owner', ?, ?, 'info', 'compliance')
 		`, audit), uuid.NewString(), time.Now().UTC().Unix(), pgpActor(), string(logging.AuditActionDataDeletionCompleted), ownerID, string(details))
@@ -883,9 +959,9 @@ func runMaintenanceCompliance(action string) {
 		printMaintenanceComplianceHelp()
 		return
 	default:
-		fmt.Println(display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_compliance_action", "action", action))
-		printMaintenanceComplianceHelp()
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]")+" "+serverCLITf("server_cli.maintenance.unknown_compliance_action", "action", action))
+		printMaintenanceComplianceHelpTo(os.Stderr)
+		exitFunc(2)
 		return
 	}
 
@@ -910,9 +986,19 @@ func runMaintenanceCompliance(action string) {
 
 // printMaintenanceComplianceHelp documents the compliance subcommand.
 func printMaintenanceComplianceHelp() {
-	fmt.Println(serverCLIText("server_cli.maintenance.compliance_heading"))
-	fmt.Println()
-	fmt.Println(serverCLIText("server_cli.maintenance.help_compliance_report"))
+	printMaintenanceComplianceHelpTo(os.Stdout)
+}
+
+func printMaintenanceComplianceHelpTo(w io.Writer) {
+	for _, line := range []string{
+		serverCLIText("server_cli.maintenance.compliance_heading"),
+		"",
+		serverCLIText("server_cli.maintenance.help_compliance_report"),
+	} {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return
+		}
+	}
 }
 
 // printComplianceReport renders the operator-facing compliance summary.
@@ -1004,8 +1090,8 @@ func printComplianceReport(cfg *config.Config) error {
 	fmt.Println(serverCLITf("server_cli.maintenance.report_data_stored", "state", yesNo(cfg.Server.Privacy.Data.StoredOnServer)))
 	fmt.Println(serverCLITf("server_cli.maintenance.report_export_right", "state", yesNo(cfg.Server.Privacy.Retention.ExportAvailable)))
 	fmt.Println(serverCLITf("server_cli.maintenance.report_deletion_right", "state", yesNo(cfg.Server.Privacy.Retention.DeletionAvailable)))
-	if cfg.Server.Privacy.Retention.Period != "" {
-		fmt.Println(serverCLITf("server_cli.maintenance.report_privacy_retention", "period", cfg.Server.Privacy.Retention.Period))
+	if period := cfg.Server.Privacy.Retention.PeriodForLanguage("en"); period != "" {
+		fmt.Println(serverCLITf("server_cli.maintenance.report_privacy_retention", "period", period))
 	}
 	fmt.Println()
 	fmt.Println(serverCLIText("server_cli.maintenance.report_data_counts"))

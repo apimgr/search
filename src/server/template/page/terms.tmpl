@@ -5,70 +5,24 @@
     </header>
 
     {{if operatorHTMLExists "terms" .}}
-    <section class="section-card page-content markdown" aria-labelledby="terms-custom-heading">
-        <h2 id="terms-custom-heading">{{t "footer.terms"}}</h2>
+    <section class="section-card markdown" aria-labelledby="terms-custom-heading">
+        <h2 id="terms-custom-heading">{{t "common.details"}}</h2>
         {{operatorHTML "terms" .}}
     </section>
     {{else}}
-    <div class="page-content">
-        <p class="last-updated">{{tf "terms.last_updated" "date" .BuildDate}}</p>
-
         <section class="section-card terms-section" aria-labelledby="terms-acceptance-heading">
             <h2 id="terms-acceptance-heading">{{t "terms.acceptance_heading"}}</h2>
             <p>{{tf "terms.acceptance_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
         </section>
 
-        <section class="section-card terms-section" aria-labelledby="terms-description-heading">
-            <h2 id="terms-description-heading">{{t "terms.description_heading"}}</h2>
-            <p>{{tf "terms.description_body" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+        <section class="section-card terms-section" aria-labelledby="terms-acceptable-use-heading">
+            <h2 id="terms-acceptable-use-heading">{{t "terms.acceptable_use_heading"}}</h2>
+            <p>{{t "terms.acceptable_use_description"}}</p>
         </section>
 
-        <section class="section-card terms-section" aria-labelledby="terms-user-conduct-heading">
-            <h2 id="terms-user-conduct-heading">{{t "terms.user_conduct_heading"}}</h2>
-            <p>{{t "terms.user_conduct_intro"}}</p>
-            <ul>
-                <li>{{t "terms.user_conduct_item_unlawful"}}</li>
-                <li>{{t "terms.user_conduct_item_access"}}</li>
-                <li>{{t "terms.user_conduct_item_disrupt"}}</li>
-                <li>{{t "terms.user_conduct_item_automated"}}</li>
-                <li>{{t "terms.user_conduct_item_reverse_engineering"}}</li>
-            </ul>
-        </section>
-
-        <section class="section-card terms-section" aria-labelledby="terms-privacy-heading">
-            <h2 id="terms-privacy-heading">{{t "terms.privacy_heading"}}</h2>
-            <p>{{t "terms.privacy_prefix"}} <a href="/server/privacy">{{t "footer.privacy_policy"}}</a>{{t "terms.privacy_suffix"}}</p>
-        </section>
-
-        <section class="section-card terms-section" aria-labelledby="terms-intellectual-property-heading">
-            <h2 id="terms-intellectual-property-heading">{{t "terms.intellectual_property_heading"}}</h2>
-            <p>{{tf "terms.intellectual_property_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
-            <p>{{t "terms.intellectual_property_followup"}}</p>
-        </section>
-
-        <section class="section-card terms-section" aria-labelledby="terms-third-party-content-heading">
-            <h2 id="terms-third-party-content-heading">{{t "terms.third_party_content_heading"}}</h2>
-            <p>{{t "terms.third_party_content_description"}}</p>
-        </section>
-
-        <section class="section-card terms-section" aria-labelledby="terms-disclaimer-heading">
-            <h2 id="terms-disclaimer-heading">{{t "terms.disclaimer_heading"}}</h2>
-            <p>{{t "terms.disclaimer_intro"}}</p>
-            <ul>
-                <li>{{t "terms.disclaimer_item_uninterrupted"}}</li>
-                <li>{{t "terms.disclaimer_item_accurate"}}</li>
-                <li>{{t "terms.disclaimer_item_defects"}}</li>
-            </ul>
-        </section>
-
-        <section class="section-card terms-section" aria-labelledby="terms-limitation-heading">
-            <h2 id="terms-limitation-heading">{{t "terms.limitation_heading"}}</h2>
-            <p>{{tf "terms.limitation_description" "app_name" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
-        </section>
-
-        <section class="section-card terms-section" aria-labelledby="terms-modifications-heading">
-            <h2 id="terms-modifications-heading">{{t "terms.modifications_heading"}}</h2>
-            <p>{{t "terms.modifications_description"}}</p>
+        <section class="section-card terms-section" aria-labelledby="terms-liability-heading">
+            <h2 id="terms-liability-heading">{{t "terms.liability_heading"}}</h2>
+            <p>{{t "terms.liability_description"}}</p>
         </section>
 
         <section class="section-card terms-section" aria-labelledby="terms-changes-heading">
@@ -76,11 +30,10 @@
             <p>{{t "terms.changes_description"}}</p>
         </section>
 
-        <section class="section-card" aria-labelledby="terms-page-title-heading">
-            <h2 id="terms-page-title-heading">{{t "contact.page_title"}}</h2>
-            <p>{{t "terms.contact_prefix"}} <a href="/server/security">{{t "contact.title"}}</a>{{t "terms.contact_suffix"}}</p>
+        <section class="section-card terms-section" aria-labelledby="terms-governing-law-heading">
+            <h2 id="terms-governing-law-heading">{{t "terms.governing_law_heading"}}</h2>
+            <p>{{t "terms.governing_law_description"}}</p>
         </section>
-    </div>
     {{end}}
 </div>
 {{end}}

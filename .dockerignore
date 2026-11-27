@@ -16,6 +16,7 @@ volumes/
 # Build output (container builds from source)
 binaries/
 releases/
+.tmp/
 
 # Tests (not needed in production image)
 tests/

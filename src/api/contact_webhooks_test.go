@@ -27,7 +27,8 @@ func TestContactWebhookConfigSaveNeverReturnsSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(tempDir, "server.yml")
-	cfg := &config.Config{Server: config.ServerConfig{Token: "operator-token"}}
+	cfg := config.DefaultConfig()
+	cfg.Server.Token = "operator-token"
 	cfg.SetPath(configPath)
 	if err := cfg.Save(configPath); err != nil {
 		t.Fatal(err)
@@ -53,7 +54,7 @@ func TestContactWebhookConfigSaveNeverReturnsSecret(t *testing.T) {
 	}
 	code, created, createdBody := save("https://hooks.example/first")
 	if code != http.StatusOK || created["secret"] != nil {
-		t.Fatalf("first save exposed the signing secret: status=%d data=%#v", code, created)
+		t.Fatalf("first save exposed the signing secret: status=%d data=%#v body=%s", code, created, createdBody)
 	}
 	secret := cfg.Get().Contact.General.Webhooks["generic_secret"]
 	if secret == "" {

@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,6 +27,15 @@ import (
 
 // ReleasesURL is the URL to check for releases
 const ReleasesURL = "https://api.github.com/repos/apimgr/search/releases"
+
+const stagedChecksumFetchTimeout = 10 * time.Second
+
+var allowedReleaseHosts = map[string]bool{
+	"api.github.com":                   true,
+	"github.com":                       true,
+	"objects.githubusercontent.com":    true,
+	"release-assets.githubusercontent.com": true,
+}
 
 // Release channels per AI.md PART 22 "Update Branches".
 // Channels are cumulative: a less-stable channel also accepts every release
@@ -552,6 +562,114 @@ type stagedVersion struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
+func newStagedChecksumClient() *http.Client {
+	return &http.Client{
+		Timeout: stagedChecksumFetchTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if req.URL.Scheme != "https" || !allowedReleaseHosts[strings.ToLower(req.URL.Hostname())] {
+				return fmt.Errorf("refusing non-official update checksum redirect to %s", req.URL.Redacted())
+			}
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects fetching official update checksum")
+			}
+			return nil
+		},
+	}
+}
+
+func fetchReleaseChecksum(version, assetName string, client *http.Client) (string, error) {
+	if filepath.Base(version) != version || strings.TrimSpace(version) == "" || assetName == "" {
+		return "", fmt.Errorf("invalid staged release identity")
+	}
+	if client == nil {
+		client = newStagedChecksumClient()
+	}
+	apiURL := strings.TrimSuffix(ReleasesURL, "/") + "/tags/" + url.PathEscape(version)
+	request, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create release lookup request: %w", err)
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("User-Agent", "Search/update-checksum")
+	response, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("fetch official release metadata: %w", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		closeErr := response.Body.Close()
+		return "", errors.Join(fmt.Errorf("official release lookup returned %d", response.StatusCode), closeErr)
+	}
+	var release Release
+	decodeErr := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&release)
+	closeErr := response.Body.Close()
+	if err := errors.Join(decodeErr, closeErr); err != nil {
+		return "", fmt.Errorf("read official release metadata: %w", err)
+	}
+	if release.TagName != version || release.Draft {
+		return "", fmt.Errorf("official release metadata does not match staged version %q", version)
+	}
+	checksumURL := (&Manager{}).findChecksumURL(release.Assets)
+	if checksumURL == "" {
+		return "", fmt.Errorf("official release %s has no checksum asset", version)
+	}
+	checksumAsset, err := url.Parse(checksumURL)
+	expectedAssetPrefix := "/apimgr/search/releases/download/" + url.PathEscape(version) + "/"
+	if err != nil || checksumAsset.Scheme != "https" || !strings.EqualFold(checksumAsset.Hostname(), "github.com") || !strings.HasPrefix(checksumAsset.EscapedPath(), expectedAssetPrefix) {
+		return "", fmt.Errorf("official release %s has an invalid checksum asset URL", version)
+	}
+	checksumRequest, err := http.NewRequest(http.MethodGet, checksumAsset.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("create checksum request: %w", err)
+	}
+	checksumRequest.Header.Set("User-Agent", "Search/update-checksum")
+	checksumResponse, err := client.Do(checksumRequest)
+	if err != nil {
+		return "", fmt.Errorf("fetch official release checksums: %w", err)
+	}
+	if checksumResponse.StatusCode != http.StatusOK {
+		closeErr := checksumResponse.Body.Close()
+		return "", errors.Join(fmt.Errorf("official release checksum asset returned %d", checksumResponse.StatusCode), closeErr)
+	}
+	checksumBody, readErr := io.ReadAll(io.LimitReader(checksumResponse.Body, 1<<20))
+	closeErr = checksumResponse.Body.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return "", fmt.Errorf("read official release checksums: %w", err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(checksumBody)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 || fields[1] != assetName {
+			continue
+		}
+		if len(fields[0]) != sha256.Size*2 {
+			return "", fmt.Errorf("official release checksum for %s is malformed", assetName)
+		}
+		if _, err := hex.DecodeString(fields[0]); err != nil {
+			return "", fmt.Errorf("official release checksum for %s is malformed: %w", assetName, err)
+		}
+		return strings.ToLower(fields[0]), nil
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("scan official release checksums: %w", err)
+	}
+	return "", fmt.Errorf("official release checksums do not include %s", assetName)
+}
+
+func verifyStagedBinary(binaryPath, version, assetName string, client *http.Client) error {
+	expected, err := fetchReleaseChecksum(version, assetName, client)
+	if err != nil {
+		return err
+	}
+	actual, err := hashUpdateFile(binaryPath)
+	if err != nil {
+		return fmt.Errorf("hash staged update binary: %w", err)
+	}
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("staged update checksum mismatch: expected %s, got %s", expected, actual)
+	}
+	return nil
+}
+
 // StagedUpdateFailure identifies the release whose staged installation failed.
 // The version is kept so the scheduler can suppress another attempt until a
 // distinct release is available.
@@ -636,7 +754,6 @@ func (m *Manager) ApplyStagedUpdate() (bool, error) {
 	updateDir := filepath.Join(dataDir, "update")
 	binaryPath := filepath.Join(updateDir, config.ProjectName+".new")
 	metadataPath := filepath.Join(updateDir, config.ProjectName+".json")
-	checksumPath := filepath.Join(updateDir, config.ProjectName+".sha256")
 	if _, err := os.Stat(updateDir); errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	} else if err != nil {
@@ -664,16 +781,8 @@ func (m *Manager) ApplyStagedUpdate() (bool, error) {
 	if !m.isNewerRelease(Release{TagName: metadata.Version, PublishedAt: metadata.PublishedAt}) {
 		return failUpdate(fmt.Errorf("staged update %s is not newer than %s", metadata.Version, m.currentVersion))
 	}
-	expectedBytes, err := os.ReadFile(checksumPath)
-	if err != nil {
-		return failUpdate(fmt.Errorf("read staged update checksum: %w", err))
-	}
-	actualChecksum, err := hashUpdateFile(binaryPath)
-	if err != nil {
-		return failUpdate(fmt.Errorf("hash staged update binary: %w", err))
-	}
-	if !strings.EqualFold(strings.TrimSpace(string(expectedBytes)), actualChecksum) {
-		return failUpdate(errors.New("staged update checksum mismatch"))
+	if err := verifyStagedBinary(binaryPath, metadata.Version, GetBinaryName(), nil); err != nil {
+		return failUpdate(err)
 	}
 	if err := m.backupCurrentBinary(); err != nil {
 		return failUpdate(fmt.Errorf("backup current binary before staged update: %w", err))

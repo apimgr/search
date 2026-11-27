@@ -15,8 +15,6 @@ type EnvConfig struct {
 	// NO_COLOR and TERM are checked directly where needed (not stored here)
 	Domain         string // FQDN override (highest priority for hostname resolution)
 	Mode           string // production (default) or development
-	DatabaseDriver string // sqlite, sqlite2, sqlite3, libsql, turso
-	DatabaseURL    string // Database connection string
 	SMTPHost       string // SMTP server hostname
 	SMTPPort       int    // SMTP server port (default: 587)
 	SMTPUsername   string // SMTP authentication username
@@ -28,6 +26,12 @@ type EnvConfig struct {
 	I2PEnabled string
 
 	// Init-Only Variables (First Run Only) - per AI.md PART 5
+	// First-run database driver; aliases are normalized by the database layer.
+	DatabaseDriver string
+	// First-run database connection URL.
+	DatabaseURL string
+	// First-run cache connection URL.
+	CacheURL string
 	ConfigDir          string // Configuration directory
 	DataDir            string // Data directory
 	LogDir             string // Log directory
@@ -50,8 +54,6 @@ func LoadFromEnv() *EnvConfig {
 	// Left empty when MODE is unset so server.yml's own mode still applies;
 	// GetMode() falls back to production for an empty or unknown value
 	cfg.Mode = os.Getenv("MODE")
-	cfg.DatabaseDriver = os.Getenv("DATABASE_DRIVER")
-	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.SMTPHost = os.Getenv("SMTP_HOST")
 	cfg.SMTPPort = ParseInt(os.Getenv("SMTP_PORT"), 0)
 	cfg.SMTPUsername = os.Getenv("SMTP_USERNAME")
@@ -62,6 +64,9 @@ func LoadFromEnv() *EnvConfig {
 	cfg.I2PEnabled = os.Getenv("I2P_ENABLED")
 
 	// Init-Only Variables (First Run Only) - per AI.md PART 5
+	cfg.DatabaseDriver = os.Getenv("DATABASE_DRIVER")
+	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
+	cfg.CacheURL = os.Getenv("CACHE_URL")
 	cfg.ConfigDir = os.Getenv("CONFIG_DIR")
 	cfg.DataDir = os.Getenv("DATA_DIR")
 	cfg.LogDir = os.Getenv("LOG_DIR")
@@ -219,18 +224,6 @@ func GetAllDomains() []string {
 		}
 	}
 	return domains
-}
-
-// GetDatabaseDriver returns the DATABASE_DRIVER environment variable
-// Per AI.md PART 5: Runtime variable - always checked
-func GetDatabaseDriver() string {
-	return os.Getenv("DATABASE_DRIVER")
-}
-
-// GetDatabaseURL returns the DATABASE_URL environment variable
-// Per AI.md PART 5: Runtime variable - always checked
-func GetDatabaseURL() string {
-	return os.Getenv("DATABASE_URL")
 }
 
 // IsNoColor returns true if NO_COLOR env var is set and non-empty

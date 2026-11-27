@@ -174,7 +174,7 @@ func BuildArgs(command Command, values map[string]string) ([]string, error) {
 // Run executes the corresponding existing CLI leaf command and returns its
 // rendered output. Structured values become individual argv fields without
 // shell parsing or splitting values that contain spaces.
-func Run(ctx context.Context, client *api.Client, command Command, values map[string]string) (string, error) {
+func Run(ctx context.Context, client *api.Client, command Command, values map[string]string) (output string, runErr error) {
 	if client == nil {
 		return "", errors.New(Text("client.surface.api_client_missing"))
 	}
@@ -202,7 +202,11 @@ func Run(ctx context.Context, client *api.Client, command Command, values map[st
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", Text("client.surface.create_token_file_directory"), err)
 		}
-		defer os.RemoveAll(tempDir)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("remove temporary token directory: %w", err))
+			}
+		}()
 		if err := os.Chmod(tempDir, 0700); err != nil {
 			return "", fmt.Errorf("%s: %w", Text("client.surface.secure_token_directory"), err)
 		}

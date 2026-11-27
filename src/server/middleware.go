@@ -8,7 +8,6 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
-	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -1213,10 +1212,6 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 
 				slog.LogAttrs(r.Context(), slog.LevelError, "PANIC recovered", attrs...)
 
-				if acceptsJSONError(r) {
-					localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
-					return
-				}
 				writeRecoveryHTML(w, r)
 			}
 		}()
@@ -1234,23 +1229,16 @@ func writeRecoveryHTML(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeRecoveryHTMLStatus(w http.ResponseWriter, r *http.Request, status int) {
-	theme := GetTheme(r)
-	className := GetThemeClass(theme)
-	lang := i18n.RequestLanguage(r)
-	dir := "ltr"
-	if language, ok := i18n.GetLanguage(lang); ok && language.RTL {
-		dir = "rtl"
-	}
-	text := func(key string) string {
-		return html.EscapeString(i18n.T(lang, key))
-	}
-	page := fmt.Sprintf(`<!doctype html><html lang="%s" dir="%s" class="%s" data-theme-mode="%s"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title><link rel="stylesheet" href="/static/css/common.css"><link rel="stylesheet" href="/static/css/public.css"></head><body><header><nav><a href="/">Search</a> <a href="/server/about">%s</a></nav></header><main class="error-page"><h1>%s</h1><p>%d %s</p><p>%s</p><a href="/">%s</a></main></body></html>`,
-		html.EscapeString(lang), dir, html.EscapeString(className), html.EscapeString(theme),
-		text("errors.recovery_title"), text("nav.about"), text("errors.recovery_heading"),
-		status, html.EscapeString(http.StatusText(status)), text("errors.recovery_message"), text("errors.recovery_search"))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	if acceptsJSONError(r) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, "{\"ok\":false,\"error\":\"SERVER_ERROR\",\"message\":%q}\n", http.StatusText(status))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
+	page := fmt.Sprintf("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%d %s</title></head><body><main><h1>%d %s</h1><p><a href=\"/\">Home</a></p></main></body></html>", status, http.StatusText(status), status, http.StatusText(status))
 	if _, err := io.WriteString(w, page); err != nil {
 		slog.Warn("failed to write recovery response", "error", err)
 	}

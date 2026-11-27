@@ -2395,9 +2395,71 @@ type ServerPageResponse struct {
 	Title       string            `json:"title"`
 	Description string            `json:"description,omitempty"`
 	Content     string            `json:"content,omitempty"`
+	Format      string            `json:"format,omitempty"`
 	Sections    []PageSection     `json:"sections,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 	Pages       []HelpPageLink    `json:"pages,omitempty"`
+}
+
+func resolveBrandingPageContent(entry config.BrandingPageContent, language string) string {
+	switch body := entry.Body.(type) {
+	case string:
+		return body
+	case map[string]any:
+		if value, ok := body[language].(string); ok && strings.TrimSpace(value) != "" {
+			return value
+		}
+		if value, ok := body["default"].(string); ok {
+			return value
+		}
+	case map[any]any:
+		if value, ok := body[language].(string); ok && strings.TrimSpace(value) != "" {
+			return value
+		}
+		if value, ok := body["default"].(string); ok {
+			return value
+		}
+	}
+	return ""
+}
+
+func (h *Handler) expandBrandingPageVariables(body string) string {
+	values := map[string]string{
+		"{current_year}":    fmt.Sprint(time.Now().Year()),
+		"{project_name}":    "search",
+		"{project_org}":     "apimgr",
+		"{project_version}": version.Version,
+		"{build_datetime}":  version.HealthBuildDate(),
+	}
+	if h.torService != nil {
+		values["{onion_address}"] = h.torService.GetOnionAddress()
+	}
+	if h.i2pManager != nil {
+		values["{i2p_address}"] = h.i2pManager.EepsiteAddressFromDisk()
+	}
+	for placeholder, value := range values {
+		body = strings.ReplaceAll(body, placeholder, value)
+	}
+	return body
+}
+
+func (h *Handler) brandingPageContent(name, builtIn string, r *http.Request) (string, string) {
+	entry, ok := h.config.Server.Branding.Content[name]
+	if !ok {
+		return builtIn, "markdown"
+	}
+	body := h.expandBrandingPageVariables(resolveBrandingPageContent(entry, i18n.RequestLanguage(r)))
+	format := strings.ToLower(strings.TrimSpace(entry.Format))
+	switch format {
+	case "html":
+		return body, "html"
+	case "txt", "text":
+		return body, "text"
+	case "", "md", "markdown":
+		return body, "markdown"
+	default:
+		return builtIn, "markdown"
+	}
 }
 
 type HelpPageLink struct {
@@ -2458,54 +2520,41 @@ func (h *Handler) handleServerAbout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.Title
+	appName := strings.TrimSpace(h.config.Server.Branding.Title)
 	if appName == "" {
-		appName = h.config.Server.Title
+		appName = strings.TrimSpace(h.config.Server.Title)
 	}
-
-	sections := []PageSection{
-		{
-			ID:      "description",
-			Title:   "What is " + appName + "?",
-			Content: appName + " is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you.",
-		},
-		{
-			ID:      "features",
-			Title:   "Features",
-			Content: "Privacy First: No tracking, no profiling, no filter bubbles. Multiple Sources: Get results from various search engines. Fast & Lightweight: No JavaScript required, minimal bandwidth usage.",
-		},
+	if appName == "" {
+		appName = "Search"
 	}
-
-	// Per AI.md PART 19: the CC BY 4.0 notices for the ip-location-db
-	// databases are a license condition and must appear verbatim on
-	// /server/about whenever the data is in use
+	tagline := strings.TrimSpace(h.config.Server.Branding.Tagline)
+	if tagline == "" {
+		tagline = "Privacy-respecting metasearch"
+	}
+	description := strings.TrimSpace(h.config.Server.Branding.Description)
+	if description == "" {
+		description = "Search aggregates results directly from primary and specialized search engines without tracking users."
+	}
+	builtIn := fmt.Sprintf("# %s\n\n%s\n\n## About\n\n%s\n\n## Features\n\n- Private metasearch across primary and specialized sources.\n- Search categories, bangs, instant answers and direct answers.\n- Server-rendered pages that work without JavaScript.\n- Optional accountless alerts and private RSS feeds.\n\n## Links\n\n- [Project site](https://scour.li)\n- [Source code](https://github.com/apimgr/search)\n- [Documentation](https://search.readthedocs.io)\n", appName, tagline, description)
 	if h.config.Server.GeoIP.Enabled {
-		sections = append(sections, PageSection{
-			ID:      "geoip-attribution",
-			Title:   "IP Geolocation Data",
-			Content: geoIPAttributionHTML + " " + geoIPAttributionText,
-		})
+		builtIn += "\n## Third-party attribution\n\n[IP Geolocation by DB-IP](https://db-ip.com/)\n\n" + geoIPAttributionText + "\n"
 	}
-
+	content, format := h.brandingPageContent("about", builtIn, r)
 	metadata := map[string]string{
 		"version":    config.Version,
 		"build_date": config.BuildDate,
 		"commit":     config.CommitID,
 	}
-
-	// Add Tor address if available
 	if h.config.Server.Tor.Enabled {
 		metadata["tor_enabled"] = "true"
 	}
-
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: ServerPageResponse{
-			Title:       "About " + appName,
-			Description: h.config.Server.Description,
-			Content:     h.config.Server.Pages.About.Content,
-			Sections:    sections,
-			Metadata:    metadata,
+			Title:    "About " + appName,
+			Content:  content,
+			Format:   format,
+			Metadata: metadata,
 		},
 		Meta: &APIMeta{Version: APIVersion},
 	})
@@ -2519,52 +2568,87 @@ func (h *Handler) handleServerPrivacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.Title
-	if appName == "" {
-		appName = h.config.Server.Title
+	privacy := h.config.Server.Privacy
+	analyticsDescription := privacy.AnalyticsDescription()
+	retentionPeriod := privacy.Retention.PeriodForLanguage(i18n.RequestLanguage(r))
+	if strings.TrimSpace(retentionPeriod) == "" {
+		retentionPeriod = i18n.RequestString(r, "privacy.retention.period")
 	}
-
-	sections := []PageSection{
-		{
-			ID:      "data_collection",
-			Title:   i18n.RequestString(r, "privacy.data_collection_heading"),
-			Content: i18n.RequestFormat(r, "privacy.data_collection_description", "app_name", appName) + " " + i18n.RequestString(r, "privacy.search_queries_description") + " " + i18n.RequestString(r, "privacy.ip_addresses_description"),
+	trackingType := strings.TrimSpace(h.config.Server.Tracking.Type)
+	trackingEnabled := trackingType != "" && !strings.EqualFold(trackingType, "none")
+	trackingNames := map[string]string{
+		"google": "Google Analytics", "matomo": "Matomo", "piwik": "Piwik",
+		"owa": "Open Web Analytics", "fathom": "Fathom", "plausible": "Plausible",
+		"umami": "Umami", "simple": "Simple Analytics", "cloudflare": "Cloudflare Web Analytics",
+	}
+	trackingName := trackingNames[strings.ToLower(trackingType)]
+	if trackingName == "" && trackingEnabled {
+		trackingName = trackingType
+	}
+	type sharingItem struct {
+		Condition string `json:"condition"`
+		When      string `json:"when"`
+		Data      string `json:"data"`
+	}
+	type serviceItem struct {
+		Name      string `json:"name"`
+		Purpose   string `json:"purpose"`
+		DataSent  string `json:"data_sent"`
+		PolicyURL string `json:"policy_url"`
+	}
+	services := make([]serviceItem, 0, len(privacy.ThirdParty.Services))
+	for _, service := range privacy.ThirdParty.Services {
+		services = append(services, serviceItem{
+			Name: service.Name, Purpose: service.Purpose, DataSent: service.DataSent, PolicyURL: service.PolicyURL,
+		})
+	}
+	if services == nil {
+		services = []serviceItem{}
+	}
+	sharing := make([]sharingItem, 0, len(privacy.Data.Sharing))
+	for _, item := range privacy.Data.Sharing {
+		sharing = append(sharing, sharingItem{Condition: item.Condition, When: item.When, Data: item.Data})
+	}
+	if sharing == nil {
+		sharing = []sharingItem{}
+	}
+	userOptedOut := false
+	if cookie, err := r.Cookie("ccpa_opt_out"); err == nil && cookie.Value == "true" {
+		userOptedOut = true
+	}
+	data := map[string]any{
+		"summary": map[string]any{
+			"data_stored_on_server": privacy.Data.StoredOnServer,
+			"data_sold":            privacy.Data.Sold,
+			"user_control":         true,
 		},
-		{
-			ID:      "data_usage",
-			Title:   i18n.RequestString(r, "privacy.data_usage_heading"),
-			Content: i18n.RequestString(r, "privacy.data_usage_description") + " " + i18n.RequestString(r, "privacy.data_usage_item_forward") + "; " + i18n.RequestString(r, "privacy.data_usage_item_aggregate") + "; " + i18n.RequestString(r, "privacy.data_usage_item_preferences") + ".",
+		"cookies": map[string]any{
+			"essential": map[string]any{"enabled": privacy.Cookies.Essential.Enabled, "description": privacy.Cookies.Essential.Description},
+			"preferences": map[string]any{"enabled": privacy.Cookies.Preferences.Enabled, "description": privacy.Cookies.Preferences.Description},
+			"analytics": map[string]any{"enabled": privacy.Cookies.Analytics.Enabled, "description": analyticsDescription},
 		},
-		{
-			ID:      "data_retention",
-			Title:   i18n.RequestString(r, "privacy.data_retention_heading"),
-			Content: i18n.RequestString(r, "privacy.data_retention_description"),
+		"data": map[string]any{
+			"sold": privacy.Data.Sold, "stored_on_server": privacy.Data.StoredOnServer, "sharing": sharing,
 		},
-		{
-			ID:      "cookies",
-			Title:   i18n.RequestString(r, "privacy.cookies_heading"),
-			Content: i18n.RequestString(r, "privacy.cookies_intro") + " " + i18n.RequestString(r, "privacy.session_cookie_description") + "; " + i18n.RequestString(r, "privacy.preference_cookie_description") + ". " + i18n.RequestString(r, "privacy.cookies_followup"),
+		"tracking": map[string]any{
+			"enabled": trackingEnabled, "type": trackingType, "type_name": trackingName,
 		},
-		{
-			ID:      "third_parties",
-			Title:   i18n.RequestString(r, "privacy.third_parties_heading"),
-			Content: i18n.RequestString(r, "privacy.third_parties_description") + " " + i18n.RequestString(r, "privacy.third_parties_followup"),
+		"retention": map[string]any{
+			"period": retentionPeriod,
+			"export_available": privacy.Retention.ExportAvailable,
+			"deletion_available": privacy.Retention.DeletionAvailable,
 		},
-		{
-			ID:      "your_rights",
-			Title:   i18n.RequestString(r, "privacy.your_rights_heading"),
-			Content: i18n.RequestString(r, "privacy.your_rights_description"),
+		"third_party": map[string]any{"services": services},
+		"ccpa": map[string]any{
+			"applicable": privacy.IsCCPAApplicable(), "opt_out_url": "/server/privacy#ccpa-opt-out", "user_opted_out": userOptedOut,
+		},
+		"content": map[string]any{
+			"consent_message": privacy.ConsentMessage(), "data_usage": privacy.DataUsageContent(),
 		},
 	}
-
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
-		Data: ServerPageResponse{
-			Title:       i18n.RequestString(r, "footer.privacy_policy"),
-			Description: i18n.RequestFormat(r, "privacy.data_collection_description", "app_name", appName),
-			Content:     h.config.Server.Pages.Privacy.Content,
-			Sections:    sections,
-		},
+		Data: data,
 		Meta: &APIMeta{Version: APIVersion},
 	})
 }
@@ -2654,71 +2738,21 @@ func (h *Handler) handleServerTerms(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.Title
+	appName := strings.TrimSpace(h.config.Server.Branding.Title)
 	if appName == "" {
-		appName = h.config.Server.Title
+		appName = strings.TrimSpace(h.config.Server.Title)
 	}
-
-	sections := []PageSection{
-		{
-			ID:      "acceptance",
-			Title:   "1. Acceptance of Terms",
-			Content: "By accessing or using " + appName + " (\"the Service\"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service.",
-		},
-		{
-			ID:      "description",
-			Title:   "2. Description of Service",
-			Content: appName + " is a privacy-respecting metasearch engine that aggregates results from multiple search engines. The Service is provided \"as is\" without warranty of any kind.",
-		},
-		{
-			ID:      "user_conduct",
-			Title:   "3. User Conduct",
-			Content: "You agree not to: Use the Service for any unlawful purpose. Attempt to gain unauthorized access to the Service or its systems. Interfere with or disrupt the Service. Use automated means to access the Service in a manner that exceeds reasonable use.",
-		},
-		{
-			ID:      "privacy",
-			Title:   "4. Privacy",
-			Content: "Your use of the Service is also governed by our Privacy Policy. We are committed to protecting your privacy and minimizing data collection.",
-		},
-		{
-			ID:      "intellectual_property",
-			Title:   "5. Intellectual Property",
-			Content: "The Service and its original content, features, and functionality are owned by the operators of " + appName + ". Search results displayed are the property of their respective owners.",
-		},
-		{
-			ID:      "third_party_content",
-			Title:   "6. Third-Party Content",
-			Content: "The Service aggregates results from third-party search engines. We do not control or endorse the content returned by these search engines.",
-		},
-		{
-			ID:      "disclaimer",
-			Title:   "7. Disclaimer of Warranties",
-			Content: "THE SERVICE IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.",
-		},
-		{
-			ID:      "liability",
-			Title:   "8. Limitation of Liability",
-			Content: "IN NO EVENT SHALL THE OPERATORS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
-		},
-		{
-			ID:      "modifications",
-			Title:   "9. Modifications to Service",
-			Content: "We reserve the right to modify, suspend, or discontinue the Service at any time without notice.",
-		},
-		{
-			ID:      "changes",
-			Title:   "10. Changes to Terms",
-			Content: "We may update these Terms of Service from time to time. Your continued use of the Service after changes constitutes acceptance of the new terms.",
-		},
+	if appName == "" {
+		appName = "Search"
 	}
-
+	builtIn := fmt.Sprintf("## Acceptance\n\nUsing %s means accepting these terms. Stop using it if you do not agree.\n\n## Acceptable use\n\nDo not use the service unlawfully, abuse other people, bypass rate limits or access controls, or test beyond the security policy at [/server/security/policy](/server/security/policy).\n\n## Liability\n\nThe service is provided as is, without warranty of any kind. To the extent the law allows, the operator is not liable for loss arising from its use.\n\n## Changes\n\nThese terms may change. The current text on this page applies from the moment it is published.\n\n## Governing law\n\nThe laws of the United States apply, without regard to conflict-of-law rules.\n", appName)
+	content, format := h.brandingPageContent("terms", builtIn, r)
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: ServerPageResponse{
-			Title:       "Terms of Service",
-			Description: "Terms of service for " + appName,
-			Content:     h.config.Server.Pages.Terms.Content,
-			Sections:    sections,
+			Title:   "Terms of Service",
+			Content: content,
+			Format:  format,
 		},
 		Meta: &APIMeta{Version: APIVersion},
 	})

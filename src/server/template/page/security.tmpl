@@ -4,7 +4,6 @@
         <h1 class="page-title">{{t "security.overview_title"}}</h1>
     </header>
 
-    <div class="page-content">
         <section class="section-card security-section" aria-labelledby="security-reporting-heading">
             <h2 id="security-reporting-heading">{{t "security.reporting_heading"}}</h2>
             <p>{{t "security.reporting_intro"}}</p>
@@ -19,16 +18,16 @@
                     <strong>{{t "security.channel_form"}}</strong>
                     <a href="{{.ContactURL}}">{{t "security.channel_form_link_text"}}</a>
                 </li>{{end}}
-                {{if .ContactURL}}
-                <li><a href="/server/contact?type=abuse">{{t "security.report_abuse_link"}}</a></li>
-                <li><a href="/server/contact?type=dmca">{{t "security.report_dmca_link"}}</a></li>
-                <li><a href="/server/contact?type=privacy">{{t "security.report_privacy_link"}}</a></li>
-                {{end}}
                 {{if .MailtoContact}}
                 <li>
                     <strong>{{t "security.channel_email"}}</strong>
                     <a href="{{.MailtoContact}}">{{.MailtoContact}}</a>
                 </li>
+                {{end}}
+                {{if .ContactURL}}
+                <li><a href="/server/contact?type=abuse">{{t "security.report_abuse_link"}}</a></li>
+                <li><a href="/server/contact?type=dmca">{{t "security.report_dmca_link"}}</a></li>
+                <li><a href="/server/contact?type=privacy">{{t "security.report_privacy_link"}}</a></li>
                 {{end}}
             </ul>
         </section>
@@ -54,6 +53,5 @@
                 <li><a href="/server/security/thanks">{{t "security.thanks_title"}}</a></li>
             </ul>
         </section>
-    </div>
 </div>
 {{end}}

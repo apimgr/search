@@ -51,6 +51,7 @@ var (
 	cliOverrides    = make(map[string]string)
 	cliOverrideMu   sync.RWMutex
 	startedElevated = IsPrivileged()
+	pidFileEnabled  = true
 )
 
 // StartedElevated reports whether this process began with elevated privileges.
@@ -86,6 +87,23 @@ func SetPIDFileOverride(path string) {
 	cliOverrideMu.Lock()
 	defer cliOverrideMu.Unlock()
 	cliOverrides["pid"] = path
+}
+
+// SetPIDFileEnabled controls whether startup manages the server PID file.
+func SetPIDFileEnabled(enabled bool) {
+	cliOverrideMu.Lock()
+	defer cliOverrideMu.Unlock()
+	pidFileEnabled = enabled
+}
+
+// PIDFileEnabled reports whether this process should manage a PID file.
+func PIDFileEnabled() bool {
+	if IsRunningInContainer() {
+		return false
+	}
+	cliOverrideMu.RLock()
+	defer cliOverrideMu.RUnlock()
+	return pidFileEnabled
 }
 
 // SetCacheDirOverride sets a CLI override for the cache directory
@@ -414,6 +432,9 @@ func GetCacheDir() string {
 	if dir, ok := getOverride("cache"); ok && dir != "" {
 		return dir
 	}
+	if dir := os.Getenv("CACHE_DIR"); dir != "" {
+		return dir
+	}
 
 	// Container paths (per AI.md PART 4)
 	if IsRunningInContainer() {
@@ -519,11 +540,14 @@ func writableBackupDir(path string) bool {
 
 // GetPIDFile returns the PID file location for the startup privilege mode.
 func GetPIDFile() string {
+	if !PIDFileEnabled() {
+		return ""
+	}
 	if path, ok := getOverride("pid"); ok && path != "" {
 		return path
 	}
-	if IsRunningInContainer() {
-		return "/data/" + ProjectName + ".pid"
+	if path := os.Getenv("PID_FILE"); path != "" {
+		return path
 	}
 	if startedElevated && (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd") {
 		return filepath.Join("/var/run", InternalOrg, InternalName, InternalName+".pid")
@@ -668,8 +692,7 @@ func EnsureDirectories() error {
 		GetSecurityDir(),
 	}
 
-	// PID file directory
-	pidDir := filepath.Dir(GetPIDFile())
+	pidFile := GetPIDFile()
 
 	// Create standard directories with appropriate permissions
 	for _, dir := range standardDirs {
@@ -685,9 +708,10 @@ func EnsureDirectories() error {
 		}
 	}
 
-	// PID directory uses standard permissions
-	if err := ensureDir(pidDir, dirPerm); err != nil {
-		return err
+	if pidFile != "" {
+		if err := ensureDir(filepath.Dir(pidFile), dirPerm); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -727,7 +751,9 @@ func EnsureSystemDirectories(userName string) error {
 		"/var/lib/" + InternalOrg + "/" + InternalName + "/db",
 		"/var/log/" + InternalOrg + "/" + InternalName,
 		"/var/cache/" + InternalOrg + "/" + InternalName,
-		filepath.Join("/var/run", InternalOrg, InternalName),
+	}
+	if PIDFileEnabled() {
+		systemDirs = append(systemDirs, filepath.Join("/var/run", InternalOrg, InternalName))
 	}
 
 	// Sensitive directories with 0700 permissions
@@ -786,7 +812,9 @@ func ChownRuntimeDirectories(userName string) error {
 		GetSecurityDir(),
 		GetSSLDir(),
 		GetTorDir(),
-		filepath.Dir(GetPIDFile()),
+	}
+	if pidFile := GetPIDFile(); pidFile != "" {
+		dirs = append(dirs, filepath.Dir(pidFile))
 	}
 
 	for _, dir := range dirs {

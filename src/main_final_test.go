@@ -69,7 +69,7 @@ func pipeStdin(t *testing.T, input string) {
 // printCompletions (3 stmts: error printf, supported-shells println, exitFunc).
 func TestPrintCompletionsUnsupportedShellOutput(t *testing.T) {
 	withExitFunc(t)
-	out := captureStdout(t, func() {
+	out := captureStderr(t, func() {
 		printCompletions("search", "tcsh")
 	})
 	if !strings.Contains(out, "Unsupported shell") {
@@ -150,7 +150,7 @@ func TestMainStatusDispatch(t *testing.T) {
 
 	resetAllFlagVars()
 	withArgs(t, []string{"search", "--status"})
-	out := captureStdout(t, main)
+	out := captureStderr(t, main)
 	if out == "" {
 		t.Error("--status: expected non-empty output from main()")
 	}

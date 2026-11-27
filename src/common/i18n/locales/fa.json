@@ -44,7 +44,8 @@
     "dismiss": "بستن",
     "upload": "Upload",
     "app_name": "Search",
-    "other": "سایر"
+    "other": "سایر",
+    "details": "جزئیات"
   },
   "auth": {
     "login": "ورود",
@@ -300,6 +301,7 @@
       "expired": "منقضی‌شده",
       "revoked": "لغوشده",
       "primary_revealed": "توکن اصلی نمایش داده شد",
+      "primary_created": "توکن اصلی ایجاد شد",
       "primary_rotated": "توکن اصلی چرخانده شد",
       "linked_created": "توکن پیوندشده ایجاد شد",
       "linked_revealed": "توکن پیوندشده نمایش داده شد",
@@ -309,7 +311,7 @@
       "expiry_90d": "۹۰ روز",
       "expiry_1y": "۱ سال",
       "shown_once": "فقط در بارگذاری این صفحه نمایش داده می‌شود.",
-      "primary_help": "دسترسی کامل به هشدارهای شما. این توکن را محرمانه نگه دارید.",
+      "primary_help": "دسترسی کامل به {resources} شما. این توکن را محرمانه نگه دارید.",
       "name_help": "برای نمونه: کارخواه MCP",
       "expiry_custom": "تاریخ دلخواه",
       "custom_date": "تاریخ دلخواه",
@@ -317,7 +319,7 @@
       "create": "ساخت توکن",
       "this_browser": "این مرورگر",
       "saved_in_browser": "توکن مالک در این مرورگر ذخیره شده است.",
-      "forget_note": "با فراموش‌کردن این مرورگر، کوکی توکن مالک حذف می‌شود. هشدارهای شما حذف نمی‌شوند.",
+      "forget_note": "با فراموش‌کردن این مرورگر، کوکی توکن مالک حذف می‌شود. {resources} شما حذف نمی‌شوند.",
       "forget_saved_token": "فراموش‌کردن توکن ذخیره‌شده",
       "forget_confirm": "توکن مالک ذخیره‌شده در این مرورگر فراموش شود؟",
       "no_linked_tokens": "هنوز توکن پیوندشده‌ای وجود ندارد.",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "توکن مالک ذخیره‌شده فراموش شد",
       "linked_revoked": "توکن پیوندشده لغو شد",
       "linked_updated": "توکن پیوندشده به‌روز شد",
-      "reveal": "نمایش توکن"
+      "reveal": "نمایش توکن",
+      "new_token": "توکن جدید",
+      "revoke_primary_heading": "لغو توکن اصلی",
+      "revoke_primary_summary": "{linked_count} توکن پیوندشده و {resource_count} {resources} حذف می‌شوند، از جمله هر چیزی که با توکن پیوندشده ایجاد شده باشد.",
+      "revoke_primary_button": "لغو توکن اصلی و حذف همه‌چیز",
+      "revoke_primary_confirm": "برای تأیید، ۴ نویسهٔ آخر توکن اصلی خود را وارد کنید ({last4})",
+      "primary_revoked": "توکن اصلی لغو شد"
     },
     "font_size": "اندازه قلم",
     "font_size_small": "کوچک",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "موضوع چیست؟",
     "message_label": "پیام",
     "message_placeholder": "پیام شما...",
-    "verification_question": "تأیید: {a} + {b} چند می‌شود؟",
+    "verification_question": "تأیید: {a} {operator} {b} چند می‌شود؟",
     "answer_placeholder": "پاسخ",
     "send_message": "ارسال پیام",
     "security_description": "شما در حال مشاهده فرم گزارش آسیب‌پذیری برای افشای هماهنگ‌شده هستید. لطفاً تا حد امکان جزئیات ارائه دهید.",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "این نشانی ایمیل درست است و این یک گزارش واقعی است، نه آگهی، درخواست تجاری یا هرزنامه.",
     "form_scope_notice": "این فرم فقط برای گزارش‌های امنیتی، نقض شرایط در نشانی‌های این سایت، اعلان‌های DMCA و درخواست‌های حریم خصوصی است. از آن برای پشتیبانی، گزارش اشکال، درخواست قابلیت یا پرسش عمومی استفاده نکنید.",
     "honeypot_label": "این قسمت را خالی بگذارید",
-    "type_abuse": "سوءاستفاده",
+    "type_abuse": "گزارش سوءاستفاده",
     "type_dmca": "DMCA",
     "type_privacy": "درخواست حریم خصوصی",
     "reported_url_label": "نشانی گزارش‌شده",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "برای گزارش آسیب‌پذیری امنیتی، به",
     "abuse_reports_heading": "گزارش‌های سوءاستفاده",
     "abuse_reports_intro": "برای گزارش محتوای آزاردهنده یا نقض شرایط، گزینهٔ سوءاستفاده را در بالا انتخاب کنید. برای ارسال اعلان DMCA، گزینهٔ DMCA را انتخاب کنید.",
-    "abuse_reports_email": "یا به {email} ایمیل بزنید"
+    "abuse_reports_email": "یا به {email} ایمیل بزنید",
+    "captcha_label": "تأیید انسانی",
+    "choose_type_heading": "نوع گزارش را انتخاب کنید",
+    "form_details_heading": "جزئیات گزارش",
+    "purpose_heading": "کاربرد این فرم",
+    "reported_url_help": "صفحه‌ای در این سایت، مانند https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "گردآوری داده‌ها",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "تجمیع و نمایش نتایج برای شما",
     "data_usage_item_preferences": "به‌خاطر سپردن ترجیحات شما (پوسته، زبان)",
     "data_retention_heading": "نگهداری داده‌ها",
+    "retention": {
+      "period": "منابعی که ایجاد می‌کنید تا زمان انقضا یا حذف با توکن مالک شما نگهداری می‌شوند. ترجیحات فقط در کوکی‌های مرورگر شما ذخیره می‌شوند. گزارش‌های عملیاتی حداکثر تا ۳۰ روز نگهداری می‌شوند. داده‌های تحلیلی ناشناس ممکن است تا ۱۲ ماه نگهداری شوند."
+    },
     "data_retention_description": "ما عبارت‌های جستجو یا داده‌های شخصی را نگه نمی‌داریم. داده‌های نشست موقت هستند و وقتی مرورگر را می‌بندید یا نشست شما منقضی می‌شود حذف می‌گردند.",
     "third_parties_heading": "اشخاص ثالث",
     "third_parties_description": "عبارت‌های جستجوی شما برای دریافت نتایج به موتورهای جستجوی بالادستی ارسال می‌شوند. ما هیچ داده دیگری را با اشخاص ثالث به اشتراک نمی‌گذاریم.",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "داده‌های تحلیلی ممکن است همان‌طور که در این خط‌مشی شرح داده شده با شرکای ثالث به اشتراک گذاشته یا به آن‌ها فروخته شوند.",
     "analytics_provider": "تحلیل‌ها از طریق {provider} ارائه می‌شوند.",
     "analytics_none": "هیچ ارائه‌دهنده تحلیل شخص ثالثی پیکربندی نشده است.",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "ذخیره‌سازی و اشتراک‌گذاری داده‌ها",
     "data_storage_intro": "هر داده‌ای که نگه می‌داریم به‌صورت امن ذخیره می‌شود و فقط تا زمانی که لازم باشد نگه‌داری می‌شود.",
     "data_storage_never_sold": "ما داده‌های ذخیره‌شده را فراتر از آنچه برای ارائه نتایج جستجو لازم است با اشخاص ثالث به اشتراک نمی‌گذاریم یا نمی‌فروشیم.",
@@ -1645,6 +1669,12 @@
     "last_updated": "آخرین به‌روزرسانی: {date}",
     "acceptance_heading": "1. پذیرش شرایط",
     "acceptance_description": "با دسترسی یا استفاده از {app_name} (\"the Service\")، شما موافقت می‌کنید که به این شرایط خدمات پایبند باشید. اگر با این شرایط موافق نیستید، لطفاً از Service استفاده نکنید.",
+    "governing_law_description": "قوانین ایالات متحده بدون توجه به قواعد تعارض قوانین اعمال می‌شوند، مگر آنکه شرایط خود گرداننده حوزه دیگری را مشخص کند.",
+    "governing_law_heading": "قانون حاکم",
+    "liability_description": "سرویس بدون هیچ‌گونه ضمانتی و همان‌طور که هست ارائه می‌شود. تا حد مجاز قانونی، گرداننده مسئول زیان ناشی از استفاده از آن نیست.",
+    "liability_heading": "مسئولیت",
+    "acceptable_use_description": "از سرویس برای کار غیرقانونی یا آسیب به دیگران استفاده نکنید، محدودیت نرخ یا کنترل دسترسی را دور نزنید و فراتر از سیاست امنیتی در /server/security/policy آزمایش نکنید.",
+    "acceptable_use_heading": "استفاده مجاز",
     "description_heading": "2. شرح سرویس",
     "description_body": "{app_name} یک موتور جستجوی فراگیرِ سازگار با حریم خصوصی است که نتایج را از چندین موتور جستجو تجمیع می‌کند. Service به‌صورت \"as is\" و بدون هیچ‌گونه ضمانتی ارائه می‌شود.",
     "user_conduct_heading": "3. رفتار کاربر",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. تغییرات در سرویس",
     "modifications_description": "ما حق داریم Service را در هر زمان و بدون اطلاع قبلی تغییر دهیم، تعلیق کنیم یا متوقف کنیم. ما در برابر شما یا هر شخص ثالثی بابت هرگونه تغییر، تعلیق یا توقف مسئول نخواهیم بود.",
-    "changes_heading": "10. تغییرات در شرایط",
-    "changes_description": "ممکن است این شرایط خدمات را از زمان به زمان به‌روزرسانی کنیم. ما با به‌روزرسانی تاریخ \"Last updated\" کاربران را از هر تغییر اساسی مطلع خواهیم کرد. ادامه استفاده شما از Service پس از تغییرات، به‌منزله پذیرش شرایط جدید است.",
+    "changes_heading": "تغییرات",
+    "changes_description": "این شرایط ممکن است تغییر کند. متن فعلی این صفحه از زمان انتشار اعمال می‌شود.",
     "contact_prefix": "اگر درباره این شرایط خدمات پرسشی دارید، لطفاً ",
     "contact_suffix": "."
   },
   "help": {
+    "i2p": {
+      "heading": "دسترسی I2P",
+      "intro": "این برنامه برای حفظ حریم خصوصی بیشتر به‌صورت یک eepsite در I2P در دسترس است.",
+      "address_heading": "نشانی I2P",
+      "how_to_heading": "نحوه اتصال",
+      "step_install": "نصب کنید",
+      "step_or": "یا",
+      "step_connect": "و منتظر بمانید تا به شبکه متصل شود.",
+      "step_proxy": "مرورگر خود را برای استفاده از پراکسی HTTP شبکه I2P در",
+      "step_address": "نشانی .b32.i2p بالا را کپی کنید و در نوار نشانی مرورگر بچسبانید.",
+      "note": "I2P با مسیریابی اتصال شما از طریق شبکه، حریم خصوصی بیشتری فراهم می‌کند. eepsiteها از طریق http:// ارائه می‌شوند؛ تونل I2P رمزگذاری انتقال را فراهم می‌کند، بنابراین گواهی TLS استفاده نمی‌شود."
+    },
+    "troubleshooting": {
+      "heading": "عیب‌یابی",
+      "search": "عبارت گسترده‌تری را امتحان کنید یا عملگرهای جستجو را حذف کنید؛ ممکن است موتور انتخاب‌شده نتیجه‌ای نیابد. اگر موتوری موقتاً در دسترس نیست، بعداً دوباره تلاش کنید.",
+      "access": "اگر بخش Tor نمایش داده نمی‌شود، با search --maintenance tor status بررسی کنید سرویس فعال و نشانی onion منتشر شده باشد. اگر I2P نیست، از اپراتور بخواهید وضعیت ارائه‌دهنده و نشانی را بررسی کند.",
+      "alerts": "اگر پیوند مدیریت هشدار باز نمی‌شود، از پیوند کامل پیام تأیید استفاده کنید؛ ممکن است توکن نامعتبر یا هشدار حذف شده باشد. فیلد مشخص‌شده در خطای فرم را اصلاح و دوباره ارسال کنید."
+    },
     "page_title": "Help",
     "title": "Help & Documentation",
     "subtitle": "Learn how to get the most out of {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "اطلاعات بیشتر",
     "policy_title": "خط‌مشی افشا",
     "policy_scope_heading": "دامنه",
-    "policy_scope_description": "این خط‌مشی برای این نمونه استقراریافته و سرویس‌هایی که ارائه می‌دهد اعمال می‌شود.",
+    "policy_scope_description": "برنامه ارائه‌شده در {fqdn}، از جمله API آن، در محدوده است.",
+    "policy_reporting_description": "لطفاً از طریق صفحه امنیت به‌صورت خصوصی گزارش دهید.",
+    "policy_reporting_heading": "گزارش‌دهی",
+    "policy_out_of_scope_item_headers": "نبود سرآیندهای توصیه‌شده در صفحات غیرحساس",
+    "policy_out_of_scope_item_scanner": "خروجی اسکن خودکار بدون اثر اثبات‌شده",
+    "policy_in_scope_item_i2p": "نشانی I2P: {address}",
+    "policy_in_scope_item_tor": "نشانی Tor: {address}",
+    "policy_in_scope_item_host": "میزبان پیکربندی‌شده دیگر: {host}",
     "policy_disclosure_window_heading": "بازه افشای هماهنگ‌شده",
-    "policy_disclosure_window_description": "از پژوهشگران می‌خواهیم تا ۹۰ روز فرصت دهند تا مشکل گزارش‌شده را بررسی و برطرف کنیم، مگر آنکه تاریخ هماهنگ‌شده دیگری توافق شود.",
+    "policy_disclosure_window_description": "لطفاً از طریق صفحه امنیت به‌صورت خصوصی گزارش دهید و از زمان گزارش ۹۰ روز برای افشای هماهنگ‌شده فرصت دهید؛ با انتشار اصلاحیه این مهلت زودتر پایان می‌یابد و با توافق قابل تمدید است.",
     "policy_in_scope_heading": "در دامنه",
     "policy_in_scope_item_deployed": "این نمونه استقراریافته و نقاط پایانی عمومی آن",
     "policy_in_scope_item_api": "رابط برنامه‌نویسی عمومی",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "آزمایش امنیت فیزیکی",
     "policy_out_of_scope_item_third_party": "سرویس‌های شخص ثالث که در کنترل ما نیستند",
     "policy_safe_harbor_heading": "پناهگاه امن",
-    "policy_safe_harbor_description": "علیه پژوهشگرانی که با حسن نیت تلاش می‌کنند این خط‌مشی را رعایت کنند، آسیب‌پذیری‌ها را مسئولانه گزارش می‌دهند و از نقض حریم خصوصی، تخریب داده یا اختلال در سرویس اجتناب می‌کنند، اقدام قانونی نخواهیم کرد.",
+    "policy_safe_harbor_description": "پژوهش با حسن نیت که از این سیاست پیروی کند، از نقض حریم خصوصی و اختلال سرویس بپرهیزد، فقط به اندازه لازم برای اثبات مشکل دسترسی داشته باشد و پس از اثبات متوقف شود، مجاز است و پیگرد قانونی نخواهد داشت.",
     "policy_contact_prefix": "سؤالات درباره این خط‌مشی را می‌توان از طریق صفحه",
     "policy_contact_suffix": " ارسال کرد.",
     "thanks_title": "قدردانی امنیتی",
@@ -2186,6 +2241,8 @@
     "report_status_title": "وضعیت گزارش امنیتی",
     "report_status_tracking_id_label": "شناسه پیگیری:",
     "report_status_state_label": "وضعیت:",
+    "report_status_comment_label": "نظر مدیران",
+    "report_status_disclosure_date_label": "تاریخ افشای مورد انتظار",
     "report_status_state_received": "دریافت شد",
     "report_status_state_triaged": "بررسی اولیه شد",
     "report_status_state_confirmed": "تأیید شد",
@@ -2232,6 +2289,7 @@
       "label_current_version": "نسخه فعلی:",
       "label_new_version": "نسخه جدید:",
       "label_release_date": "تاریخ انتشار:",
+      "label_channel": "کانال انتشار:",
       "label_release_notes": "یادداشت‌های انتشار:",
       "label_view_update": "مشاهده بروزرسانی:",
       "manual_command": "دستور به‌روزرسانی دستی: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "به روز رسانی نصب شد - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "به‌روزرسانی ناموفق بود - {app_name}",
         "body": "به‌روزرسانی ناموفق بود\n\nاز: {app_name} ({fqdn})\nزمان: {timestamp}\n\nنصب به‌روزرسانی {version} ناموفق بود.\nدلیل: {error}\n\nنسخهٔ قبلی همچنان در حال اجرا است.\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "به‌روزرسانی آماده شد - {app_name}",
+        "body": "به‌روزرسانی آماده شد\n\nاز: {app_name} ({fqdn})\nزمان: {timestamp}\n\nبه‌روزرسانی {version} تأیید و برای نصب آماده شده است.\n\nبرای اعمال به‌روزرسانی، سرویس را دوباره راه‌اندازی کنید.\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

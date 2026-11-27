@@ -16,7 +16,6 @@ import (
 	"net/netip"
 	"net/smtp"
 	"net/textproto"
-	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -32,8 +31,10 @@ import (
 var (
 	// netDialTimeout allows tests to mock net.DialTimeout
 	netDialTimeout = net.DialTimeout
-	// tlsDial allows tests to mock tls.Dial
-	tlsDial = tls.Dial
+	// tlsDial uses a bounded connection and handshake timeout. Tests may replace it.
+	tlsDial = func(network, addr string, config *tls.Config) (*tls.Conn, error) {
+		return tlsDialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, network, addr, config)
+	}
 	// smtpNewClient allows tests to mock smtp.NewClient
 	smtpNewClient = smtp.NewClient
 	// netInterfaces allows tests to mock net.Interfaces
@@ -132,7 +133,20 @@ func NewMailer(cfg *Config) *Mailer {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	}
-	return &Mailer{config: cfg}
+	mailerConfig := *cfg
+	mailerConfig.SMTP.TLS = normalizeSMTPTLSMode(mailerConfig.SMTP.TLS)
+	return &Mailer{config: &mailerConfig}
+}
+
+func normalizeSMTPTLSMode(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "auto", "starttls", "tls", "none":
+		return mode
+	default:
+		slog.Warn("invalid SMTP TLS mode; using default", "smtp_tls", mode, "default", "auto")
+		return "auto"
+	}
 }
 
 // NewMailerFromConfig builds a Mailer from the application's global
@@ -147,19 +161,16 @@ func NewMailerFromConfig(cfg *config.Config) (*Mailer, bool) {
 	if cfg == nil || cfg.Server.Notifications.Email.SMTP.Host == "" {
 		return nil, false
 	}
+	if strings.TrimSpace(cfg.Server.FQDN) == "" {
+		return nil, false
+	}
 	if smtpHostIsPrivateIP(cfg.Server.Notifications.Email.SMTP.Host) {
 		slog.Info("SMTP host is a private address: TLS certificate verification skipped", "host", cfg.Server.Notifications.Email.SMTP.Host)
 	}
 
 	fromEmail := cfg.Server.Notifications.Email.From.Email
 	if fromEmail == "" {
-		fqdn := "localhost"
-		if cfg.Server.BaseURL != "" {
-			if u, err := url.Parse(cfg.Server.BaseURL); err == nil && u.Host != "" {
-				fqdn = u.Host
-			}
-		}
-		fromEmail = "no-reply@" + fqdn
+		fromEmail = "no-reply@" + strings.TrimSpace(cfg.Server.FQDN)
 	}
 	fromName := cfg.Server.Notifications.Email.From.Name
 	if fromName == "" {
@@ -700,7 +711,7 @@ func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
 // notification. Per AI.md PART 30 "Email Template Translation": translated
 // strings are resolved server-side via i18n.T before being passed as plain
 // {variable} values.
-func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, releaseNotes, updateURL string, manualCommand ...string) error {
+func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, releaseNotes, updateURL, channel string, manualCommand ...string) error {
 	if !ml.CanSend() || !ml.config.Events.UpdateAvailable {
 		return nil
 	}
@@ -711,6 +722,7 @@ func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, r
 	vars["release_date"] = releaseDate
 	vars["release_notes"] = releaseNotes
 	vars["update_url"] = updateURL
+	vars["channel"] = channel
 	vars["manual_update_command"] = ""
 	if len(manualCommand) > 0 && strings.TrimSpace(manualCommand[0]) != "" {
 		vars["manual_update_command"] = i18n.Tf(lang, "email.update_available.manual_command", "command", manualCommand[0])
@@ -721,6 +733,7 @@ func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, r
 	vars["label_current_version"] = i18n.T(lang, "email.update_available.label_current_version")
 	vars["label_new_version"] = i18n.T(lang, "email.update_available.label_new_version")
 	vars["label_release_date"] = i18n.T(lang, "email.update_available.label_release_date")
+	vars["label_channel"] = i18n.T(lang, "email.update_available.label_channel")
 	vars["label_release_notes"] = i18n.T(lang, "email.update_available.label_release_notes")
 	vars["label_view_update"] = i18n.T(lang, "email.update_available.label_view_update")
 	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateUpdateAvailable, ml.lang(), vars)
@@ -760,6 +773,21 @@ func (ml *Mailer) SendUpdateFailed(version, reason string) error {
 	vars["version"] = version
 	vars["error"] = reason
 	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateUpdateFailed, ml.lang(), vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendToAdmins(subject, body)
+}
+
+// SendUpdateStaged tells admins that a verified update is waiting for a manual
+// service restart before it can be applied.
+func (ml *Mailer) SendUpdateStaged(version string) error {
+	if !ml.CanSend() || !ml.config.Events.UpdateStaged {
+		return nil
+	}
+	vars := ml.baseVars()
+	vars["version"] = version
+	subject, body, err := NewEmailTemplate().RenderLocalized(TemplateUpdateStaged, ml.lang(), vars)
 	if err != nil {
 		return err
 	}
@@ -1052,6 +1080,9 @@ func (ml *Mailer) TestConnection() error {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer closeutil.Close(conn)
+	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return fmt.Errorf("set SMTP test deadline: %w", err)
+	}
 
 	client, err := smtpNewClient(conn, ml.config.SMTP.Host)
 	if err != nil {
@@ -1090,6 +1121,73 @@ func (ml *Mailer) TestConnection() error {
 	return client.Quit()
 }
 
+var detectSMTP = DetectSMTP
+
+// AutoDetectSMTP fills and persists the SMTP host and port when host is empty.
+// It returns false without error when no reachable relay is found.
+func AutoDetectSMTP(cfg *config.Config, globalIPv4 ...string) (bool, error) {
+	if cfg == nil {
+		return false, fmt.Errorf("configuration is nil")
+	}
+	serverCfg := cfg.Get()
+	if serverCfg.Notifications.Email.SMTP.Host != "" {
+		return true, nil
+	}
+	if strings.TrimSpace(serverCfg.FQDN) == "" {
+		return false, nil
+	}
+
+	globalIP := ""
+	if len(globalIPv4) > 0 {
+		globalIP = globalIPv4[0]
+	}
+	detected := detectSMTP(serverCfg.FQDN, globalIP)
+	if detected == nil {
+		return false, nil
+	}
+	cfg.Update(func(server *config.ServerConfig) {
+		server.Notifications.Email.SMTP.Host = detected.Host
+		server.Notifications.Email.SMTP.Port = detected.Port
+		server.Notifications.Email.SMTP.TLS = "auto"
+	})
+
+	path := cfg.GetPath()
+	if path == "" {
+		path = config.GetConfigPath()
+	}
+	if path == "" {
+		return true, fmt.Errorf("configuration path is unavailable; detected SMTP settings are active but could not be persisted")
+	}
+	if err := cfg.Save(path); err != nil {
+		return true, fmt.Errorf("persist detected SMTP settings: %w", err)
+	}
+	return true, nil
+}
+
+// BootstrapMailer detects a relay when none is configured, then verifies the
+// configured relay before enabling email. A nil mailer with no error means no
+// working SMTP server was found.
+func BootstrapMailer(cfg *config.Config, globalIPv4 ...string) (*Mailer, bool, error) {
+	if cfg == nil || strings.TrimSpace(cfg.Get().FQDN) == "" {
+		return nil, false, nil
+	}
+	available, err := AutoDetectSMTP(cfg, globalIPv4...)
+	if err != nil && !available {
+		return nil, false, err
+	}
+	if !available {
+		return nil, false, nil
+	}
+	mailer, ok := NewMailerFromConfig(cfg)
+	if !ok || mailer == nil {
+		return nil, false, nil
+	}
+	if err := mailer.TestConnection(); err != nil {
+		return nil, false, err
+	}
+	return mailer, true, err
+}
+
 // DetectedSMTP represents a detected SMTP server
 type DetectedSMTP struct {
 	Host         string
@@ -1101,9 +1199,9 @@ type DetectedSMTP struct {
 
 // DetectSMTP auto-detects SMTP servers on the local system.
 // Per AI.md PART 17: SMTP auto-detection on first run.
-// Probe order: localhost → 127.0.0.1 → fqdn → globalIPv4 → mail.fqdn → smtp.fqdn → Docker host (172.17.0.1) → gateway IP.
+// Probe order: 127.0.0.1 → Docker bridge gateway (172.17.0.1) → default gateway IP → fqdn → globalIPv4 → mail.fqdn → smtp.fqdn.
 // fqdn and globalIPv4 are the server's configured FQDN and global IPv4 address; pass empty strings if unknown.
-// Ports: 25, 587, 465.
+// Ports: 25, 465, 587.
 func DetectSMTP(fqdn, globalIPv4 string) *DetectedSMTP {
 	// Per AI.md PART 17: Hosts to check in priority order
 	hosts := []string{"127.0.0.1", "172.17.0.1"}
@@ -1123,19 +1221,7 @@ func DetectSMTP(fqdn, globalIPv4 string) *DetectedSMTP {
 		hosts = append(hosts, "mail."+fqdn, "smtp."+fqdn)
 	}
 
-	// Per AI.md PART 17: Ports to check (25, 587, 465)
-	ports := []struct {
-		port     int
-		tls      bool
-		starttls bool
-	}{
-		// Standard SMTP
-		{25, false, true},
-		// Submission with STARTTLS
-		{587, false, true},
-		// SMTPS (TLS)
-		{465, true, false},
-	}
+	ports := smtpProbePorts()
 
 	for _, host := range hosts {
 		for _, p := range ports {
@@ -1147,6 +1233,25 @@ func DetectSMTP(fqdn, globalIPv4 string) *DetectedSMTP {
 	}
 
 	return nil
+}
+
+func smtpProbePorts() []struct {
+		port     int
+		tls      bool
+		starttls bool
+	} {
+	return []struct {
+		port     int
+		tls      bool
+		starttls bool
+	}{
+		// Standard SMTP
+		{25, false, true},
+		// SMTPS (TLS)
+		{465, true, false},
+		// Submission with STARTTLS
+		{587, false, true},
+	}
 }
 
 // getDefaultGateway attempts to get the default gateway IP

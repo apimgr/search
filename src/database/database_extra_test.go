@@ -127,12 +127,24 @@ func TestNewDB_LibSQLBadDSN(t *testing.T) {
 	}
 }
 
-// TestDB_SQL returns the underlying *sql.DB.
-func TestDB_SQL(t *testing.T) {
+// TestDB_Read exposes query operations without exposing the backing handle.
+func TestDB_Read(t *testing.T) {
 	db := newInMemoryDB(t)
-	raw := db.SQL()
-	if raw == nil {
-		t.Error("SQL() returned nil")
+	reader := db.Read(context.Background())
+	if reader == nil {
+		t.Fatal("Read() returned nil")
+	}
+	rows, err := QueryContext(context.Background(), reader, TimeoutSimpleQuery, "SELECT 1")
+	if err != nil {
+		t.Fatalf("Reader.QueryContext() error = %v", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close query rows: %v", err)
+		}
+	}()
+	if !rows.Next() {
+		t.Fatal("Reader.QueryContext() returned no rows")
 	}
 }
 

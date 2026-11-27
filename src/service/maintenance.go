@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/apimgr/search/src/common/closeutil"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 )
 
 // MaintenanceMode represents the current maintenance state
@@ -518,26 +519,30 @@ func (m *MaintenanceService) GetStatus() map[string]interface{} {
 
 // CheckDatabaseIntegrity checks database integrity and attempts repair if needed
 // Per AI.md PART 6: Database corruption handling
-func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
+func (m *MaintenanceService) CheckDatabaseIntegrity(db database.Reader) error {
+	if db == nil {
+		return fmt.Errorf("database read store unavailable")
+	}
 	ctx, cancel := context.WithTimeout(m.ctx, 120*time.Second)
 	defer cancel()
 
 	// Run SQLite integrity check
-	rows, err := db.QueryContext(ctx, "PRAGMA integrity_check")
+	rows, err := database.QueryContext(ctx, db, 120*time.Second, "PRAGMA integrity_check")
 	if err != nil {
 		return fmt.Errorf("failed to run integrity check: %w", err)
 	}
-	defer closeutil.Close(rows)
-
 	var issues []string
 	for rows.Next() {
 		var result string
 		if err := rows.Scan(&result); err != nil {
-			return fmt.Errorf("failed to scan integrity result: %w", err)
+			return errors.Join(fmt.Errorf("failed to scan integrity result: %w", err), rows.Close())
 		}
 		if result != "ok" {
 			issues = append(issues, result)
 		}
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return fmt.Errorf("failed to read integrity results: %w", err)
 	}
 
 	if len(issues) > 0 {
@@ -582,13 +587,6 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	}
 	slog.Info("Backup created", "path", backupPath)
 
-	// Open a new connection
-	db, err := sql.Open("sqlite", cleanedPath)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-	defer closeutil.Close(db)
-
 	// Try to recover using VACUUM
 	ctx, cancel := context.WithTimeout(m.ctx, 300*time.Second)
 	defer cancel()
@@ -600,21 +598,17 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	if filepath.Dir(filepath.Clean(vacuumPath)) != dbDir {
 		return fmt.Errorf("invalid vacuum output path: must be within database directory %s", dbDir)
 	}
-	if _, err := db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", vacuumPath)); err != nil {
+	vacuumed, err := database.RepairSQLite(ctx, cleanedPath, vacuumPath)
+	if err != nil {
 		slog.Warn("VACUUM INTO failed, trying reindex", "err", err)
-
-		// Try REINDEX as fallback
-		if _, err := db.ExecContext(ctx, "REINDEX"); err != nil {
-			return fmt.Errorf("repair failed: %w", err)
-		}
+		return fmt.Errorf("repair failed: %w", err)
+	}
+	if !vacuumed {
 		slog.Info("REINDEX completed")
 		return nil
 	}
 
 	// Replace original with clean copy
-	if err := db.Close(); err != nil {
-		return fmt.Errorf("failed to close repaired database before replacement: %w", err)
-	}
 	if err := os.Rename(vacuumPath, cleanedPath); err != nil {
 		return fmt.Errorf("failed to replace with clean database: %w", err)
 	}

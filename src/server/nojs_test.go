@@ -280,6 +280,14 @@ func TestRenderNoJSSearch_QueryTitleEscaped(t *testing.T) {
 	if !strings.Contains(body, "&lt;script&gt;") {
 		t.Error("expected query to be HTML-escaped in title/body")
 	}
+	for _, required := range []string{`class="empty-state"`, `class="empty-state-icon"`, `class="empty-state-title"`, `class="empty-state-message"`, `class="btn btn-secondary"`} {
+		if !strings.Contains(body, required) {
+			t.Errorf("no-JavaScript empty search state is missing %q", required)
+		}
+	}
+	if strings.Contains(body, `class="no-results"`) {
+		t.Error("no-JavaScript empty search state retains the obsolete no-results class")
+	}
 }
 
 func TestRenderNoJSSearchShowsInstantAnswerAndSameOriginThumbnail(t *testing.T) {

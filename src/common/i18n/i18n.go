@@ -205,12 +205,12 @@ func (m *Manager) DetectLanguage(r *http.Request) string {
 }
 
 // ResolveLanguage detects the preferred language and persists a supported query
-// parameter value to the language cookie.
-func (m *Manager) ResolveLanguage(w http.ResponseWriter, r *http.Request) string {
+// parameter only when the caller confirms that preference-cookie consent exists.
+func (m *Manager) ResolveLanguage(w http.ResponseWriter, r *http.Request, canPersist bool) string {
 	if raw := strings.TrimSpace(r.URL.Query().Get("lang")); raw != "" {
 		if lang := m.normalizeSupportedLanguage(raw); lang != "" {
-			if w != nil {
-				SetLanguageCookie(w, lang)
+			if w != nil && canPersist && r.Method == http.MethodGet {
+				SetLanguageCookie(w, lang, r.TLS != nil)
 			}
 			return lang
 		}
@@ -430,15 +430,16 @@ func (m *Manager) TemplateFuncs(lang string) template.FuncMap {
 	}
 }
 
-// SetLanguageCookie sets the language preference cookie
-func SetLanguageCookie(w http.ResponseWriter, lang string) {
+// SetLanguageCookie sets the consented, JavaScript-readable language preference cookie.
+func SetLanguageCookie(w http.ResponseWriter, lang string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:  "lang",
 		Value: lang,
 		Path:  "/",
 		// 1 year
 		MaxAge:   365 * 24 * 60 * 60,
-		HttpOnly: true,
+		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   secure,
 	})
 }

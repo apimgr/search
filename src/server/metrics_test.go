@@ -41,6 +41,19 @@ func TestMetricsHandlerServesOwnRegistry(t *testing.T) {
 	}
 }
 
+func TestDatabaseWriteWaitHistogramUsesConfiguredBuckets(t *testing.T) {
+	m := NewMetrics(config.DefaultConfig())
+	recorder := httptest.NewRecorder()
+	m.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/server/metrics", nil))
+
+	for _, bound := range []string{"0.001", "0.005", "0.01", "0.025", "0.05", "0.1", "0.25", "0.5", "1", "2.5", "5", "10"} {
+		want := `search_db_write_wait_seconds_bucket{le="` + bound + `"}`
+		if !strings.Contains(recorder.Body.String(), want) {
+			t.Errorf("metrics output is missing required database write wait bucket %s", bound)
+		}
+	}
+}
+
 func TestMetricsRequestStatsPersistAndRefreshFromSharedDatabase(t *testing.T) {
 	db, err := database.NewDB(&database.Config{Driver: "sqlite", DSN: ":memory:", MaxOpen: 1, MaxIdle: 1, Lifetime: 60})
 	if err != nil {

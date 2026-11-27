@@ -36,7 +36,7 @@ func ReencryptTokenCopies(ctx context.Context, db *database.DB, prefix, oldKey, 
 			encrypted string
 		}
 		err := db.Write(ctx, func(tx *sql.Tx) error {
-			rows, err := tx.QueryContext(ctx, fmt.Sprintf("SELECT id,token_enc FROM %s WHERE id>? AND token_enc<>'' ORDER BY id LIMIT 500", table), cursor)
+			rows, err := database.QueryContext(ctx, tx, database.TimeoutBulk, fmt.Sprintf("SELECT id,token_enc FROM %s WHERE id>? AND token_enc<>'' ORDER BY id LIMIT 500", table), cursor)
 			if err != nil {
 				return err
 			}
@@ -79,7 +79,7 @@ func ReencryptTokenCopies(ctx context.Context, db *database.DB, prefix, oldKey, 
 				if err != nil {
 					return fmt.Errorf("encrypt owner token row %s: %w", row.id, err)
 				}
-				result, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET token_enc=? WHERE id=? AND token_enc=?", table), encoded, row.id, row.encrypted)
+				result, err := database.ExecContext(ctx, tx, fmt.Sprintf("UPDATE %s SET token_enc=? WHERE id=? AND token_enc=?", table), encoded, row.id, row.encrypted)
 				if err != nil {
 					return fmt.Errorf("update owner token row %s: %w", row.id, err)
 				}

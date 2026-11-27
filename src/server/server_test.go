@@ -17,6 +17,7 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -124,6 +125,28 @@ func TestAPIRoutesMatchAIAndIDEAContract(t *testing.T) {
 		}
 		if !registered[operation] {
 			t.Errorf("API route drift: %s is in OpenAPI but missing from the router", operation)
+		}
+	}
+}
+
+func TestWellKnownHandlersRejectNonReadMethods(t *testing.T) {
+	server := newTestServer(t)
+	handler := server.Handler()
+
+	for _, path := range []string{
+		"/.well-known/security.txt",
+		"/.well-known/pgp-key.asc",
+		"/.well-known/llms.txt",
+		"/.well-known/change-password",
+	} {
+		request := httptest.NewRequest(http.MethodPost, path, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s status = %d, want %d", path, response.Code, http.StatusMethodNotAllowed)
+		}
+		if response.Header().Get("Allow") != "GET, HEAD" {
+			t.Errorf("POST %s Allow = %q, want %q", path, response.Header().Get("Allow"), "GET, HEAD")
 		}
 	}
 }
@@ -539,7 +562,10 @@ func normalizeRoutePath(path string) string {
 }
 
 func (e *queryCaptureEngine) Search(_ context.Context, query *model.Query) ([]model.Result, error) {
-	e.queries <- *query
+	select {
+	case e.queries <- *query:
+	default:
+	}
 	return []model.Result{{Title: "Fixture", URL: "https://example.test/", Engine: e.Name(), Category: query.Category}}, nil
 }
 
@@ -1240,7 +1266,7 @@ func TestMiddlewareRecovery(t *testing.T) {
 	}
 }
 
-func TestRecoveryHTMLUsesRequestLanguage(t *testing.T) {
+func TestRecoveryHTMLUsesDependencyFreeFallback(t *testing.T) {
 	cfg := &config.Config{Server: config.ServerConfig{Mode: "production"}}
 	mw := NewMiddleware(cfg, nil)
 	wrapped := mw.Recovery(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -1254,9 +1280,34 @@ func TestRecoveryHTMLUsesRequestLanguage(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{`<html lang="de" dir="ltr"`, "Interner Serverfehler", "Ein Fehler ist aufgetreten", "Zurück zur Suche"} {
+	for _, want := range []string{`<html lang="en"`, "<main>", "<h1>500 Internal Server Error</h1>", `href="/">Home</a>`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("localized recovery response missing %q", want)
+			t.Errorf("dependency-free recovery response missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"theme-dark", "public.css", "Interner Serverfehler", "localized recovery test"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("recovery response depends on forbidden value %q", forbidden)
+		}
+	}
+}
+
+func TestRecoveryJSONUsesDependencyFreeFallback(t *testing.T) {
+	cfg := &config.Config{Server: config.ServerConfig{Mode: "production"}}
+	mw := NewMiddleware(cfg, nil)
+	wrapped := mw.Recovery(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("json recovery test")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	for _, want := range []string{`"ok":false`, `"error":"SERVER_ERROR"`, `"message":"Internal Server Error"`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("JSON fallback missing %q: %s", want, rec.Body.String())
 		}
 	}
 }
@@ -1813,6 +1864,7 @@ func TestNewPageDataResolvesLanguageFromQueryAndSetsCookie(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/?lang=ar", nil)
+	req.AddCookie(&http.Cookie{Name: "cookie_consent", Value: url.PathEscape(`{"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}`)})
 	rec := httptest.NewRecorder()
 
 	data := s.newPageData(rec, req, "Title", "home")
@@ -2963,40 +3015,30 @@ func TestBuildHealthInfoMaintenanceMode(t *testing.T) {
 	}
 }
 
-func TestSignCaptcha(t *testing.T) {
-	s := &Server{
-		config:    &config.Config{},
-		startTime: time.Now(),
-	}
-	id := s.signCaptcha(7)
-	if id == "" {
-		t.Error("signCaptcha() returned empty string")
-	}
-	// Format should be "answer.signature"
-	parts := strings.Split(id, ".")
-	if len(parts) < 2 {
-		t.Errorf("signCaptcha() format incorrect, got %q (expected answer.sig)", id)
-	}
-	if parts[0] != "7" {
-		t.Errorf("signCaptcha(7) answer part = %q, want '7'", parts[0])
-	}
-}
-
 func TestContactHoneypotSilentlyAcceptsWithoutDelivery(t *testing.T) {
 	s := newTestServer(t)
+	previousCaptcha := s.config.Server.Pages.Contact.Captcha
+	previousMinFillSeconds := s.config.Server.Pages.Contact.Antispam.MinFillSeconds
+	s.config.Server.Pages.Contact.Captcha = "simple"
 	s.config.Update(func(cfg *config.ServerConfig) { cfg.Pages.Contact.Antispam.MinFillSeconds = 0 })
-	captchaID := s.signCaptcha(3)
+	t.Cleanup(func() {
+		s.config.Server.Pages.Contact.Captcha = previousCaptcha
+		s.config.Server.Pages.Contact.Antispam.MinFillSeconds = previousMinFillSeconds
+	})
+	challengeRequest := httptest.NewRequest(http.MethodGet, "/server/contact", nil)
+	captchaID, captchaAnswer := issueTestContactCaptcha(t, s, challengeRequest)
 	form := url.Values{
 		"website": {"https://spam.example"}, "type": {"privacy"}, "request_kind": {"other"},
 		"name": {"Spam"}, "email": {"spam@example.com"}, "subject": {"Hello"}, "message": {"Message"},
-		"form_token": {s.ContactFormToken()}, "captcha_id": {captchaID}, "captcha": {"3"},
+		"form_token": {s.ContactFormToken()}, "captcha_id": {captchaID}, "captcha_answer": {captchaAnswer},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/server/contact", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Accept", "text/html")
 	recorder := httptest.NewRecorder()
 	s.handleContactSubmit(recorder, req)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "contact-review-panel") {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `id="contact-review-title"`) {
 		t.Fatalf("honeypot first step = %d, want normal review page", recorder.Code)
 	}
 }
@@ -3016,23 +3058,6 @@ func TestContactCaptchaOnlyAppearsAfterSignedFailureMarker(t *testing.T) {
 	forged.AddCookie(&http.Cookie{Name: "contact_captcha_required", Value: "1.forged"})
 	if s.contactCaptchaRequired(forged) {
 		t.Fatal("forged failure marker enabled captcha")
-	}
-}
-
-func TestValidCaptchaChecksSignatureAndAnswer(t *testing.T) {
-	s := &Server{config: &config.Config{}, startTime: time.Now()}
-	id := s.signCaptcha(7)
-	if !s.validCaptcha(id, "7") {
-		t.Fatal("valid captcha was rejected")
-	}
-	if s.validCaptcha(id, "8") {
-		t.Error("captcha accepted a different answer")
-	}
-	if s.validCaptcha("7.invalid", "7") {
-		t.Error("captcha accepted an invalid signature")
-	}
-	if s.validCaptcha(id, "") {
-		t.Error("captcha accepted an empty answer")
 	}
 }
 
@@ -4178,4 +4203,19 @@ func TestServerListenConsumesPreboundListener(t *testing.T) {
 		t.Fatal("listen() did not consume the prebound listener")
 	}
 	got.Close()
+}
+
+func TestReplaceMailerReturnsPreviousMailer(t *testing.T) {
+	first := email.NewMailer(&email.Config{Enabled: true})
+	second := email.NewMailer(&email.Config{Enabled: true})
+	srv := &Server{}
+	if previous := srv.replaceMailer(first); previous != nil {
+		t.Fatalf("first replace returned previous mailer %p, want nil", previous)
+	}
+	if previous := srv.replaceMailer(second); previous != first {
+		t.Fatalf("second replace returned %p, want %p", previous, first)
+	}
+	if got := srv.currentMailer(); got != second {
+		t.Fatalf("currentMailer() = %p, want %p", got, second)
+	}
 }

@@ -265,6 +265,50 @@ func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 	}
 }
 
+func TestMirrorCertBundleKeepsFilesPrivate(t *testing.T) {
+	tempDir := t.TempDir()
+	sslDir := filepath.Join(tempDir, "ssl")
+	certDir := filepath.Join(sslDir, "letsencrypt", "example.com")
+	if err := os.MkdirAll(certDir, 0700); err != nil {
+		t.Fatalf("create certificate directory: %v", err)
+	}
+
+	certPath := filepath.Join(certDir, "fullchain.pem")
+	keyPath := filepath.Join(certDir, "privkey.pem")
+	for _, path := range []string{certPath, keyPath} {
+		if err := os.WriteFile(path, []byte("old data"), 0644); err != nil {
+			t.Fatalf("create existing certificate file: %v", err)
+		}
+	}
+
+	certSource, keySource, err := generateTestCertWithExpiry(tempDir, 90*24*time.Hour)
+	if err != nil {
+		t.Fatalf("generate test certificate: %v", err)
+	}
+	certPEM, err := os.ReadFile(certSource)
+	if err != nil {
+		t.Fatalf("read test certificate: %v", err)
+	}
+	keyPEM, err := os.ReadFile(keySource)
+	if err != nil {
+		t.Fatalf("read test key: %v", err)
+	}
+	bundle := append(append([]byte(nil), keyPEM...), certPEM...)
+	if err := mirrorCertBundle(sslDir, "example.com", bundle); err != nil {
+		t.Fatalf("mirror certificate bundle: %v", err)
+	}
+
+	for _, path := range []string{certPath, keyPath} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat private certificate file %q: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != 0600 {
+			t.Errorf("file mode for %s = %04o, want 0600", filepath.Base(path), got)
+		}
+	}
+}
+
 // TestObtainCertificateDNS01ExpiredCertOnDisk exercises the code path where an
 // expired (or soon-expiring) cert exists on disk — the function proceeds to call
 // Certificate.Obtain on the lego client.  The fake ACME server is not fully wired

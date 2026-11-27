@@ -37,7 +37,7 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 log "Starting ${APP_NAME}..."
 
 # Build flags from environment
-APP_FLAGS=(--address "${ADDRESS:-0.0.0.0}" --port "${PORT:-80}")
+APP_FLAGS=(--address "${LISTEN:-[::]}" --port "${PORT:-80}")
 if [ "${DEBUG:-false}" = "true" ]; then
     APP_FLAGS+=(--debug)
 fi

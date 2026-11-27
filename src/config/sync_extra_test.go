@@ -31,13 +31,19 @@ func openTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
+func newConfigSyncTestStore(db *sql.DB, cfg *Config, path string) *ConfigSync {
+	syncer := NewConfigSync(db, cfg, path)
+	syncer.legacyDB = db
+	return syncer
+}
+
 // TestWriteToDatabaseSuccess verifies writeToDatabase upserts to the DB correctly.
 func TestWriteToDatabaseSuccess(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
 	cfg := DefaultConfig()
-	cs := NewConfigSync(db, cfg, "/test/path")
+	cs := newConfigSyncTestStore(db, cfg, "/test/path")
 
 	err := cs.writeToDatabase("server.title", "TestTitle")
 	if err != nil {
@@ -62,7 +68,7 @@ func TestWriteToDatabaseUpsert(t *testing.T) {
 	defer db.Close()
 
 	cfg := DefaultConfig()
-	cs := NewConfigSync(db, cfg, "/test/path")
+	cs := newConfigSyncTestStore(db, cfg, "/test/path")
 
 	if err := cs.writeToDatabase("server.port", 8080); err != nil {
 		t.Fatalf("writeToDatabase() first write error = %v", err)
@@ -89,7 +95,7 @@ func TestWriteToDatabaseNonSerializableValue(t *testing.T) {
 	defer db.Close()
 
 	cfg := DefaultConfig()
-	cs := NewConfigSync(db, cfg, "/test/path")
+	cs := newConfigSyncTestStore(db, cfg, "/test/path")
 
 	// Channels cannot be JSON-marshaled
 	ch := make(chan int)
@@ -142,7 +148,7 @@ func TestWriteToDatabaseExecError(t *testing.T) {
 	db.Close()
 
 	cfg := DefaultConfig()
-	cs := NewConfigSync(db, cfg, "/test/path")
+	cs := newConfigSyncTestStore(db, cfg, "/test/path")
 
 	err := cs.writeToDatabase("some.key", "value")
 	if err == nil {

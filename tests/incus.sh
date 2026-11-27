@@ -20,12 +20,32 @@ case "$MODE" in
     *) echo "Usage: $0 [systemd|openrc|all]" >&2; exit 2 ;;
 esac
 
-# Detect project info
-PROJECT_NAME=$(basename "$PWD")
-PROJECT_ORG=$(basename "$(dirname "$PWD")")
-INTERNAL_NAME="${INTERNAL_NAME:-$PROJECT_NAME}"
-INTERNAL_ORG="${INTERNAL_ORG:-$PROJECT_ORG}"
-CONTAINER_PREFIX="${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+# Resolve project identity from IDEA.md first, with the documented repository/path fallbacks.
+read_idea_value() {
+    [ -r IDEA.md ] || return 0
+    sed -n "/^$1:[[:space:]]*/ { s/^$1:[[:space:]]*//; p; q; }" IDEA.md | tr -d '[:space:]'
+}
+
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || true)
+PROJECT_NAME=$(read_idea_value project_name)
+PROJECT_ORG=$(read_idea_value project_org)
+if [ -z "$PROJECT_NAME" ]; then
+    PROJECT_NAME=$(printf '%s\n' "$ORIGIN_URL" | sed -E 's|.*/([^/]+)$|\1|; s/\.git$//')
+fi
+if [ -z "$PROJECT_ORG" ]; then
+    PROJECT_ORG=$(printf '%s\n' "$ORIGIN_URL" | sed -E 's|.*[:/]([^/:]+)/[^/]+(\.git)?$|\1|')
+fi
+PROJECT_NAME=${PROJECT_NAME:-$(basename "$PWD")}
+PROJECT_ORG=${PROJECT_ORG:-$(basename "$(dirname "$PWD")")}
+IDEA_INTERNAL_NAME=$(read_idea_value internal_name)
+IDEA_INTERNAL_ORG=$(read_idea_value internal_org)
+INTERNAL_NAME=${IDEA_INTERNAL_NAME:-${INTERNAL_NAME:-$PROJECT_NAME}}
+INTERNAL_ORG=${IDEA_INTERNAL_ORG:-${INTERNAL_ORG:-$PROJECT_ORG}}
+random_suffix() {
+    head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8
+}
+
+CONTAINER_PREFIX="${PROJECT_NAME}-$(random_suffix)"
 CONTAINERS=()
 TMP_BASE="${TMPDIR:-/tmp}"
 TMP_ROOT="$TMP_BASE/$PROJECT_ORG"
@@ -81,7 +101,7 @@ else
         *) BIN_PATH="$PWD/$BIN_DIR" ;;
     esac
     docker run --rm \
-      --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+      --name "${PROJECT_NAME}-$(random_suffix)" \
       -v "$PWD:/app" \
       -v "$BIN_PATH:/out" \
       -v "$GO_CACHE:/usr/local/share/go/pkg/mod" \
@@ -90,7 +110,7 @@ else
       casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o "/out/${PROJECT_NAME}" ./src
     if [ -d "src/client" ]; then
         docker run --rm \
-          --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          --name "${PROJECT_NAME}-$(random_suffix)" \
           -v "$PWD:/app" \
           -v "$BIN_PATH:/out" \
           -v "$GO_CACHE:/usr/local/share/go/pkg/mod" \
@@ -112,6 +132,17 @@ pass() { echo "✓ $*"; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then pass "$d"; else fail "$d"; fi; }
 check_not() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$d"; else pass "$d"; fi; }
 wait_for() { local n="$1" i; shift; for i in $(seq 1 "$n"); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
+TMP_ROOT="${TMPDIR:-/tmp}/${PROJECT_ORG}"
+mkdir -p "$TMP_ROOT"
+TEST_TMP=$(mktemp -d "$TMP_ROOT/${INTERNAL_NAME}-XXXXXX")
+chmod 0700 "$TEST_TMP"
+cleanup_test_tmp() {
+    case "$TEST_TMP" in
+        "$TMP_ROOT/$INTERNAL_NAME-"*) rm -rf -- "$TEST_TMP" ;;
+        *) echo "Refusing to remove unexpected test directory: $TEST_TMP" >&2; return 1 ;;
+    esac
+}
+trap cleanup_test_tmp EXIT INT TERM
 
 # A native service listens on the port the server saved in server.yml (a random 64xxx port; 80 is only the container default), so read it there
 CONFIG_FILE="/etc/${INTERNAL_ORG}/${INTERNAL_NAME}/server.yml"
@@ -132,8 +163,8 @@ if [ "$INIT_MODE" = "systemd" ]; then
     svc_pid()     { systemctl show -p MainPID --value "$INTERNAL_NAME"; }
 else
     UNIT_FILE="/etc/init.d/${INTERNAL_NAME}"
-    svc_active()  { rc-service "$INTERNAL_NAME" status 2>&1 | grep -q started; }
-    svc_enabled() { rc-update show default | grep -qw "$INTERNAL_NAME"; }
+    svc_active()  { local service_status; service_status=$(rc-service "$INTERNAL_NAME" status 2>&1) || return 1; [[ "$service_status" == *started* ]]; }
+    svc_enabled() { local enabled_services; enabled_services=$(rc-update show default) || return 1; [[ "$enabled_services" == *"$INTERNAL_NAME"* ]]; }
     svc_pid()     { cat "/var/run/${INTERNAL_ORG}/${INTERNAL_NAME}/${INTERNAL_NAME}.pid"; }
 fi
 svc_stopped() { ! svc_active; }
@@ -163,7 +194,7 @@ echo "=== [$INIT_MODE] Service install (--service --install also enables and sta
 ${PROJECT_NAME} --service --install
 check "service file installed at ${UNIT_FILE}" test -f "$UNIT_FILE"
 if [ "$INIT_MODE" = "openrc" ]; then
-    check "init script starts with #!/sbin/openrc-run" sh -c "head -1 '$UNIT_FILE' | grep '^#!/sbin/openrc-run' >/dev/null"
+    check "init script starts with #!/sbin/openrc-run" awk 'NR == 1 { if ($0 == "#!/sbin/openrc-run") exit 0; exit 1 }' "$UNIT_FILE"
     check "init script is executable" test -x "$UNIT_FILE"
     check_not "init script is not a SysV script" grep -q 'BEGIN INIT INFO' "$UNIT_FILE"
 fi
@@ -283,25 +314,24 @@ if curl -q -LSsf http://localhost:$(port)/server/healthz | grep '"status"' >/dev
 
 echo "=== Binary Rename Tests ==="
 # Binaries show the ACTUAL name in --help/--version (not hardcoded)
-cp /usr/local/bin/${PROJECT_NAME} /tmp/renamed-server
-chmod +x /tmp/renamed-server
-if /tmp/renamed-server --help 2>&1 | grep 'renamed-server' >/dev/null; then pass "Server binary rename works (--help shows actual name)"; else fail "Server --help does not show renamed binary name"; fi
+cp "/usr/local/bin/${PROJECT_NAME}" "$TEST_TMP/renamed-server"
+chmod +x "$TEST_TMP/renamed-server"
+if "$TEST_TMP/renamed-server" --help 2>&1 | grep 'renamed-server' >/dev/null; then pass "Server binary rename works (--help shows actual name)"; else fail "Server --help does not show renamed binary name"; fi
 
 echo "=== Client Tests (if exists) ==="
 if [ -f /usr/local/bin/${PROJECT_NAME}-cli ]; then
     ${PROJECT_NAME}-cli --version || fail "CLI --version"
     ${PROJECT_NAME}-cli --help || fail "CLI --help"
 
-    cp /usr/local/bin/${PROJECT_NAME}-cli /tmp/renamed-cli
-    chmod +x /tmp/renamed-cli
-    if /tmp/renamed-cli --help 2>&1 | grep 'renamed-cli' >/dev/null; then pass "CLI binary rename works"; else fail "CLI --help does not show renamed binary name"; fi
+    cp "/usr/local/bin/${PROJECT_NAME}-cli" "$TEST_TMP/renamed-cli"
+    chmod +x "$TEST_TMP/renamed-cli"
+    if "$TEST_TMP/renamed-cli" --help 2>&1 | grep 'renamed-cli' >/dev/null; then pass "CLI binary rename works"; else fail "CLI --help does not show renamed binary name"; fi
 
     echo '--- CLI Full Functionality Tests ---'
     if [ -n "${LINKED_TOKEN:-}" ]; then
-        mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-        CLI_TMP=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+        CLI_TMP="$TEST_TMP/cli"
+        mkdir -p "$CLI_TMP"
         chmod 0700 "$CLI_TMP"
-        trap 'rm -rf -- "$CLI_TMP"' EXIT
         printf '%s' "$LINKED_TOKEN" > "$CLI_TMP/linked-token"
         chmod 0600 "$CLI_TMP/linked-token"
         cli_args=(--server "http://localhost:$(port)" --token-file "$CLI_TMP/linked-token")

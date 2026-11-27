@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -51,7 +52,7 @@ func TestDetectShellFromEnv(t *testing.T) {
 		{"/usr/bin/fish", "fish"},
 		{"/bin/sh", "sh"},
 		{"/usr/local/bin/zsh", "zsh"},
-		{"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "powershell.exe"},
+		{"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "powershell"},
 	}
 
 	for _, tt := range tests {
@@ -187,6 +188,41 @@ func TestPrintCompletionsUnsupported(t *testing.T) {
 
 	if err == nil {
 		t.Error("printCompletions('unsupported') should return error")
+	}
+}
+
+func TestCompletionsIncludeUpdateAndShellValues(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish", "powershell", "pwsh"} {
+		t.Run(shell, func(t *testing.T) {
+			output, err := captureStdout(func() error { return printCompletions(shell) })
+			if err != nil {
+				t.Fatalf("printCompletions(%q): %v", shell, err)
+			}
+			for _, want := range []string{"--update", "check", "yes", "--shell", "completions", "init"} {
+				if !strings.Contains(output, want) {
+					t.Errorf("%s completions missing %q", shell, want)
+				}
+			}
+		})
+	}
+}
+
+func TestPosixCompletionFunctionHasContextualCandidates(t *testing.T) {
+	for _, shell := range []string{"sh", "dash", "ksh"} {
+		t.Run(shell, func(t *testing.T) {
+			previousArgs := os.Args
+			os.Args = []string{"search-cli"}
+			t.Cleanup(func() { os.Args = previousArgs })
+			output, err := captureStdout(func() error { return printCompletions(shell) })
+			if err != nil {
+				t.Fatalf("printCompletions(%q): %v", shell, err)
+			}
+			for _, want := range []string{"_search_cli_completion_candidates", "--update", "check yes", "--maintenance", "--shell"} {
+				if !strings.Contains(output, want) {
+					t.Errorf("%s completions missing %q", shell, want)
+				}
+			}
+		})
 	}
 }
 

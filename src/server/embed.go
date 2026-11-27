@@ -26,6 +26,7 @@ import (
 	"github.com/apimgr/search/src/common/theme"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/health"
+	"github.com/apimgr/search/src/version"
 	"github.com/yuin/goldmark"
 	xhtml "golang.org/x/net/html"
 	"golang.org/x/text/cases"
@@ -125,6 +126,18 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 		"trim":           strings.TrimSpace,
 		"join":           strings.Join,
 		"markdownToHTML": markdownToHTML,
+		"privacyRetentionPeriod": func(retention config.PrivacyRetention) string {
+			period := retention.PeriodForLanguage(resolvedLanguage)
+			if strings.TrimSpace(period) != "" {
+				return period
+			}
+			if i18nFuncs != nil {
+				if tFunc, ok := i18nFuncs["t"].(func(string, ...interface{}) string); ok {
+					return tFunc("privacy.retention.period")
+				}
+			}
+			return "privacy.retention.period"
+		},
 		"operatorHTML": func(name string, data interface{}) template.HTML {
 			return loadOperatorHTML(name, resolvedLanguage, pageDataValue(data))
 		},
@@ -882,11 +895,13 @@ type Pagination struct {
 // PART 11 — populated only when a valid rotating security_id was supplied.
 type ContactPageData struct {
 	PageData
+	ContactType     string
+	ContactChooser  bool
+	ContactFQDN     string
 	ContactSent     bool
 	ContactError    string
-	CaptchaA        int
-	CaptchaB        int
 	CaptchaID       string
+	CaptchaQuestion string
 	CaptchaRequired bool
 	CaptchaExternal bool
 	CaptchaLocal    bool
@@ -952,9 +967,11 @@ type Announcement struct {
 
 // CookieConsentData represents cookie consent popup data
 type CookieConsentData struct {
-	Enabled   bool
-	Message   string
-	PolicyURL string
+	Enabled         bool
+	Message         string
+	PolicyURL       string
+	ShowPreferences bool
+	PreferencesText string
 	// DataSold reflects server.privacy.data.sold — true if user data may be sold
 	DataSold bool
 
@@ -975,7 +992,7 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 		Lang:        "en",
 		Dir:         "ltr",
 		Config:      cfg,
-		BuildDate:   time.Now().Format(time.RFC3339),
+		BuildDate:   version.HealthBuildDate(),
 	}
 
 	// Populate active announcements from config
@@ -1008,10 +1025,12 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 			message = cc.Message
 		}
 		pd.CookieConsent = &CookieConsentData{
-			Enabled:   true,
-			Message:   message,
-			PolicyURL: cc.PolicyURL,
-			DataSold:  dataSold,
+			Enabled:         true,
+			Message:         message,
+			PolicyURL:       cc.PolicyURL,
+			ShowPreferences: cfg.Server.Privacy.Consent.ShowPreferences,
+			PreferencesText: cfg.Server.Privacy.Consent.PreferencesText,
+			DataSold:        dataSold,
 		}
 	}
 
@@ -1208,7 +1227,11 @@ func markdownToHTML(source string) template.HTML {
 		}
 	}
 	renderBody(document)
-	return template.HTML(safe.String())
+	normalized, err := demoteDirectContentHeadings(safe.String(), "")
+	if err != nil {
+		return template.HTML(safe.String())
+	}
+	return template.HTML(normalized)
 }
 
 var safeMarkdownElements = map[string]bool{

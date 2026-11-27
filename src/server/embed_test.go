@@ -30,6 +30,18 @@ func TestMarkdownToHTMLSanitizesRenderedContent(t *testing.T) {
 	}
 }
 
+func TestOperatorContentHeadingsStayBelowCardHeading(t *testing.T) {
+	got := string(sanitizeOperatorHTMLWithHeadingFloor("<h1>Page title</h1><h2>Section</h2><h4>Subsection</h4>", false, operatorContentHeadingFloor("about")))
+	for _, want := range []string{"<h3>Page title</h3>", "<h3>Section</h3>", "<h4>Subsection</h4>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("operator content heading output %q missing %q", got, want)
+		}
+	}
+	if strings.Contains(got, "<h1>") || strings.Contains(got, "<h2>") {
+		t.Errorf("operator content retained a page or card heading: %s", got)
+	}
+}
+
 // TestGetStringField covers valid field, missing field, and non-string field.
 func TestGetStringField(t *testing.T) {
 	type sampleStruct struct {

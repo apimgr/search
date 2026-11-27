@@ -1,11 +1,108 @@
 package main
 
 import (
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/logging"
 )
+
+func captureMaintenanceOutput(t *testing.T, fn func()) (string, string, int) {
+	t.Helper()
+
+	originalStdout, originalStderr, originalExit := os.Stdout, os.Stderr, exitFunc
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdout pipe: %v", err)
+	}
+	stderrReader, stderrWriter, err := os.Pipe()
+	if err != nil {
+		_ = stdoutReader.Close()
+		_ = stdoutWriter.Close()
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	os.Stdout, os.Stderr = stdoutWriter, stderrWriter
+	exitCode := 0
+	exitFunc = func(code int) { exitCode = code }
+	t.Cleanup(func() {
+		os.Stdout, os.Stderr, exitFunc = originalStdout, originalStderr, originalExit
+		_ = stdoutReader.Close()
+		_ = stdoutWriter.Close()
+		_ = stderrReader.Close()
+		_ = stderrWriter.Close()
+	})
+
+	stdoutDone := make(chan string, 1)
+	stderrDone := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(stdoutReader)
+		stdoutDone <- string(data)
+	}()
+	go func() {
+		data, _ := io.ReadAll(stderrReader)
+		stderrDone <- string(data)
+	}()
+
+	fn()
+	_ = stdoutWriter.Close()
+	_ = stderrWriter.Close()
+	stdout, stderr := <-stdoutDone, <-stderrDone
+	return stdout, stderr, exitCode
+}
+
+func TestMaintenanceUsageErrorsUseStderrAndExitTwo(t *testing.T) {
+	tests := []struct {
+		name string
+		call func()
+	}{
+		{
+			name: "unknown secret action",
+			call: func() { runMaintenanceSecret("unknown", "") },
+		},
+		{
+			name: "unknown secret name",
+			call: func() { runMaintenanceSecret("rotate", "unknown_secret") },
+		},
+		{
+			name: "unknown token action",
+			call: func() { runMaintenanceToken("unknown", "") },
+		},
+		{
+			name: "missing token prefix",
+			call: func() { runMaintenanceToken("revoke", "") },
+		},
+		{
+			name: "unknown data action",
+			call: func() { runMaintenanceData("unknown", nil) },
+		},
+		{
+			name: "malformed data options",
+			call: func() { runMaintenanceData("export", []string{"--unknown"}) },
+		},
+		{
+			name: "unknown compliance action",
+			call: func() { runMaintenanceCompliance("unknown") },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout, stderr, exitCode := captureMaintenanceOutput(t, tt.call)
+			if stdout != "" {
+				t.Errorf("usage error wrote to stdout: %q", stdout)
+			}
+			if strings.TrimSpace(stderr) == "" {
+				t.Error("usage error did not write a diagnostic and usage to stderr")
+			}
+			if exitCode != 2 {
+				t.Errorf("usage error exit code = %d, want 2", exitCode)
+			}
+		})
+	}
+}
 
 func TestParseMaintenanceEmailArgs(t *testing.T) {
 	tests := []struct {

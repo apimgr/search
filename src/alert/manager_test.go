@@ -131,7 +131,13 @@ func newTestManager(t *testing.T, engines ...search.Engine) (*Manager, *sql.DB) 
 		MaxConcurrent: len(engines),
 	})
 
-	return NewManager(db, cfg, aggregator, nil), db
+	return newManagerWithTestDB(db, cfg, aggregator, nil), db
+}
+
+func newManagerWithTestDB(db *sql.DB, cfg *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
+	manager := NewManager(db, cfg, aggregator, mailer)
+	manager.legacyDB = db
+	return manager
 }
 
 func TestCreateStoresAlertFilterContext(t *testing.T) {
@@ -208,6 +214,38 @@ func TestListByOwnerReturnsOnlyAPIShapedOwnedAlerts(t *testing.T) {
 	}
 	if alerts[0].OwnerID != "owner-a" || alerts[0].Query != "privacy search" {
 		t.Errorf("ListByOwner() returned alert %+v for the wrong owner or query", alerts[0])
+	}
+}
+
+func TestCountOwnerResourcesIncludesAlertsAndRetainedResults(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+	created, err := manager.Create(context.Background(), CreateRequest{
+		OwnerID: "owner-a", Query: "privacy", Category: "general", Language: "en",
+		Frequency: FrequencyDaily, Email: "alerts@example.com", DeliverRSS: true,
+		BaseURL: "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := manager.insertResult(context.Background(), created.Alert.ID, model.Result{
+		Title: "Privacy result", URL: "https://example.test/privacy", Content: "Example",
+	}); err != nil {
+		t.Fatalf("insertResult() error = %v", err)
+	}
+	count, err := manager.CountOwnerResources(context.Background(), "owner-a")
+	if err != nil {
+		t.Fatalf("CountOwnerResources() error = %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountOwnerResources() = %d, want one alert plus one result", count)
+	}
+	count, err = manager.CountOwnerResources(context.Background(), "owner-b")
+	if err != nil {
+		t.Fatalf("CountOwnerResources(other owner) error = %v", err)
+	}
+	if count != 0 {
+		t.Errorf("CountOwnerResources(other owner) = %d, want 0", count)
 	}
 }
 
@@ -847,7 +885,7 @@ func TestProcessDueWithNilAggregator(t *testing.T) {
 	db := setupAlertTestDB(t)
 	defer db.Close()
 	cfg := config.DefaultConfig()
-	manager := NewManager(db, cfg, nil, nil)
+	manager := newManagerWithTestDB(db, cfg, nil, nil)
 
 	if err := manager.ProcessDue(context.Background(), FrequencyDaily); err != nil {
 		t.Fatalf("ProcessDue() with nil aggregator should not error: %v", err)
@@ -1007,7 +1045,7 @@ func TestCreateRateLimitExceeded(t *testing.T) {
 		[]search.Engine{newTestEngine("google", "general")},
 		search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1},
 	)
-	manager := NewManager(db, cfg, aggregator, nil)
+	manager := newManagerWithTestDB(db, cfg, aggregator, nil)
 
 	req := CreateRequest{
 		Query:         "rate limit test",
@@ -1506,7 +1544,7 @@ func TestCreateEmailDeliveryRequiresEnabledMailer(t *testing.T) {
 	cfg := config.DefaultConfig()
 	aggregator := search.NewAggregator([]search.Engine{newTestEngine("google", "general")}, search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1})
 	mailer := email.NewMailer(&email.Config{Enabled: false})
-	manager := NewManager(db, cfg, aggregator, mailer)
+	manager := newManagerWithTestDB(db, cfg, aggregator, mailer)
 
 	_, err := manager.Create(context.Background(), CreateRequest{
 		Query:        "email test",
@@ -1529,7 +1567,7 @@ func TestCreateEmailDeliverySucceedsWithEnabledMailer(t *testing.T) {
 	cfg := config.DefaultConfig()
 	aggregator := search.NewAggregator([]search.Engine{newTestEngine("google", "general")}, search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1})
 	mailer := email.NewMailer(&email.Config{Enabled: true})
-	manager := NewManager(db, cfg, aggregator, mailer)
+	manager := newManagerWithTestDB(db, cfg, aggregator, mailer)
 
 	resp, err := manager.Create(context.Background(), CreateRequest{
 		Query:        "email test",
@@ -1590,7 +1628,7 @@ func TestProcessDueEmailSendFailurePropagates(t *testing.T) {
 	aggregator := search.NewAggregator([]search.Engine{google}, search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1})
 	// Enabled but pointed at an unreachable host so Send() fails fast.
 	mailer := email.NewMailer(&email.Config{Enabled: true, SMTP: email.SMTPConfig{Host: "", Port: 0}})
-	manager := NewManager(db, cfg, aggregator, mailer)
+	manager := newManagerWithTestDB(db, cfg, aggregator, mailer)
 
 	resp, err := manager.Create(context.Background(), CreateRequest{
 		Query:        "email failure",
@@ -1704,7 +1742,7 @@ func TestEnforceCreateRateLimitDisabledIsNoop(t *testing.T) {
 	defer db.Close()
 	cfg := config.DefaultConfig()
 	cfg.Search.Alerts.CreateRateLimitPerHour = 0
-	manager := NewManager(db, cfg, nil, nil)
+	manager := newManagerWithTestDB(db, cfg, nil, nil)
 
 	if err := manager.enforceCreateRateLimit(context.Background(), "10.0.0.9"); err != nil {
 		t.Fatalf("enforceCreateRateLimit() with limit=0 should be a no-op, got: %v", err)
@@ -1716,7 +1754,7 @@ func TestEnforceCreateRateLimitEmptyIPIsNoop(t *testing.T) {
 	defer db.Close()
 	cfg := config.DefaultConfig()
 	cfg.Search.Alerts.CreateRateLimitPerHour = 1
-	manager := NewManager(db, cfg, nil, nil)
+	manager := newManagerWithTestDB(db, cfg, nil, nil)
 
 	if err := manager.enforceCreateRateLimit(context.Background(), ""); err != nil {
 		t.Fatalf("enforceCreateRateLimit() with empty IP should be a no-op, got: %v", err)
@@ -1746,7 +1784,7 @@ func TestNormalizeAlertEnginesNilAggregator(t *testing.T) {
 	db := setupAlertTestDB(t)
 	defer db.Close()
 	cfg := config.DefaultConfig()
-	manager := NewManager(db, cfg, nil, nil)
+	manager := newManagerWithTestDB(db, cfg, nil, nil)
 
 	result, err := manager.normalizeAlertEngines([]string{"anything"})
 	if err != nil {

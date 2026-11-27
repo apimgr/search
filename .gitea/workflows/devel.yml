@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
 
 permissions:
@@ -15,7 +14,7 @@ permissions:
 
 concurrency:
   group: devel-${{ gitea.ref }}
-  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
+  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' }}
 
 env:
   PROJECTNAME: search
@@ -81,7 +80,8 @@ jobs:
         run: |
           {
             echo "VERSION=${{ needs.version.outputs.version }}"
-            echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)"
+            COMMIT_SHA="${{ gitea.sha }}"
+            echo "COMMIT_ID=${COMMIT_SHA:0:7}"
             echo "BUILD_EPOCH=$(date -u +%s)"
             if [ -f site.txt ]; then
               echo "OFFICIAL_SITE=$(cat site.txt)"
@@ -123,7 +123,25 @@ jobs:
             -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-          go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client
+          go build -buildvcs=false -trimpath -ldflags "$CLI_LDFLAGS" -o "${CLI_OUTPUT}" ./src/client
+
+      - name: Build GUI client
+        if: hashFiles('src/client/gui/**') != '' && matrix.goos != 'freebsd'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          CLI_LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
+            -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+          go build -buildvcs=false -trimpath -tags gui -ldflags "$CLI_LDFLAGS" \
+            -o "${PROJECTNAME}-cli-gui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -137,6 +155,14 @@ jobs:
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.CLI_OUTPUT }}
+          retention-days: 7
+
+      - name: Upload GUI client artifact
+        if: hashFiles('src/client/gui/**') != '' && matrix.goos != 'freebsd'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECTNAME }}-cli-gui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-gui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
           retention-days: 7
   release:
     name: Publish devel release

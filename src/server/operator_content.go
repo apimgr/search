@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,7 +77,7 @@ func loadOperatorHTML(name, lang string, page PageData) template.HTML {
 		case "txt":
 			contents = operatorTextHTML(contents)
 		}
-		return sanitizeOperatorHTML(contents, name == "header" || name == "footer")
+		return sanitizeOperatorHTMLWithHeadingFloor(contents, name == "header" || name == "footer", operatorContentHeadingFloor(name))
 	}
 	root := filepath.Join(config.GetConfigDir(), "html")
 	info, err := os.Stat(root)
@@ -110,7 +111,7 @@ func loadOperatorHTML(name, lang string, page PageData) template.HTML {
 			case ".txt":
 				contents = operatorTextHTML(contents)
 			}
-			result := sanitizeOperatorHTML(contents, name == "header" || name == "footer")
+			result := sanitizeOperatorHTMLWithHeadingFloor(contents, name == "header" || name == "footer", operatorContentHeadingFloor(name))
 			cacheOperatorContent(root, name, lang, operatorContentCacheEntry{found: true, content: result})
 			return result
 		}
@@ -244,7 +245,18 @@ func operatorTextHTML(contents string) string {
 	return output.String()
 }
 
+func operatorContentHeadingFloor(name string) int {
+	if name == "about" || name == "privacy" || name == "terms" {
+		return 3
+	}
+	return 0
+}
+
 func sanitizeOperatorHTML(source string, strict bool) template.HTML {
+	return sanitizeOperatorHTMLWithHeadingFloor(source, strict, 0)
+}
+
+func sanitizeOperatorHTMLWithHeadingFloor(source string, strict bool, headingFloor int) template.HTML {
 	document, err := xhtml.Parse(strings.NewReader(source))
 	if err != nil {
 		return template.HTML(stdhtml.EscapeString(source))
@@ -259,9 +271,13 @@ func sanitizeOperatorHTML(source string, strict bool) template.HTML {
 			if node.Data == "script" || node.Data == "style" || node.Data == "iframe" || node.Data == "object" || node.Data == "svg" || node.Data == "math" || node.Data == "form" || node.Data == "input" || node.Data == "button" || node.Data == "textarea" || node.Data == "select" {
 				return
 			}
+			outputElement := node.Data
+			if len(outputElement) == 2 && outputElement[0] == 'h' && outputElement[1] >= '1' && outputElement[1] <= '6' && int(outputElement[1]-'0') < headingFloor {
+				outputElement = "h" + strconv.Itoa(headingFloor)
+			}
 			if operatorAllowedElement(node.Data, strict) {
 				output.WriteByte('<')
-				output.WriteString(node.Data)
+				output.WriteString(outputElement)
 				for _, attribute := range node.Attr {
 					value, keep := operatorAllowedAttribute(node.Data, attribute.Key, attribute.Val, strict)
 					if keep {
@@ -277,7 +293,7 @@ func sanitizeOperatorHTML(source string, strict bool) template.HTML {
 				render(child)
 			}
 			if operatorAllowedElement(node.Data, strict) && node.Data != "br" && node.Data != "hr" && node.Data != "img" {
-				output.WriteString("</" + node.Data + ">")
+				output.WriteString("</" + outputElement + ">")
 			}
 		case xhtml.DocumentNode:
 			for child := node.FirstChild; child != nil; child = child.NextSibling {

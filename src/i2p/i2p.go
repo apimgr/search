@@ -159,8 +159,11 @@ func unusedLoopbackPort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer listener.Close()
-	_, portText, err := net.SplitHostPort(listener.Addr().String())
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		return 0, fmt.Errorf("close temporary I2P port listener: %w", err)
+	}
+	_, portText, err := net.SplitHostPort(address)
 	if err != nil {
 		return 0, err
 	}

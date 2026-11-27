@@ -1,6 +1,12 @@
 package server
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,10 +15,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/model"
 )
 
@@ -39,6 +47,112 @@ type AlertCreatedPageData struct {
 	RSSURL        string
 	OwnerToken    string
 	WebhookSecret string
+}
+
+const alertCreateResultCookie = "search_alert_created"
+
+type alertCreateResult struct {
+	Issued       int64  `json:"issued"`
+	OwnerToken   string `json:"owner_token,omitempty"`
+	ManageToken  string `json:"manage_token"`
+	RSSToken     string `json:"rss_token"`
+	WebhookSecret string `json:"webhook_secret,omitempty"`
+}
+
+func (s *Server) clearAlertCreateResultCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: alertCreateResultCookie, Value: "", Path: "/alerts/created", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, Secure: s.cookieSecure(r), SameSite: http.SameSiteStrictMode})
+}
+
+func (s *Server) setAlertCreateResultCookie(w http.ResponseWriter, r *http.Request, result alertCreateResult) error {
+	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return errors.New("server database unavailable for alert result encryption")
+	}
+	secret, err := database.EnsureSecret(r.Context(), s.dbManager.ServerDB(), database.SecretCookieSigning)
+	if err != nil {
+		return err
+	}
+	encodedKey, err := base64.StdEncoding.DecodeString(secret.Value)
+	if err != nil {
+		return err
+	}
+	key := sha256.Sum256(encodedKey)
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+	result.Issued = time.Now().UTC().Unix()
+	plain, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return err
+	}
+	ciphertext := aead.Seal(nil, nonce, plain, []byte("search-alert-created-v1"))
+	value := "v1." + base64.RawURLEncoding.EncodeToString(nonce) + "." + base64.RawURLEncoding.EncodeToString(ciphertext)
+	http.SetCookie(w, &http.Cookie{Name: alertCreateResultCookie, Value: value, Path: "/alerts/created", MaxAge: 60, HttpOnly: true, Secure: s.cookieSecure(r), SameSite: http.SameSiteStrictMode})
+	return nil
+}
+
+func (s *Server) takeAlertCreateResultCookie(w http.ResponseWriter, r *http.Request) (*alertCreateResult, error) {
+	cookie, err := r.Cookie(alertCreateResultCookie)
+	if err != nil {
+		return nil, nil
+	}
+	s.clearAlertCreateResultCookie(w, r)
+	parts := strings.Split(cookie.Value, ".")
+	if len(parts) != 3 || parts[0] != "v1" || s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return nil, errors.New("invalid alert result cookie")
+	}
+	nonce, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	ciphertext, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return nil, err
+	}
+	secret, err := database.GetSecret(r.Context(), s.dbManager.ServerDB(), database.SecretCookieSigning)
+	if err != nil {
+		return nil, err
+	}
+	for _, encodedKey := range []string{secret.Value, secret.PreviousValue} {
+		if encodedKey == "" {
+			continue
+		}
+		decoded, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
+		if decodeErr != nil {
+			continue
+		}
+		key := sha256.Sum256(decoded)
+		block, cipherErr := aes.NewCipher(key[:])
+		if cipherErr != nil {
+			continue
+		}
+		aead, cipherErr := cipher.NewGCM(block)
+		if cipherErr != nil || len(nonce) != aead.NonceSize() {
+			continue
+		}
+		plain, openErr := aead.Open(nil, nonce, ciphertext, []byte("search-alert-created-v1"))
+		if openErr != nil {
+			continue
+		}
+		var result alertCreateResult
+		if json.Unmarshal(plain, &result) != nil || result.ManageToken == "" || result.RSSToken == "" {
+			return nil, errors.New("invalid alert result payload")
+		}
+		now := time.Now().UTC().Unix()
+		if result.Issued > now || now-result.Issued > 60 {
+			return nil, errors.New("expired alert result cookie")
+		}
+		return &result, nil
+	}
+	return nil, errors.New("alert result cookie authentication failed")
 }
 
 type AlertManagePageData struct {
@@ -78,6 +192,7 @@ func (s *Server) handleAlertNew(w http.ResponseWriter, r *http.Request) {
 	}
 	baseData := s.newPageData(w, r, "", "alerts-new")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.create_title")
+	mailer := s.currentMailer()
 	data := &AlertNewPageData{
 		PageData:         *baseData,
 		Query:            strings.TrimSpace(r.URL.Query().Get("q")),
@@ -86,7 +201,7 @@ func (s *Server) handleAlertNew(w http.ResponseWriter, r *http.Request) {
 		Region:           strings.TrimSpace(r.URL.Query().Get("region")),
 		SafeSearch:       safeSearch,
 		Frequency:        s.config.Search.Alerts.DefaultFrequency,
-		EmailEnabled:     s.mailer != nil && s.mailer.IsEnabled(),
+		EmailEnabled:     mailer != nil && mailer.IsEnabled(),
 		DefaultRSS:       s.config.Search.Alerts.DefaultDeliverRSS,
 		DefaultWebhook:   s.config.Search.Alerts.DefaultDeliverWebhook,
 		AvailableEngines: s.alertEngineOptions(splitCSVParam(r.URL.Query()["engines"])),
@@ -103,6 +218,36 @@ func (s *Server) handleAlertNew(w http.ResponseWriter, r *http.Request) {
 		data.Frequency = string(alert.FrequencyDaily)
 	}
 	if err := s.renderer.Render(w, "alerts-new", data); err != nil {
+		slog.Error("template render error", "err", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAlertCreated(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	result, err := s.takeAlertCreateResultCookie(w, r)
+	if err != nil {
+		slog.Warn("invalid one-use alert result cookie", "error", err)
+	}
+	if result == nil || err != nil {
+		http.Redirect(w, r, "/alerts/new", http.StatusSeeOther)
+		return
+	}
+	baseData := s.newPageData(w, r, "", "alerts-created")
+	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.created_title")
+	data := &AlertCreatedPageData{
+		PageData:      *baseData,
+		ManageURL:     s.getBaseURL(r) + "/alerts/manage/" + result.ManageToken,
+		RSSURL:        s.getBaseURL(r) + "/alerts/" + result.RSSToken + ".rss",
+		OwnerToken:    result.OwnerToken,
+		WebhookSecret: result.WebhookSecret,
+	}
+	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
 		slog.Error("template render error", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
@@ -179,25 +324,19 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, params, http.StatusSeeOther)
 		return
 	}
+	result := alertCreateResult{OwnerToken: issuedToken, ManageToken: created.ManageToken, RSSToken: created.RSSToken, WebhookSecret: created.WebhookSecret}
+	if err := s.setAlertCreateResultCookie(w, r, result); err != nil {
+		if cleanupErr := s.alertManager.Delete(r.Context(), created.ManageToken); cleanupErr != nil {
+			slog.Error("failed to remove alert after result-cookie failure", "error", cleanupErr)
+		}
+		s.handleInternalError(w, r, "alert result cookie encryption", err)
+		return
+	}
 	if issuedToken != "" {
-		s.setOwnerCookie(w, issuedToken)
+		s.setOwnerCookie(w, r, issuedToken)
 	}
-
-	baseData := s.newPageData(w, r, "", "alerts-created")
-	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.created_title")
 	w.Header().Set("Cache-Control", "no-store")
-	data := &AlertCreatedPageData{
-		PageData:      *baseData,
-		Alert:         created.Alert,
-		ManageURL:     s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
-		RSSURL:        s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
-		OwnerToken:    issuedToken,
-		WebhookSecret: created.WebhookSecret,
-	}
-	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
-		slog.Error("template render error", "err", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-	}
+	http.Redirect(w, r, "/alerts/created", http.StatusSeeOther)
 }
 
 func (s *Server) handleAlertAction(w http.ResponseWriter, r *http.Request) {

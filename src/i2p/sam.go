@@ -97,7 +97,7 @@ func splitSAMTokens(s string) []string {
 
 // writeSAMKeys persists the destination private blob with 0600 permissions so
 // the .b32.i2p address survives restarts.
-func writeSAMKeys(keysPath string, priv []byte) error {
+func writeSAMKeys(keysPath string, priv []byte) (resultErr error) {
 	samKeyWriteMu.Lock()
 	defer samKeyWriteMu.Unlock()
 	dir := filepath.Dir(keysPath)
@@ -109,7 +109,11 @@ func writeSAMKeys(keysPath string, priv []byte) error {
 		return fmt.Errorf("create temporary I2P key file: %w", err)
 	}
 	tempPath := temp.Name()
-	defer os.Remove(tempPath)
+	defer func() {
+		if err := os.Remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			resultErr = errors.Join(resultErr, fmt.Errorf("remove temporary I2P key file: %w", err))
+		}
+	}()
 	if err := temp.Chmod(0600); err != nil {
 		return errors.Join(err, temp.Close())
 	}
@@ -389,12 +393,16 @@ func waitForSAMBridge(ctx context.Context, addr string, exited <-chan struct{}) 
 	}
 }
 
-func probeSAMBridge(addr string) error {
+func probeSAMBridge(addr string) (resultErr error) {
 	conn, err := dialSAM(addr, 5*time.Second)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close SAM liveness probe connection: %w", err))
+		}
+	}()
 	if err := samHello(conn, bufio.NewReader(conn), 5*time.Second); err != nil {
 		return err
 	}

@@ -33,6 +33,12 @@ type SecurityAcknowledgment struct {
 	Severity string `json:"severity"`
 }
 
+type SecurityPolicyDefaultPageData struct {
+	PageData
+	FQDN    string
+	Domains []string
+}
+
 func (s *Server) SecurityOverview(r *http.Request) interface{} {
 	webSecurity := s.config.Server.Web.Security
 	baseURL := s.getBaseURL(r)
@@ -77,17 +83,78 @@ func (s *Server) SecurityOverview(r *http.Request) interface{} {
 func (s *Server) SecurityPolicy(r *http.Request) interface{} {
 	policy := s.config.Server.Web.Security.Policy
 	if policy == "" {
-		lang := s.getI18nManager().ResolveLanguage(nil, r)
+		lang := s.getI18nManager().ResolveLanguage(nil, r, false)
 		im := s.getI18nManager()
-		policy = strings.Join([]string{
-			"## " + im.T(lang, "security.policy_scope_heading"), im.T(lang, "security.policy_scope_description"),
-			"## " + im.T(lang, "security.policy_disclosure_window_heading"), im.T(lang, "security.policy_disclosure_window_description"),
-			"## " + im.T(lang, "security.policy_in_scope_heading"), "- " + im.T(lang, "security.policy_in_scope_item_deployed"), "- " + im.T(lang, "security.policy_in_scope_item_api"), "- " + im.T(lang, "security.policy_in_scope_item_auth"),
-			"## " + im.T(lang, "security.policy_out_of_scope_heading"), "- " + im.T(lang, "security.policy_out_of_scope_item_dos"), "- " + im.T(lang, "security.policy_out_of_scope_item_social"), "- " + im.T(lang, "security.policy_out_of_scope_item_physical"), "- " + im.T(lang, "security.policy_out_of_scope_item_third_party"),
-			"## " + im.T(lang, "security.policy_safe_harbor_heading"), im.T(lang, "security.policy_safe_harbor_description"),
-		}, "\n\n")
+		fqdn, domains := securityPolicyDomains(s.config.Server.FQDN, r.Host)
+		onion, i2pAddress := s.securityPolicyOverlayAddresses()
+		policy = defaultSecurityPolicyMarkdown(lang, im.T, fqdn, domains, onion, i2pAddress)
 	}
 	return map[string]string{"policy": policy}
+}
+
+func (s *Server) securityPolicyOverlayAddresses() (string, string) {
+	onion := ""
+	if s.torService != nil && s.torService.IsRunning() {
+		onion = s.torService.GetOnionAddress()
+	}
+	i2pAddress := ""
+	if s.i2pManager != nil {
+		i2pAddress = s.i2pManager.EepsiteAddress()
+	}
+	return onion, i2pAddress
+}
+
+func securityPolicyDomains(configured, requestHost string) (string, []string) {
+	configured = strings.TrimSpace(configured)
+	if configured == "" {
+		configured = strings.Join(config.GetAllDomains(), ",")
+	}
+	domains := make([]string, 0)
+	for _, domain := range strings.Split(configured, ",") {
+		domain = strings.TrimSpace(domain)
+		if domain != "" && !containsString(domains, domain) {
+			domains = append(domains, domain)
+		}
+	}
+	if len(domains) == 0 && strings.TrimSpace(requestHost) != "" {
+		domains = append(domains, strings.TrimSpace(requestHost))
+	}
+	if len(domains) == 0 {
+		return "", nil
+	}
+	return domains[0], domains[1:]
+}
+
+func defaultSecurityPolicyMarkdown(lang string, translate func(string, string, ...interface{}) string, fqdn string, domains []string, onion, i2p string) string {
+	scope := translate(lang, "security.policy_scope_description", fqdn)
+	sections := []string{
+		"## " + translate(lang, "security.policy_scope_heading"), scope,
+		"## " + translate(lang, "security.policy_disclosure_window_heading"), translate(lang, "security.policy_disclosure_window_description"),
+		"## " + translate(lang, "security.policy_in_scope_heading"), "- " + translate(lang, "security.policy_in_scope_item_deployed"), "- " + translate(lang, "security.policy_in_scope_item_api"), "- " + translate(lang, "security.policy_in_scope_item_auth"),
+	}
+	for _, domain := range domains {
+		sections = append(sections, "- "+translate(lang, "security.policy_in_scope_item_host", domain))
+	}
+	if onion != "" {
+		sections = append(sections, "- "+translate(lang, "security.policy_in_scope_item_tor", onion))
+	}
+	if i2p != "" {
+		sections = append(sections, "- "+translate(lang, "security.policy_in_scope_item_i2p", i2p))
+	}
+	sections = append(sections,
+		"## "+translate(lang, "security.policy_out_of_scope_heading"),
+		"- "+translate(lang, "security.policy_out_of_scope_item_dos"),
+		"- "+translate(lang, "security.policy_out_of_scope_item_social"),
+		"- "+translate(lang, "security.policy_out_of_scope_item_physical"),
+		"- "+translate(lang, "security.policy_out_of_scope_item_third_party"),
+		"- "+translate(lang, "security.policy_out_of_scope_item_scanner"),
+		"- "+translate(lang, "security.policy_out_of_scope_item_headers"),
+		"## "+translate(lang, "security.policy_safe_harbor_heading"),
+		translate(lang, "security.policy_safe_harbor_description"),
+		"## "+translate(lang, "security.policy_reporting_heading"),
+		translate(lang, "security.policy_reporting_description")+" ["+translate(lang, "security.overview_title")+"](/server/security)",
+	)
+	return strings.Join(sections, "\n\n")
 }
 
 func (s *Server) SecurityThanks(ctx context.Context) (interface{}, error) {
@@ -191,8 +258,9 @@ func (s *Server) handleSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
-	if err := s.renderer.Render(w, "security_policy", data); err != nil {
+	fqdn, domains := securityPolicyDomains(s.config.Server.FQDN, r.Host)
+	defaultData := SecurityPolicyDefaultPageData{PageData: *data, FQDN: fqdn, Domains: domains}
+	if err := s.renderer.Render(w, "security_policy", defaultData); err != nil {
 		s.handleInternalError(w, r, "template render", err)
 	}
 }
@@ -226,8 +294,10 @@ func (s *Server) handleSecurityThanks(w http.ResponseWriter, r *http.Request) {
 // page at /server/security/report/{tracking_id}.
 type SecurityReportStatusPageData struct {
 	PageData
-	TrackingID string
-	Status     string
+	TrackingID      string
+	Status          string
+	ResearcherComment string
+	DisclosureDate  string
 }
 
 // handleSecurityReportStatus renders /server/security/report/{tracking_id},
@@ -248,6 +318,7 @@ func (s *Server) handleSecurityReportStatus(w http.ResponseWriter, r *http.Reque
 	// string cross-origin, but this belt-and-suspenders header ensures even a
 	// same-origin resource load from this page never forwards the token.
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "no-store")
 
 	status, err := security.LookupReportStatus(r.Context(), s.dbManager.ServerDB(), trackingID)
 	if err != nil {
@@ -284,9 +355,11 @@ func (s *Server) handleSecurityReportStatus(w http.ResponseWriter, r *http.Reque
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "security.report_status_title")
 
 	data := &SecurityReportStatusPageData{
-		PageData:   *baseData,
-		TrackingID: status.TrackingID,
-		Status:     status.Status,
+		PageData:         *baseData,
+		TrackingID:       status.TrackingID,
+		Status:           status.Status,
+		ResearcherComment: status.ResearcherComment,
+		DisclosureDate:   status.DisclosureDate,
 	}
 
 	if err := s.renderer.Render(w, "security_report_status", data); err != nil {

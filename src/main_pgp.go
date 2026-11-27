@@ -64,14 +64,14 @@ func pgpAuthorized(cfg *config.Config) bool {
 func pgpRequireAuthorized() *config.Config {
 	cfg, err := config.Initialize()
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_config", "error", err))
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_config", "error", err))
+		exitFunc(78)
 		return nil
 	}
 	if !pgpAuthorized(cfg) {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.not_authorized"))
-		fmt.Println("   " + serverCLIText("server_cli.pgp.requires_operator_auth"))
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.not_authorized"))
+		fmt.Fprintln(os.Stderr, "   "+serverCLIText("server_cli.pgp.requires_operator_auth"))
+		exitFunc(77)
 		return nil
 	}
 	return cfg
@@ -90,24 +90,24 @@ func pgpReadLine(prompt string) string {
 // PART 5 requires on top of pgpAuthorized for export private / import /
 // delete: re-prompt for the operator token and collect the reason text the
 // operator must supply for the audit entry.
-func pgpSensitiveConfirm(cfg *config.Config) (reasonText string, ok bool) {
+func pgpSensitiveConfirm(cfg *config.Config) (reasonText string, exitCode int) {
 	token := pgpReadLine(serverCLIText("server_cli.pgp.reenter_operator_token"))
 	if cfg.Server.Token == "" || token == "" {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.token_confirmation_failed"))
-		return "", false
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.token_confirmation_failed"))
+		return "", 77
 	}
 	expected := sha256.Sum256([]byte(cfg.Server.Token))
 	got := sha256.Sum256([]byte(token))
 	if subtle.ConstantTimeCompare(expected[:], got[:]) != 1 {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.token_confirmation_failed"))
-		return "", false
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.token_confirmation_failed"))
+		return "", 77
 	}
 	reasonText = pgpReadLine(serverCLIText("server_cli.pgp.reason_prompt"))
 	if reasonText == "" {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.reason_required"))
-		return "", false
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.reason_required"))
+		return "", 65
 	}
-	return reasonText, true
+	return reasonText, 0
 }
 
 // pgpAuditLogger opens the audit logger used by every pgp subcommand.
@@ -219,12 +219,12 @@ func pgpMarkRevoked(dm *database.DatabaseManager, id int64) error {
 // outcome. Shared by "generate", "rotate" (auto-publish) and "publish".
 func pgpPublish(cfg *config.Config, dm *database.DatabaseManager, id int64) {
 	if len(cfg.Server.Web.Security.Keyservers) == 0 {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.no_keyservers"))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.no_keyservers"))
 		return
 	}
 	pubArmor, err := security.LoadPublicKey(config.GetConfigDir())
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_public_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_public_key", "error", err))
 		return
 	}
 	fingerprint, _ := security.KeyFingerprint(pubArmor)
@@ -232,7 +232,7 @@ func pgpPublish(cfg *config.Config, dm *database.DatabaseManager, id int64) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	results, err := security.PublishKeyserversOnce(context.Background(), client, config.GetConfigDir(), pubArmor, cfg.Server.Web.Security.Keyservers, time.Now().UTC())
 	if err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_persist_retry_state", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_persist_retry_state", "error", err))
 	}
 	success := true
 	for _, r := range results {
@@ -240,13 +240,13 @@ func pgpPublish(cfg *config.Config, dm *database.DatabaseManager, id int64) {
 			fmt.Println(display.Emoji("✅", "[OK]") + " " + serverCLITf("server_cli.pgp.published_to", "keyserver", r.Keyserver))
 		} else {
 			success = false
-			fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_publish_to", "keyserver", r.Keyserver, "error", r.Err))
+			fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_publish_to", "keyserver", r.Keyserver, "error", r.Err))
 		}
 	}
 
 	if dm != nil && id != 0 {
 		if err := pgpMarkPublished(dm, id, results); err != nil {
-			fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_publish_state", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_publish_state", "error", err))
 		}
 	}
 	pgpAuditLogger().LogPGPKeyPublished(pgpActor(), pgpAuditIP, fingerprint, cfg.Server.Web.Security.Keyservers, success)
@@ -292,25 +292,25 @@ func runPGPGenerate() {
 	}
 
 	if _, err := security.LoadPublicKey(config.GetConfigDir()); err == nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.keypair_exists"))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.keypair_exists"))
 		exitFunc(1)
 		return
 	}
 
 	kp, err := security.GenerateKeypair(cfg.Server.Title, cfg.Server.Web.Security.Contact, cfg.Server.Security.InstallationSecret)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_generate", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_generate", "error", err))
 		exitFunc(1)
 		return
 	}
 	configDir := config.GetConfigDir()
 	if err := security.SavePublicKey(configDir, kp.PublicKeyArmor); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_public_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_public_key", "error", err))
 		exitFunc(1)
 		return
 	}
 	if err := security.SaveEncryptedPrivateKey(configDir, kp.EncryptedPrivateKey); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_private_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_private_key", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -318,7 +318,7 @@ func runPGPGenerate() {
 	dm, err := pgpOpenDB()
 	var id int64
 	if err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.metadata_database_unavailable", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.metadata_database_unavailable", "error", err))
 	} else {
 		defer func() {
 			if err := dm.Close(); err != nil {
@@ -326,7 +326,7 @@ func runPGPGenerate() {
 			}
 		}()
 		if err := pgpInsertKeypairRow(dm, kp.Fingerprint, kp.ExpiresAt); err != nil {
-			fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_keypair", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_keypair", "error", err))
 		} else {
 			id, _, _ = pgpCurrentKeypairRow(dm)
 		}
@@ -355,7 +355,7 @@ func runPGPRotate() {
 	configDir := config.GetConfigDir()
 	reportLock, err := security.LockReportMutation(configDir)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_lock_reports", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_lock_reports", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -368,20 +368,20 @@ func runPGPRotate() {
 		}
 	}()
 	if err := security.CheckPGPRotationFiles(configDir); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.cannot_start_rotation", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.cannot_start_rotation", "error", err))
 		exitFunc(1)
 		return
 	}
 
 	oldPubArmor, err := security.LoadPublicKey(configDir)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.no_keypair_to_rotate"))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.no_keypair_to_rotate"))
 		exitFunc(1)
 		return
 	}
 	oldFingerprint, err := security.KeyFingerprint(oldPubArmor)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_fingerprint_previous", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_fingerprint_previous", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -392,31 +392,31 @@ func runPGPRotate() {
 	// recipients verifying the rotation).
 	oldPrivEncrypted, err := security.LoadEncryptedPrivateKey(configDir)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_previous_private", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_previous_private", "error", err))
 		exitFunc(1)
 		return
 	}
 	oldKey, err := security.UnlockPrivateKey(oldPrivEncrypted, cfg.Server.Security.InstallationSecret)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_unlock_previous_private", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_unlock_previous_private", "error", err))
 		exitFunc(1)
 		return
 	}
 
 	kp, err := security.GenerateKeypair(cfg.Server.Title, cfg.Server.Web.Security.Contact, cfg.Server.Security.InstallationSecret)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_generate_rotation_keypair", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_generate_rotation_keypair", "error", err))
 		exitFunc(1)
 		return
 	}
 	rotationSig, err := security.SignDetached(oldKey, []byte(kp.PublicKeyArmor))
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_sign_new_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_sign_new_key", "error", err))
 		exitFunc(1)
 		return
 	}
 	if err := security.StagePGPRotation(configDir, kp, rotationSig, time.Now().UTC()); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_stage_keypair", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_stage_keypair", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -424,7 +424,7 @@ func runPGPRotate() {
 	dm, err := pgpOpenDB()
 	if err != nil {
 		cleanupErr := security.DiscardPGPRotation(configDir)
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_open_database", "error", errors.Join(err, cleanupErr)))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_open_database", "error", errors.Join(err, cleanupErr)))
 		exitFunc(1)
 		return
 	}
@@ -434,7 +434,7 @@ func runPGPRotate() {
 		}
 	}()
 	if err := pgpMigrateLegacyReports(cfg, dm); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.legacy_report_migration_failed", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.legacy_report_migration_failed", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -445,30 +445,30 @@ func runPGPRotate() {
 		if _, err := security.ReencryptPGPReportBodiesTx(context.Background(), tx, serverDB, oldKey, kp.PublicKeyArmor); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(context.Background(),
+		_, err := database.ExecContext(context.Background(), tx,
 			fmt.Sprintf("INSERT INTO %s (fingerprint, created_at, expires_at, last_rotated_at, revoked) VALUES (?, ?, ?, ?, 0)", keyTable),
 			kp.Fingerprint, kp.CreatedAt.UTC().Format(time.RFC3339), kp.ExpiresAt.UTC().Format(time.RFC3339), rotatedAt.Format(time.RFC3339))
 		return err
 	})
 	if err != nil {
 		cleanupErr := security.DiscardPGPRotation(configDir)
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.rotation_transaction_failed", "error", errors.Join(err, cleanupErr)))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.rotation_transaction_failed", "error", errors.Join(err, cleanupErr)))
 		exitFunc(1)
 		return
 	}
 	if err := security.FinalizePGPRotation(configDir, kp.Fingerprint); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.rotation_promotion_failed", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.rotation_promotion_failed", "error", err))
 		exitFunc(1)
 		return
 	}
 	id, fingerprint, err := pgpCurrentKeypairRow(dm)
 	if err != nil || fingerprint != kp.Fingerprint {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.rotation_metadata_failed", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.rotation_metadata_failed", "error", err))
 		exitFunc(1)
 		return
 	}
 	if err := reportLock.Unlock(); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.report_unlock_failed", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.report_unlock_failed", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -497,7 +497,7 @@ func runPGPPublish() {
 	dm, err := pgpOpenDB()
 	var id int64
 	if err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_open_database", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_open_database", "error", err))
 	} else {
 		defer func() {
 			if err := dm.Close(); err != nil {
@@ -522,7 +522,7 @@ func runPGPExportPublic(path string) {
 
 	armor, err := security.LoadPublicKey(config.GetConfigDir())
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_public_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_public_key", "error", err))
 		exitFunc(1)
 		return
 	}
@@ -531,7 +531,7 @@ func runPGPExportPublic(path string) {
 		return
 	}
 	if err := os.WriteFile(path, []byte(armor), 0o644); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_write_file", "path", path, "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_write_file", "path", path, "error", err))
 		exitFunc(1)
 		return
 	}
@@ -540,14 +540,14 @@ func runPGPExportPublic(path string) {
 
 // runPGPExportPrivate implements --maintenance pgp export private <path>.
 func runPGPExportPrivate(path string) {
-	fmt.Println(display.Emoji("🔐", "[PGP]") + " " + serverCLIText("server_cli.pgp.export_private_heading"))
-	fmt.Println()
 	if path == "" {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.destination_required"))
-		fmt.Println(serverCLIText("server_cli.pgp.usage_export_private"))
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.destination_required"))
+		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.pgp.usage_export_private"))
+		exitFunc(2)
 		return
 	}
+	fmt.Println(display.Emoji("🔐", "[PGP]") + " " + serverCLIText("server_cli.pgp.export_private_heading"))
+	fmt.Println()
 
 	cfg := pgpRequireAuthorized()
 	if cfg == nil {
@@ -556,43 +556,43 @@ func runPGPExportPrivate(path string) {
 	configDir := config.GetConfigDir()
 
 	if err := pgpCheckExportRateLimit(configDir); err != nil {
-		fmt.Printf(display.Emoji("❌", "[ERROR]")+" %v\n", err)
+		fmt.Fprintf(os.Stderr, display.Emoji("❌", "[ERROR]")+" %v\n", err)
 		exitFunc(1)
 		return
 	}
 
-	fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.private_key_warning"))
-	reasonText, ok := pgpSensitiveConfirm(cfg)
-	if !ok {
-		exitFunc(1)
+	fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.private_key_warning"))
+	reasonText, exitCode := pgpSensitiveConfirm(cfg)
+	if exitCode != 0 {
+		exitFunc(exitCode)
 		return
 	}
 
 	privArmor, err := security.LoadEncryptedPrivateKey(configDir)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_private_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_load_private_key", "error", err))
 		exitFunc(1)
 		return
 	}
 	unlocked, err := security.UnlockPrivateKey(privArmor, cfg.Server.Security.InstallationSecret)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_unlock_private_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_unlock_private_key", "error", err))
 		exitFunc(1)
 		return
 	}
 	decrypted, err := unlocked.Armor()
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_armor_private_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_armor_private_key", "error", err))
 		exitFunc(1)
 		return
 	}
 	if err := os.WriteFile(path, []byte(decrypted), 0o600); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_write_file", "path", path, "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_write_file", "path", path, "error", err))
 		exitFunc(1)
 		return
 	}
 	if err := pgpRecordExport(configDir); err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_export_marker", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_export_marker", "error", err))
 	}
 
 	pgpAuditLogger().LogPGPPrivateKeyExport(pgpActor(), pgpAuditIP, reasonText)
@@ -602,43 +602,43 @@ func runPGPExportPrivate(path string) {
 
 // runPGPImport implements --maintenance pgp import <file>.
 func runPGPImport(file string) {
-	fmt.Println(display.Emoji("🔐", "[PGP]") + " " + serverCLIText("server_cli.pgp.import_heading"))
-	fmt.Println()
 	if file == "" {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.source_required"))
-		fmt.Println(serverCLIText("server_cli.pgp.usage_import"))
-		exitFunc(1)
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.source_required"))
+		fmt.Fprintln(os.Stderr, serverCLIText("server_cli.pgp.usage_import"))
+		exitFunc(2)
 		return
 	}
+	fmt.Println(display.Emoji("🔐", "[PGP]") + " " + serverCLIText("server_cli.pgp.import_heading"))
+	fmt.Println()
 
 	cfg := pgpRequireAuthorized()
 	if cfg == nil {
 		return
 	}
 
-	reasonText, ok := pgpSensitiveConfirm(cfg)
-	if !ok {
-		exitFunc(1)
+	reasonText, exitCode := pgpSensitiveConfirm(cfg)
+	if exitCode != 0 {
+		exitFunc(exitCode)
 		return
 	}
 
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_read_file", "path", file, "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_read_file", "path", file, "error", err))
 		exitFunc(1)
 		return
 	}
 
 	kp, err := security.ImportPrivateKey(string(raw), cfg.Server.Title, cfg.Server.Web.Security.Contact, cfg.Server.Security.InstallationSecret)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_import_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_import_key", "error", err))
 		exitFunc(1)
 		return
 	}
 
 	identityMismatch := !security.IdentityMatches(kp.Key, cfg.Server.Title, cfg.Server.Web.Security.Contact)
 	if identityMismatch {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.identity_mismatch"))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.identity_mismatch"))
 		confirm := pgpReadLine(serverCLIText("server_cli.pgp.import_anyway_prompt"))
 		if confirm != "yes" {
 			fmt.Println(serverCLIText("admin.status.cancelled"))
@@ -648,19 +648,19 @@ func runPGPImport(file string) {
 
 	configDir := config.GetConfigDir()
 	if err := security.SavePublicKey(configDir, kp.PublicKeyArmor); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_public_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_public_key", "error", err))
 		exitFunc(1)
 		return
 	}
 	if err := security.SaveEncryptedPrivateKey(configDir, kp.EncryptedPrivateKey); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_private_key", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_save_private_key", "error", err))
 		exitFunc(1)
 		return
 	}
 
 	dm, err := pgpOpenDB()
 	if err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.metadata_database_unavailable", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.metadata_database_unavailable", "error", err))
 	} else {
 		defer func() {
 			if err := dm.Close(); err != nil {
@@ -668,7 +668,7 @@ func runPGPImport(file string) {
 			}
 		}()
 		if err := pgpInsertKeypairRow(dm, kp.Fingerprint, kp.ExpiresAt); err != nil {
-			fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_keypair", "error", err))
+			fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_record_keypair", "error", err))
 		}
 	}
 
@@ -691,16 +691,16 @@ func runPGPDelete() {
 
 	pubArmor, err := security.LoadPublicKey(configDir)
 	if err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.no_keypair_to_delete"))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLIText("server_cli.pgp.no_keypair_to_delete"))
 		exitFunc(1)
 		return
 	}
 	fingerprint, _ := security.KeyFingerprint(pubArmor)
 
-	fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.delete_reports_warning"))
-	reasonText, ok := pgpSensitiveConfirm(cfg)
-	if !ok {
-		exitFunc(1)
+	fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLIText("server_cli.pgp.delete_reports_warning"))
+	reasonText, exitCode := pgpSensitiveConfirm(cfg)
+	if exitCode != 0 {
+		exitFunc(exitCode)
 		return
 	}
 	confirm := pgpReadLine(serverCLIText("server_cli.pgp.delete_confirmation_prompt"))
@@ -710,19 +710,19 @@ func runPGPDelete() {
 	}
 
 	if err := security.DeleteKeypairFiles(configDir); err != nil {
-		fmt.Println(display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_delete_keypair", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("❌", "[ERROR]") + " " + serverCLITf("server_cli.pgp.failed_delete_keypair", "error", err))
 		exitFunc(1)
 		return
 	}
 
 	cfg.Server.Web.Security.PublishPGPKey = false
 	if err := cfg.Save(config.GetConfigPath()); err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_update_config", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_update_config", "error", err))
 	}
 
 	dm, err := pgpOpenDB()
 	if err != nil {
-		fmt.Println(display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_open_database", "error", err))
+		fmt.Fprintln(os.Stderr, display.Emoji("⚠️", "[WARN]") + " " + serverCLITf("server_cli.pgp.failed_open_database", "error", err))
 	} else {
 		defer func() {
 			if err := dm.Close(); err != nil {

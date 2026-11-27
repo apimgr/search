@@ -19,12 +19,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/owner"
 	"github.com/apimgr/search/src/version"
 )
 
 type requestStatsStore interface {
-	ReadSQL() *sql.DB
+	Read(context.Context) database.Reader
 	Write(context.Context, func(*sql.Tx) error) error
 	RequestStatsTable() string
 }
@@ -258,7 +259,7 @@ func NewMetrics(cfg *config.Config) *Metrics {
 			prometheus.HistogramOpts{
 				Name:    "search_db_write_wait_seconds",
 				Help:    "Time spent waiting to begin SQLite write transactions",
-				Buckets: prometheus.DefBuckets,
+				Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 			},
 		),
 
@@ -750,16 +751,20 @@ func (m *Metrics) GetRequestsLast24Hours() int64 {
 // SetRequestStatsDB loads persisted counters once at startup. Subsequent health
 // reads use only the in-memory cache.
 func (m *Metrics) SetRequestStatsDB(ctx context.Context, db requestStatsStore) error {
-	if m == nil || db == nil || db.ReadSQL() == nil {
+	if m == nil || db == nil {
+		return nil
+	}
+	reader := db.Read(ctx)
+	if reader == nil {
 		return nil
 	}
 	var total int64
 	table := db.RequestStatsTable()
-	if err := db.ReadSQL().QueryRowContext(ctx, `SELECT COALESCE(SUM(request_count), 0) FROM `+table).Scan(&total); err != nil {
+	if err := database.QueryRowContext(ctx, reader, database.TimeoutSimpleQuery, `SELECT COALESCE(SUM(request_count), 0) FROM `+table).Scan(&total); err != nil {
 		return err
 	}
 	cutoff := time.Now().UTC().Truncate(time.Hour).Add(-23 * time.Hour).Unix()
-	rows, err := db.ReadSQL().QueryContext(ctx, `SELECT hour, request_count FROM `+table+` WHERE hour >= ? ORDER BY hour`, cutoff)
+	rows, err := database.QueryContext(ctx, reader, database.TimeoutSimpleQuery, `SELECT hour, request_count FROM `+table+` WHERE hour >= ? ORDER BY hour`, cutoff)
 	if err != nil {
 		return err
 	}
@@ -809,7 +814,7 @@ func (m *Metrics) PersistRequestStats(ctx context.Context) error {
 	if batchTotal > 0 {
 		err := db.Write(ctx, func(tx *sql.Tx) error {
 			for hour, count := range batch {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO `+db.RequestStatsTable()+` (hour, request_count) VALUES (?, ?) ON CONFLICT(hour) DO UPDATE SET request_count = request_count + excluded.request_count`, hour, count); err != nil {
+				if _, err := database.ExecContext(ctx, tx, `INSERT INTO `+db.RequestStatsTable()+` (hour, request_count) VALUES (?, ?) ON CONFLICT(hour) DO UPDATE SET request_count = request_count + excluded.request_count`, hour, count); err != nil {
 					return err
 				}
 			}
@@ -832,10 +837,11 @@ func (m *Metrics) PersistRequestStats(ctx context.Context) error {
 	}
 	cutoff := time.Now().UTC().Truncate(time.Hour).Add(-23 * time.Hour).Unix()
 	var persistedTotal int64
-	if err := db.ReadSQL().QueryRowContext(ctx, `SELECT COALESCE(SUM(request_count), 0) FROM `+db.RequestStatsTable()).Scan(&persistedTotal); err != nil {
+	reader := db.Read(ctx)
+	if err := database.QueryRowContext(ctx, reader, database.TimeoutSimpleQuery, `SELECT COALESCE(SUM(request_count), 0) FROM `+db.RequestStatsTable()).Scan(&persistedTotal); err != nil {
 		return err
 	}
-	rows, err := db.ReadSQL().QueryContext(ctx, `SELECT hour, request_count FROM `+db.RequestStatsTable()+` WHERE hour >= ? ORDER BY hour`, cutoff)
+	rows, err := database.QueryContext(ctx, reader, database.TimeoutSimpleQuery, `SELECT hour, request_count FROM `+db.RequestStatsTable()+` WHERE hour >= ? ORDER BY hour`, cutoff)
 	if err != nil {
 		return err
 	}

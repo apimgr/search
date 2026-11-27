@@ -60,7 +60,7 @@ type OwnerRevocationCounts struct {
 }
 
 type Manager struct {
-	db        *sql.DB
+	db        database.Reader
 	table     string
 	owners    string
 	audit     string
@@ -75,7 +75,7 @@ func (m *Manager) MaxLinked() int {
 	return m.maxLinked
 }
 
-func NewManager(db *sql.DB, tablePrefix, encryptionKey string, maxLinked int) (*Manager, error) {
+func NewManager(db database.Reader, tablePrefix, encryptionKey string, maxLinked int) (*Manager, error) {
 	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encryptionKey))
 	if err != nil || len(key) != 32 {
 		return nil, errors.New("owner tokens require a base64-encoded 32-byte encryption key")
@@ -83,11 +83,12 @@ func NewManager(db *sql.DB, tablePrefix, encryptionKey string, maxLinked int) (*
 	if maxLinked < 1 {
 		maxLinked = 25
 	}
-	return &Manager{db: db, table: tablePrefix + "api_tokens", owners: tablePrefix + "owners", audit: tablePrefix + "audit_log", key: key, maxLinked: maxLinked, clock: time.Now}, nil
+	manager := &Manager{db: db, table: tablePrefix + "api_tokens", owners: tablePrefix + "owners", audit: tablePrefix + "audit_log", key: key, maxLinked: maxLinked, clock: time.Now}
+	return manager, nil
 }
 
 func NewManagerWithDB(db *database.DB, tablePrefix, encryptionKey string, maxLinked int) (*Manager, error) {
-	manager, err := NewManager(db.ReadSQL(), tablePrefix, encryptionKey, maxLinked)
+	manager, err := NewManager(db.Read(context.Background()), tablePrefix, encryptionKey, maxLinked)
 	if err == nil {
 		manager.writer = db
 	}
@@ -98,31 +99,14 @@ func (m *Manager) withWrite(ctx context.Context, fn func(*sql.Tx) error) error {
 	if m.writer != nil {
 		return m.writer.Write(ctx, fn)
 	}
-	tx, err := m.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	if err := fn(tx); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	committed = true
-	return nil
+	return errors.New("owner write store unavailable")
 }
 
 func (m *Manager) execWrite(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	var result sql.Result
 	err := m.withWrite(ctx, func(tx *sql.Tx) error {
 		var err error
-		result, err = tx.ExecContext(ctx, query, args...)
+		result, err = database.ExecContext(ctx, tx, query, args...)
 		return err
 	})
 	return result, err
@@ -151,17 +135,17 @@ func (m *Manager) IssueWithSource(ctx context.Context, source string) (identity 
 		return Identity{}, "", err
 	}
 	err = m.withWrite(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO `+m.owners+` (id, created_at, last_seen_at) VALUES (?, ?, ?)`, ownerID, now, now); err != nil {
+		if _, err := database.ExecContext(ctx, tx, `INSERT INTO `+m.owners+` (id, created_at, last_seen_at) VALUES (?, ?, ?)`, ownerID, now, now); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO `+m.table+` (id, name, token_hash, token_prefix, token_last4, owner_id, kind, token_enc, created_at) VALUES (?, 'primary', ?, ?, ?, ?, 'primary', ?, ?)`, id.String(), hash, token[:12], token[len(token)-4:], ownerID, enc, now); err != nil {
+		if _, err := database.ExecContext(ctx, tx, `INSERT INTO `+m.table+` (id, name, token_hash, token_prefix, token_last4, owner_id, kind, token_enc, created_at) VALUES (?, 'primary', ?, ?, ?, ?, 'primary', ?, ?)`, id.String(), hash, token[:12], token[len(token)-4:], ownerID, enc, now); err != nil {
 			return err
 		}
 		details, err := json.Marshal(map[string]string{"token_prefix": token[:12], "source": source})
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO `+m.audit+` (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details) VALUES (?, ?, 'owner', ?, 'token.created', 'api_token', ?, ?)`, uuid.NewString(), now, ownerID, token[:12], string(details))
+		_, err = database.ExecContext(ctx, tx, `INSERT INTO `+m.audit+` (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details) VALUES (?, ?, 'owner', ?, 'token.created', 'api_token', ?, ?)`, uuid.NewString(), now, ownerID, token[:12], string(details))
 		return err
 	})
 	if err != nil {
@@ -176,7 +160,7 @@ func (m *Manager) Resolve(ctx context.Context, token string) (Identity, error) {
 		return Identity{}, ErrInvalidToken
 	}
 	hash := tokenHash(token)
-	rows, err := m.db.QueryContext(ctx, `SELECT t.id, t.owner_id, t.kind, t.token_prefix, t.token_hash, t.expires_at, t.last_used_at, o.last_seen_at FROM `+m.table+` t JOIN `+m.owners+` o ON o.id = t.owner_id WHERE t.token_prefix = ? AND t.revoked_at IS NULL AND t.owner_id IS NOT NULL`, token[:12])
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutComplexQuery, `SELECT t.id, t.owner_id, t.kind, t.token_prefix, t.token_hash, t.expires_at, t.last_used_at, o.last_seen_at FROM `+m.table+` t JOIN `+m.owners+` o ON o.id = t.owner_id WHERE t.token_prefix = ? AND t.revoked_at IS NULL AND t.owner_id IS NOT NULL`, token[:12])
 	if err != nil {
 		return Identity{}, err
 	}
@@ -216,12 +200,12 @@ func (m *Manager) Resolve(ctx context.Context, token string) (Identity, error) {
 	if !lastUsed.Valid || lastUsed.Int64 <= now-300 || !ownerLastSeen.Valid || ownerLastSeen.Int64 <= now-300 {
 		if err := m.withWrite(ctx, func(tx *sql.Tx) error {
 			if !lastUsed.Valid || lastUsed.Int64 <= now-300 {
-				if _, err := tx.ExecContext(ctx, `UPDATE `+m.table+` SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`, now, identity.TokenID, now-300); err != nil {
+				if _, err := database.ExecContext(ctx, tx, `UPDATE `+m.table+` SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at <= ?)`, now, identity.TokenID, now-300); err != nil {
 					return err
 				}
 			}
 			if !ownerLastSeen.Valid || ownerLastSeen.Int64 <= now-300 {
-				if _, err := tx.ExecContext(ctx, `UPDATE `+m.owners+` SET last_seen_at = ? WHERE id = ? AND last_seen_at <= ?`, now, identity.OwnerID, now-300); err != nil {
+				if _, err := database.ExecContext(ctx, tx, `UPDATE `+m.owners+` SET last_seen_at = ? WHERE id = ? AND last_seen_at <= ?`, now, identity.OwnerID, now-300); err != nil {
 					return err
 				}
 			}
@@ -248,7 +232,7 @@ func (m *Manager) List(ctx context.Context, identity Identity) (items []Token, e
 	if identity.Kind != "primary" {
 		return nil, ErrForbidden
 	}
-	rows, err := m.db.QueryContext(ctx, `SELECT id, kind, COALESCE(name, ''), token_prefix, token_last4, created_at, rotated_at, last_used_at, expires_at, revoked_at FROM `+m.table+` WHERE owner_id = ? ORDER BY kind, id`, identity.OwnerID)
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT id, kind, COALESCE(name, ''), token_prefix, token_last4, created_at, rotated_at, last_used_at, expires_at, revoked_at FROM `+m.table+` WHERE owner_id = ? ORDER BY kind, id`, identity.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +260,7 @@ func (m *Manager) List(ctx context.Context, identity Identity) (items []Token, e
 }
 
 func (m *Manager) ActiveCounts(ctx context.Context) (map[string]int, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM `+m.table+` WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) GROUP BY kind`, m.clock().Unix())
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT kind, COUNT(*) FROM `+m.table+` WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) GROUP BY kind`, m.clock().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +289,7 @@ func (m *Manager) Reveal(ctx context.Context, identity Identity, tokenID string)
 		return "", ErrForbidden
 	}
 	var encrypted string
-	err := m.db.QueryRowContext(ctx, `SELECT token_enc FROM `+m.table+` WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`, tokenID, identity.OwnerID).Scan(&encrypted)
+	err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT token_enc FROM `+m.table+` WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`, tokenID, identity.OwnerID).Scan(&encrypted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
@@ -328,7 +312,7 @@ func (m *Manager) Mask(ctx context.Context, identity Identity, tokenID string) (
 		return "", ErrForbidden
 	}
 	var prefix, last4 string
-	if err := m.db.QueryRowContext(ctx, `SELECT token_prefix, token_last4 FROM `+m.table+` WHERE id = ? AND owner_id = ?`, tokenID, identity.OwnerID).Scan(&prefix, &last4); errors.Is(err, sql.ErrNoRows) {
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT token_prefix, token_last4 FROM `+m.table+` WHERE id = ? AND owner_id = ?`, tokenID, identity.OwnerID).Scan(&prefix, &last4); errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	} else if err != nil {
 		return "", err
@@ -345,7 +329,7 @@ func (m *Manager) Mask(ctx context.Context, identity Identity, tokenID string) (
 // BackfillTokenLast4 derives display metadata from encrypted credentials after
 // any pending encryption-key rotation has completed. It never stores plaintext.
 func (m *Manager) BackfillTokenLast4(ctx context.Context) (int, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT id, token_enc FROM `+m.table+` WHERE owner_id IS NOT NULL AND token_last4 = '' AND token_enc <> '' ORDER BY id`)
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutBulk, `SELECT id, token_enc FROM `+m.table+` WHERE owner_id IS NOT NULL AND token_last4 = '' AND token_enc <> '' ORDER BY id`)
 	if err != nil {
 		return 0, fmt.Errorf("read owner token metadata to backfill last four: %w", err)
 	}
@@ -420,7 +404,7 @@ func (m *Manager) CreateLinked(ctx context.Context, identity Identity, name stri
 		return "", "", errors.New("token name must be 1–64 characters")
 	}
 	var count int
-	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+m.table+` WHERE owner_id = ? AND kind = 'linked' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`, identity.OwnerID, m.clock().Unix()).Scan(&count); err != nil {
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT COUNT(*) FROM `+m.table+` WHERE owner_id = ? AND kind = 'linked' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`, identity.OwnerID, m.clock().Unix()).Scan(&count); err != nil {
 		return "", "", err
 	}
 	if count >= m.maxLinked {
@@ -491,7 +475,7 @@ func (m *Manager) RevokeLinked(ctx context.Context, identity Identity, tokenID s
 		return ErrForbidden
 	}
 	var prefix string
-	if err := m.db.QueryRowContext(ctx, `SELECT token_prefix FROM `+m.table+` WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, tokenID, identity.OwnerID).Scan(&prefix); errors.Is(err, sql.ErrNoRows) {
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT token_prefix FROM `+m.table+` WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, tokenID, identity.OwnerID).Scan(&prefix); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
 		return err
@@ -515,7 +499,7 @@ func (m *Manager) RevokeOwner(ctx context.Context, identity Identity, confirmati
 	}
 	err := m.withWrite(ctx, func(tx *sql.Tx) error {
 		var last4 string
-		if err := tx.QueryRowContext(ctx, `SELECT token_last4 FROM `+m.table+` WHERE id = ? AND owner_id = ? AND kind = 'primary' AND revoked_at IS NULL`, identity.TokenID, identity.OwnerID).Scan(&last4); errors.Is(err, sql.ErrNoRows) {
+		if err := database.QueryRowContext(ctx, tx, database.TimeoutSimpleQuery, `SELECT token_last4 FROM `+m.table+` WHERE id = ? AND owner_id = ? AND kind = 'primary' AND revoked_at IS NULL`, identity.TokenID, identity.OwnerID).Scan(&last4); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -529,25 +513,25 @@ func (m *Manager) RevokeOwner(ctx context.Context, identity Identity, confirmati
 			`SELECT COUNT(*) FROM ` + m.table + ` WHERE owner_id = ?`: &counts.Tokens,
 			`SELECT COUNT(*) FROM ` + alerts + ` WHERE owner_id = ?`:   &counts.Resources,
 		} {
-			if err := tx.QueryRowContext(ctx, query, identity.OwnerID).Scan(target); err != nil {
+			if err := database.QueryRowContext(ctx, tx, database.TimeoutSimpleQuery, query, identity.OwnerID).Scan(target); err != nil {
 				return err
 			}
 		}
 		var resultCount int64
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+results+` WHERE alert_id IN (SELECT id FROM `+alerts+` WHERE owner_id = ?)`, identity.OwnerID).Scan(&resultCount); err != nil {
+		if err := database.QueryRowContext(ctx, tx, database.TimeoutComplexQuery, `SELECT COUNT(*) FROM `+results+` WHERE alert_id IN (SELECT id FROM `+alerts+` WHERE owner_id = ?)`, identity.OwnerID).Scan(&resultCount); err != nil {
 			return err
 		}
 		counts.Resources += resultCount
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+results+` WHERE alert_id IN (SELECT id FROM `+alerts+` WHERE owner_id = ?)`, identity.OwnerID); err != nil {
+		if _, err := database.ExecContext(ctx, tx, `DELETE FROM `+results+` WHERE alert_id IN (SELECT id FROM `+alerts+` WHERE owner_id = ?)`, identity.OwnerID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+alerts+` WHERE owner_id = ?`, identity.OwnerID); err != nil {
+		if _, err := database.ExecContext(ctx, tx, `DELETE FROM `+alerts+` WHERE owner_id = ?`, identity.OwnerID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+m.table+` WHERE owner_id = ?`, identity.OwnerID); err != nil {
+		if _, err := database.ExecContext(ctx, tx, `DELETE FROM `+m.table+` WHERE owner_id = ?`, identity.OwnerID); err != nil {
 			return err
 		}
-		deleted, err := tx.ExecContext(ctx, `DELETE FROM `+m.owners+` WHERE id = ?`, identity.OwnerID)
+		deleted, err := database.ExecContext(ctx, tx, `DELETE FROM `+m.owners+` WHERE id = ?`, identity.OwnerID)
 		if err != nil {
 			return err
 		}
@@ -560,7 +544,7 @@ func (m *Manager) RevokeOwner(ctx context.Context, identity Identity, confirmati
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO `+m.audit+` (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details) VALUES (?, ?, 'owner', ?, 'token.revoked', 'owner', ?, ?)`, uuid.NewString(), m.clock().Unix(), identity.OwnerID, identity.OwnerID, string(details))
+		_, err = database.ExecContext(ctx, tx, `INSERT INTO `+m.audit+` (id, timestamp, actor_type, actor_id, action, resource_type, resource_id, details) VALUES (?, ?, 'owner', ?, 'token.revoked', 'owner', ?, ?)`, uuid.NewString(), m.clock().Unix(), identity.OwnerID, identity.OwnerID, string(details))
 		return err
 	})
 	return counts, err

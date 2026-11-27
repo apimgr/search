@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -50,6 +51,42 @@ func newManagerTempDir(t *testing.T) *DatabaseManager {
 	}
 	t.Cleanup(func() { dm.Close() })
 	return dm
+}
+
+func TestQueryHelpersRunAndCloseBoundedResults(t *testing.T) {
+	db := newInMemoryDB(t)
+	if _, err := db.Exec(context.Background(), "CREATE TABLE timeout_probe (value INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(context.Background(), "INSERT INTO timeout_probe (value) VALUES (?)", 42); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := db.Query(context.Background(), "SELECT value FROM timeout_probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		t.Fatalf("timed query returned no row: %v", rows.Err())
+	}
+	var value int
+	if err := rows.Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if value != 42 {
+		t.Fatalf("timed query value = %d, want 42", value)
+	}
+
+	var rowValue int
+	if err := db.QueryRow(context.Background(), "SELECT value FROM timeout_probe").Scan(&rowValue); err != nil {
+		t.Fatal(err)
+	}
+	if rowValue != value {
+		t.Fatalf("timed row value = %d, want %d", rowValue, value)
+	}
 }
 
 // --- normalizeDriver ---
@@ -272,8 +309,8 @@ func TestNewDB_SQLiteInMemory(t *testing.T) {
 	if db.IsRemote() {
 		t.Error("IsRemote() = true for sqlite, want false")
 	}
-	if db.SQL() == nil {
-		t.Error("SQL() returned nil")
+	if db.Read(context.Background()) == nil {
+		t.Error("Read() returned nil")
 	}
 }
 
@@ -352,11 +389,11 @@ func TestDB_Query_WhenNotReady(t *testing.T) {
 	}
 }
 
-func TestDB_Begin_WhenNotReady(t *testing.T) {
+func TestDB_Write_WhenNotReady(t *testing.T) {
 	db := &DB{driver: "sqlite", ready: false}
-	_, err := db.Begin(context.Background())
+	err := db.Write(context.Background(), func(*sql.Tx) error { return nil })
 	if err == nil {
-		t.Error("Begin() should fail when not ready")
+		t.Error("Write() should fail when not ready")
 	}
 }
 
@@ -402,13 +439,9 @@ func TestDB_Exec_Query_Begin_Ping_Ready(t *testing.T) {
 		t.Errorf("QueryRow id = %d, want 1", id)
 	}
 
-	// Begin / commit
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		t.Fatalf("Begin: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("Commit: %v", err)
+	// Transactions are managed by Write.
+	if err := db.Write(ctx, func(*sql.Tx) error { return nil }); err != nil {
+		t.Fatalf("Write: %v", err)
 	}
 
 	// Ping
@@ -455,6 +488,36 @@ func TestInitSchema_CreatesAllTables(t *testing.T) {
 			}
 		})
 	}
+
+	columns, err := tableColumns(ctx, dm.ServerDB(), "scheduler_tasks")
+	if err != nil {
+		t.Fatalf("inspect scheduler_tasks columns: %v", err)
+	}
+	for _, column := range []string{"id", "name"} {
+		if _, ok := columns[column]; !ok {
+			t.Errorf("fresh scheduler_tasks schema is missing canonical column %q", column)
+		}
+	}
+	for _, legacy := range []string{"task_id", "task_name"} {
+		if _, ok := columns[legacy]; ok {
+			t.Errorf("fresh scheduler_tasks schema contains legacy column %q", legacy)
+		}
+	}
+	historyColumns, err := tableColumns(ctx, dm.ServerDB(), "scheduler_history")
+	if err != nil {
+		t.Fatalf("inspect scheduler_history columns: %v", err)
+	}
+	if !strings.Contains(strings.ToUpper(historyColumns["id"]), "INT") {
+		t.Errorf("fresh scheduler_history id type = %q, want integer primary key", historyColumns["id"])
+	}
+	for _, column := range []string{"task_id", "started_at", "finished_at", "status", "error", "duration_ms"} {
+		if _, ok := historyColumns[column]; !ok {
+			t.Errorf("fresh scheduler_history schema is missing canonical column %q", column)
+		}
+	}
+	if _, ok := historyColumns["success"]; ok {
+		t.Error("fresh scheduler_history schema contains legacy success column")
+	}
 }
 
 func TestInitSchema_Idempotent(t *testing.T) {
@@ -467,6 +530,88 @@ func TestInitSchema_Idempotent(t *testing.T) {
 	// Running again must not error (IF NOT EXISTS guards)
 	if err := InitSchema(ctx, dm); err != nil {
 		t.Fatalf("second InitSchema: %v", err)
+	}
+}
+
+func TestInitSchemaRenamesLegacySchedulerTaskColumnsInPlace(t *testing.T) {
+	db := newInMemoryDB(t)
+	ctx := context.Background()
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE TABLE scheduler_tasks (
+		task_id TEXT PRIMARY KEY, task_name TEXT, schedule TEXT, last_run DATETIME,
+		last_status TEXT, last_error TEXT, next_run DATETIME, run_count INTEGER DEFAULT 0,
+		fail_count INTEGER DEFAULT 0, enabled INTEGER DEFAULT 1, retry_count INTEGER DEFAULT 0,
+		next_retry DATETIME, locked_by TEXT, locked_at DATETIME)`); err != nil {
+		t.Fatalf("create legacy scheduler_tasks schema: %v", err)
+	}
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `INSERT INTO scheduler_tasks(task_id, task_name, schedule) VALUES ('backup_daily', 'Daily Backup', '0 2 * * *')`); err != nil {
+		t.Fatalf("insert legacy scheduler task: %v", err)
+	}
+	if err := initServerSchema(ctx, db); err != nil {
+		t.Fatalf("migrate legacy scheduler schema: %v", err)
+	}
+	columns, err := tableColumns(ctx, db, "scheduler_tasks")
+	if err != nil {
+		t.Fatalf("inspect migrated scheduler_tasks columns: %v", err)
+	}
+	for _, column := range []string{"id", "name"} {
+		if _, ok := columns[column]; !ok {
+			t.Errorf("migrated scheduler_tasks schema is missing canonical column %q", column)
+		}
+	}
+	for _, legacy := range []string{"task_id", "task_name"} {
+		if _, ok := columns[legacy]; ok {
+			t.Errorf("migrated scheduler_tasks schema retains legacy column %q", legacy)
+		}
+	}
+	var id, name string
+	if err := db.QueryRow(ctx, "SELECT id, name FROM scheduler_tasks").Scan(&id, &name); err != nil {
+		t.Fatalf("read migrated task row: %v", err)
+	}
+	if id != "backup_daily" || name != "Daily Backup" {
+		t.Errorf("migrated task = (%q, %q), want (backup_daily, Daily Backup)", id, name)
+	}
+	if err := initServerSchema(ctx, db); err != nil {
+		t.Fatalf("repeat legacy scheduler migration: %v", err)
+	}
+}
+
+func TestInitSchemaRenamesLegacySchedulerHistoryColumnsInPlace(t *testing.T) {
+	db := newInMemoryDB(t)
+	ctx := context.Background()
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `CREATE TABLE scheduler_history (
+		id TEXT PRIMARY KEY, task_id TEXT NOT NULL, ran_at DATETIME NOT NULL,
+		finished_at DATETIME, success INTEGER NOT NULL DEFAULT 0, error TEXT)`); err != nil {
+		t.Fatalf("create legacy scheduler_history schema: %v", err)
+	}
+	if _, err := db.ExecWithTimeout(ctx, TimeoutMigration, `INSERT INTO scheduler_history(id, task_id, ran_at, finished_at, success, error)
+		VALUES ('legacy-row-id', 'backup_daily', '2026-01-02 03:04:05', '2026-01-02 03:04:06', 1, '')`); err != nil {
+		t.Fatalf("insert legacy scheduler history: %v", err)
+	}
+	if err := initServerSchema(ctx, db); err != nil {
+		t.Fatalf("migrate legacy scheduler history: %v", err)
+	}
+	columns, err := tableColumns(ctx, db, "scheduler_history")
+	if err != nil {
+		t.Fatalf("inspect migrated scheduler_history columns: %v", err)
+	}
+	for _, column := range []string{"id", "task_id", "started_at", "finished_at", "status", "error", "duration_ms"} {
+		if _, ok := columns[column]; !ok {
+			t.Errorf("migrated scheduler_history schema is missing canonical column %q", column)
+		}
+	}
+	if _, ok := columns["ran_at"]; ok {
+		t.Error("migrated scheduler_history schema retains ran_at")
+	}
+	var id, status, started string
+	var duration int64
+	if err := db.QueryRow(ctx, "SELECT id, status, started_at, duration_ms FROM scheduler_history").Scan(&id, &status, &started, &duration); err != nil {
+		t.Fatalf("read migrated scheduler history: %v", err)
+	}
+	if id != "legacy-row-id" || status != "success" || started != "2026-01-02T03:04:05Z" || duration < 900 || duration > 1100 {
+		t.Errorf("migrated history = (%q, %q, %q, %d ms), want preserved id/start, success, and about 1000 ms", id, status, started, duration)
+	}
+	if err := initServerSchema(ctx, db); err != nil {
+		t.Fatalf("repeat legacy scheduler history migration: %v", err)
 	}
 }
 

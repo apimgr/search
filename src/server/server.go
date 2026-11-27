@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -52,6 +52,8 @@ import (
 	"github.com/apimgr/search/src/ssl"
 	"github.com/apimgr/search/src/widget"
 	"github.com/go-chi/chi/v5"
+	xhtml "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // Server represents the HTTP server
@@ -73,6 +75,7 @@ type Server struct {
 	startTime               time.Time
 	middleware              *Middleware
 	rateLimiter             *RateLimiter
+	strictLimiter           *EndpointRateLimiter
 	csrf                    *CSRFMiddleware
 	renderer                *TemplateRenderer
 	apiHandler              *api.Handler
@@ -85,6 +88,7 @@ type Server struct {
 	instantManager          *instant.Manager
 	directManager           *direct.Manager
 	geoipLookup             *geoip.Lookup
+	mailerMu                sync.RWMutex
 	mailer                  *email.Mailer
 	notifyManager           *notify.Manager
 	notifyCancel            context.CancelFunc
@@ -99,14 +103,10 @@ type Server struct {
 	databaseFailureSince    time.Time
 	databaseFailureCount    int
 	databaseFailureNotified time.Time
-	ownerFlashMu            sync.Mutex
-	ownerFlashes            map[string]ownerTokenFlash
 	contactSpamMu           sync.Mutex
 	contactSpamState        *contactSpamState
 	feedQueriesMu           sync.RWMutex
 	feedQueries             []feedQuery
-	apiCaptchasMu           sync.Mutex
-	apiCaptchas             map[string]apiContactCaptcha
 	blocklistManager        *security.BlocklistManager
 	cveManager              *security.CVEManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
@@ -118,7 +118,7 @@ type Server struct {
 	// Debug accessors per AI.md PART 6
 	router chi.Router
 	cache  *search.ResultCache
-	db     *sql.DB
+	db     *database.DB
 
 	// Loopback port of the Tor PROXY-protocol backend listener; 0 when Tor is
 	// not running. Mirrors Metrics.torBackendPort so middleware can identify
@@ -166,6 +166,20 @@ func cloneStringMap(values map[string]string) map[string]string {
 		copy[key] = value
 	}
 	return copy
+}
+
+func (s *Server) currentMailer() *email.Mailer {
+	s.mailerMu.RLock()
+	defer s.mailerMu.RUnlock()
+	return s.mailer
+}
+
+func (s *Server) replaceMailer(mailer *email.Mailer) *email.Mailer {
+	s.mailerMu.Lock()
+	previous := s.mailer
+	s.mailer = mailer
+	s.mailerMu.Unlock()
+	return previous
 }
 
 // NewServer creates a new server instance with the production public-IP providers.
@@ -307,6 +321,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	// Create rate limiter
 	rl := NewRateLimiter(&cfg.Server.RateLimit)
+	strictLimiter := NewEndpointRateLimiter(cfg.Server.RateLimit.Strict.Requests, time.Duration(cfg.Server.RateLimit.Strict.Window)*time.Second)
 
 	// Create CSRF middleware
 	csrf := NewCSRFMiddleware(cfg)
@@ -466,28 +481,39 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	})
 
 	// Create email mailer
-	// Per AI.md PART 18: Email is auto-enabled if SMTP is configured
+	// SMTP is detected or checked once at startup before the mail queue is
+	// created. Unavailable SMTP disables notifications without failing startup.
 	var mailer *email.Mailer
-	if cfg.Server.Notifications.Email.SMTP.Host != "" {
-		// Per AI.md PART 12 "Contact Configuration": server.contact.admin.email
-		// is the required admin notification recipient — "Empty → startup
-		// warning. Auto-populated from the operator's email on first install
-		// if unset." This is the recipient list SendToAdmins() delivers to.
-		if cfg.Server.Contact.Admin.Email == "" {
-			slog.Warn("server.contact.admin.email is not configured — admin email notifications will not be delivered")
-		}
-
-		if m, ok := email.NewMailerFromConfig(cfg); ok {
-			// Per AI.md PART 17 "Email Queue with Retry Logic": SMTP-configured
-			// mail must be delivered through the built-in queue, which retries
-			// with exponential backoff and logs every success and failure.
-			if err := m.StartQueue(context.Background(), email.QueueConfig{}); err != nil {
-				slog.Error("Email queue failed to start", "err", err)
+	if strings.TrimSpace(cfg.Server.FQDN) == "" {
+		slog.Warn("Email disabled because server FQDN is empty", "email.configured", false)
+	} else {
+		m, configured, bootstrapErr := email.BootstrapMailer(cfg, cachedPublicIPv4())
+		if !configured {
+			if bootstrapErr != nil {
+				slog.Warn("SMTP unavailable; email notifications disabled", "email.configured", false, "err", bootstrapErr)
+			} else {
+				slog.Warn("SMTP not configured; email notifications disabled", "email.configured", false)
 			}
-			email.SetDefaultMailer(m)
-			mailer = m
-			slog.Info("Email mailer configured", "smtp_host", cfg.Server.Notifications.Email.SMTP.Host, "smtp_port", cfg.Server.Notifications.Email.SMTP.Port)
+		} else {
+			if bootstrapErr != nil {
+				slog.Warn("detected SMTP settings could not be persisted", "err", bootstrapErr)
+			}
+			// Per AI.md PART 12 "Contact Configuration": server.contact.admin.email
+			// is the required admin notification recipient.
+			if cfg.Server.Contact.Admin.Email == "" {
+				slog.Warn("server.contact.admin.email is not configured — admin email notifications will not be delivered")
+			}
+			if err := m.StartQueue(context.Background(), email.QueueConfig{}); err != nil {
+				slog.Warn("SMTP queue unavailable; email notifications disabled", "email.configured", false, "err", err)
+			} else {
+				email.SetDefaultMailer(m)
+				mailer = m
+				slog.Info("Email mailer configured", "email.configured", true, "smtp_host", cfg.Server.Notifications.Email.SMTP.Host, "smtp_port", cfg.Server.Notifications.Email.SMTP.Port)
+			}
 		}
+	}
+	if mailer == nil {
+		email.SetDefaultMailer(nil)
 	}
 
 	// Scheduler is initialized after Server struct creation per AI.md PART 19
@@ -501,17 +527,68 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	var err error
 	securityReportsRecoveryFailed := false
 
+	databaseSettings := cfg.Server.Database
+	databaseURL := strings.TrimSpace(databaseSettings.URL)
+	databaseDriver := strings.TrimSpace(databaseSettings.Driver)
+	if databaseURL != "" {
+		if schemeDriver := databaseURLDriver(databaseURL); schemeDriver != "" {
+			databaseDriver = schemeDriver
+		}
+	}
+	if databaseDriver == "" {
+		databaseDriver = "sqlite"
+	}
+	databaseDir := config.GetDatabaseDir()
+	databaseDSN := databaseURL
+	if databaseDriver == "libsql" && databaseSettings.Token != "" {
+		parsed, parseErr := url.Parse(databaseDSN)
+		if parseErr == nil {
+			query := parsed.Query()
+			if query.Get("authToken") == "" {
+				query.Set("authToken", databaseSettings.Token)
+				parsed.RawQuery = query.Encode()
+				databaseDSN = parsed.String()
+			}
+		}
+	}
+	if databaseDriver == "sqlite" && databaseURL != "" {
+		if parsed, parseErr := url.Parse(databaseURL); parseErr == nil {
+			switch parsed.Scheme {
+			case "file":
+				databaseDSN = parsed.Path
+			case "":
+				databaseDSN = databaseURL
+			}
+		}
+		if databaseDSN != "" {
+			if !filepath.IsAbs(databaseDSN) {
+				databaseDSN = filepath.Join(databaseDir, databaseDSN)
+			}
+			databaseDir = filepath.Dir(databaseDSN)
+		}
+	}
+	databaseConfig := databaseSettings.Pool
+	maxLifetime := parseDatabasePoolDuration(databaseConfig.MaxLifetime, 5*time.Minute)
+	maxIdleTime := parseDatabasePoolDuration(databaseConfig.MaxIdleTime, time.Minute)
 	dbConfig := &database.Config{
-		Driver:   "sqlite",
-		DataDir:  config.GetDatabaseDir(),
-		MaxOpen:  10,
-		MaxIdle:  5,
-		Lifetime: 300,
+		Driver:   databaseDriver,
+		DSN:      databaseDSN,
+		DataDir:  databaseDir,
+		MaxOpen:  databaseConfig.MaxOpen,
+		MaxIdle:  databaseConfig.MaxIdle,
+		Lifetime: int(maxLifetime / time.Second),
+		IdleTime: int(maxIdleTime / time.Second),
 	}
 	dbMgr, err = database.NewDatabaseManager(dbConfig)
 	if err != nil {
 		securityReportsRecoveryFailed = true
-		slog.Warn("Database initialization failed", "err", err)
+		// Driver errors can include the full connection URL, which may contain
+		// credentials. The notification path applies its own redaction.
+		if databaseDriver == "invalid-url" {
+			slog.Error("invalid DATABASE_URL; use the URL form")
+		} else {
+			slog.Warn("Database initialization failed", "driver", databaseDriver)
+		}
 		if mailer != nil {
 			if notifyErr := mailer.SendDatabaseError(err, time.Now().UTC()); notifyErr != nil {
 				slog.Error("database error notification failed", "err", notifyErr)
@@ -702,6 +779,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
+	strictLimiter.SetMetrics(metrics)
 	if dbMgr != nil {
 		dbMgr.SetBusyObserver(metrics.RecordDBBusy)
 		if db := dbMgr.ServerDB(); db != nil {
@@ -725,7 +803,7 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	mw.SetTemplateRenderer(renderer)
 
 	var alertMgr *alert.Manager
-	if dbMgr != nil && dbMgr.ServerDB() != nil && dbMgr.ServerDB().ReadSQL() != nil {
+	if dbMgr != nil && dbMgr.ServerDB() != nil {
 		alertMgr = alert.NewManagerWithDB(dbMgr.ServerDB(), cfg, aggregator, mailer)
 	}
 
@@ -778,20 +856,20 @@ func newServer(cfg *config.Config, providers []string) *Server {
 	}
 
 	// Set debug accessor for db per AI.md PART 6
-	var serverDB *sql.DB
+	var serverDB *database.DB
 	if dbMgr != nil && dbMgr.ServerDB() != nil {
-		serverDB = dbMgr.ServerDB().ReadSQL()
+		serverDB = dbMgr.ServerDB()
 	}
 
 	s := &Server{
 		config:                        cfg,
 		securityReportsRecoveryFailed: securityReportsRecoveryFailed,
-		apiCaptchas:                   make(map[string]apiContactCaptcha),
 		publicIPProviders:             providers,
 		registry:                      registry,
 		aggregator:                    aggregator,
 		middleware:                    mw,
 		rateLimiter:                   rl,
+		strictLimiter:                 strictLimiter,
 		csrf:                          csrf,
 		renderer:                      renderer,
 		apiHandler:                    apiHandler,
@@ -817,6 +895,37 @@ func newServer(cfg *config.Config, providers []string) *Server {
 		cache: resultCache,
 		db:    serverDB,
 	}
+	cfg.OnReload(func(reloaded *config.Config) {
+		var next *email.Mailer
+		if strings.TrimSpace(reloaded.Server.FQDN) == "" {
+			slog.Warn("Email disabled because server FQDN is empty", "email.configured", false)
+		} else {
+			globalIPv4, _ := s.GetPublicIP()
+			candidate, configured, bootstrapErr := email.BootstrapMailer(reloaded, globalIPv4)
+			if !configured {
+				if bootstrapErr != nil {
+					slog.Warn("SMTP unavailable after configuration reload; email notifications disabled", "email.configured", false, "err", bootstrapErr)
+				} else {
+					slog.Warn("SMTP not configured after configuration reload; email notifications disabled", "email.configured", false)
+				}
+			} else {
+				if bootstrapErr != nil {
+					slog.Warn("detected SMTP settings could not be persisted", "err", bootstrapErr)
+				}
+				if queueErr := candidate.StartQueue(context.Background(), email.QueueConfig{}); queueErr != nil {
+					slog.Warn("SMTP queue unavailable after configuration reload; email notifications disabled", "email.configured", false, "err", queueErr)
+				} else {
+					next = candidate
+					slog.Info("Email mailer configured after configuration reload", "email.configured", true, "smtp_host", reloaded.Server.Notifications.Email.SMTP.Host, "smtp_port", reloaded.Server.Notifications.Email.SMTP.Port)
+				}
+			}
+		}
+		previous := s.replaceMailer(next)
+		email.SetDefaultMailer(next)
+		if previous != nil && previous != next {
+			previous.StopQueue()
+		}
+	})
 	s.rebuildHealthRegistry()
 	cfg.OnReload(func(*config.Config) {
 		s.rebuildHealthRegistry()
@@ -929,6 +1038,35 @@ func applyEngineCredentials(registry *engine.Registry, engines map[string]config
 			mc.Settings["contact_username"] = ov.ContactUsername
 		}
 	}
+}
+
+func databaseURLDriver(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "invalid-url"
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "libsql", "https":
+		return "libsql"
+	case "file":
+		return "sqlite"
+	default:
+		if parsed.Scheme == "" {
+			if strings.Contains(raw, ";") || strings.Contains(raw, "=") {
+				return "invalid-url"
+			}
+			return "sqlite"
+		}
+		return "invalid-url"
+	}
+}
+
+func parseDatabasePoolDuration(raw string, fallback time.Duration) time.Duration {
+	duration, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || duration <= 0 {
+		return fallback
+	}
+	return duration
 }
 
 // TorAddress returns the active .onion address, or empty string if Tor is not running.
@@ -1301,8 +1439,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	// Drain and stop the email delivery queue. StopQueue drains messages
 	// already accepted before workers exit (AI.md PART 17: queue shutdown).
-	if s.mailer != nil {
-		s.mailer.StopQueue()
+	if mailer := s.currentMailer(); mailer != nil {
+		mailer.StopQueue()
 	}
 
 	// Stop Tor service
@@ -1353,7 +1491,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	if s.mailer != nil {
+	if mailer := s.currentMailer(); mailer != nil {
 		reason := "signal"
 		if value := s.shutdownReason.Load(); value != nil {
 			if configured, ok := value.(string); ok && configured != "" {
@@ -1363,7 +1501,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		hostname, _ := os.Hostname()
 		done := make(chan error, 1)
 		go func() {
-			done <- s.mailer.SendShutdown(hostname, config.Version, s.config.Server.Mode, reason)
+			done <- mailer.SendShutdown(hostname, config.Version, s.config.Server.Mode, reason)
 		}()
 		select {
 		case err := <-done:
@@ -1399,8 +1537,8 @@ func (s *Server) SetShutdownReason(reason string) {
 // email after the server is ready.
 func (s *Server) NotifyStartup(hostname string) {
 	slog.Info("Server started", "version", config.Version, "mode", s.config.Server.Mode)
-	if s.mailer != nil {
-		if err := s.mailer.SendStartup(hostname, config.Version, s.config.Server.Mode); err != nil {
+	if mailer := s.currentMailer(); mailer != nil {
+		if err := mailer.SendStartup(hostname, config.Version, s.config.Server.Mode); err != nil {
 			slog.Error("startup notification email failed", "err", err)
 		}
 	}
@@ -1453,8 +1591,8 @@ func (s *Server) reportDatabaseStatus(err error) {
 	}
 	if shouldNotify {
 		slog.Warn("database connection probe failed", "consecutive_failures", failures)
-		if s.mailer != nil {
-			if sendErr := s.mailer.SendDatabaseError(err, since); sendErr != nil {
+		if mailer := s.currentMailer(); mailer != nil {
+			if sendErr := mailer.SendDatabaseError(err, since); sendErr != nil {
 				slog.Error("database error notification failed")
 			}
 		}
@@ -1468,8 +1606,8 @@ func (s *Server) NotifyUpdateInstalled(previousVersion, newVersion string) {
 	if s.logManager != nil && s.logManager.Audit() != nil {
 		s.logManager.Audit().LogEvent(logging.AuditActionServerUpdated, logging.AuditCategorySystem, logging.AuditSeverityInfo, logging.AuditActor{Type: "system", Username: "system"}, nil, "success", map[string]interface{}{"previous_version": previousVersion, "new_version": newVersion}, "")
 	}
-	if s.mailer != nil {
-		if err := s.mailer.SendUpdateInstalled(previousVersion, newVersion); err != nil {
+	if mailer := s.currentMailer(); mailer != nil {
+		if err := mailer.SendUpdateInstalled(previousVersion, newVersion); err != nil {
 			slog.Error("failed to send update-installed notification", "err", err)
 		}
 	}
@@ -1486,8 +1624,8 @@ func (s *Server) NotifyUpdateFailed(version, reason string) {
 		}
 		s.logManager.Audit().LogEvent(logging.AuditAction("update.failed"), logging.AuditCategorySystem, logging.AuditSeverityError, logging.AuditActor{Type: "system", Username: "system"}, nil, "failure", details, reason)
 	}
-	if s.mailer != nil {
-		if err := s.mailer.SendUpdateFailed(version, reason); err != nil {
+	if mailer := s.currentMailer(); mailer != nil {
+		if err := mailer.SendUpdateFailed(version, reason); err != nil {
 			slog.Error("failed to send update-failed notification", "err", err)
 		}
 	}
@@ -1500,11 +1638,11 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	data := NewPageData(s.config, title, page)
 	data.MCPEnabled = true
 	i18nManager := s.getI18nManager()
-	data.Lang = i18nManager.ResolveLanguage(w, r)
+	data.Lang = i18nManager.ResolveLanguage(w, r, CanSetPreferenceCookie(r))
 	if langCookie, err := r.Cookie("lang"); err == nil {
-		data.LangPinned = i18nManager.ResolveSupportedLanguage(langCookie.Value) != ""
+		data.LangPinned = i18nManager.IsSupported(strings.TrimSpace(langCookie.Value))
 	}
-	if i18nManager.ResolveSupportedLanguage(r.URL.Query().Get("lang")) != "" {
+	if i18nManager.IsSupported(strings.TrimSpace(r.URL.Query().Get("lang"))) {
 		data.LangPinned = true
 	}
 	if language, ok := i18n.GetLanguage(data.Lang); ok {
@@ -1568,7 +1706,7 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 			data.TorStatus = "starting..."
 		}
 	}
-	if s.i2pManager != nil {
+	if s.i2pManager != nil && s.i2pManager.IsRunning() {
 		data.I2PAddress = s.i2pManager.EepsiteAddress()
 	}
 	// Set HasConsentCookie: skip banner when a valid cookie_consent cookie exists.
@@ -1801,6 +1939,7 @@ func (s *Server) setupRoutes() http.Handler {
 	// Alert routes mutate on POST; CSRF-protect them (GET renders pass through).
 	r.HandleFunc("/alerts/new", s.csrfProtect(s.handleAlertNew))
 	r.HandleFunc("/alerts", s.csrfProtect(s.handleAlerts))
+	r.HandleFunc("/alerts/created", s.csrfProtect(s.handleAlertCreated))
 	r.HandleFunc("/alerts/*", s.csrfProtect(s.handleAlertAction))
 
 	// Direct answers (full-page results for type:term queries per IDEA.md)
@@ -1891,15 +2030,17 @@ func (s *Server) setupRoutes() http.Handler {
 	// action, one route. /preferences/widgets remains for the homepage
 	// widget grid's drag-and-drop reorder, which has no form of its own.
 	r.Post("/server/preferences/widgets", s.csrfProtect(s.handleWidgetOrderSave))
-	r.Post("/server/preferences/token/reveal", s.csrfProtect(s.handleOwnerPrimaryReveal))
-	r.Post("/server/preferences/token/rotate", s.csrfProtect(s.handleOwnerPrimaryRotate))
-	r.Post("/server/preferences/token/restore", s.csrfProtect(s.handleOwnerRestore))
+	r.Post("/server/preferences/token/reveal", s.strictRateLimit(s.csrfProtect(s.handleOwnerPrimaryReveal)))
+	r.Post("/server/preferences/token/create", s.strictRateLimit(s.csrfProtect(s.handleOwnerPrimaryCreate)))
+	r.Post("/server/preferences/token/rotate", s.strictRateLimit(s.csrfProtect(s.handleOwnerPrimaryRotate)))
+	r.Post("/server/preferences/token/revoke", s.strictRateLimit(s.csrfProtect(s.handleOwnerPrimaryRevoke)))
+	r.Post("/server/preferences/token/restore", s.strictRateLimit(s.csrfProtect(s.handleOwnerRestore)))
 	r.Post("/server/preferences/tokens/forget", s.csrfProtect(s.handleOwnerTokenForget))
-	r.Post("/server/preferences/tokens", s.csrfProtect(s.handleOwnerLinkedCreate))
-	r.Post("/server/preferences/tokens/{id}/reveal", s.csrfProtect(s.handleOwnerLinkedReveal))
-	r.Post("/server/preferences/tokens/{id}/rotate", s.csrfProtect(s.handleOwnerLinkedRotate))
-	r.Post("/server/preferences/tokens/{id}/update", s.csrfProtect(s.handleOwnerLinkedUpdate))
-	r.Post("/server/preferences/tokens/{id}/revoke", s.csrfProtect(s.handleOwnerLinkedRevoke))
+	r.Post("/server/preferences/tokens", s.strictRateLimit(s.csrfProtect(s.handleOwnerLinkedCreate)))
+	r.Post("/server/preferences/tokens/{id}/reveal", s.strictRateLimit(s.csrfProtect(s.handleOwnerLinkedReveal)))
+	r.Post("/server/preferences/tokens/{id}/rotate", s.strictRateLimit(s.csrfProtect(s.handleOwnerLinkedRotate)))
+	r.Post("/server/preferences/tokens/{id}/update", s.strictRateLimit(s.csrfProtect(s.handleOwnerLinkedUpdate)))
+	r.Post("/server/preferences/tokens/{id}/revoke", s.strictRateLimit(s.csrfProtect(s.handleOwnerLinkedRevoke)))
 	// Cross-device preference sync (stateless export/import, no CSRF needed - GET only)
 	r.Get("/server/preferences/sync", s.handlePreferencesSync)
 	r.Post("/server/preferences/sync", s.csrfProtect(s.handlePreferencesSync))
@@ -2025,6 +2166,8 @@ func (s *Server) setupRoutes() http.Handler {
 		s.middleware.GeoBlock(s.geoipLookup),
 		// 10. log requests (innermost of spec chain)
 		s.middleware.Logger,
+		// Keep every explicit and catch-all /.well-known route read-only.
+		wellKnownMethods,
 	)
 
 	return handler
@@ -2634,6 +2777,13 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 	baseData := s.newPageData(w, r, answer.Title, "direct")
 	baseData.Description = answer.Description
 	baseData.Query = fmt.Sprintf("%s:%s", answer.Type, answer.Term)
+	content, err := demoteDirectContentHeadings(answer.Content, answer.Title)
+	if err != nil {
+		slog.Error("failed to normalize direct answer headings", "err", err)
+		s.renderTemplateFailure(w, r, http.StatusInternalServerError)
+		return
+	}
+	answer.Content = content
 
 	data := &DirectAnswerPageData{
 		PageData: *baseData,
@@ -2641,6 +2791,81 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 	}
 
 	s.renderPageTemplate(w, r, "direct", data)
+}
+
+func demoteDirectContentHeadings(content, pageTitle string) (string, error) {
+	contextNode := &xhtml.Node{Type: xhtml.ElementNode, DataAtom: atom.Div, Data: "div"}
+	nodes, err := xhtml.ParseFragment(strings.NewReader(content), contextNode)
+	if err != nil {
+		return "", err
+	}
+	for _, node := range nodes {
+		contextNode.AppendChild(node)
+	}
+	var textContent func(*xhtml.Node) string
+	textContent = func(node *xhtml.Node) string {
+		if node.Type == xhtml.TextNode {
+			return node.Data
+		}
+		var text strings.Builder
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			text.WriteString(textContent(child))
+		}
+		return text.String()
+	}
+	normalizedPageTitle := strings.Join(strings.Fields(strings.ToLower(pageTitle)), " ")
+	previousSourceLevel := 0
+	previousOutputLevel := 0
+	var demoteChildren func(*xhtml.Node)
+	demoteChildren = func(parent *xhtml.Node) {
+		for node := parent.FirstChild; node != nil; {
+			next := node.NextSibling
+			if node.Type == xhtml.ElementNode && node.Data == "h1" && strings.Join(strings.Fields(strings.ToLower(textContent(node))), " ") == normalizedPageTitle {
+				parent.RemoveChild(node)
+			} else {
+				if node.Type == xhtml.ElementNode && len(node.Data) == 2 && node.Data[0] == 'h' && node.Data[1] >= '1' && node.Data[1] <= '6' {
+					isPageTitle := node.Data == "h1" && strings.Join(strings.Fields(strings.ToLower(textContent(node))), " ") == normalizedPageTitle
+					if isPageTitle {
+						parent.RemoveChild(node)
+						node = next
+						continue
+					}
+					sourceLevel := int(node.Data[1] - '0')
+					level := 3
+					if previousSourceLevel != 0 {
+						switch {
+						case sourceLevel > previousSourceLevel:
+							level = previousOutputLevel + 1
+						case sourceLevel == previousSourceLevel:
+							level = previousOutputLevel
+						default:
+							level = previousOutputLevel - (previousSourceLevel - sourceLevel)
+							if level < 3 {
+								level = 3
+							}
+						}
+					}
+					if level > 6 {
+						level = 6
+					}
+					node.Data = "h" + strconv.Itoa(level)
+					node.DataAtom = atom.Lookup([]byte(node.Data))
+					previousSourceLevel = sourceLevel
+					previousOutputLevel = level
+				}
+				demoteChildren(node)
+			}
+			node = next
+		}
+	}
+	demoteChildren(contextNode)
+	var output bytes.Buffer
+	for node := contextNode.FirstChild; node != nil; node = node.NextSibling {
+		if err := xhtml.Render(&output, node); err != nil {
+			return "", err
+		}
+	}
+	return output.String(), nil
 }
 
 // DirectAnswerPageData contains data for rendering a direct answer page
@@ -2685,12 +2910,59 @@ func (s *Server) renderPageTemplateStatus(w http.ResponseWriter, r *http.Request
 // renderTemplateFailure emits the specified minimal recovery response when a
 // server page cannot be rendered. API clients receive the canonical JSON error.
 func (s *Server) renderTemplateFailure(w http.ResponseWriter, r *http.Request, status int) {
+	lang := "en"
+	heading := "Something went wrong"
+	message := "The server could not complete this request. Please try again."
+	manager := i18n.NewManager("en", i18n.DefaultSupportedLanguages())
+	if s != nil {
+		manager = s.getI18nManager()
+	}
+	lang = manager.ResolveLanguage(nil, r, false)
+	heading = manager.T(lang, "errors.recovery_heading")
+	message = manager.T(lang, "errors.recovery_message")
+	if heading == "errors.recovery_heading" || heading == "" {
+		heading = "Something went wrong"
+	}
+	if message == "errors.recovery_message" || message == "" {
+		message = "The server could not complete this request. Please try again."
+	}
+	if s != nil && s.renderer != nil && s.config != nil {
+		page := s.newPageData(w, r, manager.T(lang, "errors.recovery_title"), "error")
+		page.RequestPath = ""
+		data := &ErrorPageData{
+			PageData:   *page,
+			StatusCode: status,
+			StatusText: manager.T(lang, "errors.recovery_title"),
+			Message:    message,
+		}
+		var body bytes.Buffer
+		if err := s.renderer.Render(&body, "error", data); err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(status)
+			if _, err := w.Write(body.Bytes()); err != nil {
+				slog.Warn("failed to write themed recovery response", "error", err)
+			}
+			return
+		}
+	}
+	writeRecoveryHTMLStatusLocalized(w, r, status, lang, heading, message)
+}
+
+func writeRecoveryHTMLStatusLocalized(w http.ResponseWriter, r *http.Request, status int, lang, heading, message string) {
 	w.Header().Set("Cache-Control", "no-store")
 	if acceptsJSONError(r) {
-		localizedHTTPError(w, r, status, "errors.server_error")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, "{\"ok\":false,\"error\":\"SERVER_ERROR\",\"message\":%q}\n", http.StatusText(status))
 		return
 	}
-	writeRecoveryHTMLStatus(w, r, status)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	page := fmt.Sprintf("<!doctype html><html lang=\"%s\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%d %s</title></head><body><main><h1>%s</h1><p>%s</p><p><a href=\"/\">Home</a></p></main></body></html>", html.EscapeString(lang), status, html.EscapeString(http.StatusText(status)), html.EscapeString(heading), html.EscapeString(message))
+	if _, err := io.WriteString(w, page); err != nil {
+		slog.Warn("failed to write recovery response", "error", err)
+	}
 }
 
 // renderSearchError renders an error page

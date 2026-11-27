@@ -53,7 +53,7 @@
         <h2 id="appearance-heading">{{t "preferences.appearance_heading"}}</h2>
             <div class="form-group">
                 <label for="theme">{{t "preferences.theme"}}</label>
-                <select id="theme" name="theme">
+                <select class="form-input" id="theme" name="theme">
                     <option value="dark" {{if eq .Prefs.Theme "dark"}}selected{{end}}>{{t "preferences.theme_dark"}}</option>
                     <option value="light" {{if eq .Prefs.Theme "light"}}selected{{end}}>{{t "preferences.theme_light"}}</option>
                     <option value="auto" {{if eq .Prefs.Theme "auto"}}selected{{end}}>{{t "preferences.theme_auto"}}</option>
@@ -62,7 +62,7 @@
 
             <div id="language" class="form-group">
                 <label for="lang">{{t "preferences.language"}}</label>
-                <select id="lang" name="lang">
+                <select class="form-input" id="lang" name="lang">
                     <option value="" {{if not .LangPinned}}selected{{end}}>{{tf "preferences.language_automatic" "language" .LangName}}</option>
                     {{range .AvailableLanguages}}<option value="{{.Code}}" lang="{{.Code}}" {{if and $.LangPinned (eq $.Lang .Code)}}selected{{end}}>{{.NativeName}}</option>{{end}}
                 </select>
@@ -74,7 +74,7 @@
 
             <div class="form-group">
                 <label for="font-size">{{t "preferences.font_size"}}</label>
-                <select id="font-size" name="search_pref_font_size">
+                <select class="form-input" id="font-size" name="search_pref_font_size">
                     <option value="small" {{if eq .Prefs.FontSize "small"}}selected{{end}}>{{t "preferences.font_size_small"}}</option>
                     <option value="medium" {{if eq .Prefs.FontSize "medium"}}selected{{end}}>{{t "preferences.font_size_medium"}}</option>
                     <option value="large" {{if eq .Prefs.FontSize "large"}}selected{{end}}>{{t "preferences.font_size_large"}}</option>
@@ -83,7 +83,7 @@
 
             <div class="form-group">
                 <label for="results-density">{{t "preferences.results_density"}}</label>
-                <select id="results-density" name="search_pref_results_density">
+                <select class="form-input" id="results-density" name="search_pref_results_density">
                     <option value="compact" {{if eq .Prefs.ResultsDensity "compact"}}selected{{end}}>{{t "preferences.density_compact"}}</option>
                     <option value="comfortable" {{if eq .Prefs.ResultsDensity "comfortable"}}selected{{end}}>{{t "preferences.density_comfortable"}}</option>
                     <option value="spacious" {{if eq .Prefs.ResultsDensity "spacious"}}selected{{end}}>{{t "preferences.density_spacious"}}</option>
@@ -92,12 +92,12 @@
 
             <div class="form-group">
                 <label for="accent-color">{{t "preferences.accent_color"}}</label>
-                <input type="color" id="accent-color" name="search_pref_accent_color" value="{{if .Prefs.AccentColor}}{{.Prefs.AccentColor}}{{else}}#8250df{{end}}">
+                <input class="form-input" type="color" id="accent-color" name="search_pref_accent_color" value="{{if .Prefs.AccentColor}}{{.Prefs.AccentColor}}{{else}}#8250df{{end}}">
             </div>
 
             <div class="form-group">
                 <label for="default-category">{{t "preferences.default_category_label"}}</label>
-                <select id="default-category" name="search_pref_category">
+                <select class="form-input" id="default-category" name="search_pref_category">
                     <option value="general" {{if eq .Prefs.DefaultCategory "general"}}selected{{end}}>{{t "preferences.default_category_general"}}</option>
                     <option value="images" {{if eq .Prefs.DefaultCategory "images"}}selected{{end}}>{{t "search.categories.images"}}</option>
                     <option value="videos" {{if eq .Prefs.DefaultCategory "videos"}}selected{{end}}>{{t "search.categories.videos"}}</option>
@@ -113,7 +113,7 @@
 
             <div class="form-group">
                 <label for="safe-search">{{t "search.safe_search"}}</label>
-                <select id="safe-search" name="search_pref_safe_search">
+                <select class="form-input" id="safe-search" name="search_pref_safe_search">
                     <option value="0" {{if eq .Prefs.SafeSearch "0"}}selected{{end}}>{{t "search.safe_search_off"}}</option>
                     <option value="1" {{if eq .Prefs.SafeSearch "1"}}selected{{end}}>{{t "search.safe_search_moderate"}}</option>
                     <option value="2" {{if eq .Prefs.SafeSearch "2"}}selected{{end}}>{{t "search.safe_search_strict"}}</option>
@@ -122,7 +122,7 @@
 
             <div class="form-group">
                 <label for="units">{{t "preferences.units_label"}}</label>
-                <select id="units" name="search_pref_units">
+                <select class="form-input" id="units" name="search_pref_units">
                     <option value="metric" {{if eq .Prefs.Units "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
                     <option value="imperial" {{if eq .Prefs.Units "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
                 </select>
@@ -130,7 +130,7 @@
 
             <div class="form-group">
                 <label for="weather-units">{{t "preferences.weather_units"}}</label>
-                <select id="weather-units" name="search_pref_weather_units">
+                <select class="form-input" id="weather-units" name="search_pref_weather_units">
                     <option value="auto" {{if eq .Prefs.WeatherUnits "auto"}}selected{{end}}>{{t "preferences.weather_units_global"}}</option>
                     <option value="metric" {{if eq .Prefs.WeatherUnits "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
                     <option value="imperial" {{if eq .Prefs.WeatherUnits "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
@@ -139,7 +139,7 @@
 
             <div class="form-group">
                 <label for="results-per-page">{{t "preferences.results_per_page"}}</label>
-                <select id="results-per-page" name="search_pref_results_per_page">
+                <select class="form-input" id="results-per-page" name="search_pref_results_per_page">
                     <option value="10" {{if eq .Prefs.ResultsPerPage "10"}}selected{{end}}>10</option>
                     <option value="20" {{if eq .Prefs.ResultsPerPage "20"}}selected{{end}}>20</option>
                     <option value="30" {{if eq .Prefs.ResultsPerPage "30"}}selected{{end}}>30</option>
@@ -337,11 +337,11 @@
         <button type="submit" id="save-preferences" class="btn btn-primary">{{t "form.save"}}</button>
         <span id="save-status" class="save-status"></span>
     </div>
-    <div id="reset-preferences" class="preferences-reset-popover" popover>
+    <div id="reset-preferences" class="preferences-reset-popover popover-panel" popover>
         <p>{{t "preferences.reset_confirm_title"}}</p>
         <p>{{t "preferences.reset_everything_warning"}}</p>
-        <button type="button" popovertarget="reset-preferences" popovertargetaction="hide">{{t "form.cancel"}}</button>
-        <button type="submit" form="general-settings" formaction="/server/preferences?action=reset">{{t "preferences.erase_everything"}}</button>
+        <button class="btn btn-secondary" type="button" popovertarget="reset-preferences" popovertargetaction="hide">{{t "form.cancel"}}</button>
+        <button class="btn btn-danger" type="submit" form="general-settings" formaction="/server/preferences?action=reset">{{t "preferences.erase_everything"}}</button>
     </div>
     </form>
 

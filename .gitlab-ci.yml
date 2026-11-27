@@ -31,7 +31,17 @@ stages:
     - go mod download
     - go run ./src/apigen
     - go generate ./src/swagger/...
-    - if [ -f release.txt ]; then export VERSION="$(cat release.txt)"; else export VERSION="${CI_COMMIT_TAG#v}"; fi
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        if [[ "$CI_COMMIT_TAG" =~ ^[0-9]{14}-beta$ ]]; then
+          VERSION="$CI_COMMIT_TAG"
+        else
+          VERSION="${CI_COMMIT_TAG#v}"
+        fi
+      else
+        VERSION="${CI_COMMIT_SHA:0:7}"
+      fi
+      export VERSION
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
@@ -47,6 +57,19 @@ stages:
     - export CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECT_NAME}' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
 
 # =============================================================================
+# BUILD GATE (main push and merge requests)
+# =============================================================================
+
+build:check:
+  <<: *go-build
+  stage: build
+  script:
+    - go build -buildvcs=false ./...
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# =============================================================================
 # RELEASE BUILDS (Tag Push: v* or semver)
 # =============================================================================
 
@@ -58,7 +81,8 @@ build:linux-amd64:
     GOARCH: amd64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-linux-amd64 ./src/client; fi
     # Export RELEASE_VERSION via dotenv for the release job (`needs` on this
     # job) - a job's declarative release: block can only see predefined CI
     # variables or dotenv exported by an UPSTREAM job, never its own; this
@@ -68,6 +92,8 @@ build:linux-amd64:
   artifacts:
     paths:
       - ${PROJECT_NAME}-linux-amd64*
+      - ${PROJECT_NAME}-cli-linux-amd64
+      - ${PROJECT_NAME}-cli-gui-linux-amd64
     reports:
       dotenv: release.env
     expire_in: 1 week
@@ -82,10 +108,13 @@ build:linux-arm64:
     GOARCH: arm64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-linux-arm64 ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-linux-arm64 ./src/client; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-linux-arm64*
+      - ${PROJECT_NAME}-cli-linux-arm64
+      - ${PROJECT_NAME}-cli-gui-linux-arm64
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -98,10 +127,13 @@ build:darwin-amd64:
     GOARCH: amd64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-darwin-amd64 ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-darwin-amd64 ./src/client; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-darwin-amd64*
+      - ${PROJECT_NAME}-cli-darwin-amd64
+      - ${PROJECT_NAME}-cli-gui-darwin-amd64
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -114,10 +146,13 @@ build:darwin-arm64:
     GOARCH: arm64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-darwin-arm64 ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-darwin-arm64 ./src/client; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-darwin-arm64*
+      - ${PROJECT_NAME}-cli-darwin-arm64
+      - ${PROJECT_NAME}-cli-gui-darwin-arm64
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -130,10 +165,13 @@ build:windows-amd64:
     GOARCH: amd64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-windows-amd64.exe ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client/gui" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-windows-amd64.exe ./src/client; fi
   artifacts:
     paths:
-      - ${PROJECT_NAME}-windows-amd64*.exe
+      - ${PROJECT_NAME}-windows-amd64.exe*
+      - ${PROJECT_NAME}-cli-windows-amd64.exe
+      - ${PROJECT_NAME}-cli-gui-windows-amd64.exe
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -146,10 +184,13 @@ build:windows-arm64:
     GOARCH: arm64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-windows-arm64.exe ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client/gui" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-windows-arm64.exe ./src/client; fi
   artifacts:
     paths:
-      - ${PROJECT_NAME}-windows-arm64*.exe
+      - ${PROJECT_NAME}-windows-arm64.exe*
+      - ${PROJECT_NAME}-cli-windows-arm64.exe
+      - ${PROJECT_NAME}-cli-gui-windows-arm64.exe
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -162,10 +203,11 @@ build:freebsd-amd64:
     GOARCH: amd64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-freebsd-amd64 ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-freebsd-amd64*
+      - ${PROJECT_NAME}-cli-freebsd-amd64
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -178,10 +220,11 @@ build:freebsd-arm64:
     GOARCH: arm64
   script:
     - go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-freebsd-arm64 ./src
-    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-freebsd-arm64*
+      - ${PROJECT_NAME}-cli-freebsd-arm64
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -194,13 +237,23 @@ test:
   <<: *go-build
   stage: test
   script:
-    - mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-    - COVDIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
-    - go test -v -cover -coverprofile="${COVDIR}/coverage.out" ./...
-    - THRESHOLD=60
-    - PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
-    - if [ "$PCT" -lt "$THRESHOLD" ]; then echo "coverage ${PCT}% is below threshold ${THRESHOLD}%"; exit 1; fi
-    - 'echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"'
+    - PROJECT_ORG=$(sed -n '/^project_org:[[:space:]]*/ { s/^project_org:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+    - INTERNAL_NAME=$(sed -n '/^internal_name:[[:space:]]*/ { s/^internal_name:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+    - '[ -n "$PROJECT_ORG" ] && [ -n "$INTERNAL_NAME" ]'
+    - |
+      mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
+      COVDIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
+      trap 'rm -rf "$COVDIR"' EXIT
+      mkdir -p "$COVDIR/data"
+      go test -v -cover ./... -args -test.gocoverdir="$COVDIR/data"
+      go tool covdata textfmt -i="$COVDIR/data" -o="$COVDIR/coverage.out"
+      THRESHOLD=60
+      PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+      if [ "$PCT" -lt "$THRESHOLD" ]; then
+        echo "coverage ${PCT}% is below the ${THRESHOLD}% threshold"
+        exit 1
+      fi
+      echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -223,7 +276,7 @@ lint:
 secret-scan:
   stage: security
   image:
-    name: trufflesecurity/trufflehog:latest
+    name: trufflesecurity/trufflehog:latest@sha256:9c7a8325d43a4af2960d3f21d61a08981d8a1bf0542e007efa2e47097e386452
     entrypoint: [""]
   variables:
     GIT_DEPTH: "0"
@@ -239,7 +292,7 @@ secret-scan:
 
 workflow-policy:
   stage: security
-  image: alpine:latest
+  image: alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
   script:
     - |
       bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
@@ -260,13 +313,22 @@ vuln-scan:
     - exists:
         - go.sum
 
+license-check:
+  <<: *go-build
+  stage: security
+  script:
+    - bash scripts/verify-licenses.sh
+  rules:
+    - exists:
+        - go.mod
+
 # =============================================================================
 # RELEASE (GitLab Release)
 # =============================================================================
 
 release:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: registry.gitlab.com/gitlab-org/release-cli:latest@sha256:3f52d526f48e8d10625c722fa6d6423ee82aadeae1b1aa91f07b62551d96dacf
   needs:
     - build:linux-amd64
     - build:linux-arm64
@@ -338,6 +400,34 @@ release:
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:freebsd-amd64"
         - name: "${PROJECT_NAME}-freebsd-arm64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:freebsd-arm64"
+        - name: "${PROJECT_NAME}-cli-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-linux-amd64?job=build:linux-amd64"
+        - name: "${PROJECT_NAME}-cli-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-linux-arm64?job=build:linux-arm64"
+        - name: "${PROJECT_NAME}-cli-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-darwin-amd64?job=build:darwin-amd64"
+        - name: "${PROJECT_NAME}-cli-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-darwin-arm64?job=build:darwin-arm64"
+        - name: "${PROJECT_NAME}-cli-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-windows-amd64.exe?job=build:windows-amd64"
+        - name: "${PROJECT_NAME}-cli-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-windows-arm64.exe?job=build:windows-arm64"
+        - name: "${PROJECT_NAME}-cli-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-freebsd-amd64?job=build:freebsd-amd64"
+        - name: "${PROJECT_NAME}-cli-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-freebsd-arm64?job=build:freebsd-arm64"
+        - name: "${PROJECT_NAME}-cli-gui-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-linux-amd64?job=build:linux-amd64"
+        - name: "${PROJECT_NAME}-cli-gui-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-linux-arm64?job=build:linux-arm64"
+        - name: "${PROJECT_NAME}-cli-gui-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-darwin-amd64?job=build:darwin-amd64"
+        - name: "${PROJECT_NAME}-cli-gui-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-darwin-arm64?job=build:darwin-arm64"
+        - name: "${PROJECT_NAME}-cli-gui-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-windows-amd64.exe?job=build:windows-amd64"
+        - name: "${PROJECT_NAME}-cli-gui-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-windows-arm64.exe?job=build:windows-arm64"
         - name: "${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json?job=release"
         - name: "${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz"
@@ -350,7 +440,7 @@ release:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
 
 # =============================================================================
-# BETA BUILDS (Push to beta branch)
+# BETA BUILDS (Push of YYYYMMDDHHMMSS-beta tag)
 # =============================================================================
 
 build:beta:
@@ -361,7 +451,7 @@ build:beta:
     - go mod download
     - go run ./src/apigen
     - go generate ./src/swagger/...
-    - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
+    - export VERSION="$CI_COMMIT_TAG"
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
@@ -379,14 +469,20 @@ build:beta:
     - GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-freebsd-amd64 ./src
     - GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-freebsd-arm64 ./src
     # Build CLI if exists
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=darwin GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=darwin GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
     # Build Agent if exists
     # Export VERSION via dotenv so release:beta (which creates version.txt,
     # checksums, and the GitLab Release) never recomputes the timestamp - the
@@ -399,10 +495,10 @@ build:beta:
       dotenv: release.env
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 # =============================================================================
-# DEVEL BUILDS (Scheduled + main/master push) - All 8 platforms
+# DEVEL BUILDS (Scheduled + main push) - All 8 platforms
 # =============================================================================
 
 build:devel:
@@ -432,14 +528,20 @@ build:devel:
     - GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-freebsd-amd64 ./src
     - GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${SERVER_LDFLAGS}" -o ${PROJECT_NAME}-freebsd-arm64 ./src
     # Build CLI if exists
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=darwin GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=darwin GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client/gui" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -tags gui -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-gui-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
     # Build Agent if exists
   artifacts:
     paths:
@@ -447,7 +549,7 @@ build:devel:
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
@@ -487,7 +589,7 @@ sbom:beta:
       - ${PROJECT_NAME}-*-sbom.cdx.json
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 sbom:devel:
   image: $BUILD_IMAGE
@@ -505,7 +607,7 @@ sbom:devel:
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
@@ -516,7 +618,7 @@ sbom:devel:
 
 release:beta:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: registry.gitlab.com/gitlab-org/release-cli:latest@sha256:3f52d526f48e8d10625c722fa6d6423ee82aadeae1b1aa91f07b62551d96dacf
   needs:
     - build:beta
     - sbom:beta
@@ -554,35 +656,63 @@ release:beta:
     assets:
       links:
         - name: "${PROJECT_NAME}-linux-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-amd64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-linux-amd64?job=build:beta"
         - name: "${PROJECT_NAME}-linux-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-arm64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-linux-arm64?job=build:beta"
         - name: "${PROJECT_NAME}-darwin-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-amd64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-darwin-amd64?job=build:beta"
         - name: "${PROJECT_NAME}-darwin-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-arm64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-darwin-arm64?job=build:beta"
         - name: "${PROJECT_NAME}-windows-amd64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-amd64.exe?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-windows-amd64.exe?job=build:beta"
         - name: "${PROJECT_NAME}-windows-arm64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-arm64.exe?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-windows-arm64.exe?job=build:beta"
         - name: "${PROJECT_NAME}-freebsd-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:beta"
         - name: "${PROJECT_NAME}-freebsd-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-linux-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-linux-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-darwin-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-darwin-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-windows-amd64.exe?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-windows-arm64.exe?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-freebsd-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-freebsd-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-gui-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-linux-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-gui-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-linux-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-gui-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-darwin-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-gui-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-darwin-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-gui-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-windows-amd64.exe?job=build:beta"
+        - name: "${PROJECT_NAME}-cli-gui-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-cli-gui-windows-arm64.exe?job=build:beta"
         - name: "${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json?job=release:beta"
         - name: "${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release:beta"
         - name: "sha256.txt"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha256.txt?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha256.txt?job=release:beta"
         - name: "sha512.txt"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha512.txt?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha512.txt?job=release:beta"
   rules:
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 release:devel:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: registry.gitlab.com/gitlab-org/release-cli:latest@sha256:3f52d526f48e8d10625c722fa6d6423ee82aadeae1b1aa91f07b62551d96dacf
   needs:
     - build:devel
     - sbom:devel
@@ -641,6 +771,34 @@ release:devel:
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:devel"
         - name: "${PROJECT_NAME}-freebsd-arm64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-linux-amd64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-linux-arm64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-darwin-amd64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-darwin-arm64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-windows-amd64.exe?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-windows-arm64.exe?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-freebsd-amd64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-freebsd-arm64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-gui-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-gui-linux-amd64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-gui-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-gui-linux-arm64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-gui-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-gui-darwin-amd64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-gui-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-gui-darwin-arm64?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-gui-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-gui-windows-amd64.exe?job=build:devel"
+        - name: "${PROJECT_NAME}-cli-gui-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-cli-gui-windows-arm64.exe?job=build:devel"
         - name: "${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-sbom.cdx.json"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-sbom.cdx.json?job=release:devel"
         - name: "${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-source.tar.gz"
@@ -651,7 +809,7 @@ release:devel:
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/sha512.txt?job=release:devel"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
@@ -661,9 +819,9 @@ release:devel:
 
 docker:build:
   stage: docker
-  image: docker:latest
+  image: docker:latest@sha256:fbbc96e0af32cdc190aff92ba97a1281a115351a723afe21af78879cc55126b0
   services:
-    - docker:dind
+    - docker:dind@sha256:fbbc96e0af32cdc190aff92ba97a1281a115351a723afe21af78879cc55126b0
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_BUILDKIT: "1"
@@ -673,13 +831,13 @@ docker:build:
   script:
     - |
       # Determine version and tags based on trigger
-      if [ -n "$CI_COMMIT_TAG" ]; then
+      if [ "${CI_COMMIT_TAG%-beta}" != "$CI_COMMIT_TAG" ]; then
+        VERSION="$CI_COMMIT_TAG"
+        TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+      elif [ -n "$CI_COMMIT_TAG" ]; then
         VERSION="${CI_COMMIT_TAG#v}"
         YYMM=$(date +%y%m)
         TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
-      elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
-        VERSION="beta-${CI_COMMIT_SHA:0:7}"
-        TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       else
         VERSION="${CI_COMMIT_SHA:0:7}"
         TAGS="-t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
@@ -736,22 +894,22 @@ docker:build:
     - bash tests/docker-image-check.sh "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
+    - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
-# DEVEL IMAGE BUILD (own job — push to any branch + daily schedule)
+# DEVEL IMAGE BUILD (own job — main push + daily schedule)
 # =============================================================================
 # :devel is never built by docker:build above — Dockerfile.dev is built here,
-# on every push (excluding tags) and once devel via a scheduled pipeline, so a
+# on every push to main and once daily via a scheduled pipeline, so a
 # broken Dockerfile.dev can never block the release docker:build job. MODE=devel
 # is baked into Dockerfile.dev via ENV — no extra build-arg needed here.
 
 docker:devel:
   stage: docker
-  image: docker:latest
+  image: docker:latest@sha256:fbbc96e0af32cdc190aff92ba97a1281a115351a723afe21af78879cc55126b0
   services:
-    - docker:dind
+    - docker:dind@sha256:fbbc96e0af32cdc190aff92ba97a1281a115351a723afe21af78879cc55126b0
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_BUILDKIT: "1"
@@ -812,11 +970,11 @@ docker:devel:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG
       when: never
-    - when: on_success
+    - if: $CI_COMMIT_BRANCH == "main"
 
 image-scan:
   stage: docker
-  image: ghcr.io/aquasecurity/trivy:0.76.1
+  image: ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
   needs:
     - job: docker:build
       optional: true
@@ -824,7 +982,7 @@ image-scan:
       optional: true
   script:
     - |
-      if [ -n "$CI_COMMIT_TAG" ] || [ "$CI_COMMIT_BRANCH" = "main" ] || [ "$CI_COMMIT_BRANCH" = "master" ] || [ "$CI_COMMIT_BRANCH" = "beta" ]; then
+      if [ -n "$CI_COMMIT_TAG" ] || [ "$CI_COMMIT_BRANCH" = "main" ]; then
         IMAGE_TAG="${CI_COMMIT_SHA:0:7}"
       else
         IMAGE_TAG="devel"

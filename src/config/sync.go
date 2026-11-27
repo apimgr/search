@@ -20,7 +20,8 @@ import (
 // Per AI.md PART 5: server.yml is the source of truth for all configuration.
 // There is no cluster mode, no database-as-config-source-of-truth (AI.md line 2055).
 type ConfigSync struct {
-	db         *sql.DB
+	db         database.Reader
+	legacyDB   *sql.DB
 	writer     *database.DB
 	config     *Config
 	configPath string
@@ -29,18 +30,19 @@ type ConfigSync struct {
 }
 
 func NewConfigSyncWithDB(db *database.DB, config *Config, configPath string) *ConfigSync {
-	syncer := NewConfigSync(db.ReadSQL(), config, configPath)
+	syncer := NewConfigSync(db.Read(context.Background()), config, configPath)
 	syncer.writer = db
 	return syncer
 }
 
 // NewConfigSync creates a new config sync manager.
-func NewConfigSync(db *sql.DB, config *Config, configPath string) *ConfigSync {
-	return &ConfigSync{
+func NewConfigSync(db database.Reader, config *Config, configPath string) *ConfigSync {
+	syncer := &ConfigSync{
 		db:         db,
 		config:     config,
 		configPath: configPath,
 	}
+	return syncer
 }
 
 // SaveSetting saves a config setting to server.yml (source of truth).
@@ -89,8 +91,10 @@ func (cs *ConfigSync) writeToDatabase(key string, value interface{}) error {
 			_, writeErr := tx.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
 			return writeErr
 		})
+	} else if cs.legacyDB != nil {
+		_, err = cs.legacyDB.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
 	} else {
-		_, err = cs.db.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
+		return fmt.Errorf("database write store unavailable")
 	}
 	if err != nil {
 		return fmt.Errorf("failed to upsert setting: %w", err)

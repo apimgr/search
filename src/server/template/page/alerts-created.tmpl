@@ -1,12 +1,13 @@
 {{define "content"}}
-<section class="page-section alert-page">
-    <div class="page-header">
-        <h1>{{t "alerts.created_title"}}</h1>
-    </div>
-    <p>{{t "alerts.alert_active"}}</p>
+<div class="container container-sm">
+    <header class="page-header">
+        <h1 class="page-title">{{t "alerts.created_title"}}</h1>
+    </header>
+    <section class="section-card" aria-labelledby="alert-created-heading">
+        <h2 id="alert-created-heading">{{t "alerts.alert_active"}}</h2>
     {{if .OwnerToken}}
     <div class="owner-token-issued" role="status">
-        <h2>{{t "preferences.owner_tokens.primary_token"}}</h2>
+        <h3>{{t "preferences.owner_tokens.primary_token"}}</h3>
         <p>{{t "preferences.owner_tokens.restore_description"}}</p>
         <code class="token-value">{{.OwnerToken}}</code>
     </div>
@@ -19,10 +20,11 @@
     {{end}}
     {{if .WebhookSecret}}
     <div class="owner-token-issued" role="status">
-        <h2>{{t "alerts.webhook_secret_label"}}</h2>
+        <h3>{{t "alerts.webhook_secret_label"}}</h3>
         <p>{{t "alerts.webhook_secret_help"}}</p>
         <code class="copy-value">{{.WebhookSecret}}</code>
     </div>
     {{end}}
-</section>
+    </section>
+</div>
 {{end}}

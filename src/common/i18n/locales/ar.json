@@ -44,7 +44,8 @@
     "dismiss": "اغلاق",
     "upload": "Upload",
     "app_name": "Search",
-    "other": "أخرى"
+    "other": "أخرى",
+    "details": "التفاصيل"
   },
   "auth": {
     "login": "تسجيل الدخول",
@@ -300,6 +301,7 @@
       "expired": "منتهي الصلاحية",
       "revoked": "ملغى",
       "primary_revealed": "تم إظهار الرمز الأساسي",
+      "primary_created": "تم إنشاء الرمز الأساسي",
       "primary_rotated": "تم تدوير الرمز الأساسي",
       "linked_created": "تم إنشاء الرمز المرتبط",
       "linked_revealed": "تم إظهار الرمز المرتبط",
@@ -309,7 +311,7 @@
       "expiry_90d": "90 يومًا",
       "expiry_1y": "سنة واحدة",
       "shown_once": "تظهر مرة واحدة في تحميل هذه الصفحة.",
-      "primary_help": "وصول كامل إلى تنبيهاتك. احتفظ بهذا الرمز سريًا.",
+      "primary_help": "وصول كامل إلى {resources}. احتفظ بهذا الرمز سريًا.",
       "name_help": "مثال: عميل MCP",
       "expiry_custom": "تاريخ مخصص",
       "custom_date": "تاريخ مخصص",
@@ -317,7 +319,7 @@
       "create": "إنشاء رمز",
       "this_browser": "هذا المتصفح",
       "saved_in_browser": "يُحفظ رمز المالك في هذا المتصفح.",
-      "forget_note": "نسيان هذا المتصفح يزيل ملف تعريف ارتباط رمز المالك المحفوظ. لن تُحذف تنبيهاتك.",
+      "forget_note": "نسيان هذا المتصفح يزيل ملف تعريف ارتباط رمز المالك المحفوظ. لن تُحذف {resources}.",
       "forget_saved_token": "نسيان الرمز المحفوظ",
       "forget_confirm": "هل تريد نسيان رمز المالك المحفوظ في هذا المتصفح؟",
       "no_linked_tokens": "لا توجد رموز مرتبطة بعد.",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "تم نسيان رمز المالك المحفوظ",
       "linked_revoked": "تم إبطال الرمز المرتبط",
       "linked_updated": "تم تحديث الرمز المرتبط",
-      "reveal": "إظهار الرمز"
+      "reveal": "إظهار الرمز",
+      "new_token": "رمز جديد",
+      "revoke_primary_heading": "إلغاء الرمز الرئيسي",
+      "revoke_primary_summary": "سيُحذف {linked_count} من الرموز المرتبطة و{resource_count} من {resources}، بما في ذلك كل ما أُنشئ باستخدام رمز مرتبط.",
+      "revoke_primary_button": "إلغاء الرمز الرئيسي وحذف كل شيء",
+      "revoke_primary_confirm": "اكتب آخر 4 أحرف من الرمز الرئيسي ({last4}) للتأكيد",
+      "primary_revoked": "تم إلغاء الرمز الأساسي"
     },
     "font_size": "حجم الخط",
     "font_size_small": "صغير",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "ما الموضوع؟",
     "message_label": "الرسالة",
     "message_placeholder": "رسالتك...",
-    "verification_question": "التحقق: كم يساوي {a} + {b}؟",
+    "verification_question": "التحقق: كم يساوي {a} {operator} {b}؟",
     "answer_placeholder": "الإجابة",
     "send_message": "إرسال الرسالة",
     "security_description": "أنت تشاهد نموذج الإبلاغ عن الثغرات الأمنية للإفصاح المنسق. يرجى تقديم أكبر قدر ممكن من التفاصيل.",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "أؤكد أن عنوان البريد الإلكتروني صحيح وأن هذا البلاغ حقيقي وليس إعلانًا أو طلبًا تجاريًا أو رسالة مزعجة.",
     "form_scope_notice": "هذا النموذج مخصص فقط لبلاغات الأمان ومخالفات الشروط على رابط في هذا الموقع وإشعارات DMCA وطلبات الخصوصية. لا يُستخدم للدعم أو الإبلاغ عن الأخطاء أو طلب الميزات أو الأسئلة العامة.",
     "honeypot_label": "اترك هذا الحقل فارغًا",
-    "type_abuse": "إساءة",
+    "type_abuse": "الإبلاغ عن إساءة",
     "type_dmca": "DMCA",
     "type_privacy": "طلب خصوصية",
     "reported_url_label": "الرابط المُبلّغ عنه",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "للإبلاغ عن ثغرة أمنية، راجع",
     "abuse_reports_heading": "بلاغات الإساءة",
     "abuse_reports_intro": "للإبلاغ عن محتوى مسيء أو مخالفة للشروط، اختر نوع الإساءة أعلاه. لإرسال إشعار DMCA، اختر نوع DMCA أعلاه.",
-    "abuse_reports_email": "أو أرسل بريدًا إلكترونيًا إلى {email}"
+    "abuse_reports_email": "أو أرسل بريدًا إلكترونيًا إلى {email}",
+    "captcha_label": "التحقق البشري",
+    "choose_type_heading": "اختر نوع البلاغ",
+    "form_details_heading": "تفاصيل البلاغ",
+    "purpose_heading": "الغرض من هذا النموذج",
+    "reported_url_help": "صفحة على هذا الموقع، مثل https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "جمع البيانات",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "تجميع النتائج وعرضها لك",
     "data_usage_item_preferences": "تذكر تفضيلاتك (المظهر، اللغة)",
     "data_retention_heading": "الاحتفاظ بالبيانات",
+    "retention": {
+      "period": "تبقى الموارد التي تنشئها حتى تنتهي صلاحيتها أو تحذفها باستخدام رمز المالك. تُخزَّن التفضيلات في ملفات تعريف الارتباط في متصفحك فقط. تُحتفظ بسجلات التشغيل لمدة تصل إلى 30 يومًا. قد تُحتفظ ببيانات التحليلات مجهولة الهوية لمدة تصل إلى 12 شهرًا."
+    },
     "data_retention_description": "لا نحتفظ باستعلامات البحث أو البيانات الشخصية. بيانات الجلسة مؤقتة ويتم حذفها عندما تغلق المتصفح أو تنتهي جلستك.",
     "third_parties_heading": "أطراف ثالثة",
     "third_parties_description": "تُرسل استعلامات البحث الخاصة بك إلى محركات البحث الأولية لاسترجاع النتائج. نحن لا نشارك أي بيانات أخرى مع أطراف ثالثة.",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "قد تُشارَك بيانات التحليلات مع شركاء خارجيين أو تُباع لهم كما هو موضح في هذه السياسة.",
     "analytics_provider": "يتم توفير التحليلات عبر {provider}.",
     "analytics_none": "لا يوجد مزوّد تحليلات خارجي تم تكوينه.",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "تخزين البيانات ومشاركتها",
     "data_storage_intro": "تُخزَّن أي بيانات نحتفظ بها بشكل آمن ولا يُحتفظ بها إلا للمدة اللازمة.",
     "data_storage_never_sold": "نحن لا نشارك أو نبيع البيانات المخزنة لأطراف ثالثة بما يتجاوز ما هو مطلوب لتقديم نتائج البحث.",
@@ -1645,6 +1669,12 @@
     "last_updated": "آخر تحديث: {date}",
     "acceptance_heading": "1. قبول الشروط",
     "acceptance_description": "من خلال الوصول إلى {app_name} (\"the Service\") أو استخدامه، فإنك توافق على الالتزام بهذه الشروط. إذا كنت لا توافق على هذه الشروط، يرجى عدم استخدام Service.",
+    "governing_law_description": "تسري قوانين الولايات المتحدة دون اعتبار لقواعد تنازع القوانين، ما لم تنص شروط المشغّل على خلاف ذلك.",
+    "governing_law_heading": "القانون الحاكم",
+    "liability_description": "تُقدَّم الخدمة كما هي ومن دون أي ضمان من أي نوع. وبالقدر الذي يسمح به القانون، لا يتحمل المشغّل مسؤولية الخسائر الناشئة عن استخدامها.",
+    "liability_heading": "المسؤولية",
+    "acceptable_use_description": "يُحظر استخدام الخدمة بصورة غير قانونية، أو الإساءة إلى الآخرين، أو تجاوز حدود المعدل أو ضوابط الوصول، أو إجراء اختبارات تتجاوز سياسة الأمان على /server/security/policy.",
+    "acceptable_use_heading": "الاستخدام المقبول",
     "description_heading": "2. وصف الخدمة",
     "description_body": "{app_name} هو محرك بحث تجميعي يحترم الخصوصية ويجمع النتائج من عدة محركات بحث. يتم تقديم Service \"as is\" دون أي ضمان من أي نوع.",
     "user_conduct_heading": "3. سلوك المستخدم",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. تعديلات الخدمة",
     "modifications_description": "نحتفظ بالحق في تعديل Service أو تعليقه أو إيقافه في أي وقت دون إشعار. ولن نكون مسؤولين تجاهك أو تجاه أي طرف ثالث عن أي تعديل أو تعليق أو إيقاف.",
-    "changes_heading": "10. التغييرات على الشروط",
-    "changes_description": "قد نقوم بتحديث هذه الشروط من وقت لآخر. سنُخطر المستخدمين بأي تغييرات جوهرية عن طريق تحديث تاريخ \"Last updated\". استمرارك في استخدام Service بعد التغييرات يعني قبول الشروط الجديدة.",
+    "changes_heading": "التغييرات",
+    "changes_description": "قد تتغير هذه الشروط. يسري النص الحالي على هذه الصفحة منذ لحظة نشره.",
     "contact_prefix": "إذا كانت لديك أسئلة حول هذه الشروط، يُرجى ",
     "contact_suffix": "."
   },
   "help": {
+    "i2p": {
+      "heading": "الوصول عبر I2P",
+      "intro": "هذا التطبيق متاح كموقع eepsite على شبكة I2P لمزيد من الخصوصية.",
+      "address_heading": "عنوان I2P",
+      "how_to_heading": "طريقة الاتصال",
+      "step_install": "ثبّت",
+      "step_or": "أو",
+      "step_connect": "وانتظر حتى يتصل بالشبكة.",
+      "step_proxy": "اضبط متصفحك لاستخدام وكيل HTTP الخاص بـ I2P على",
+      "step_address": "انسخ عنوان .b32.i2p أعلاه والصقه في شريط عنوان المتصفح.",
+      "note": "يوفر I2P خصوصية إضافية عبر توجيه اتصالك خلال الشبكة. تُقدَّم مواقع eepsite عبر http://؛ ويوفر نفق I2P تشفير النقل، لذلك لا تُستخدم شهادة TLS."
+    },
+    "troubleshooting": {
+      "heading": "استكشاف الأخطاء وإصلاحها",
+      "search": "جرّب عبارة أوسع أو أزل عوامل البحث؛ فقد لا يجد محرك محدد نتائج. إذا كان المحرك غير متاح مؤقتًا، أعد المحاولة لاحقًا.",
+      "access": "إذا لم يظهر قسم Tor، فتحقق من أن الخدمة تعمل وأن عنوان onion منشور؛ استخدم search --maintenance tor status. إذا لم يظهر I2P، اطلب من المشغّل التحقق من حالة الموفر والعنوان المنشور.",
+      "alerts": "إذا تعذر فتح رابط إدارة التنبيه، استخدم الرابط الكامل من رسالة التأكيد؛ قد يكون الرمز غير صالح أو التنبيه محذوفًا. صحح الحقل المشار إليه في رسالة خطأ النموذج وأعد الإرسال."
+    },
     "page_title": "Help",
     "title": "Help & Documentation",
     "subtitle": "Learn how to get the most out of {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "مزيد من المعلومات",
     "policy_title": "سياسة الإفصاح",
     "policy_scope_heading": "النطاق",
-    "policy_scope_description": "تنطبق هذه السياسة على هذه النسخة المنشورة والخدمات التي تعرضها.",
+    "policy_scope_description": "التطبيق المتاح على {fqdn}، بما في ذلك واجهة API الخاصة به، مشمول بالنطاق.",
+    "policy_reporting_description": "يرجى الإبلاغ بسرية عبر صفحة الأمان.",
+    "policy_reporting_heading": "الإبلاغ",
+    "policy_out_of_scope_item_headers": "غياب ترويسات أفضل الممارسات عن الصفحات غير الحساسة",
+    "policy_out_of_scope_item_scanner": "نتائج الماسحات الآلية دون أثر مثبت",
+    "policy_in_scope_item_i2p": "عنوان I2P: {address}",
+    "policy_in_scope_item_tor": "عنوان Tor: {address}",
+    "policy_in_scope_item_host": "مضيف آخر: {host}",
     "policy_disclosure_window_heading": "نافذة الإفصاح المنسق",
-    "policy_disclosure_window_description": "نطلب من الباحثين منحنا حتى 90 يومًا لفرز ومعالجة المشكلة المُبلَّغ عنها قبل أي إفصاح علني، ما لم يتم الاتفاق على تاريخ منسق مختلف.",
+    "policy_disclosure_window_description": "يرجى الإبلاغ بسرية عبر صفحة الأمان وإتاحة 90 يومًا من تاريخ التقرير للنشر المنسق؛ تنتهي المهلة مبكرًا عند إصدار الإصلاح، ويمكن تمديدها بالاتفاق.",
     "policy_in_scope_heading": "ضمن النطاق",
     "policy_in_scope_item_deployed": "هذه النسخة المنشورة ونقاط نهايتها العامة",
     "policy_in_scope_item_api": "واجهة برمجة التطبيقات العامة",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "اختبار الأمان المادي",
     "policy_out_of_scope_item_third_party": "خدمات الأطراف الثالثة التي لا نتحكم بها",
     "policy_safe_harbor_heading": "الملاذ الآمن",
-    "policy_safe_harbor_description": "لن نتخذ إجراءً قانونيًا ضد الباحثين الذين يبذلون جهدًا صادقًا للامتثال لهذه السياسة، ويبلغون عن الثغرات الأمنية بمسؤولية، ويتجنبون انتهاكات الخصوصية أو إتلاف البيانات أو تعطيل الخدمة.",
+    "policy_safe_harbor_description": "نرحب بالبحث حسن النية الذي يلتزم بهذه السياسة، ويتجنب انتهاك الخصوصية وتعطيل الخدمة، ولا يصل إلا إلى ما يلزم لإثبات المشكلة ويتوقف بعد ذلك. لن نتخذ إجراءً قانونيًا تجاه هذا البحث.",
     "policy_contact_prefix": "يمكن إرسال الأسئلة حول هذه السياسة عبر صفحة",
     "policy_contact_suffix": ".",
     "thanks_title": "شكر وتقدير أمني",
@@ -2186,6 +2241,8 @@
     "report_status_title": "حالة تقرير الأمان",
     "report_status_tracking_id_label": "معرّف التتبع:",
     "report_status_state_label": "الحالة:",
+    "report_status_comment_label": "تعليق المشرف",
+    "report_status_disclosure_date_label": "تاريخ الإفصاح المتوقع",
     "report_status_state_received": "تم الاستلام",
     "report_status_state_triaged": "تم الفرز",
     "report_status_state_confirmed": "تم التأكيد",
@@ -2232,6 +2289,7 @@
       "label_current_version": "الإصدار الحالي:",
       "label_new_version": "الإصدار الجديد:",
       "label_release_date": "تاريخ الإصدار:",
+      "label_channel": "قناة الإصدار:",
       "label_release_notes": "ملاحظات الإصدار:",
       "label_view_update": "عرض التحديث:",
       "manual_command": "أمر التحديث اليدوي: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "تم تثبيت التحديث - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "فشل التحديث - {app_name}",
         "body": "فشل التحديث\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nتعذر تثبيت التحديث {version}.\nالسبب: {error}\n\nلا يزال الإصدار السابق قيد التشغيل.\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "تم تجهيز التحديث - {app_name}",
+        "body": "تم تجهيز التحديث\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nتم التحقق من التحديث {version} وتجهيزه للتثبيت.\n\nأعد تشغيل الخدمة لتطبيق التحديث.\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

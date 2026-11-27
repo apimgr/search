@@ -44,7 +44,8 @@
     "dismiss": "بند",
     "upload": "Upload",
     "app_name": "Search",
-    "other": "دیگر"
+    "other": "دیگر",
+    "details": "تفصیلات"
   },
   "auth": {
     "login": "لاگ ان",
@@ -300,6 +301,7 @@
       "expired": "میعاد ختم",
       "revoked": "منسوخ",
       "primary_revealed": "بنیادی ٹوکن دکھایا گیا",
+      "primary_created": "بنیادی ٹوکن بنایا گیا",
       "primary_rotated": "بنیادی ٹوکن تبدیل کیا گیا",
       "linked_created": "منسلک ٹوکن بنایا گیا",
       "linked_revealed": "منسلک ٹوکن دکھایا گیا",
@@ -309,7 +311,7 @@
       "expiry_90d": "۹۰ دن",
       "expiry_1y": "۱ سال",
       "shown_once": "صرف اس صفحے کے لوڈ ہونے پر ایک بار دکھایا جائے گا۔",
-      "primary_help": "آپ کے انتباہات تک مکمل رسائی۔ اس ٹوکن کو خفیہ رکھیں۔",
+      "primary_help": "آپ کے {resources} تک مکمل رسائی۔ اس ٹوکن کو خفیہ رکھیں۔",
       "name_help": "مثال کے طور پر: MCP کلائنٹ",
       "expiry_custom": "حسبِ ضرورت تاریخ",
       "custom_date": "حسبِ ضرورت تاریخ",
@@ -317,7 +319,7 @@
       "create": "ٹوکن بنائیں",
       "this_browser": "یہ براؤزر",
       "saved_in_browser": "مالک کا ٹوکن اس براؤزر میں محفوظ ہے۔",
-      "forget_note": "اس براؤزر کو بھولنے سے محفوظ مالک ٹوکن کی کوکی ہٹ جائے گی۔ آپ کے انتباہات حذف نہیں ہوں گے۔",
+      "forget_note": "اس براؤزر کو بھولنے سے محفوظ مالک ٹوکن کی کوکی ہٹ جائے گی۔ آپ کے {resources} حذف نہیں ہوں گے۔",
       "forget_saved_token": "محفوظ ٹوکن بھولیں",
       "forget_confirm": "کیا اس براؤزر میں محفوظ مالک ٹوکن بھول جائیں؟",
       "no_linked_tokens": "ابھی کوئی منسلک ٹوکن نہیں۔",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "محفوظ مالک ٹوکن بھلا دیا گیا",
       "linked_revoked": "منسلک ٹوکن منسوخ ہوگیا",
       "linked_updated": "منسلک ٹوکن اپ ڈیٹ ہوگیا",
-      "reveal": "ٹوکن دکھائیں"
+      "reveal": "ٹوکن دکھائیں",
+      "new_token": "نیا ٹوکن",
+      "revoke_primary_heading": "بنیادی ٹوکن منسوخ کریں",
+      "revoke_primary_summary": "{linked_count} منسلک ٹوکن اور {resource_count} {resources} حذف ہو جائیں گے، بشمول منسلک ٹوکن سے بنائی گئی ہر چیز۔",
+      "revoke_primary_button": "بنیادی ٹوکن منسوخ کریں اور سب کچھ حذف کریں",
+      "revoke_primary_confirm": "تصدیق کے لیے اپنے بنیادی ٹوکن کے آخری 4 حروف ({last4}) درج کریں",
+      "primary_revoked": "بنیادی ٹوکن منسوخ کر دیا گیا"
     },
     "font_size": "فونٹ سائز",
     "font_size_small": "چھوٹا",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "یہ کس بارے میں ہے؟",
     "message_label": "پیغام",
     "message_placeholder": "آپ کا پیغام...",
-    "verification_question": "تصدیق: {a} + {b} کیا ہوتا ہے؟",
+    "verification_question": "تصدیق: {a} {operator} {b} کیا ہوتا ہے؟",
     "answer_placeholder": "جواب",
     "send_message": "پیغام بھیجیں",
     "security_description": "آپ مربوط انکشاف کی کمزوری رپورٹ فارم دیکھ رہے ہیں۔ براہ کرم جتنی ممکن ہو تفصیلات فراہم کریں۔",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "یہ ای میل پتہ درست ہے اور یہ حقیقی رپورٹ ہے، اشتہار، تجارتی درخواست یا فضول پیغام نہیں۔",
     "form_scope_notice": "یہ فارم صرف سیکیورٹی رپورٹس، اس سائٹ کے URL پر شرائط کی خلاف ورزی، DMCA نوٹس اور رازداری کی درخواستوں کے لیے ہے۔ اسے مدد، بگ رپورٹس، فیچر درخواستوں یا عام سوالات کے لیے استعمال نہ کریں۔",
     "honeypot_label": "اس خانے کو خالی چھوڑیں",
-    "type_abuse": "بدسلوکی",
+    "type_abuse": "بدسلوکی کی اطلاع دیں",
     "type_dmca": "DMCA",
     "type_privacy": "رازداری کی درخواست",
     "reported_url_label": "رپورٹ کردہ URL",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "سیکیورٹی کمزوری کی اطلاع دینے کے لیے ہماری",
     "abuse_reports_heading": "بدسلوکی کی رپورٹس",
     "abuse_reports_intro": "بدسلوکی والے مواد یا شرائط کی خلاف ورزی کی اطلاع دینے کے لیے اوپر بدسلوکی منتخب کریں۔ DMCA نوٹس بھیجنے کے لیے اوپر DMCA منتخب کریں۔",
-    "abuse_reports_email": "یا {email} پر ای میل کریں"
+    "abuse_reports_email": "یا {email} پر ای میل کریں",
+    "captcha_label": "انسانی تصدیق",
+    "choose_type_heading": "رپورٹ کی قسم منتخب کریں",
+    "form_details_heading": "رپورٹ کی تفصیلات",
+    "purpose_heading": "اس فارم کا مقصد",
+    "reported_url_help": "اس سائٹ کا صفحہ، مثلاً https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "ڈیٹا جمع کرنا",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "نتائج کو یکجا کرنا اور آپ کو دکھانا",
     "data_usage_item_preferences": "آپ کی ترجیحات (تھیم، زبان) یاد رکھنا",
     "data_retention_heading": "ڈیٹا کی برقراری",
+    "retention": {
+      "period": "آپ کے بنائے ہوئے وسائل ان کی میعاد ختم ہونے تک یا آپ کے مالک ٹوکن سے حذف کرنے تک محفوظ رہتے ہیں۔ ترجیحات صرف آپ کے براؤزر کی کوکیز میں محفوظ ہوتی ہیں۔ عملیاتی لاگز 30 دن تک رکھے جاتے ہیں۔ گمنام تجزیاتی ڈیٹا 12 ماہ تک رکھا جا سکتا ہے۔"
+    },
     "data_retention_description": "ہم تلاش کے سوالات یا ذاتی ڈیٹا محفوظ نہیں رکھتے۔ سیشن ڈیٹا عارضی ہوتا ہے اور جب آپ اپنا براؤزر بند کرتے ہیں یا آپ کا سیشن ختم ہو جاتا ہے تو حذف کر دیا جاتا ہے۔",
     "third_parties_heading": "تیسری جماعتیں",
     "third_parties_description": "آپ کے تلاش کے سوالات نتائج حاصل کرنے کے لیے بالادست سرچ انجنوں کو بھیجے جاتے ہیں۔ ہم کوئی اور ڈیٹا تیسری جماعتوں کے ساتھ شیئر نہیں کرتے۔",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "تجزیاتی ڈیٹا اس پالیسی میں بیان کردہ تیسرے فریق کے شراکت داروں کے ساتھ شیئر یا فروخت کیا جا سکتا ہے۔",
     "analytics_provider": "تجزیات {provider} کے ذریعے فراہم کیے جاتے ہیں۔",
     "analytics_none": "کوئی تیسرے فریق کا تجزیاتی فراہم کنندہ ترتیب نہیں دیا گیا۔",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "ڈیٹا اسٹوریج اور شیئرنگ",
     "data_storage_intro": "کوئی بھی ڈیٹا جو ہم رکھتے ہیں محفوظ طریقے سے ذخیرہ کیا جاتا ہے اور صرف ضرورت کے مطابق وقت کے لیے رکھا جاتا ہے۔",
     "data_storage_never_sold": "ہم تلاش کے نتائج فراہم کرنے کے لیے ضروری حد سے زیادہ محفوظ شدہ ڈیٹا تیسرے فریق کے ساتھ شیئر یا فروخت نہیں کرتے۔",
@@ -1645,6 +1669,12 @@
     "last_updated": "آخری بار اپ ڈیٹ کیا گیا: {date}",
     "acceptance_heading": "1. شرائط کی قبولیت",
     "acceptance_description": "{app_name} (\"the Service\") تک رسائی یا اس کے استعمال کے ذریعے، آپ ان سروس کی شرائط کے پابند ہونے پر رضامند ہوتے ہیں۔ اگر آپ ان شرائط سے متفق نہیں ہیں تو براہِ کرم Service استعمال نہ کریں۔",
+    "governing_law_description": "قوانین کے تصادم کے اصولوں سے قطع نظر ریاستہائے متحدہ کے قوانین لاگو ہوں گے، الا یہ کہ منتظم کی اپنی شرائط کوئی اور دائرۂ اختیار بتائیں۔",
+    "governing_law_heading": "حاکم قانون",
+    "liability_description": "سروس جیسی ہے ویسی ہی فراہم کی جاتی ہے اور کسی قسم کی ضمانت نہیں دی جاتی۔ قانون کی اجازت کی حد تک، منتظم اس کے استعمال سے ہونے والے نقصان کا ذمہ دار نہیں ہے۔",
+    "liability_heading": "ذمہ داری",
+    "acceptable_use_description": "سروس کو غیرقانونی طور پر استعمال نہ کریں، دوسروں کو نقصان نہ پہنچائیں، شرح کی حدود یا رسائی کے کنٹرول سے نہ بچیں، اور /server/security/policy کی سیکیورٹی پالیسی سے آگے ٹیسٹ نہ کریں۔",
+    "acceptable_use_heading": "قابلِ قبول استعمال",
     "description_heading": "2. سروس کی تفصیل",
     "description_body": "{app_name} ایک رازداری کا احترام کرنے والا میٹا سرچ انجن ہے جو متعدد سرچ انجنوں سے نتائج کو یکجا کرتا ہے۔ Service \"as is\" کسی بھی قسم کی وارنٹی کے بغیر فراہم کی جاتی ہے۔",
     "user_conduct_heading": "3. صارف کا طرزِ عمل",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. سروس میں تبدیلیاں",
     "modifications_description": "ہم کسی بھی وقت بغیر اطلاع Service میں ترمیم، معطلی یا خاتمہ کرنے کا حق محفوظ رکھتے ہیں۔ کسی بھی ترمیم، معطلی یا خاتمے کے لیے ہم آپ یا کسی تیسرے فریق کے سامنے ذمہ دار نہیں ہوں گے۔",
-    "changes_heading": "10. شرائط میں تبدیلیاں",
-    "changes_description": "ہم وقتاً فوقتاً ان سروس کی شرائط کو اپ ڈیٹ کر سکتے ہیں۔ ہم \"Last updated\" تاریخ کو اپ ڈیٹ کر کے صارفین کو کسی بھی اہم تبدیلی سے آگاہ کریں گے۔ تبدیلیوں کے بعد Service کا آپ کا مسلسل استعمال نئی شرائط کی قبولیت سمجھا جائے گا۔",
+    "changes_heading": "تبدیلیاں",
+    "changes_description": "یہ شرائط تبدیل ہو سکتی ہیں۔ اس صفحے کا موجودہ متن شائع ہوتے ہی لاگو ہوتا ہے۔",
     "contact_prefix": "اگر آپ کو ان سروس کی شرائط کے بارے میں سوالات ہوں تو براہِ کرم ",
     "contact_suffix": "."
   },
   "help": {
+    "i2p": {
+      "heading": "I2P رسائی",
+      "intro": "یہ ایپلیکیشن بہتر رازداری کے لیے I2P eepsite کے طور پر دستیاب ہے۔",
+      "address_heading": "I2P پتہ",
+      "how_to_heading": "رابطہ کیسے کریں",
+      "step_install": "انسٹال کریں",
+      "step_or": "یا",
+      "step_connect": "اور نیٹ ورک سے منسلک ہونے کا انتظار کریں۔",
+      "step_proxy": "اپنے براؤزر کو I2P HTTP پراکسی کے لیے یہاں ترتیب دیں",
+      "step_address": "اوپر دیا گیا .b32.i2p پتہ نقل کرکے براؤزر کے ایڈریس بار میں چسپاں کریں۔",
+      "note": "I2P آپ کے رابطے کو نیٹ ورک سے گزار کر اضافی رازداری فراہم کرتا ہے۔ Eepsite، http:// کے ذریعے دستیاب ہوتے ہیں؛ I2P ٹنل ٹرانسپورٹ کو خفیہ کرتی ہے، اس لیے TLS سرٹیفکیٹ استعمال نہیں ہوتا۔"
+    },
+    "troubleshooting": {
+      "heading": "خرابیوں کا ازالہ",
+      "search": "وسیع تر سوال آزمائیں یا سرچ آپریٹرز ہٹا دیں؛ منتخب انجن کو نتائج نہ ملیں۔ اگر انجن عارضی طور پر دستیاب نہیں تو بعد میں کوشش کریں۔",
+      "access": "اگر Tor سیکشن نہیں تو search --maintenance tor status سے تصدیق کریں کہ سروس چل رہی ہے اور onion پتہ شائع ہے۔ اگر I2P نہیں تو آپریٹر سے فراہم کنندہ اور شائع شدہ پتے کی جانچ کروائیں۔",
+      "alerts": "اگر الرٹ مینجمنٹ لنک نہ کھلے تو تصدیقی پیغام کا مکمل لنک استعمال کریں؛ ٹوکن غلط یا الرٹ حذف ہو سکتا ہے۔ فارم کی خرابی میں بتائی گئی فیلڈ درست کرکے دوبارہ بھیجیں۔"
+    },
     "page_title": "Help",
     "title": "Help & Documentation",
     "subtitle": "Learn how to get the most out of {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "مزید معلومات",
     "policy_title": "انکشاف کی پالیسی",
     "policy_scope_heading": "دائرہ کار",
-    "policy_scope_description": "یہ پالیسی اس تعینات کردہ مثال اور اس کے فراہم کردہ خدمات پر لاگو ہوتی ہے۔",
+    "policy_scope_description": "{fqdn} پر دستیاب ایپلیکیشن، بشمول اس کے API، دائرۂ کار میں ہے۔",
+    "policy_reporting_description": "سیکیورٹی صفحے کے ذریعے نجی طور پر رپورٹ کریں۔",
+    "policy_reporting_heading": "رپورٹنگ",
+    "policy_out_of_scope_item_headers": "غیر حساس صفحات پر تجویز کردہ ہیڈرز کی عدم موجودگی",
+    "policy_out_of_scope_item_scanner": "ثابت شدہ اثر کے بغیر خودکار اسکینر کے نتائج",
+    "policy_in_scope_item_i2p": "I2P پتہ: {address}",
+    "policy_in_scope_item_tor": "Tor پتہ: {address}",
+    "policy_in_scope_item_host": "دوسرا تشکیل شدہ میزبان: {host}",
     "policy_disclosure_window_heading": "مربوط انکشاف کی مدت",
-    "policy_disclosure_window_description": "ہم محققین سے درخواست کرتے ہیں کہ کسی بھی عوامی انکشاف سے پہلے رپورٹ شدہ مسئلے کا جائزہ لینے اور اسے حل کرنے کے لیے ہمیں 90 دن تک کا وقت دیں، جب تک کہ کوئی اور تاریخ طے نہ کی جائے۔",
+    "policy_disclosure_window_description": "براہِ کرم سیکیورٹی صفحے کے ذریعے نجی طور پر رپورٹ کریں اور مربوط انکشاف کے لیے رپورٹ کے بعد 90 دن دیں؛ اصلاح جاری ہونے پر مدت پہلے ختم ہو جائے گی اور باہمی اتفاق سے بڑھائی جا سکتی ہے۔",
     "policy_in_scope_heading": "دائرہ کار میں",
     "policy_in_scope_item_deployed": "یہ تعینات کردہ مثال اور اس کے عوامی اینڈ پوائنٹس",
     "policy_in_scope_item_api": "عوامی API",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "جسمانی سیکیورٹی کی جانچ",
     "policy_out_of_scope_item_third_party": "تیسرے فریق کی خدمات جن پر ہمارا کنٹرول نہیں ہے",
     "policy_safe_harbor_heading": "محفوظ پناہ گاہ",
-    "policy_safe_harbor_description": "ہم ان محققین کے خلاف قانونی کارروائی نہیں کریں گے جو نیک نیتی سے اس پالیسی کی تعمیل کرتے ہیں، کمزوریوں کی ذمہ داری سے اطلاع دیتے ہیں، اور رازداری کی خلاف ورزی، ڈیٹا کی تباہی، یا سروس میں خلل سے گریز کرتے ہیں۔",
+    "policy_safe_harbor_description": "نیک نیتی سے کی گئی ایسی تحقیق مجاز ہے جو اس پالیسی پر عمل کرے، رازداری کی خلاف ورزی اور سروس میں خلل سے بچے، مسئلہ ثابت کرنے کے لیے صرف ضروری رسائی لے، اور ثبوت ملنے پر رک جائے۔ اس تحقیق پر قانونی کارروائی نہیں ہوگی۔",
     "policy_contact_prefix": "اس پالیسی کے بارے میں سوالات کو",
     "policy_contact_suffix": " صفحے کے ذریعے بھیجا جا سکتا ہے۔",
     "thanks_title": "سیکیورٹی اعترافات",
@@ -2186,6 +2241,8 @@
     "report_status_title": "سیکیورٹی رپورٹ کی حیثیت",
     "report_status_tracking_id_label": "ٹریکنگ آئی ڈی:",
     "report_status_state_label": "حیثیت:",
+    "report_status_comment_label": "منتظمین کا تبصرہ",
+    "report_status_disclosure_date_label": "متوقع انکشاف کی تاریخ",
     "report_status_state_received": "موصول ہوئی",
     "report_status_state_triaged": "جائزہ لیا گیا",
     "report_status_state_confirmed": "تصدیق شدہ",
@@ -2232,6 +2289,7 @@
       "label_current_version": "موجودہ ورژن:",
       "label_new_version": "نیا ورژن:",
       "label_release_date": "ریلیز کی تاریخ:",
+      "label_channel": "ریلیز چینل:",
       "label_release_notes": "ریلیز نوٹس:",
       "label_view_update": "اپ ڈیٹ دیکھیں:",
       "manual_command": "دستی اپ ڈیٹ کمانڈ: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "اپ ڈیٹ انسٹال ہو گیا - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "اپ ڈیٹ ناکام ہو گئی - {app_name}",
         "body": "اپ ڈیٹ ناکام ہو گئی\n\nمنجانب: {app_name} ({fqdn})\nوقت: {timestamp}\n\nاپ ڈیٹ {version} انسٹال نہیں ہو سکی۔\nوجہ: {error}\n\nپچھلا ورژن اب بھی چل رہا ہے۔\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "اپ ڈیٹ تیار کر دی گئی - {app_name}",
+        "body": "اپ ڈیٹ تیار کر دی گئی\n\nاز: {app_name} ({fqdn})\nوقت: {timestamp}\n\nاپ ڈیٹ {version} کی تصدیق ہو گئی ہے اور اسے تنصیب کے لیے تیار کیا گیا ہے۔\n\nاپ ڈیٹ لاگو کرنے کے لیے سروس دوبارہ شروع کریں۔\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3299,6 +3361,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

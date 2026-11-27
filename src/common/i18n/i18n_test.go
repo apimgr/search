@@ -171,7 +171,7 @@ func TestManagerResolveLanguageSetsCookieForSupportedQuery(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?lang=fr", nil)
 	rec := httptest.NewRecorder()
 
-	got := m.ResolveLanguage(rec, req)
+	got := m.ResolveLanguage(rec, req, true)
 	if got != "fr" {
 		t.Fatalf("ResolveLanguage() = %q, want %q", got, "fr")
 	}
@@ -200,7 +200,7 @@ func TestManagerResolveLanguageDoesNotPersistInvalidQuery(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?lang=zz", nil)
 	rec := httptest.NewRecorder()
 
-	got := m.ResolveLanguage(rec, req)
+	got := m.ResolveLanguage(rec, req, false)
 	if got != "en" {
 		t.Fatalf("ResolveLanguage() = %q, want %q", got, "en")
 	}
@@ -208,6 +208,34 @@ func TestManagerResolveLanguageDoesNotPersistInvalidQuery(t *testing.T) {
 	for _, cookie := range rec.Result().Cookies() {
 		if cookie.Name == "lang" {
 			t.Fatalf("ResolveLanguage() unexpectedly set lang cookie %q for invalid query", cookie.Value)
+		}
+	}
+}
+
+func TestManagerResolveLanguageDoesNotPersistWithoutConsent(t *testing.T) {
+	m := NewManager("en", []string{"en", "fr"})
+	req := httptest.NewRequest(http.MethodGet, "/?lang=fr", nil)
+	rec := httptest.NewRecorder()
+	if got := m.ResolveLanguage(rec, req, false); got != "fr" {
+		t.Fatalf("ResolveLanguage() = %q, want %q", got, "fr")
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "lang" {
+			t.Fatalf("ResolveLanguage() persisted language without consent: %q", cookie.Value)
+		}
+	}
+}
+
+func TestManagerResolveLanguageDoesNotPersistQueryOnPost(t *testing.T) {
+	m := NewManager("en", []string{"en", "fr"})
+	req := httptest.NewRequest(http.MethodPost, "/?lang=fr", nil)
+	rec := httptest.NewRecorder()
+	if got := m.ResolveLanguage(rec, req, true); got != "fr" {
+		t.Fatalf("ResolveLanguage() = %q, want %q", got, "fr")
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "lang" {
+			t.Fatalf("ResolveLanguage() persisted query language on POST: %q", cookie.Value)
 		}
 	}
 }
@@ -443,7 +471,7 @@ func TestManagerTemplateFuncs(t *testing.T) {
 
 func TestSetLanguageCookie(t *testing.T) {
 	w := httptest.NewRecorder()
-	SetLanguageCookie(w, "de")
+	SetLanguageCookie(w, "de", false)
 
 	cookies := w.Result().Cookies()
 	if len(cookies) != 1 {
@@ -460,8 +488,8 @@ func TestSetLanguageCookie(t *testing.T) {
 	if cookie.Path != "/" {
 		t.Errorf("Cookie path = %q, want %q", cookie.Path, "/")
 	}
-	if !cookie.HttpOnly {
-		t.Error("Cookie should be HttpOnly")
+	if cookie.HttpOnly {
+		t.Error("preference cookie must be readable by JavaScript")
 	}
 	if cookie.MaxAge != 365*24*60*60 {
 		t.Errorf("Cookie MaxAge = %d, want %d", cookie.MaxAge, 365*24*60*60)

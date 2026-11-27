@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -89,6 +90,59 @@ func TestStageUpdateVerifiesAndStoresRelease(t *testing.T) {
 	}
 	if stagedRelease.Version != "1.1.0" || !stagedRelease.PublishedAt.Equal(published) {
 		t.Fatalf("staged metadata = %+v, want version 1.1.0 published at %s", stagedRelease, published)
+	}
+}
+
+type stagedChecksumTransport func(*http.Request) (*http.Response, error)
+
+func (transport stagedChecksumTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestVerifyStagedBinaryIgnoresWritableStagedChecksum(t *testing.T) {
+	releasedBinary := []byte("official release binary")
+	releasedDigest := sha256.Sum256(releasedBinary)
+	tamperedBinary := []byte("tampered staged binary")
+	tamperedDigest := sha256.Sum256(tamperedBinary)
+	dir := t.TempDir()
+	stagedPath := filepath.Join(dir, "search.new")
+	if err := os.WriteFile(stagedPath, tamperedBinary, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// This file is writable by the service user and deliberately matches the
+	// tampered bytes. Root verification must never consult it.
+	if err := os.WriteFile(filepath.Join(dir, "search.sha256"), []byte(hex.EncodeToString(tamperedDigest[:])+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	checksumURL := "https://github.com/apimgr/search/releases/download/v1.1.0/sha256.txt"
+	client := &http.Client{Transport: stagedChecksumTransport(func(request *http.Request) (*http.Response, error) {
+		var body string
+		switch request.URL.String() {
+		case ReleasesURL + "/tags/v1.1.0":
+			release := Release{
+				TagName: "v1.1.0",
+				Assets:  []Asset{{Name: "sha256.txt", DownloadURL: checksumURL}},
+			}
+			encoded, err := json.Marshal(release)
+			if err != nil {
+				return nil, err
+			}
+			body = string(encoded)
+		case checksumURL:
+			body = fmt.Sprintf("%s  search-linux-amd64\n", hex.EncodeToString(releasedDigest[:]))
+		default:
+			return nil, fmt.Errorf("unexpected request URL %s", request.URL)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Header:     make(http.Header),
+			Request:    request,
+		}, nil
+	})}
+	err := verifyStagedBinary(stagedPath, "v1.1.0", "search-linux-amd64", client)
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("verifyStagedBinary() error = %v, want authoritative checksum mismatch", err)
 	}
 }
 

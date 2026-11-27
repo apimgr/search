@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
     branches: [main]
   schedule:
@@ -37,20 +37,25 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          mkdir -p "/tmp/${PROJECTORG}"
-          COVDIR=$(mktemp -d "/tmp/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+          PROJECT_ORG=$(sed -n '/^project_org:[[:space:]]*/ { s/^project_org:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+          INTERNAL_NAME=$(sed -n '/^internal_name:[[:space:]]*/ { s/^internal_name:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+          [ -n "$PROJECT_ORG" ] && [ -n "$INTERNAL_NAME" ]
+          mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
+          COVDIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
+          trap 'rm -rf "$COVDIR"' EXIT
+          mkdir -p "$COVDIR/data"
           go mod download
           go run ./src/apigen
           go generate ./src/swagger/...
-          go test -cover -coverprofile="${COVDIR}/coverage.out" ./...
+          go test -cover ./... -args -test.gocoverdir="$COVDIR/data"
+          go tool covdata textfmt -i="$COVDIR/data" -o="$COVDIR/coverage.out"
           THRESHOLD=60
-          PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
-            echo "::error::coverage ${PCT}% is below threshold ${THRESHOLD}%"
+            echo "::error::coverage $PCT% < threshold $THRESHOLD%"
             exit 1
           fi
-          echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
-
+          echo "Coverage: $PCT% (threshold: $THRESHOLD%)"
   lint:
     name: Lint
     if: github.event_name != 'schedule'
@@ -87,28 +92,6 @@ jobs:
     if: github.event_name != 'schedule'
     needs: [test, lint]
     runs-on: ubuntu-26.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-            ext: .exe
-          - goos: windows
-            goarch: arm64
-            ext: .exe
-          - goos: freebsd
-            goarch: amd64
-          - goos: freebsd
-            goarch: arm64
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -117,55 +100,8 @@ jobs:
       GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
-      - name: Set build info
-        run: |
-          {
-            echo "VERSION=$(git rev-parse --short=7 HEAD 2>/dev/null || echo devel)"
-            echo "COMMIT_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
-            echo "BUILD_EPOCH=$(date -u +%s)"
-            if [ -f site.txt ]; then
-              echo "OFFICIAL_SITE=$(cat site.txt)"
-            else
-              echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}"
-            fi
-          } >> "$GITHUB_ENV"
-
-      - name: Generate API code
-        run: |
-          go mod download
-          go run ./src/apigen
-          go generate ./src/swagger/...
-
-      - name: Build binaries
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          LDFLAGS="-s -w \
-            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
-            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
-            -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}' \
-            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
-            -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
-            -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
-          CLI_LDFLAGS="-s -w \
-            -X 'github.com/apimgr/search/src/client/command.ProjectName=${PROJECTNAME}' \
-            -X 'github.com/apimgr/search/src/client/command.Version=${VERSION}' \
-            -X 'github.com/apimgr/search/src/client/command.CommitID=${COMMIT_ID}' \
-            -X 'github.com/apimgr/search/src/client/command.BuildEpoch=${BUILD_EPOCH}' \
-            -X 'github.com/apimgr/search/src/client/command.OfficialSite=${OFFICIAL_SITE}' \
-            -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
-            -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-          go build -buildvcs=false -trimpath \
-            -ldflags "$LDFLAGS" -o "/tmp/search-${GOOS}-${GOARCH}${{ matrix.ext }}" ./src
-          if [ -d src/client ]; then
-            go build -buildvcs=false -trimpath -tags gui \
-              -ldflags "$CLI_LDFLAGS" -o "/tmp/search-cli-${GOOS}-${GOARCH}${{ matrix.ext }}" ./src/client
-          fi
-          echo "Build OK"
-
+      - name: Compile server and client for the toolchain platform
+        run: go build -buildvcs=false ./...
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-26.04
@@ -222,6 +158,18 @@ jobs:
           go generate ./src/swagger/...
           govulncheck ./...
 
+  license-check:
+    name: License check
+    runs-on: ubuntu-26.04
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Verify shipped dependency licenses
+        run: bash scripts/verify-licenses.sh
+
   workflow-policy:
     name: Workflow SHA policy
     runs-on: ubuntu-26.04
@@ -248,10 +196,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Build image for scan
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: docker/Dockerfile

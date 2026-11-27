@@ -35,6 +35,20 @@ func (s *Server) handleWellKnownCatchAll(w http.ResponseWriter, r *http.Request)
 	http.NotFound(w, r)
 }
 
+// wellKnownMethods restricts every /.well-known route, including explicit
+// handlers, to the GET and HEAD methods required by AI.md PART 11.
+func wellKnownMethods(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (r.URL.Path == "/.well-known" || strings.HasPrefix(r.URL.Path, "/.well-known/")) &&
+			r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // handleRobotsTxt serves robots.txt per AI.md spec
 // This is the enhanced handler that replaces the basic one
 func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {

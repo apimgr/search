@@ -11,12 +11,12 @@ import (
 
 func (h *Handler) strictOwnerAction(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.config == nil || !h.config.Server.RateLimit.Enabled {
-			next(w, r)
-			return
+		limit := 10
+		window := 15 * time.Minute
+		if h.config != nil {
+			limit = h.config.Server.RateLimit.Strict.Requests
+			window = time.Duration(h.config.Server.RateLimit.Strict.Window) * time.Second
 		}
-		limit := h.config.Server.RateLimit.Strict.Requests
-		window := time.Duration(h.config.Server.RateLimit.Strict.Window) * time.Second
 		if limit <= 0 {
 			limit = 10
 		}

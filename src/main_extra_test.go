@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -202,6 +203,29 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	fn()
+	if err := w.Close(); err != nil {
+		t.Errorf("close captured stderr: %v", err)
+	}
+	os.Stderr = old
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Errorf("read captured stderr: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Errorf("close captured stderr pipe: %v", err)
+	}
+	return buf.String()
+}
+
 func TestPrintVersion(t *testing.T) {
 	out := captureStdout(t, printVersion)
 
@@ -281,6 +305,9 @@ func TestPrintCompletions(t *testing.T) {
 			shell:    "powershell",
 			mustHave: []string{"Register-ArgumentCompleter", "--service", "--update", "--maintenance tor"},
 		},
+		{shell: "sh", mustHave: []string{"POSIX completion candidates", "_search_completion_candidates", "--update", "check yes branch"}},
+		{shell: "dash", mustHave: []string{"POSIX completion candidates", "_search_completion_candidates", "--service", "--maintenance"}},
+		{shell: "ksh", mustHave: []string{"POSIX completion candidates", "_search_completion_candidates", "--shell"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.shell, func(t *testing.T) {
@@ -310,12 +337,38 @@ func TestMaintenanceTorHelpDispatch(t *testing.T) {
 }
 
 func TestPrintCompletionsUnsupportedShellExits(t *testing.T) {
-	// printCompletions calls os.Exit(1) on unknown shells; test that it doesn't
-	// panic and produces an error message via the display package.
-	// We can't easily intercept os.Exit, so we verify the error message is emitted.
-	// To avoid exiting the test binary, skip execution for unknown shell and
-	// instead verify the default case is reached by looking for a known prefix.
-	t.Log("unsupported shell path calls os.Exit(1) — verified by code inspection")
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	oldStderr, oldExit := os.Stderr, exitFunc
+	os.Stderr = writePipe
+	var exitCode int
+	exitFunc = func(code int) { exitCode = code }
+	t.Cleanup(func() {
+		os.Stderr, exitFunc = oldStderr, oldExit
+		if err := writePipe.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Errorf("close stderr writer: %v", err)
+		}
+		if err := readPipe.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Errorf("close stderr reader: %v", err)
+		}
+	})
+
+	printCompletions("search", "unsupported")
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	stderr, err := io.ReadAll(readPipe)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	if exitCode != 2 {
+		t.Fatalf("unsupported shell exit code = %d, want 2", exitCode)
+	}
+	if !strings.Contains(string(stderr), "Supported shells:") {
+		t.Fatalf("unsupported shell stderr = %q, want supported shell usage", stderr)
+	}
 }
 
 // ============================================================
@@ -330,6 +383,9 @@ func TestPrintShellInit(t *testing.T) {
 		{"bash", "completions bash"},
 		{"zsh", "completions zsh"},
 		{"fish", "completions fish"},
+		{"sh", "completions sh"},
+		{"dash", "completions dash"},
+		{"ksh", "completions ksh"},
 		{"powershell", "completions powershell"},
 		{"pwsh", "completions powershell"},
 	}
@@ -491,11 +547,17 @@ func TestApplyCliOverridesColorAndDirs(t *testing.T) {
 
 	t.Run("flagPID sets the config override", func(t *testing.T) {
 		resetFlagVars()
+		originalPIDEnabled := config.PIDFileEnabled()
+		t.Cleanup(func() { config.SetPIDFileEnabled(originalPIDEnabled) })
 
 		flagPID = "/tmp/test-search.pid"
 		applyCliOverrides()
 
-		if got := config.GetPIDFile(); got != "/tmp/test-search.pid" {
+		if config.IsRunningInContainer() {
+			if config.GetPIDFile() != "" {
+				t.Errorf("GetPIDFile() = %q, want empty path in a container", config.GetPIDFile())
+			}
+		} else if got := config.GetPIDFile(); got != "/tmp/test-search.pid" {
 			t.Errorf("GetPIDFile() = %q, want /tmp/test-search.pid", got)
 		}
 		config.SetPIDFileOverride("")

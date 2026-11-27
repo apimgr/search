@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -489,10 +490,31 @@ func mirrorCertBundle(sslDir, key string, data []byte) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "fullchain.pem"), certPEM, 0644); err != nil {
+	if err := writePrivateFile(filepath.Join(dir, "fullchain.pem"), certPEM); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "privkey.pem"), keyPEM, 0600)
+	return writePrivateFile(filepath.Join(dir, "privkey.pem"), keyPEM)
+}
+
+// writePrivateFile makes an existing or new file private before replacing its contents.
+func writePrivateFile(path string, data []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	if err := file.Chmod(0600); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	if err := file.Truncate(0); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	if _, err := file.Write(data); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	if err := file.Sync(); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	return file.Close()
 }
 
 // initDNS01 initializes Let's Encrypt with DNS-01 challenge using lego
@@ -716,10 +738,10 @@ func (m *Manager) obtainCertificateDNS01() error {
 	if err := os.MkdirAll(filepath.Dir(certPath), 0700); err != nil {
 		return fmt.Errorf("failed to create certificate directory: %w", err)
 	}
-	if err := os.WriteFile(certPath, certificates.Certificate, 0644); err != nil {
+	if err := writePrivateFile(certPath, certificates.Certificate); err != nil {
 		return fmt.Errorf("failed to save certificate: %w", err)
 	}
-	if err := os.WriteFile(keyPath, certificates.PrivateKey, 0600); err != nil {
+	if err := writePrivateFile(keyPath, certificates.PrivateKey); err != nil {
 		return fmt.Errorf("failed to save private key: %w", err)
 	}
 

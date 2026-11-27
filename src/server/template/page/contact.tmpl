@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="container container-md">
     <header class="page-header">
-        <h1 class="page-title">{{t "contact.title"}}</h1>
+        <h1 class="page-title">{{if .ContactType}}{{t (printf "contact.type_%s" .ContactType)}}{{else}}{{t "contact.title"}}{{end}}</h1>
     </header>
 
     {{if .ContactSent}}
@@ -16,8 +16,8 @@
         <a href="/" class="btn btn-primary">{{t "contact.return_home"}}</a>
     </section>
     {{else if .ReviewMode}}
-    <div class="contact-review-backdrop">
-        <section class="section-card contact-review-panel" aria-labelledby="contact-review-title">
+    <div class="modal-backdrop">
+        <section class="section-card modal-panel" aria-labelledby="contact-review-title">
             <h2 id="contact-review-title">{{t "contact.review_title"}}</h2>
             {{if .ContactError}}<p role="alert">{{.ContactError}}</p>{{end}}
             <p class="contact-review-email">{{.ReviewEmail}}</p>
@@ -33,18 +33,40 @@
             </form>
         </section>
     </div>
+    {{else if .ContactChooser}}
+        <section class="section-card" aria-labelledby="contact-purpose-heading">
+            <h2 id="contact-purpose-heading">{{t "contact.purpose_heading"}}</h2>
+            <p>{{t "contact.form_scope_notice"}}</p>
+        </section>
+        <section class="section-card" aria-labelledby="contact-chooser-heading">
+            <h2 id="contact-chooser-heading">{{t "contact.choose_type_heading"}}</h2>
+            <ul class="hub-list">
+                <li><a class="hub-link" href="/server/contact?type=abuse">{{t "contact.type_abuse"}}</a></li>
+                <li><a class="hub-link" href="/server/contact?type=dmca">{{t "contact.type_dmca"}}</a></li>
+                <li><a class="hub-link" href="/server/contact?type=privacy">{{t "contact.type_privacy"}}</a></li>
+            </ul>
+        </section>
+        <section class="section-card" aria-labelledby="contact-security-heading">
+            <h2 id="contact-security-heading">{{t "contact.security_issues_heading"}}</h2>
+            <p>{{t "contact.security_issues_intro"}} <a href="/server/security">{{t "security.policy_title"}}</a>.</p>
+        </section>
+        <section class="section-card" aria-labelledby="contact-abuse-heading">
+            <h2 id="contact-abuse-heading">{{t "contact.abuse_reports_heading"}}</h2>
+            <p>{{t "contact.abuse_reports_intro"}}{{if .Config.Server.Contact.Abuse.Email}} {{tf "contact.abuse_reports_email" "email" .Config.Server.Contact.Abuse.Email}}{{else if .Config.Server.Contact.General.Email}} {{tf "contact.abuse_reports_email" "email" .Config.Server.Contact.General.Email}}{{end}}</p>
+        </section>
     {{else}}
-    <div class="page-content">
-        <p>{{t "contact.form_scope_notice"}}</p>
-
-        <form action="/server/contact" method="POST" class="section-card contact-form">
-            <h2>{{t "contact.title"}}</h2>
+        <section class="section-card" aria-labelledby="contact-purpose-heading">
+            <h2 id="contact-purpose-heading">{{t "contact.purpose_heading"}}</h2>
+            <p>{{t "contact.form_scope_notice"}}</p>
+        </section>
+        <form action="/server/contact" method="POST" class="section-card contact-form" aria-labelledby="contact-form-heading">
+            <h2 id="contact-form-heading">{{t "contact.form_details_heading"}}</h2>
             {{/* CSRF Token */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
             <div class="contact-honeypot" aria-hidden="true">
                 <label for="website">{{t "contact.honeypot_label"}}</label>
-                <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                <input class="form-input" type="text" id="website" name="website" tabindex="-1" autocomplete="off">
             </div>
             <input type="hidden" name="form_token" value="{{.FormToken}}">
 
@@ -59,21 +81,30 @@
             {{end}}
 
             {{if not .SecurityMode}}
+            <input type="hidden" name="type" value="{{.ContactType}}">
+            {{end}}
+
             <div class="form-group">
-                <label for="type">{{t "contact.type_label"}} <span class="required">*</span></label>
-                <select id="type" name="type" required>
-                    <option value="abuse" {{if eq (index .ReviewFields "type") "abuse"}}selected{{end}}>{{t "contact.type_abuse"}}</option>
-                    <option value="dmca" {{if eq (index .ReviewFields "type") "dmca"}}selected{{end}}>{{t "contact.type_dmca"}}</option>
-                    <option value="privacy" {{if eq (index .ReviewFields "type") "privacy"}}selected{{end}}>{{t "contact.type_privacy"}}</option>
-                </select>
+                <label for="name">{{t "contact.name_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <input class="form-input" type="text" id="name" name="name" maxlength="100" required value="{{index .ReviewFields "name"}}" placeholder="{{t "contact.name_placeholder"}}" autocomplete="name">
             </div>
+
             <div class="form-group">
-                <label for="reported_url">{{t "contact.reported_url_label"}}</label>
-                <input type="url" id="reported_url" name="reported_url" maxlength="2048" value="{{index .ReviewFields "reported_url"}}">
+                <label for="email">{{t "contact.email_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <input class="form-input" type="email" id="email" name="email" maxlength="254" required value="{{index .ReviewFields "email"}}" placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
             </div>
+
+            {{if or (eq .ContactType "abuse") (eq .ContactType "dmca")}}
             <div class="form-group">
-                <label for="reason">{{t "contact.abuse_reason_label"}}</label>
-                <select id="reason" name="reason">
+                <label for="reported_url">{{t "contact.reported_url_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <input class="form-input" type="url" id="reported_url" name="reported_url" maxlength="2048" required value="{{index .ReviewFields "reported_url"}}" aria-describedby="reported-url-help">
+                <p id="reported-url-help">{{tf "contact.reported_url_help" "fqdn" .ContactFQDN}}</p>
+            </div>
+            {{end}}
+            {{if eq .ContactType "abuse"}}
+            <div class="form-group">
+                <label for="reason">{{t "contact.abuse_reason_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <select class="form-input" id="reason" name="reason" required>
                     <option value="illegal_content" {{if eq (index .ReviewFields "reason") "illegal_content"}}selected{{end}}>{{t "contact.reason_illegal_content"}}</option>
                     <option value="terms_violation" {{if eq (index .ReviewFields "reason") "terms_violation"}}selected{{end}}>{{t "contact.reason_terms_violation"}}</option>
                     <option value="harassment" {{if eq (index .ReviewFields "reason") "harassment"}}selected{{end}}>{{t "contact.reason_harassment"}}</option>
@@ -81,21 +112,25 @@
                     <option value="other" {{if eq (index .ReviewFields "reason") "other"}}selected{{end}}>{{t "common.other"}}</option>
                 </select>
             </div>
+            {{end}}
+            {{if eq .ContactType "dmca"}}
             <div class="form-group">
-                <label for="copyrighted_work">{{t "contact.copyrighted_work_label"}}</label>
-                <input type="text" id="copyrighted_work" name="copyrighted_work" maxlength="1000" value="{{index .ReviewFields "copyrighted_work"}}">
+                <label for="copyrighted_work">{{t "contact.copyrighted_work_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <textarea class="form-input" id="copyrighted_work" name="copyrighted_work" maxlength="2000" required>{{index .ReviewFields "copyrighted_work"}}</textarea>
             </div>
             <div class="form-group form-checkbox">
-                <label><input type="checkbox" name="good_faith_statement" value="true" {{if eq (index .ReviewFields "good_faith_statement") "true"}}checked{{end}}> {{t "contact.good_faith_statement"}}</label>
-                <label><input type="checkbox" name="accuracy_statement" value="true" {{if eq (index .ReviewFields "accuracy_statement") "true"}}checked{{end}}> {{t "contact.accuracy_statement"}}</label>
+                <label><input type="checkbox" name="good_faith_statement" value="true" required {{if eq (index .ReviewFields "good_faith_statement") "true"}}checked{{end}}> {{t "contact.good_faith_statement"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <label><input type="checkbox" name="accuracy_statement" value="true" required {{if eq (index .ReviewFields "accuracy_statement") "true"}}checked{{end}}> {{t "contact.accuracy_statement"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
             </div>
             <div class="form-group">
-                <label for="signature">{{t "contact.electronic_signature_label"}}</label>
-                <input type="text" id="signature" name="signature" maxlength="254" value="{{index .ReviewFields "signature"}}">
+                <label for="signature">{{t "contact.electronic_signature_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <input class="form-input" type="text" id="signature" name="signature" maxlength="100" required value="{{index .ReviewFields "signature"}}">
             </div>
+            {{end}}
+            {{if eq .ContactType "privacy"}}
             <div class="form-group">
-                <label for="request_kind">{{t "contact.privacy_request_label"}}</label>
-                <select id="request_kind" name="request_kind">
+                <label for="request_kind">{{t "contact.privacy_request_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <select class="form-input" id="request_kind" name="request_kind" required>
                     <option value="access" {{if eq (index .ReviewFields "request_kind") "access"}}selected{{end}}>{{t "contact.request_access"}}</option>
                     <option value="export" {{if eq (index .ReviewFields "request_kind") "export"}}selected{{end}}>{{t "contact.request_export"}}</option>
                     <option value="deletion" {{if eq (index .ReviewFields "request_kind") "deletion"}}selected{{end}}>{{t "contact.request_deletion"}}</option>
@@ -105,36 +140,25 @@
                 </select>
             </div>
             {{end}}
-
-            <div class="form-group">
-                <label for="name">{{t "contact.name_label"}} <span class="required">*</span></label>
-                <input type="text" id="name" name="name" required value="{{index .ReviewFields "name"}}" placeholder="{{t "contact.name_placeholder"}}" autocomplete="name">
-            </div>
-
-            <div class="form-group">
-                <label for="email">{{t "contact.email_label"}} {{if not .SecurityMode}}<span class="required">*</span>{{end}}</label>
-                <input type="email" id="email" name="email" {{if not .SecurityMode}}required{{end}} value="{{index .ReviewFields "email"}}" placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
-            </div>
-
             {{if .SecurityMode}}
             <div class="form-group">
                 <label for="researcher_gpg">{{t "contact.security_researcher_gpg_label"}}</label>
-                <input type="text" id="researcher_gpg" name="researcher_gpg" value="{{.ResearcherGPG}}" placeholder="{{t "contact.security_researcher_gpg_placeholder"}}">
+                <input class="form-input" type="text" id="researcher_gpg" name="researcher_gpg" value="{{.ResearcherGPG}}" placeholder="{{t "contact.security_researcher_gpg_placeholder"}}">
             </div>
 
             <div class="form-group">
                 <label for="affected_component">{{t "contact.security_affected_component_label"}} <span class="required">*</span></label>
-                <input type="text" id="affected_component" name="affected_component" required value="{{.AffectedComponent}}" placeholder="{{t "contact.security_affected_component_placeholder"}}">
+                <input class="form-input" type="text" id="affected_component" name="affected_component" required value="{{.AffectedComponent}}" placeholder="{{t "contact.security_affected_component_placeholder"}}">
             </div>
 
             <div class="form-group">
                 <label for="affected_endpoint">{{t "contact.security_affected_endpoint_label"}}</label>
-                <input type="text" id="affected_endpoint" name="affected_endpoint" value="{{.AffectedEndpoint}}" placeholder="{{t "contact.security_affected_endpoint_placeholder"}}">
+                <input class="form-input" type="text" id="affected_endpoint" name="affected_endpoint" value="{{.AffectedEndpoint}}" placeholder="{{t "contact.security_affected_endpoint_placeholder"}}">
             </div>
 
             <div class="form-group">
                 <label for="severity">{{t "contact.security_severity_label"}} <span class="required">*</span></label>
-                <select id="severity" name="severity" required>
+                <select class="form-input" id="severity" name="severity" required>
                     <option value="critical" {{if eq .Severity "critical"}}selected{{end}}>{{t "contact.security_severity_critical"}}</option>
                     <option value="high" {{if eq .Severity "high"}}selected{{end}}>{{t "contact.security_severity_high"}}</option>
                     <option value="medium" {{if eq .Severity "medium"}}selected{{end}}>{{t "contact.security_severity_medium"}}</option>
@@ -145,22 +169,22 @@
 
             <div class="form-group">
                 <label for="summary">{{t "contact.security_summary_label"}} <span class="required">*</span></label>
-                <input type="text" id="summary" name="summary" required value="{{.Summary}}" placeholder="{{t "contact.security_summary_placeholder"}}">
+                <input class="form-input" type="text" id="summary" name="summary" required value="{{.Summary}}" placeholder="{{t "contact.security_summary_placeholder"}}">
             </div>
 
             <div class="form-group">
                 <label for="steps_to_reproduce">{{t "contact.security_steps_label"}} <span class="required">*</span></label>
-                <textarea id="steps_to_reproduce" name="steps_to_reproduce" rows="6" required placeholder="{{t "contact.security_steps_placeholder"}}">{{.StepsToReproduce}}</textarea>
+                <textarea class="form-input" id="steps_to_reproduce" name="steps_to_reproduce" rows="6" required placeholder="{{t "contact.security_steps_placeholder"}}">{{.StepsToReproduce}}</textarea>
             </div>
 
             <div class="form-group">
                 <label for="impact">{{t "contact.security_impact_label"}} <span class="required">*</span></label>
-                <textarea id="impact" name="impact" rows="4" required placeholder="{{t "contact.security_impact_placeholder"}}">{{.Impact}}</textarea>
+                <textarea class="form-input" id="impact" name="impact" rows="4" required placeholder="{{t "contact.security_impact_placeholder"}}">{{.Impact}}</textarea>
             </div>
 
             <div class="form-group">
                 <label for="suggested_fix">{{t "contact.security_suggested_fix_label"}}</label>
-                <textarea id="suggested_fix" name="suggested_fix" rows="4" placeholder="{{t "contact.security_suggested_fix_placeholder"}}">{{.SuggestedFix}}</textarea>
+                <textarea class="form-input" id="suggested_fix" name="suggested_fix" rows="4" placeholder="{{t "contact.security_suggested_fix_placeholder"}}">{{.SuggestedFix}}</textarea>
             </div>
 
             <div class="form-group form-checkbox">
@@ -172,12 +196,12 @@
 
             <div class="form-group">
                 <label for="disclosure_days">{{t "contact.security_disclosure_days_label"}}</label>
-                <input type="number" id="disclosure_days" name="disclosure_days" min="1" value="{{if .DisclosureDays}}{{.DisclosureDays}}{{else}}90{{end}}">
+                <input class="form-input" type="number" id="disclosure_days" name="disclosure_days" min="1" value="{{if .DisclosureDays}}{{.DisclosureDays}}{{else}}90{{end}}">
             </div>
 
             <div class="form-group">
                 <label for="credit_preference">{{t "contact.security_credit_preference_label"}} <span class="required">*</span></label>
-                <select id="credit_preference" name="credit_preference" required>
+                <select class="form-input" id="credit_preference" name="credit_preference" required>
                     <option value="real_name" {{if eq .CreditPreference "real_name"}}selected{{end}}>{{t "contact.security_credit_real_name"}}</option>
                     <option value="handle" {{if eq .CreditPreference "handle"}}selected{{end}}>{{t "contact.security_credit_handle"}}</option>
                     <option value="no" {{if eq .CreditPreference "no"}}selected{{end}}>{{t "contact.security_credit_no"}}</option>
@@ -187,7 +211,7 @@
 
             <div class="form-group">
                 <label for="credit_handle">{{t "contact.security_credit_name_label"}} <span data-credit-handle-required hidden>*</span></label>
-                <input type="text" id="credit_handle" name="credit_handle" maxlength="100" value="{{.CreditHandle}}">
+                <input class="form-input" type="text" id="credit_handle" name="credit_handle" maxlength="100" value="{{.CreditHandle}}">
             </div>
 
             <div class="form-group form-checkbox">
@@ -198,19 +222,20 @@
             </div>
             {{else}}
             <div class="form-group">
-                <label for="subject">{{t "contact.subject_label"}} <span class="required">*</span></label>
-                <input type="text" id="subject" name="subject" required value="{{index .ReviewFields "subject"}}" placeholder="{{t "contact.subject_placeholder"}}">
+                <label for="subject">{{t "contact.subject_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <input class="form-input" type="text" id="subject" name="subject" maxlength="200" required value="{{index .ReviewFields "subject"}}" placeholder="{{t "contact.subject_placeholder"}}">
             </div>
 
             <div class="form-group">
-                <label for="message">{{t "contact.message_label"}} <span class="required">*</span></label>
-                <textarea id="message" name="message" rows="6" required placeholder="{{t "contact.message_placeholder"}}">{{index .ReviewFields "message"}}</textarea>
+                <label for="message">{{t "contact.message_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                <textarea class="form-input" id="message" name="message" rows="6" maxlength="5000" required placeholder="{{t "contact.message_placeholder"}}">{{index .ReviewFields "message"}}</textarea>
             </div>
             {{end}}
 
             {{if .CaptchaRequired}}
             {{if .CaptchaExternal}}
             <div class="form-group captcha-group">
+                <p>{{t "contact.captcha_label"}} <span class="required" aria-label="{{t "errors.required"}}">*</span></p>
                 {{if eq .CaptchaProvider "recaptcha"}}
                 <div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div>
                 <script src="https://www.google.com/recaptcha/api.js" async defer></script>
@@ -218,12 +243,17 @@
                 <div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div>
                 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
                 {{end}}
+                <input type="hidden" name="captcha_id" value="{{.CaptchaID}}">
+                <noscript>
+                    <label for="captcha">{{.CaptchaQuestion}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
+                    <input class="form-input" type="number" id="captcha" name="captcha_answer" required placeholder="{{t "contact.answer_placeholder"}}" autocomplete="off">
+                </noscript>
             </div>
             {{else if .CaptchaLocal}}
             <div class="form-group captcha-group">
-                <label for="captcha">{{tf "contact.verification_question" "a" .CaptchaA "b" .CaptchaB}} <span class="required">*</span></label>
+                <label for="captcha">{{.CaptchaQuestion}} <span class="required" aria-label="{{t "errors.required"}}">*</span></label>
                 <input type="hidden" name="captcha_id" value="{{.CaptchaID}}">
-                <input type="number" id="captcha" name="captcha" required placeholder="{{t "contact.answer_placeholder"}}" autocomplete="off">
+                <input class="form-input" type="number" id="captcha" name="captcha_answer" required placeholder="{{t "contact.answer_placeholder"}}" autocomplete="off">
             </div>
             {{end}}
             {{end}}
@@ -242,11 +272,6 @@
             <h2 id="contact-security-heading">{{t "contact.security_issues_heading"}}</h2>
             <p>{{t "contact.security_issues_intro"}} <a href="/server/security">{{t "security.policy_title"}}</a>.</p>
         </section>
-        <section class="section-card contact-information" aria-labelledby="contact-abuse-heading">
-            <h2 id="contact-abuse-heading">{{t "contact.abuse_reports_heading"}}</h2>
-            <p>{{t "contact.abuse_reports_intro"}} {{if not .SecurityMode}}<a href="#type">{{t "security.report_abuse_link"}}</a>. {{end}}{{if .Config.Server.Contact.Abuse.Email}}{{tf "contact.abuse_reports_email" "email" .Config.Server.Contact.Abuse.Email}}{{else if .Config.Server.Contact.General.Email}}{{tf "contact.abuse_reports_email" "email" .Config.Server.Contact.General.Email}}{{end}}</p>
-        </section>
-    </div>
     {{end}}
 </div>
 {{end}}

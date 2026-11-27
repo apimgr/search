@@ -29,9 +29,55 @@
         <input type="hidden" name="choice" value="accept">
         <button type="submit" class="btn-accept">{{t "common.accept"}}</button>
       </form>
+      {{if .CookieConsent.ShowPreferences}}
+      <button type="button" class="btn-secondary" data-action="cookie-preferences">{{default "Manage Preferences" .CookieConsent.PreferencesText}}</button>
+      {{end}}
     </div>
   </div>
 </div>
 {{ end }}
+<dialog id="cookie-preferences-modal" class="modal" aria-labelledby="cookie-preferences-title">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h2 id="cookie-preferences-title" class="modal-title">{{t "privacy.cookies_heading"}}</h2>
+      <button type="button" class="modal-close" data-action="cookie-preferences-close" aria-label="{{t "common.close"}}">×</button>
+    </header>
+    <form id="cookie-preferences-form" method="post" action="/server/consent">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="return_to" value="{{.RequestPath}}">
+      <input type="hidden" name="choice" value="save">
+      <div class="modal-body">
+        <div class="form-group toggle-group">
+          <label class="toggle">
+            <input type="checkbox" checked disabled aria-label="{{t "privacy.session_cookie_label"}}">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">{{t "privacy.session_cookie_label"}} ({{t "common.enabled"}})</span>
+          </label>
+          <p>{{t "privacy.session_cookie_description"}}</p>
+        </div>
+        <div class="form-group toggle-group">
+          <label class="toggle">
+            <input type="checkbox" id="pref-preferences" name="preferences" value="true" {{if .ConsentPreferences}}checked{{end}}>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">{{t "privacy.preference_cookie_label"}}</span>
+          </label>
+          <p>{{t "privacy.preference_cookie_description"}}</p>
+        </div>
+        <div class="form-group toggle-group">
+          <label class="toggle">
+            <input type="checkbox" id="pref-analytics" name="analytics" value="true" {{if .ConsentAnalytics}}checked{{end}}>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">{{t "privacy.analytics_heading"}}</span>
+          </label>
+          <p>{{if .Config.Server.Tracking.Type}}{{tf "privacy.analytics_provider" "provider" .Config.Server.Tracking.Type}}{{else}}{{t "privacy.analytics_none"}}{{end}}</p>
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" data-action="cookie-preferences-close">{{t "common.cancel"}}</button>
+        <button type="submit" class="btn-primary">{{t "common.save"}}</button>
+      </footer>
+    </form>
+  </div>
+</dialog>
 {{ end }}
 {{ end }}

@@ -44,7 +44,8 @@
     "dismiss": "Закрыть",
     "upload": "Загрузить",
     "app_name": "Search",
-    "other": "Другое"
+    "other": "Другое",
+    "details": "Подробности"
   },
   "auth": {
     "login": "Войти",
@@ -300,6 +301,7 @@
       "expired": "Истёк",
       "revoked": "Отозван",
       "primary_revealed": "Основной токен показан",
+      "primary_created": "Основной токен создан",
       "primary_rotated": "Основной токен заменён",
       "linked_created": "Связанный токен создан",
       "linked_revealed": "Связанный токен показан",
@@ -309,7 +311,7 @@
       "expiry_90d": "90 дней",
       "expiry_1y": "1 год",
       "shown_once": "Показывается один раз при загрузке этой страницы.",
-      "primary_help": "Полный доступ к вашим оповещениям. Храните этот токен в секрете.",
+      "primary_help": "Полный доступ к вашим {resources}. Храните этот токен в секрете.",
       "name_help": "Например: клиент MCP",
       "expiry_custom": "Своя дата",
       "custom_date": "Своя дата",
@@ -317,7 +319,7 @@
       "create": "Создать токен",
       "this_browser": "Этот браузер",
       "saved_in_browser": "Токен владельца сохранён в этом браузере.",
-      "forget_note": "Забыв этот браузер, вы удалите сохранённую cookie токена владельца. Оповещения не удаляются.",
+      "forget_note": "Забыв этот браузер, вы удалите сохранённую cookie токена владельца. Ваши {resources} не удаляются.",
       "forget_saved_token": "Забыть сохранённый токен",
       "forget_confirm": "Забыть токен владельца, сохранённый в этом браузере?",
       "no_linked_tokens": "Связанных токенов пока нет.",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "Сохранённый токен владельца забыт",
       "linked_revoked": "Связанный токен отозван",
       "linked_updated": "Связанный токен обновлён",
-      "reveal": "Показать токен"
+      "reveal": "Показать токен",
+      "new_token": "Новый токен",
+      "revoke_primary_heading": "Отозвать основной токен",
+      "revoke_primary_summary": "Будут удалены связанные токены: {linked_count}, и {resources}: {resource_count}, включая всё созданное с помощью связанного токена.",
+      "revoke_primary_button": "Отозвать основной токен и удалить всё",
+      "revoke_primary_confirm": "Для подтверждения введите последние 4 символа основного токена ({last4})",
+      "primary_revoked": "Основной токен отозван"
     },
     "font_size": "Размер шрифта",
     "font_size_small": "Маленький",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "О чём это?",
     "message_label": "Сообщение",
     "message_placeholder": "Ваше сообщение...",
-    "verification_question": "Проверка: сколько будет {a} + {b}?",
+    "verification_question": "Проверка: сколько будет {a} {operator} {b}?",
     "answer_placeholder": "Ответ",
     "send_message": "Отправить сообщение",
     "security_description": "Вы просматриваете форму отчёта об уязвимости для скоординированного раскрытия информации. Укажите как можно больше подробностей.",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "Этот адрес электронной почты указан верно, а сообщение является подлинным и не содержит рекламы, коммерческого предложения или спама.",
     "form_scope_notice": "Эта форма предназначена только для сообщений об уязвимостях, нарушениях условий по URL на этом сайте, уведомлений DMCA и запросов о конфиденциальности. Она не предназначена для поддержки, сообщений об ошибках, предложений функций или общих вопросов.",
     "honeypot_label": "Оставьте это поле пустым",
-    "type_abuse": "Нарушение",
+    "type_abuse": "Сообщить о нарушении",
     "type_dmca": "DMCA",
     "type_privacy": "Запрос о конфиденциальности",
     "reported_url_label": "URL, о котором сообщается",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "Чтобы сообщить об уязвимости, ознакомьтесь с нашей",
     "abuse_reports_heading": "Сообщения о нарушениях",
     "abuse_reports_intro": "Чтобы сообщить о вредоносном содержимом или нарушении условий, выберите выше «Нарушение». Для отправки уведомления DMCA выберите выше DMCA.",
-    "abuse_reports_email": "или напишите на {email}"
+    "abuse_reports_email": "или напишите на {email}",
+    "captcha_label": "Проверка на человека",
+    "choose_type_heading": "Выберите тип обращения",
+    "form_details_heading": "Подробности обращения",
+    "purpose_heading": "Назначение этой формы",
+    "reported_url_help": "Страница на этом сайте, например https://{fqdn}/..."
   },
   "privacy": {
     "data_collection_heading": "Сбор данных",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "Собрать и показать вам результаты",
     "data_usage_item_preferences": "Запомнить ваши настройки (тема, язык)",
     "data_retention_heading": "Хранение данных",
+    "retention": {
+      "period": "Созданные вами ресурсы хранятся до истечения срока действия или до удаления с помощью вашего токена владельца. Настройки хранятся только в файлах cookie вашего браузера. Операционные журналы хранятся до 30 дней. Анонимизированные аналитические данные могут храниться до 12 месяцев."
+    },
     "data_retention_description": "Мы не храним поисковые запросы или персональные данные. Данные сессии являются временными и удаляются, когда вы закрываете браузер или истекает срок вашей сессии.",
     "third_parties_heading": "Третьи лица",
     "third_parties_description": "Ваши поисковые запросы передаются на поисковые системы-посредники для получения результатов. Мы не передаем никаких других данных третьим лицам.",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "Аналитические данные могут передаваться или продаваться сторонним партнёрам, как описано в этой политике.",
     "analytics_provider": "Аналитика предоставляется через {provider}.",
     "analytics_none": "Сторонний поставщик аналитики не настроен.",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "Хранение и передача данных",
     "data_storage_intro": "Все данные, которые мы храним, надёжно защищены и хранятся только столько времени, сколько необходимо.",
     "data_storage_never_sold": "Мы не передаём и не продаём хранимые данные третьим сторонам сверх того, что требуется для предоставления результатов поиска.",
@@ -1645,6 +1669,12 @@
     "last_updated": "Последнее обновление: {date}",
     "acceptance_heading": "1. Принятие условий",
     "acceptance_description": "Получая доступ к {app_name} (\"the Service\") или используя его, вы соглашаетесь соблюдать настоящие Условия обслуживания. Если вы не согласны с этими условиями, пожалуйста, не используйте Service.",
+    "governing_law_description": "Применяются законы США без учёта коллизионных норм, если собственные условия оператора не указывают другую юрисдикцию.",
+    "governing_law_heading": "Применимое право",
+    "liability_description": "Сервис предоставляется как есть, без каких-либо гарантий. В пределах, разрешённых законом, оператор не отвечает за убытки, возникшие в связи с его использованием.",
+    "liability_heading": "Ответственность",
+    "acceptable_use_description": "Запрещено незаконно использовать сервис, вредить другим людям, обходить ограничения частоты запросов или контроля доступа, а также тестировать за пределами политики безопасности по адресу /server/security/policy.",
+    "acceptable_use_heading": "Допустимое использование",
     "description_heading": "2. Описание сервиса",
     "description_body": "{app_name} — это метапоисковая система, уважающая конфиденциальность и агрегирующая результаты из нескольких поисковых систем. Service предоставляется \"as is\" без каких-либо гарантий.",
     "user_conduct_heading": "3. Поведение пользователя",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. Изменения сервиса",
     "modifications_description": "Мы оставляем за собой право изменять, приостанавливать или прекращать работу Service в любое время без уведомления. Мы не несем ответственности перед вами или любой третьей стороной за любое изменение, приостановку или прекращение.",
-    "changes_heading": "10. Изменения условий",
-    "changes_description": "Мы можем время от времени обновлять настоящие Условия обслуживания. Мы будем уведомлять пользователей о любых существенных изменениях, обновляя дату \"Last updated\". Ваше дальнейшее использование Service после изменений означает принятие новых условий.",
+    "changes_heading": "Изменения",
+    "changes_description": "Эти условия могут изменяться. Текущий текст на этой странице действует с момента публикации.",
     "contact_prefix": "Если у вас есть вопросы о настоящих Условиях обслуживания, пожалуйста ",
     "contact_suffix": "."
   },
   "help": {
+    "i2p": {
+      "heading": "Доступ через I2P",
+      "intro": "Приложение доступно как eepsite в сети I2P для повышения конфиденциальности.",
+      "address_heading": "Адрес I2P",
+      "how_to_heading": "Как подключиться",
+      "step_install": "Установите",
+      "step_or": "или",
+      "step_connect": "и дождитесь подключения к сети.",
+      "step_proxy": "Настройте браузер для использования HTTP-прокси I2P по адресу",
+      "step_address": "Скопируйте адрес .b32.i2p выше и вставьте его в адресную строку браузера.",
+      "note": "I2P повышает конфиденциальность, направляя соединение через сеть. Eepsite доступны по http://; туннель I2P шифрует транспорт, поэтому сертификат TLS не используется."
+    },
+    "troubleshooting": {
+      "heading": "Устранение неполадок",
+      "search": "Попробуйте более общий запрос или удалите операторы; выбранная система может не найти результатов. Если система временно недоступна, повторите попытку позже.",
+      "access": "Если раздел Tor отсутствует, проверьте командой search --maintenance tor status, что служба работает и onion-адрес опубликован. Если отсутствует I2P, попросите оператора проверить провайдера и адрес.",
+      "alerts": "Если ссылка управления оповещением не открывается, используйте полную ссылку из сообщения подтверждения; токен может быть недействительным или оповещение удалено. Исправьте поле, указанное в ошибке формы, и отправьте снова."
+    },
     "page_title": "Справка",
     "title": "Справка и документация",
     "subtitle": "Узнайте, как извлечь максимум из {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "Дополнительная информация",
     "policy_title": "Политика раскрытия информации",
     "policy_scope_heading": "Область действия",
-    "policy_scope_description": "Эта политика распространяется на данный развёрнутый экземпляр и предоставляемые им сервисы.",
+    "policy_scope_description": "Приложение на {fqdn}, включая его API, входит в область действия политики.",
+    "policy_reporting_description": "Сообщайте о проблемах конфиденциально через страницу безопасности.",
+    "policy_reporting_heading": "Сообщение",
+    "policy_out_of_scope_item_headers": "Отсутствие рекомендуемых заголовков на несекретных страницах",
+    "policy_out_of_scope_item_scanner": "Результаты автоматического сканирования без доказанного влияния",
+    "policy_in_scope_item_i2p": "Адрес I2P: {address}",
+    "policy_in_scope_item_tor": "Адрес Tor: {address}",
+    "policy_in_scope_item_host": "Другой настроенный хост: {host}",
     "policy_disclosure_window_heading": "Окно скоординированного раскрытия",
-    "policy_disclosure_window_description": "Мы просим исследователей предоставить нам до 90 дней на анализ и устранение сообщённой проблемы до какого-либо публичного раскрытия, если не согласована другая дата.",
+    "policy_disclosure_window_description": "Сообщайте о проблемах конфиденциально через страницу безопасности и предоставляйте 90 дней с даты отчёта для согласованного раскрытия; срок завершается раньше после выпуска исправления и может быть продлён по соглашению.",
     "policy_in_scope_heading": "В области действия",
     "policy_in_scope_item_deployed": "Этот развёрнутый экземпляр и его публичные конечные точки",
     "policy_in_scope_item_api": "Публичный API",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "Тестирование физической безопасности",
     "policy_out_of_scope_item_third_party": "Сторонние сервисы, которые мы не контролируем",
     "policy_safe_harbor_heading": "Безопасная гавань",
-    "policy_safe_harbor_description": "Мы не будем предпринимать юридических действий против исследователей, которые добросовестно стараются соблюдать эту политику, ответственно сообщают об уязвимостях и избегают нарушений конфиденциальности, уничтожения данных или прерывания обслуживания.",
+    "policy_safe_harbor_description": "Добросовестное исследование, соблюдающее эту политику, не нарушающее конфиденциальность и работу сервиса, ограниченное необходимым для подтверждения проблемы и прекращаемое после подтверждения, разрешено. За такое исследование юридические меры не последуют.",
     "policy_contact_prefix": "Вопросы по этой политике можно отправить через страницу",
     "policy_contact_suffix": ".",
     "thanks_title": "Благодарности за безопасность",
@@ -2186,6 +2241,8 @@
     "report_status_title": "Статус отчёта о безопасности",
     "report_status_tracking_id_label": "Идентификатор отслеживания:",
     "report_status_state_label": "Статус:",
+    "report_status_comment_label": "Комментарий сопровождающего",
+    "report_status_disclosure_date_label": "Ожидаемая дата раскрытия",
     "report_status_state_received": "Получено",
     "report_status_state_triaged": "Проанализировано",
     "report_status_state_confirmed": "Подтверждено",
@@ -2232,6 +2289,7 @@
       "label_current_version": "Текущая версия:",
       "label_new_version": "Новая версия:",
       "label_release_date": "Дата выпуска:",
+      "label_channel": "Канал выпуска:",
       "label_release_notes": "Примечания к выпуску:",
       "label_view_update": "Просмотреть обновление:",
       "manual_command": "Команда ручного обновления: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "Обновление установлено — {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "Не удалось обновить - {app_name}",
         "body": "ОБНОВЛЕНИЕ НЕ УДАЛОСЬ\n\nОт: {app_name} ({fqdn})\nВремя: {timestamp}\n\nНе удалось установить обновление {version}.\nПричина: {error}\n\nПредыдущая версия продолжает работать.\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "Обновление подготовлено - {app_name}",
+        "body": "ОБНОВЛЕНИЕ ПОДГОТОВЛЕНО\n\nОт: {app_name} ({fqdn})\nВремя: {timestamp}\n\nОбновление {version} проверено и подготовлено к установке.\n\nПерезапустите службу, чтобы применить обновление.\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

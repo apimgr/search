@@ -44,7 +44,8 @@
     "dismiss": "閉じる",
     "upload": "Upload",
     "app_name": "Search",
-    "other": "その他"
+    "other": "その他",
+    "details": "詳細"
   },
   "auth": {
     "login": "ログイン",
@@ -300,6 +301,7 @@
       "expired": "期限切れ",
       "revoked": "取り消し済み",
       "primary_revealed": "プライマリトークンを表示しました",
+      "primary_created": "プライマリートークンを作成しました",
       "primary_rotated": "プライマリトークンをローテーションしました",
       "linked_created": "リンク済みトークンを作成しました",
       "linked_revealed": "リンク済みトークンを表示しました",
@@ -309,7 +311,7 @@
       "expiry_90d": "90日",
       "expiry_1y": "1年",
       "shown_once": "このページの読み込み時に一度だけ表示されます。",
-      "primary_help": "アラートに完全にアクセスできます。このトークンは秘密にしてください。",
+      "primary_help": "{resources}に完全にアクセスできます。このトークンは秘密にしてください。",
       "name_help": "例: MCP クライアント",
       "expiry_custom": "カスタム日付",
       "custom_date": "カスタム日付",
@@ -317,7 +319,7 @@
       "create": "トークンを作成",
       "this_browser": "このブラウザー",
       "saved_in_browser": "所有者トークンはこのブラウザーに保存されています。",
-      "forget_note": "このブラウザーを忘れると、保存された所有者トークンの Cookie が削除されます。アラートは削除されません。",
+      "forget_note": "このブラウザーを忘れると、保存された所有者トークンの Cookie が削除されます。{resources}は削除されません。",
       "forget_saved_token": "保存済みトークンを忘れる",
       "forget_confirm": "このブラウザーに保存された所有者トークンを忘れますか？",
       "no_linked_tokens": "リンク済みトークンはまだありません。",
@@ -327,7 +329,13 @@
       "forgot_saved_token": "保存済み所有者トークンを削除しました",
       "linked_revoked": "リンク済みトークンを失効しました",
       "linked_updated": "リンク済みトークンを更新しました",
-      "reveal": "トークンを表示"
+      "reveal": "トークンを表示",
+      "new_token": "新しいトークン",
+      "revoke_primary_heading": "プライマリートークンを失効",
+      "revoke_primary_summary": "リンク済みトークン{linked_count}個と{resources}{resource_count}件が削除されます。リンク済みトークンで作成したものも含まれます。",
+      "revoke_primary_button": "プライマリートークンを失効してすべて削除",
+      "revoke_primary_confirm": "確認のため、プライマリートークンの末尾4文字（{last4}）を入力してください",
+      "primary_revoked": "プライマリートークンを失効しました"
     },
     "font_size": "フォントサイズ",
     "font_size_small": "小",
@@ -1499,7 +1507,7 @@
     "subject_placeholder": "ご用件は何ですか？",
     "message_label": "メッセージ",
     "message_placeholder": "メッセージ...",
-    "verification_question": "確認: {a} + {b} はいくつですか？",
+    "verification_question": "確認: {a} {operator} {b} はいくつですか？",
     "answer_placeholder": "回答",
     "send_message": "メッセージを送信",
     "security_description": "これは協調的な脆弱性開示のための報告フォームです。できるだけ詳細な情報をご記入ください。",
@@ -1541,7 +1549,7 @@
     "confirm_email_statement": "このメールアドレスは正しく、広告、勧誘、迷惑メールではなく正当な報告です。",
     "form_scope_notice": "このフォームは、セキュリティ報告、このサイト上のURLに関する規約違反、DMCA通知、プライバシー請求専用です。サポート、バグ報告、機能要望、一般的な質問には使用できません。",
     "honeypot_label": "この欄は空のままにしてください",
-    "type_abuse": "不正行為",
+    "type_abuse": "不正行為を報告",
     "type_dmca": "DMCA",
     "type_privacy": "プライバシー請求",
     "reported_url_label": "報告対象のURL",
@@ -1564,7 +1572,12 @@
     "security_issues_intro": "脆弱性を報告する場合は、こちらの",
     "abuse_reports_heading": "不正行為の報告",
     "abuse_reports_intro": "不正なコンテンツや規約違反を報告するには、上の「不正行為」を選択してください。DMCA通知を送るには、上の「DMCA」を選択してください。",
-    "abuse_reports_email": "または {email} にメールしてください"
+    "abuse_reports_email": "または {email} にメールしてください",
+    "captcha_label": "人間による確認",
+    "choose_type_heading": "報告の種類を選択",
+    "form_details_heading": "報告の詳細",
+    "purpose_heading": "このフォームの用途",
+    "reported_url_help": "このサイトのページ（例：https://{fqdn}/...）"
   },
   "privacy": {
     "data_collection_heading": "データ収集",
@@ -1581,6 +1594,9 @@
     "data_usage_item_aggregate": "結果を集約して表示する",
     "data_usage_item_preferences": "設定（テーマ、言語）を記憶する",
     "data_retention_heading": "データの保持",
+    "retention": {
+      "period": "作成したリソースは、有効期限が切れるか、所有者トークンで削除するまで保持されます。設定はブラウザーの Cookie にのみ保存されます。運用ログは最長 30 日間保持されます。匿名化された分析データは最長 12 か月間保持される場合があります。"
+    },
     "data_retention_description": "検索クエリや個人データは保持しません。セッションデータは一時的なもので、ブラウザを閉じるかセッションの有効期限が切れると削除されます。",
     "third_parties_heading": "第三者",
     "third_parties_description": "検索結果を取得するため、検索クエリは上流の検索エンジンに転送されます。その他のデータを第三者と共有することはありません。",
@@ -1612,6 +1628,14 @@
     "analytics_suffix_sold": "アナリティクスデータは、本ポリシーに記載のとおり第三者パートナーと共有または販売される場合があります。",
     "analytics_provider": "アナリティクスは{provider}によって提供されます。",
     "analytics_none": "第三者のアナリティクスプロバイダーは設定されていません。",
+    "additional_information_heading": "Additional Privacy Information",
+    "data_security_heading": "Data Security",
+    "connection_tls": "Connections are encrypted with HTTPS/TLS.",
+    "connection_no_tls": "This site is currently served without TLS.",
+    "data_stored_on_server": "All data is stored on this server.",
+    "data_stored_off_server": "Some data is stored with third-party services as described below.",
+    "data_sharing_heading": "When Data May Be Shared",
+    "data_sharing_none": "No data sharing conditions are configured.",
     "data_storage_heading": "データの保存と共有",
     "data_storage_intro": "保持するすべてのデータは安全に保存され、必要な期間のみ保持されます。",
     "data_storage_never_sold": "検索結果の提供に必要な範囲を超えて、保存データを第三者と共有または販売することはありません。",
@@ -1645,6 +1669,12 @@
     "last_updated": "最終更新日: {date}",
     "acceptance_heading": "1. 規約への同意",
     "acceptance_description": "{app_name} (\"the Service\") にアクセスまたは使用することにより、本利用規約に拘束されることに同意したものとみなされます。これらの条件に同意しない場合は、Service を使用しないでください。",
+    "governing_law_description": "運営者独自の規約に別の定めがない限り、抵触法の規則にかかわらず米国法が適用されます。",
+    "governing_law_heading": "準拠法",
+    "liability_description": "本サービスは現状有姿で提供され、いかなる保証もありません。法律で認められる範囲で、運営者は利用に起因する損失について責任を負いません。",
+    "liability_heading": "責任",
+    "acceptable_use_description": "違法な利用、他者への加害、レート制限やアクセス制御の回避、または /server/security/policy のセキュリティポリシーを超えるテストは禁止します。",
+    "acceptable_use_heading": "適切な利用",
     "description_heading": "2. サービスの説明",
     "description_body": "{app_name} は、複数の検索エンジンの結果を集約する、プライバシーに配慮したメタサーチエンジンです。Service はいかなる種類の保証もなく \"as is\" で提供されます。",
     "user_conduct_heading": "3. ユーザーの行為",
@@ -1671,12 +1701,30 @@
     "limitation_description": "IN NO EVENT SHALL THE OPERATORS OF {app_name} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
     "modifications_heading": "9. サービスの変更",
     "modifications_description": "当社は、予告なくいつでも Service を変更、一時停止、または終了する権利を留保します。当社は、いかなる変更、一時停止、または終了についても、あなたまたは第三者に対して責任を負いません。",
-    "changes_heading": "10. 規約の変更",
-    "changes_description": "当社は、本利用規約を随時更新することがあります。重要な変更があった場合は、\"Last updated\" 日付を更新することでユーザーに通知します。変更後も Service の利用を継続した場合、新しい規約に同意したものとみなされます。",
+    "changes_heading": "変更",
+    "changes_description": "本規約は変更される場合があります。このページに掲載された現行の文面は、公開時点から適用されます。",
     "contact_prefix": "本利用規約についてご質問がある場合は、",
     "contact_suffix": "。"
   },
   "help": {
+    "i2p": {
+      "heading": "I2P アクセス",
+      "intro": "プライバシー保護を強化するため、このアプリケーションは I2P eepsite として利用できます。",
+      "address_heading": "I2P アドレス",
+      "how_to_heading": "接続方法",
+      "step_install": "インストールして",
+      "step_or": "または",
+      "step_connect": "ネットワークに接続されるまで待ちます。",
+      "step_proxy": "ブラウザーで I2P HTTP プロキシを次のアドレスに設定します:",
+      "step_address": "上記の .b32.i2p アドレスをコピーして、ブラウザーのアドレスバーに貼り付けます。",
+      "note": "I2P はネットワーク経由で接続をルーティングし、プライバシーを強化します。eepsite は http:// で配信され、I2P トンネルが通信を暗号化するため、TLS 証明書は使用しません。"
+    },
+    "troubleshooting": {
+      "heading": "トラブルシューティング",
+      "search": "より広い検索語を試すか演算子を外してください。選択したエンジンで結果がない場合があります。エンジンが一時的に利用できない場合は後でもう一度お試しください。",
+      "access": "Tor セクションがない場合、search --maintenance tor status でサービス稼働と onion アドレスの公開を確認します。I2P がない場合は管理者にプロバイダーと公開アドレスの状態を確認してもらいます。",
+      "alerts": "アラート管理リンクを開けない場合は確認メッセージの完全なリンクを使用してください。トークンが無効か、アラートが削除された可能性があります。フォームエラーに示された項目を修正して再送信してください。"
+    },
     "page_title": "Help",
     "title": "Help & Documentation",
     "subtitle": "Learn how to get the most out of {app_name}",
@@ -2164,9 +2212,16 @@
     "links_heading": "詳しい情報",
     "policy_title": "開示ポリシー",
     "policy_scope_heading": "対象範囲",
-    "policy_scope_description": "本ポリシーは、このデプロイされたインスタンスおよびそれが公開するサービスに適用されます。",
+    "policy_scope_description": "{fqdn} で提供されるアプリケーションとその API が対象範囲です。",
+    "policy_reporting_description": "セキュリティ概要から非公開で報告してください。",
+    "policy_reporting_heading": "報告",
+    "policy_out_of_scope_item_headers": "機密でないページのベストプラクティスヘッダー不足",
+    "policy_out_of_scope_item_scanner": "影響が実証されていない自動スキャナーの出力",
+    "policy_in_scope_item_i2p": "I2P アドレス: {address}",
+    "policy_in_scope_item_tor": "Tor アドレス: {address}",
+    "policy_in_scope_item_host": "追加設定ホスト: {host}",
     "policy_disclosure_window_heading": "協調的開示までの期間",
-    "policy_disclosure_window_description": "別途合意した日がない限り、公開前に報告された問題の分析と修正のために最大90日間の猶予をいただくようお願いしています。",
+    "policy_disclosure_window_description": "セキュリティ概要から非公開で報告し、報告日から協調開示まで90日をお待ちください。修正の公開時点で期間は終了し、合意により延長できます。",
     "policy_in_scope_heading": "対象範囲内",
     "policy_in_scope_item_deployed": "このデプロイされたインスタンスとその公開エンドポイント",
     "policy_in_scope_item_api": "公開API",
@@ -2177,7 +2232,7 @@
     "policy_out_of_scope_item_physical": "物理的セキュリティテスト",
     "policy_out_of_scope_item_third_party": "当方が管理していないサードパーティサービス",
     "policy_safe_harbor_heading": "セーフハーバー",
-    "policy_safe_harbor_description": "本ポリシーを誠実に遵守し、脆弱性を責任を持って報告し、プライバシー侵害・データ破壊・サービス中断を回避する研究者に対して、法的措置を取ることはありません。",
+    "policy_safe_harbor_description": "本ポリシーに従い、プライバシー侵害やサービス妨害を避け、問題の実証に必要な範囲だけにアクセスし、実証後に停止する誠実な調査は許可されます。その調査について法的措置は行いません。",
     "policy_contact_prefix": "本ポリシーに関するご質問は、",
     "policy_contact_suffix": "ページからお送りください。",
     "thanks_title": "セキュリティ謝辞",
@@ -2186,6 +2241,8 @@
     "report_status_title": "セキュリティ報告のステータス",
     "report_status_tracking_id_label": "追跡ID:",
     "report_status_state_label": "ステータス:",
+    "report_status_comment_label": "保守担当者のコメント",
+    "report_status_disclosure_date_label": "予定公開日",
     "report_status_state_received": "受付済み",
     "report_status_state_triaged": "トリアージ済み",
     "report_status_state_confirmed": "確認済み",
@@ -2232,6 +2289,7 @@
       "label_current_version": "現在のバージョン:",
       "label_new_version": "新しいバージョン:",
       "label_release_date": "リリース日:",
+      "label_channel": "リリースチャンネル:",
       "label_release_notes": "リリースノート:",
       "label_view_update": "更新を表示:",
       "manual_command": "手動更新コマンド: {command}"
@@ -2308,7 +2366,7 @@
       },
       "update_available": {
         "subject": "{subject_prefix} - {app_name}",
-        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
+        "body": "{heading}\n\n{label_from} {app_name} ({fqdn})\n{label_time} {timestamp}\n\n{intro}\n\n{label_current_version} {current_version}\n{label_new_version} {new_version}\n{label_channel} {channel}\n{label_release_date} {release_date}\n\n{label_release_notes}\n{release_notes}\n\n{label_view_update} {update_url}\n{manual_update_command}\n\n--\n{app_name}\n{app_url}"
       },
       "update_installed": {
         "subject": "アップデートがインストールされました - {app_name}",
@@ -2317,6 +2375,10 @@
       "update_failed": {
         "subject": "更新に失敗しました - {app_name}",
         "body": "更新に失敗しました\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\n更新 {version} をインストールできませんでした。\n理由: {error}\n\n以前のバージョンは引き続き実行されています。\n\n--\n{app_name}\n{app_url}"
+      },
+      "update_staged": {
+        "subject": "更新を準備しました - {app_name}",
+        "body": "更新を準備しました\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\n更新 {version} の検証が完了し、インストールの準備ができました。\n\n更新を適用するにはサービスを再起動してください。\n\n--\n{app_name}\n{app_url}"
       }
     }
   },
@@ -3308,6 +3370,8 @@
     },
     "main": {
       "service_heading": "Service action: {action}",
+      "service_action_required": "Error: a service action is required",
+      "maintenance_action_required": "Error: a maintenance action is required",
       "failed_load_config": "Failed to load configuration: {error}",
       "installing_service": "Installing {os} system service...",
       "privilege_escalation_failed": "Privilege escalation failed: {error}",

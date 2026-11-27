@@ -46,7 +46,8 @@ var (
 )
 
 type Manager struct {
-	db           *sql.DB
+	db           database.Reader
+	legacyDB     *sql.DB
 	writer       *database.DB
 	serverConfig *config.Config
 	aggregator   *search.Aggregator
@@ -137,7 +138,7 @@ type Feed struct {
 	FeedURL string
 }
 
-func NewManager(db *sql.DB, serverConfig *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
+func NewManager(db database.Reader, serverConfig *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
 	return &Manager{
 		db:           db,
 		serverConfig: serverConfig,
@@ -156,19 +157,22 @@ func NewManager(db *sql.DB, serverConfig *config.Config, aggregator *search.Aggr
 }
 
 func NewManagerWithDB(db *database.DB, serverConfig *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
-	manager := NewManager(db.ReadSQL(), serverConfig, aggregator, mailer)
+	manager := NewManager(db.Read(context.Background()), serverConfig, aggregator, mailer)
 	manager.writer = db
 	return manager
 }
 
 func (m *Manager) execWrite(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	if m.writer == nil {
-		return m.db.ExecContext(ctx, query, args...)
+		if m.legacyDB == nil {
+			return nil, errors.New("alert write store unavailable")
+		}
+		return database.ExecContext(ctx, m.legacyDB, query, args...)
 	}
 	var result sql.Result
 	err := m.writer.Write(ctx, func(tx *sql.Tx) error {
 		var err error
-		result, err = tx.ExecContext(ctx, query, args...)
+		result, err = database.ExecContext(ctx, tx, query, args...)
 		return err
 	})
 	return result, err
@@ -452,7 +456,7 @@ func (m *Manager) Feed(ctx context.Context, rssToken string, limit int) (*Feed, 
 	if err != nil {
 		return nil, err
 	}
-	rows, err := m.db.QueryContext(ctx, `
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, `
 		SELECT id, title, url, content, engine, published_at, first_seen_at, notified_email_at, notified_webhook_at
 		FROM search_alert_results
 		WHERE alert_id = ?
@@ -745,7 +749,7 @@ func (m *Manager) enforceCreateRateLimit(ctx context.Context, ip string) error {
 		return nil
 	}
 	var count int
-	err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM search_alerts WHERE created_from_ip = ? AND created_at >= ?`, ip, time.Now().UTC().Add(-1*time.Hour)).Scan(&count)
+	err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT COUNT(*) FROM search_alerts WHERE created_from_ip = ? AND created_at >= ?`, ip, time.Now().UTC().Add(-1*time.Hour)).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("check alert rate limit: %w", err)
 	}
@@ -756,7 +760,7 @@ func (m *Manager) enforceCreateRateLimit(ctx context.Context, ip string) error {
 }
 
 func (m *Manager) loadAlertsByFrequency(ctx context.Context, frequency Frequency) ([]*Alert, error) {
-	rows, err := m.db.QueryContext(ctx, `
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, `
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
 		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
 		       status, base_url, last_checked_at, last_sent_at,
@@ -783,7 +787,7 @@ func (m *Manager) loadAlertsByFrequency(ctx context.Context, frequency Frequency
 // ListAll returns every alert in the database, ordered by creation time descending.
 // Intended for operator use only — callers must enforce auth before invoking.
 func (m *Manager) ListAll(ctx context.Context) ([]*Alert, error) {
-	rows, err := m.db.QueryContext(ctx, `
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, `
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
 		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
 		       status, base_url, last_checked_at, last_sent_at,
@@ -816,7 +820,7 @@ func (m *Manager) ListByOwner(ctx context.Context, ownerID string) ([]*Alert, er
 	if m.writer != nil {
 		table = database.ServerTableName(m.writer, table)
 	}
-	rows, err := m.db.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, fmt.Sprintf(`
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
 		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
 		       status, base_url, last_checked_at, last_sent_at,
@@ -842,6 +846,31 @@ func (m *Manager) ListByOwner(ctx context.Context, ownerID string) ([]*Alert, er
 	return alerts, rows.Err()
 }
 
+// CountOwnerResources returns the alerts and retained result rows owned by one
+// identity, matching the resources deleted by primary-token revocation.
+func (m *Manager) CountOwnerResources(ctx context.Context, ownerID string) (int64, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return 0, errors.New("owner id is required")
+	}
+	alertsTable := "search_alerts"
+	resultsTable := "search_alert_results"
+	if m.writer != nil {
+		alertsTable = database.ServerTableName(m.writer, alertsTable)
+		resultsTable = database.ServerTableName(m.writer, resultsTable)
+	}
+	var alerts, results int64
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery,
+		fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE owner_id = ?`, alertsTable), ownerID).Scan(&alerts); err != nil {
+		return 0, fmt.Errorf("count owner alerts: %w", err)
+	}
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutComplexQuery,
+		fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE alert_id IN (SELECT id FROM %s WHERE owner_id = ?)`, resultsTable, alertsTable), ownerID).Scan(&results); err != nil {
+		return 0, fmt.Errorf("count owner alert results: %w", err)
+	}
+	return alerts + results, nil
+}
+
 func (m *Manager) getAlertByTokenHash(ctx context.Context, column, tokenHash string) (*Alert, error) {
 	query := fmt.Sprintf(`
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
@@ -850,7 +879,7 @@ func (m *Manager) getAlertByTokenHash(ctx context.Context, column, tokenHash str
 		       last_error, created_from_ip, created_at, paused_at
 		FROM search_alerts WHERE %s = ?
 	`, column)
-	row := m.db.QueryRowContext(ctx, query, tokenHash)
+	row := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, query, tokenHash)
 	alert, err := scanAlert(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -882,7 +911,7 @@ func (m *Manager) pendingResults(ctx context.Context, alertID, column string) ([
 		WHERE alert_id = ? AND %s IS NULL
 		ORDER BY first_seen_at ASC
 	`, column)
-	rows, err := m.db.QueryContext(ctx, query, alertID)
+	rows, err := database.QueryContext(ctx, m.db, database.TimeoutSimpleQuery, query, alertID)
 	if err != nil {
 		return nil, err
 	}
@@ -933,7 +962,7 @@ func (m *Manager) WebhookSecretForManageToken(ctx context.Context, manageToken s
 
 func (m *Manager) ensureWebhookSecret(ctx context.Context, alertID string) error {
 	var encrypted string
-	if err := m.db.QueryRowContext(ctx, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alertID).Scan(&encrypted); err != nil {
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alertID).Scan(&encrypted); err != nil {
 		return err
 	}
 	if encrypted != "" {
@@ -955,7 +984,7 @@ func (m *Manager) ensureWebhookSecret(ctx context.Context, alertID string) error
 
 func (m *Manager) webhookSecret(ctx context.Context, alert *Alert) (string, error) {
 	var encrypted string
-	if err := m.db.QueryRowContext(ctx, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alert.ID).Scan(&encrypted); err != nil {
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alert.ID).Scan(&encrypted); err != nil {
 		return "", err
 	}
 	creds, err := ssl.DecryptCredentials(encrypted, m.serverConfig.Server.SecretKey)
@@ -984,7 +1013,7 @@ func (m *Manager) alertToken(ctx context.Context, alertID, column string) (strin
 		return "", fmt.Errorf("invalid token column: %s", column)
 	}
 	var encrypted string
-	if err := m.db.QueryRowContext(ctx, query, alertID).Scan(&encrypted); err != nil {
+	if err := database.QueryRowContext(ctx, m.db, database.TimeoutSimpleQuery, query, alertID).Scan(&encrypted); err != nil {
 		return "", err
 	}
 	return decryptAlertToken(encrypted, m.serverConfig.Server.SecretKey)

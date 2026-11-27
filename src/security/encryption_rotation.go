@@ -152,7 +152,7 @@ func ReencryptQRShortlinks(ctx context.Context, db *database.DB, currentKey, pre
 		type item struct{ code, encrypted string }
 		var batch []item
 		err := db.Write(ctx, func(tx *sql.Tx) error {
-			rows, err := tx.QueryContext(ctx, fmt.Sprintf("SELECT code,target_encrypted FROM %s WHERE code>? ORDER BY code LIMIT 500", table), cursor)
+			rows, err := database.QueryContext(ctx, tx, database.TimeoutBulk, fmt.Sprintf("SELECT code,target_encrypted FROM %s WHERE code>? ORDER BY code LIMIT 500", table), cursor)
 			if err != nil {
 				return err
 			}
@@ -192,7 +192,7 @@ func ReencryptQRShortlinks(ctx context.Context, db *database.DB, currentKey, pre
 				if err != nil {
 					return fmt.Errorf("encrypt QR short link %s: %w", row.code, err)
 				}
-				result, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET target_encrypted=? WHERE code=? AND target_encrypted=?", table), replacement, row.code, row.encrypted)
+				result, err := database.ExecContext(ctx, tx, fmt.Sprintf("UPDATE %s SET target_encrypted=? WHERE code=? AND target_encrypted=?", table), replacement, row.code, row.encrypted)
 				if err != nil {
 					return fmt.Errorf("update QR short link %s: %w", row.code, err)
 				}

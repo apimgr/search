@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,152 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+func newTestScheduler(db *sql.DB, nodeID string) *Scheduler {
+	return newScheduler(db, nil, db, nodeID)
+}
+
+func TestRegisteredTaskIDsAreSorted(t *testing.T) {
+	s := &Scheduler{tasks: map[TaskID]*Task{
+		TaskUpdateCheck:   {},
+		TaskSSLRenewal:    {},
+		TaskDatabaseCheck: {},
+	}}
+	want := []string{"database_check", "ssl_renewal", "update_check"}
+	if got := s.registeredTaskIDs(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("registeredTaskIDs() = %v, want %v", got, want)
+	}
+}
+
+func TestBackupHourlyDisabledStatePersistsAcrossSchedulerRestart(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	handlers := &TaskHandlers{BackupHourly: func(context.Context) error { return nil }}
+	first := newTestScheduler(db, "node1")
+	first.RegisterBuiltinTasks(handlers)
+	var persisted bool
+	if err := db.QueryRow(`SELECT enabled FROM scheduler_tasks WHERE id = ?`, TaskBackupHourly).Scan(&persisted); err != nil {
+		t.Fatalf("read persisted hourly task state: %v", err)
+	}
+	if persisted {
+		t.Fatal("backup_hourly persisted enabled, want disabled by default")
+	}
+
+	restarted := newTestScheduler(db, "node1")
+	restarted.RegisterBuiltinTasks(handlers)
+	hourly, err := restarted.GetTask(TaskBackupHourly)
+	if err != nil {
+		t.Fatalf("get restored hourly task: %v", err)
+	}
+	if hourly.Enabled {
+		t.Fatal("backup_hourly restored enabled, want disabled")
+	}
+}
+
+func TestSchedulerInitRenamesLegacyTaskColumnsWithoutLosingState(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`CREATE TABLE scheduler_tasks (
+		task_id TEXT PRIMARY KEY, task_name TEXT NOT NULL, schedule TEXT NOT NULL,
+		last_run DATETIME, last_status TEXT, last_error TEXT, next_run DATETIME,
+		run_count INTEGER DEFAULT 0, fail_count INTEGER DEFAULT 0, enabled INTEGER DEFAULT 1,
+		retry_count INTEGER DEFAULT 0, next_retry DATETIME, locked_by TEXT, locked_at DATETIME)`); err != nil {
+		t.Fatalf("create legacy scheduler table: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO scheduler_tasks (task_id, task_name, schedule, run_count)
+		VALUES ('backup_daily', 'Daily Backup', '0 2 * * *', 7)`); err != nil {
+		t.Fatalf("insert legacy task row: %v", err)
+	}
+
+	_ = newTestScheduler(db, "node1")
+	columns, err := db.Query(`PRAGMA table_info(scheduler_tasks)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[string]bool)
+	for columns.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := columns.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			columns.Close()
+			t.Fatal(err)
+		}
+		seen[name] = true
+	}
+	if err := errors.Join(columns.Err(), columns.Close()); err != nil {
+		t.Fatalf("read scheduler columns: %v", err)
+	}
+	for _, name := range []string{"id", "name"} {
+		if !seen[name] {
+			t.Errorf("canonical scheduler_tasks column %q missing", name)
+		}
+	}
+	for _, name := range []string{"task_id", "task_name"} {
+		if seen[name] {
+			t.Errorf("legacy scheduler_tasks column %q remains", name)
+		}
+	}
+	var id, name string
+	var runs int
+	if err := db.QueryRow(`SELECT id, name, run_count FROM scheduler_tasks`).Scan(&id, &name, &runs); err != nil {
+		t.Fatalf("read migrated task: %v", err)
+	}
+	if id != "backup_daily" || name != "Daily Backup" || runs != 7 {
+		t.Errorf("migrated row = (%q, %q, %d), want (backup_daily, Daily Backup, 7)", id, name, runs)
+	}
+}
+
+func TestSchedulerInitPreservesLegacyHistoryKeyAndReadsCanonicalFields(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`CREATE TABLE scheduler_history (
+		id TEXT PRIMARY KEY, task_id TEXT NOT NULL, ran_at DATETIME NOT NULL,
+		finished_at DATETIME, success INTEGER NOT NULL DEFAULT 0, error TEXT)`); err != nil {
+		t.Fatalf("create legacy history table: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO scheduler_history(id, task_id, ran_at, finished_at, success, error)
+		VALUES ('legacy-history-id', 'backup_daily', '2026-01-02 03:04:05', '2026-01-02 03:04:06', 1, '')`); err != nil {
+		t.Fatalf("insert legacy history row: %v", err)
+	}
+
+	s := newTestScheduler(db, "node1")
+	entries, err := s.GetHistory(TaskBackupDaily, 10)
+	if err != nil {
+		t.Fatalf("read migrated history: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Status != string(StatusSuccess) || !entries[0].Success || entries[0].Duration != time.Second {
+		t.Fatalf("migrated history entries = %#v, want one successful one-second run", entries)
+	}
+	now := time.Now()
+	s.recordHistory(&Task{ID: TaskBackupDaily}, now, now.Add(25*time.Millisecond), StatusSuccess, "")
+	var successRows int
+	if err := db.QueryRow("SELECT COUNT(*) FROM scheduler_history WHERE success = 1 AND status = 'success'").Scan(&successRows); err != nil {
+		t.Fatalf("read appended legacy history: %v", err)
+	}
+	if successRows != 2 {
+		t.Fatalf("legacy success rows = %d, want 2 including appended run", successRows)
+	}
+	columns, err := s.inspectTableColumns(context.Background(), "scheduler_history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if columns["ran_at"] != "" || columns["started_at"] == "" || columns["duration_ms"] == "" {
+		t.Errorf("history migration columns = %v, want canonical started_at/duration_ms without ran_at", columns)
+	}
+}
 
 func TestTaskIDConstants(t *testing.T) {
 	tests := []struct {
@@ -836,6 +983,34 @@ func TestRegisterBuiltinTasksNilHandlers(t *testing.T) {
 	}
 }
 
+func TestModeBoundHealthTasksRequireAvailableHandlers(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		id      TaskID
+		install func(*TaskHandlers)
+	}{
+		{name: "Tor", id: TaskTorHealth, install: func(h *TaskHandlers) { h.TorHealth = func(context.Context) error { return nil } }},
+		{name: "I2P", id: TaskI2PHealth, install: func(h *TaskHandlers) { h.I2PHealth = func(context.Context) error { return nil } }},
+	} {
+		t.Run(test.name+" unavailable", func(t *testing.T) {
+			s := NewScheduler(nil, "node1")
+			s.RegisterBuiltinTasks(&TaskHandlers{})
+			if _, err := s.GetTask(test.id); err == nil {
+				t.Fatalf("mode-bound task %q registered without an available handler", test.id)
+			}
+		})
+		t.Run(test.name+" available", func(t *testing.T) {
+			s := NewScheduler(nil, "node1")
+			handlers := &TaskHandlers{}
+			test.install(handlers)
+			s.RegisterBuiltinTasks(handlers)
+			if _, err := s.GetTask(test.id); err != nil {
+				t.Fatalf("mode-bound task %q not registered with an available handler: %v", test.id, err)
+			}
+		})
+	}
+}
+
 func TestTaskFailureNotification(t *testing.T) {
 	now := time.Now()
 	n := TaskFailureNotification{
@@ -1150,7 +1325,7 @@ func TestSchedulerCatchUpMissedTasks(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.SetCatchUpWindow(2 * time.Hour)
 
 	ran := make(chan bool, 1)
@@ -1203,7 +1378,7 @@ func TestSchedulerCatchUpMissedTasksDisabledTask(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.SetCatchUpWindow(2 * time.Hour)
 
 	task := &Task{
@@ -1245,7 +1420,7 @@ func TestSchedulerWithDatabase(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 
 	task := &Task{
 		ID:        "db.test",
@@ -1287,7 +1462,7 @@ func TestSchedulerLoadTaskState(t *testing.T) {
 	defer db.Close()
 
 	// First scheduler - create and save state
-	s1 := NewScheduler(db, "node1")
+	s1 := newTestScheduler(db, "node1")
 
 	task := &Task{
 		ID:        "persist.test",
@@ -1307,7 +1482,7 @@ func TestSchedulerLoadTaskState(t *testing.T) {
 	s1.StopTaskScheduler()
 
 	// Second scheduler - should load persisted state
-	s2 := NewScheduler(db, "node1")
+	s2 := newTestScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "persist.test",
@@ -1334,7 +1509,7 @@ func TestSchedulerLoadTaskStateNonSkippable(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 
 	// First register and run a skippable task to create DB state
 	task := &Task{
@@ -1352,7 +1527,7 @@ func TestSchedulerLoadTaskStateNonSkippable(t *testing.T) {
 	s.StopTaskScheduler()
 
 	// Second scheduler with non-skippable version
-	s2 := NewScheduler(db, "node1")
+	s2 := newTestScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:       "nonskip.test",
@@ -1380,7 +1555,7 @@ func TestSchedulerSaveTaskStateWithNextRetry(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.StartTaskScheduler()
 
 	task := &Task{
@@ -1411,7 +1586,7 @@ func TestSchedulerGlobalTaskWithLocking(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 
 	ran := make(chan bool, 1)
 	task := &Task{
@@ -1452,7 +1627,7 @@ func TestSchedulerAcquireReleaseLock(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.StartTaskScheduler()
 
 	task := &Task{
@@ -1485,7 +1660,7 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 	defer db.Close()
 
 	// First node
-	s1 := NewScheduler(db, "node1")
+	s1 := newTestScheduler(db, "node1")
 	s1.StartTaskScheduler()
 
 	task := &Task{
@@ -1502,13 +1677,13 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 	s1.acquireTaskLock(task)
 
 	// Simulate expired lock by updating locked_at in the past
-	db.Exec("UPDATE scheduler_tasks SET locked_at = ? WHERE task_id = ?",
+	db.Exec("UPDATE scheduler_tasks SET locked_at = ? WHERE id = ?",
 		time.Now().Add(-10*time.Minute), "takeover.test")
 
 	s1.StopTaskScheduler()
 
 	// Second node should be able to take over expired lock
-	s2 := NewScheduler(db, "node2")
+	s2 := newTestScheduler(db, "node2")
 	s2.StartTaskScheduler()
 
 	task2 := &Task{
@@ -1536,7 +1711,7 @@ func TestSchedulerReacquireOwnLock(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.StartTaskScheduler()
 
 	task := &Task{
@@ -1731,12 +1906,12 @@ func TestSchedulerInitDatabaseMigration(t *testing.T) {
 	}
 
 	// Create scheduler - should migrate schema
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.StartTaskScheduler()
 	s.StopTaskScheduler()
 
 	// Verify columns were added (no error means columns exist)
-	_, err = db.Exec("UPDATE scheduler_tasks SET retry_count = 0, next_retry = NULL WHERE task_id = ?", "test.task")
+	_, err = db.Exec("UPDATE scheduler_tasks SET retry_count = 0, next_retry = NULL WHERE id = ?", "test.task")
 	if err != nil {
 		t.Errorf("Migration failed - retry columns not added: %v", err)
 	}
@@ -1807,7 +1982,7 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 
 	task := &Task{
 		ID:        "future.test",
@@ -1825,13 +2000,13 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 	// in-memory state over every row, so seeding the row out-of-band while it
 	// runs would be clobbered on shutdown (AI.md PART 18 "Shutdown Behavior").
 	futureTime := time.Now().Add(2 * time.Hour)
-	_, err = db.Exec("UPDATE scheduler_tasks SET next_run = ? WHERE task_id = ?", futureTime, "future.test")
+	_, err = db.Exec("UPDATE scheduler_tasks SET next_run = ? WHERE id = ?", futureTime, "future.test")
 	if err != nil {
 		t.Fatalf("Failed to update next_run: %v", err)
 	}
 
 	// New scheduler should load the future next_run
-	s2 := NewScheduler(db, "node1")
+	s2 := newTestScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "future.test",
@@ -1857,7 +2032,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 	s.StartTaskScheduler()
 
 	task := &Task{
@@ -1873,7 +2048,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 
 	// Save state with past next_run
 	pastTime := time.Now().Add(-2 * time.Hour)
-	_, err = db.Exec("UPDATE scheduler_tasks SET next_run = ? WHERE task_id = ?", pastTime, "past.test")
+	_, err = db.Exec("UPDATE scheduler_tasks SET next_run = ? WHERE id = ?", pastTime, "past.test")
 	if err != nil {
 		t.Fatalf("Failed to update next_run: %v", err)
 	}
@@ -1881,7 +2056,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 	s.StopTaskScheduler()
 
 	// New scheduler should recalculate next_run (not use past time)
-	s2 := NewScheduler(db, "node1")
+	s2 := newTestScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "past.test",
@@ -1908,7 +2083,7 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := NewScheduler(db, "node1")
+	s := newTestScheduler(db, "node1")
 
 	task := &Task{
 		ID:        "allfields.test",
@@ -1930,14 +2105,14 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	_, err = db.Exec(`UPDATE scheduler_tasks SET
 		last_run = ?, last_status = ?, last_error = ?,
 		run_count = ?, fail_count = ?, retry_count = ?, next_retry = ?
-		WHERE task_id = ?`,
+		WHERE id = ?`,
 		now, "failed", "test error", 5, 2, 1, futureRetry, "allfields.test")
 	if err != nil {
 		t.Fatalf("Failed to update fields: %v", err)
 	}
 
 	// New scheduler should load all fields
-	s2 := NewScheduler(db, "node1")
+	s2 := newTestScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "allfields.test",

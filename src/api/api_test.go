@@ -22,6 +22,7 @@ import (
 
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/health"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/owner"
@@ -31,7 +32,6 @@ import (
 	"github.com/apimgr/search/src/swagger"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	_ "modernc.org/sqlite"
 )
 
 type testContactCaptcha struct{}
@@ -101,6 +101,19 @@ func newTestHandler() *Handler {
 	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	return NewHandler(cfg, registry, aggregator)
+}
+
+func apiTestQueryRow(dm *database.DatabaseManager, query string, args ...any) *sql.Row {
+	ctx := context.Background()
+	return dm.ServerDB().Read(ctx).QueryRowContext(ctx, query, args...)
+}
+
+func apiTestExec(dm *database.DatabaseManager, query string, args ...any) error {
+	ctx := context.Background()
+	return dm.ServerDB().Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, query, args...)
+		return err
+	})
 }
 
 func TestOperatorRouteDistinguishesOwnerTokensFromInvalidCredentials(t *testing.T) {
@@ -188,10 +201,13 @@ func TestOwnerLinkedCreateReturnsLinkedTokenField(t *testing.T) {
 func TestOwnerPrimaryIssueAPIRejectsExistingValidCredential(t *testing.T) {
 	handler, _, db := newAlertAPIHandler(t)
 	defer db.Close()
+	handler.config.Server.RateLimit.Enabled = false
+	handler.config.Server.RateLimit.Strict.Requests = 2
 	router := chi.NewRouter()
 	handler.RegisterRoutes(router)
-	issue := func(token string) *httptest.ResponseRecorder {
+	issue := func(token, remoteAddr string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens/primary", nil)
+		request.RemoteAddr = remoteAddr
 		if token != "" {
 			request.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -199,11 +215,13 @@ func TestOwnerPrimaryIssueAPIRejectsExistingValidCredential(t *testing.T) {
 		router.ServeHTTP(response, request)
 		return response
 	}
-	first := issue("")
+	first := issue("", "198.51.100.10:1234")
 	if first.Code != http.StatusCreated {
 		t.Fatalf("issue status = %d, want %d; body=%s", first.Code, http.StatusCreated, first.Body.String())
 	}
-	var issued struct { Data map[string]string `json:"data"` }
+	var issued struct {
+		Data map[string]string `json:"data"`
+	}
 	if err := json.NewDecoder(first.Body).Decode(&issued); err != nil {
 		t.Fatalf("decode issue response: %v", err)
 	}
@@ -211,12 +229,28 @@ func TestOwnerPrimaryIssueAPIRejectsExistingValidCredential(t *testing.T) {
 	if ownerToken == "" {
 		t.Fatal("issue response omitted data.owner_token")
 	}
-	conflict := issue(ownerToken)
+	conflict := issue(ownerToken, "198.51.100.10:1234")
 	if conflict.Code != http.StatusConflict {
 		t.Fatalf("valid existing owner token status = %d, want %d; body=%s", conflict.Code, http.StatusConflict, conflict.Body.String())
 	}
+	limited := issue("invalid-token", "198.51.100.10:1234")
+	if limited.Code != http.StatusTooManyRequests {
+		t.Fatalf("request after a conflict used the strict limit status = %d, want %d; body=%s", limited.Code, http.StatusTooManyRequests, limited.Body.String())
+	}
+	identity, err := handler.ownerManager.Resolve(context.Background(), ownerToken)
+	if err != nil {
+		t.Fatalf("resolve primary token: %v", err)
+	}
+	_, linkedToken, err := handler.ownerManager.CreateLinked(context.Background(), identity, "automation", nil)
+	if err != nil {
+		t.Fatalf("create linked token: %v", err)
+	}
+	linkedConflict := issue(linkedToken, "198.51.100.11:1234")
+	if linkedConflict.Code != http.StatusConflict {
+		t.Fatalf("valid linked token status = %d, want %d; body=%s", linkedConflict.Code, http.StatusConflict, linkedConflict.Body.String())
+	}
 	var details string
-	if err := db.QueryRow(`SELECT details FROM audit_log WHERE action='token.created' ORDER BY timestamp DESC LIMIT 1`).Scan(&details); err != nil || !strings.Contains(details, `"source":"issue"`) {
+	if err := apiTestQueryRow(db, `SELECT details FROM audit_log WHERE action='token.created' AND details LIKE '%"source":"issue"%' ORDER BY timestamp DESC LIMIT 1`).Scan(&details); err != nil || !strings.Contains(details, `"source":"issue"`) {
 		t.Fatalf("issue audit details = %q, error=%v; want source=issue", details, err)
 	}
 }
@@ -234,10 +268,10 @@ func TestOwnerPrimaryRevokeRequiresConfirmationAndDeletesOwnerData(t *testing.T)
 	if err != nil {
 		t.Fatalf("create linked token: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO search_alerts (id,owner_id,email,query,category,frequency,manage_token_hash,rss_token_hash) VALUES ('alert-1',?,'a@example.test','q','general','daily','manage-hash','rss-hash')`, identity.OwnerID); err != nil {
+	if err := apiTestExec(db, `INSERT INTO search_alerts (id,owner_id,email,query,category,frequency,manage_token_hash,rss_token_hash) VALUES ('alert-1',?,'a@example.test','q','general','daily','manage-hash','rss-hash')`, identity.OwnerID); err != nil {
 		t.Fatalf("insert owner resource: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO search_alert_results (id,alert_id,fingerprint,title,url) VALUES ('result-1','alert-1','f','t','https://example.test')`); err != nil {
+	if err := apiTestExec(db, `INSERT INTO search_alert_results (id,alert_id,fingerprint,title,url) VALUES ('result-1','alert-1','f','t','https://example.test')`); err != nil {
 		t.Fatalf("insert owner resource child: %v", err)
 	}
 	post := func(confirm string) *httptest.ResponseRecorder {
@@ -253,14 +287,16 @@ func TestOwnerPrimaryRevokeRequiresConfirmationAndDeletesOwnerData(t *testing.T)
 		t.Fatalf("wrong confirmation status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
 	var ownersBefore int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM owners WHERE id=?`, identity.OwnerID).Scan(&ownersBefore); err != nil || ownersBefore != 1 {
+	if err := apiTestQueryRow(db, `SELECT COUNT(*) FROM owners WHERE id=?`, identity.OwnerID).Scan(&ownersBefore); err != nil || ownersBefore != 1 {
 		t.Fatalf("wrong confirmation deleted owner: count=%d error=%v", ownersBefore, err)
 	}
 	response := post(primaryToken[len(primaryToken)-4:])
 	if response.Code != http.StatusOK {
 		t.Fatalf("revoke status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	var result struct { Data map[string]float64 `json:"data"` }
+	var result struct {
+		Data map[string]float64 `json:"data"`
+	}
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		t.Fatalf("decode revoke response: %v", err)
 	}
@@ -269,14 +305,16 @@ func TestOwnerPrimaryRevokeRequiresConfirmationAndDeletesOwnerData(t *testing.T)
 	}
 	var owners, tokens, alerts, results int
 	for query, target := range map[string]*int{
-		`SELECT COUNT(*) FROM owners WHERE id=?`: &owners,
-		`SELECT COUNT(*) FROM api_tokens WHERE owner_id=?`: &tokens,
-		`SELECT COUNT(*) FROM search_alerts WHERE owner_id=?`: &alerts,
+		`SELECT COUNT(*) FROM owners WHERE id=?`:                        &owners,
+		`SELECT COUNT(*) FROM api_tokens WHERE owner_id=?`:              &tokens,
+		`SELECT COUNT(*) FROM search_alerts WHERE owner_id=?`:           &alerts,
 		`SELECT COUNT(*) FROM search_alert_results WHERE id='result-1'`: &results,
 	} {
 		args := []interface{}{}
-		if strings.Contains(query, "?") { args = append(args, identity.OwnerID) }
-		if err := db.QueryRow(query, args...).Scan(target); err != nil {
+		if strings.Contains(query, "?") {
+			args = append(args, identity.OwnerID)
+		}
+		if err := apiTestQueryRow(db, query, args...).Scan(target); err != nil {
 			t.Fatalf("check owner revocation: %v", err)
 		}
 	}
@@ -284,7 +322,7 @@ func TestOwnerPrimaryRevokeRequiresConfirmationAndDeletesOwnerData(t *testing.T)
 		t.Fatalf("owner revocation left rows: owners=%d tokens=%d alerts=%d results=%d", owners, tokens, alerts, results)
 	}
 	var action, details string
-	if err := db.QueryRow(`SELECT action,details FROM audit_log WHERE resource_id=? ORDER BY timestamp DESC LIMIT 1`, identity.OwnerID).Scan(&action, &details); err != nil || action != "token.revoked" {
+	if err := apiTestQueryRow(db, `SELECT action,details FROM audit_log WHERE resource_id=? ORDER BY timestamp DESC LIMIT 1`, identity.OwnerID).Scan(&action, &details); err != nil || action != "token.revoked" {
 		t.Fatalf("owner revoke audit action=%q error=%v", action, err)
 	}
 	var auditDetails map[string]interface{}
@@ -308,7 +346,9 @@ func TestOwnerTokenAPIResponsesUseMaskedTokenObjects(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+primaryToken)
 		response := httptest.NewRecorder()
 		call(response, req)
-		var envelope struct { Data map[string]string `json:"data"` }
+		var envelope struct {
+			Data map[string]string `json:"data"`
+		}
 		if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
 			t.Fatalf("decode primary token response: %v", err)
 		}
@@ -339,7 +379,9 @@ func TestOwnerTokenAPIResponsesUseMaskedTokenObjects(t *testing.T) {
 	}
 	decodeData := func(t *testing.T, response *httptest.ResponseRecorder) map[string]interface{} {
 		t.Helper()
-		var envelope struct { Data map[string]interface{} `json:"data"` }
+		var envelope struct {
+			Data map[string]interface{} `json:"data"`
+		}
 		if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
@@ -349,7 +391,13 @@ func TestOwnerTokenAPIResponsesUseMaskedTokenObjects(t *testing.T) {
 	listReq.Header.Set("Authorization", "Bearer "+primaryToken)
 	listResponse := httptest.NewRecorder()
 	handler.ownerTokensList(listResponse, listReq)
-	var listEnvelope struct { Data struct { Primary map[string]interface{} `json:"primary"`; Linked []map[string]interface{} `json:"linked"`; MaxLinked int `json:"max_linked"` } `json:"data"` }
+	var listEnvelope struct {
+		Data struct {
+			Primary   map[string]interface{}   `json:"primary"`
+			Linked    []map[string]interface{} `json:"linked"`
+			MaxLinked int                      `json:"max_linked"`
+		} `json:"data"`
+	}
 	if err := json.NewDecoder(listResponse.Body).Decode(&listEnvelope); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
@@ -382,7 +430,11 @@ func TestOwnerTokenAPIResponsesUseMaskedTokenObjects(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+primaryToken)
 	response := httptest.NewRecorder()
 	handler.ownerTokensList(response, req)
-	var afterRevoke struct { Data struct { Linked []map[string]interface{} `json:"linked"` } `json:"data"` }
+	var afterRevoke struct {
+		Data struct {
+			Linked []map[string]interface{} `json:"linked"`
+		} `json:"data"`
+	}
 	if err := json.NewDecoder(response.Body).Decode(&afterRevoke); err != nil {
 		t.Fatalf("decode list after revoke: %v", err)
 	}
@@ -3468,8 +3520,30 @@ func TestHandleServerAbout(t *testing.T) {
 	if data["title"] == nil {
 		t.Error("expected title in response")
 	}
-	if data["sections"] == nil {
-		t.Error("expected sections in response")
+	if data["format"] != "markdown" || !strings.Contains(data["content"].(string), "## Features") {
+		t.Errorf("expected built-in Markdown content, got format=%v content=%v", data["format"], data["content"])
+	}
+}
+
+func TestHandleServerAboutUsesLocalizedBrandingSource(t *testing.T) {
+	handler := newTestHandler()
+	handler.config.Server.Branding.Content = map[string]config.BrandingPageContent{
+		"about": {Format: "html", Body: map[string]any{"es": "<p>{project_name} {project_version}</p>", "default": "<p>fallback</p>"}},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/about?lang=es", nil)
+	w := httptest.NewRecorder()
+	handler.handleServerAbout(w, req)
+	var payload struct {
+		Data struct {
+			Content string `json:"content"`
+			Format  string `json:"format"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Data.Format != "html" || !strings.HasPrefix(payload.Data.Content, "<p>search ") || strings.Contains(payload.Data.Content, "{project_version}") {
+		t.Errorf("localized API source = (%q, %q), want expanded HTML source", payload.Data.Format, payload.Data.Content)
 	}
 }
 
@@ -3540,12 +3614,49 @@ func TestHandleServerPrivacy(t *testing.T) {
 	if !ok {
 		t.Fatal("data is not a map")
 	}
-	if data["title"] != "Privacy Policy" {
-		t.Errorf("title = %v, want 'Privacy Policy'", data["title"])
+	for _, field := range []string{"summary", "cookies", "data", "tracking", "retention", "third_party", "ccpa", "content"} {
+		if data[field] == nil {
+			t.Errorf("privacy payload lacks %q", field)
+		}
 	}
-	sections, ok := data["sections"].([]interface{})
-	if !ok || len(sections) == 0 {
-		t.Error("expected sections slice with at least one entry")
+	summary := data["summary"].(map[string]interface{})
+	if summary["user_control"] != true {
+		t.Errorf("summary.user_control = %v, want true", summary["user_control"])
+	}
+	ccpa := data["ccpa"].(map[string]interface{})
+	if ccpa["opt_out_url"] != "/server/privacy#ccpa-opt-out" {
+		t.Errorf("ccpa.opt_out_url = %v", ccpa["opt_out_url"])
+	}
+}
+
+func TestHandleServerPrivacyDynamicFields(t *testing.T) {
+	handler := newTestHandler()
+	handler.config.Server.Privacy.Data.Sold = true
+	handler.config.Server.Privacy.Consent.MessageIfSold = "sold consent"
+	handler.config.Server.Privacy.Content.DataUsageIfSold = "sold usage"
+	handler.config.Server.Privacy.Retention.Period = map[string]any{"es": "retención en español", "default": "default retention"}
+	handler.config.Server.Tracking.Type = "plausible"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/privacy?lang=es", nil)
+	req.AddCookie(&http.Cookie{Name: "ccpa_opt_out", Value: "true"})
+	w := httptest.NewRecorder()
+	handler.handleServerPrivacy(w, req)
+	var payload struct {
+		Data map[string]map[string]any `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Data["summary"]["data_sold"] != true || payload.Data["tracking"]["type_name"] != "Plausible" {
+		t.Errorf("dynamic privacy fields = %#v", payload.Data)
+	}
+	if payload.Data["content"]["consent_message"] != "sold consent" || payload.Data["content"]["data_usage"] != "sold usage" {
+		t.Errorf("dynamic content = %#v", payload.Data["content"])
+	}
+	if payload.Data["retention"]["period"] != "retención en español" {
+		t.Errorf("localized retention period = %v", payload.Data["retention"]["period"])
+	}
+	if payload.Data["ccpa"]["applicable"] != true || payload.Data["ccpa"]["user_opted_out"] != true {
+		t.Errorf("CCPA fields = %#v", payload.Data["ccpa"])
 	}
 }
 
@@ -3659,9 +3770,39 @@ func TestHandleServerTerms(t *testing.T) {
 	if data["title"] != "Terms of Service" {
 		t.Errorf("title = %v, want 'Terms of Service'", data["title"])
 	}
-	sections, ok := data["sections"].([]interface{})
-	if !ok || len(sections) == 0 {
-		t.Error("expected sections with entries")
+	if data["format"] != "markdown" {
+		t.Errorf("format = %v, want markdown", data["format"])
+	}
+	content, ok := data["content"].(string)
+	if !ok {
+		t.Fatal("expected Markdown source content")
+	}
+	for _, section := range []string{"## Acceptance", "## Acceptable use", "## Liability", "## Changes", "## Governing law", "United States"} {
+		if !strings.Contains(content, section) {
+			t.Errorf("built-in terms omit %q", section)
+		}
+	}
+}
+
+func TestHandleServerTermsUsesLocalizedBrandingSource(t *testing.T) {
+	handler := newTestHandler()
+	handler.config.Server.Branding.Content = map[string]config.BrandingPageContent{
+		"terms": {Format: "txt", Body: map[string]any{"fr": "Conditions pour {project_name}", "default": "Fallback"}},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/terms?lang=fr", nil)
+	w := httptest.NewRecorder()
+	handler.handleServerTerms(w, req)
+	var payload struct {
+		Data struct {
+			Content string `json:"content"`
+			Format  string `json:"format"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Data.Format != "text" || payload.Data.Content != "Conditions pour search" {
+		t.Errorf("localized terms = (%q, %q)", payload.Data.Format, payload.Data.Content)
 	}
 }
 
@@ -4502,7 +4643,7 @@ func TestHandleAlertsInvalidCreateDoesNotIssueOwner(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body = %s", w.Code, w.Body.String())
 	}
 	var owners int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM owners`).Scan(&owners); err != nil {
+	if err := db.ServerDB().Read(context.Background()).QueryRowContext(context.Background(), `SELECT COUNT(*) FROM owners`).Scan(&owners); err != nil {
 		t.Fatal(err)
 	}
 	if owners != 0 {
@@ -5168,13 +5309,16 @@ func TestWriteErrorTranslatesByErrorCode(t *testing.T) {
 func TestSchedulerOperatorEndpoints(t *testing.T) {
 	handler := newTestHandler()
 	handler.config.Server.Token = "scheduler-test-token"
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := database.NewDatabaseManager(&database.Config{Driver: "sqlite", DataDir: t.TempDir(), MaxOpen: 2, MaxIdle: 2})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open database manager: %v", err)
 	}
-	defer db.Close()
-	db.SetMaxOpenConns(1)
-	sched := scheduler.NewScheduler(db, "test")
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close database manager: %v", err)
+		}
+	})
+	sched := scheduler.NewSchedulerWithDB(db.ServerDB(), "test")
 	if err := sched.Register(&scheduler.Task{
 		ID: "test_task", Name: "Test task", Description: "test", Schedule: "@hourly",
 		Skippable: true, Run: func(context.Context) error { return nil },

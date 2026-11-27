@@ -17,7 +17,7 @@ var shellCmd = newShellCommand()
 // preserving the previous cobra command tree behavior.
 func newShellCommand() *command {
 	return &command{
-		Use:   "shell [completions|init] [bash|zsh|fish|powershell]",
+		Use:   "shell [completions|init] [SHELL]",
 		Short: "Shell integration commands",
 		Long:  `Shell integration for completions and init scripts.`,
 		run: func(args []string) error {
@@ -76,7 +76,7 @@ func detectShell() string {
 	if idx := strings.LastIndex(base, "\\"); idx >= 0 {
 		base = base[idx+1:]
 	}
-	return base
+	return strings.TrimSuffix(strings.ToLower(base), ".exe")
 }
 
 // printCompletions generates and prints a shell completion script.
@@ -100,12 +100,10 @@ func printCompletions(shell string) error {
 		fmt.Print(powershellCompletion(binaryName))
 		return nil
 	case "sh", "dash", "ksh":
-		// Basic POSIX completions
-		fmt.Printf("# POSIX shell completions for %s\n", binaryName)
-		fmt.Printf("# Limited completion support for %s\n", shell)
+		fmt.Print(posixCompletion(binaryName, shell))
 		return nil
 	default:
-		return fmt.Errorf("unsupported shell: %s\nSupported: bash, zsh, fish, powershell", shell)
+		return fmt.Errorf("unsupported shell: %s\nSupported: bash, zsh, fish, sh, dash, ksh, powershell, pwsh", shell)
 	}
 }
 
@@ -113,7 +111,7 @@ func printCompletions(shell string) error {
 var completionFlags = []string{
 	"config", "server", "token", "token-file", "user", "output",
 	"color", "shell", "lang", "timeout", "debug", "page", "limit",
-	"help", "version",
+	"maintenance", "update", "help", "version",
 }
 
 // completionSubcommands lists the subcommands offered for completion.
@@ -145,6 +143,18 @@ _%[1]s_completions() {
         COMPREPLY=( $(compgen -W "auto yes no" -- "$cur") )
         return 0
     fi
+    if [[ "$prev" == "--update" ]]; then
+        COMPREPLY=( $(compgen -W "check yes" -- "$cur") )
+        return 0
+    fi
+    if [[ "$prev" == "--shell" ]]; then
+        COMPREPLY=( $(compgen -W "completions init --help" -- "$cur") )
+        return 0
+    fi
+    if [[ "${COMP_WORDS[COMP_CWORD-2]}" == "--shell" && ( "$prev" == "completions" || "$prev" == "init" ) ]]; then
+        COMPREPLY=( $(compgen -W "bash zsh fish sh dash ksh powershell pwsh" -- "$cur") )
+        return 0
+    fi
     COMPREPLY=( $(compgen -W "$subcommands $flags" -- "$cur") )
     return 0
 }
@@ -156,6 +166,9 @@ complete -F _%[1]s_completions %[1]s
 func zshCompletion(bin string) string {
 	flags := ""
 	for _, f := range completionFlags {
+		if f == "update" {
+			continue
+		}
 		flags += "'--" + f + "' "
 	}
 	subs := strings.Join(completionSubcommands, " ")
@@ -167,6 +180,8 @@ _%[1]s() {
     flags=(%[3]s)
     _arguments \
         '1: :->cmds' \
+        '--update[check for or install a client update]:action:(check yes)' \
+        '--shell[shell integration]:action:(completions init --help)' \
         '*: :->args'
     case $state in
         cmds)
@@ -192,7 +207,51 @@ func fishCompletion(bin string) string {
 	for _, f := range completionFlags {
 		fmt.Fprintf(&b, "complete -c %s -l %s\n", bin, f)
 	}
+	fmt.Fprintf(&b, "complete -c %s -n '__fish_seen_argument --update' -a 'check yes'\n", bin)
+	fmt.Fprintf(&b, "complete -c %s -n '__fish_seen_argument --shell' -a 'completions init --help'\n", bin)
 	return b.String()
+}
+
+// posixCompletion emits a portable candidate function for shells without a
+// standardized programmable-completion interface.
+func posixCompletion(bin, shell string) string {
+	items := append([]string{}, completionSubcommands...)
+	for _, flag := range completionFlags {
+		items = append(items, "--"+flag)
+	}
+	items = append(items, "check", "yes")
+	fn := completionFunctionName(bin)
+	return fmt.Sprintf(`# POSIX completion candidates for %[1]s (%[3]s)
+# Call %[2]s PREFIX [PREVIOUS-ARGUMENT] to list matching commands and flags.
+%[2]s() {
+    _completion_prefix=${1-}
+    _completion_previous=${2-}
+    case "$_completion_previous" in
+        --update) _completion_items='check yes' ;;
+        --shell) _completion_items='completions init --help' ;;
+        *) _completion_items='%[4]s' ;;
+    esac
+    for _completion_item in $_completion_items; do
+        case "$_completion_item" in
+            "$_completion_prefix"*) printf '%%s\\n' "$_completion_item" ;;
+        esac
+    done
+}
+`, bin, fn, shell, strings.Join(items, " "))
+}
+
+func completionFunctionName(bin string) string {
+	var name strings.Builder
+	name.WriteByte('_')
+	for _, char := range strings.ToLower(bin) {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+			name.WriteRune(char)
+		} else {
+			name.WriteByte('_')
+		}
+	}
+	name.WriteString("_completion_candidates")
+	return name.String()
 }
 
 // powershellCompletion returns a hand-written PowerShell completion script.
@@ -209,6 +268,11 @@ func powershellCompletion(bin string) string {
 Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $items = @(%[2]s)
+    if ($commandAst.ToString() -match '--update\s+\S*$') {
+        $items = @('check', 'yes')
+    } elseif ($commandAst.ToString() -match '--shell\s+\S*$') {
+        $items = @('completions', 'init', '--help')
+    }
     $items | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
         [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
     }
@@ -233,7 +297,7 @@ func printInit(shell string) error {
 	case "powershell", "pwsh":
 		fmt.Printf("Invoke-Expression (& %s --shell completions powershell)\n", binaryName)
 	default:
-		return fmt.Errorf("unsupported shell: %s\nSupported: bash, zsh, fish, powershell", shell)
+		return fmt.Errorf("unsupported shell: %s\nSupported: bash, zsh, fish, sh, dash, ksh, powershell, pwsh", shell)
 	}
 	return nil
 }

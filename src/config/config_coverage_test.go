@@ -224,6 +224,33 @@ func TestPeekServerAddressReadsOnlyAddressValue(t *testing.T) {
 	}
 }
 
+func TestPeekServerPIDFile(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		value   string
+		want    bool
+		present bool
+	}{{"enabled", "true", true, true}, {"disabled", "false", false, true}, {"missing", "", false, false}} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "server.yml")
+			content := "server:\n"
+			if test.value != "" {
+				content += "  pidfile: " + test.value + "\n"
+			}
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatalf("WriteFile() error = %v", err)
+			}
+			got, found, err := PeekServerPIDFile(path)
+			if err != nil {
+				t.Fatalf("PeekServerPIDFile() error = %v", err)
+			}
+			if got != test.want || found != test.present {
+				t.Fatalf("PeekServerPIDFile() = %t,%t, want %t,%t", got, found, test.want, test.present)
+			}
+		})
+	}
+}
+
 func TestPeekServerPortAndAddressMergeOrderedDropIns(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.yml")
@@ -386,15 +413,19 @@ func TestIsDumbTerminal(t *testing.T) {
 // TestSetDebugOverride covers the 0% SetDebugOverride function.
 func TestSetDebugOverride(t *testing.T) {
 	origOverride := debugOverride
-	defer func() { debugOverride = origOverride }()
+	origSet := debugOverrideSet
+	defer func() {
+		debugOverride = origOverride
+		debugOverrideSet = origSet
+	}()
 
 	SetDebugOverride(true)
-	if !debugOverride {
+	if !debugOverride || !debugOverrideSet {
 		t.Error("SetDebugOverride(true) should set debugOverride=true")
 	}
 
 	SetDebugOverride(false)
-	if debugOverride {
+	if debugOverride || !debugOverrideSet {
 		t.Error("SetDebugOverride(false) should set debugOverride=false")
 	}
 }
@@ -499,6 +530,7 @@ func TestGetLogDirInContainer(t *testing.T) {
 // TestGetCacheDirInContainer verifies GetCacheDir returns /data/search/cache in a container.
 func TestGetCacheDirInContainer(t *testing.T) {
 	setContainerOverride(t, true)
+	t.Setenv("CACHE_DIR", "")
 	SetCacheDirOverride("")
 	defer SetCacheDirOverride("")
 
@@ -524,17 +556,34 @@ func TestGetBackupDirInContainer(t *testing.T) {
 	}
 }
 
-// TestGetPIDFileInContainer verifies GetPIDFile returns /data/search.pid in a container.
+// TestGetPIDFileInContainer verifies containers never create a server PID file.
 func TestGetPIDFileInContainer(t *testing.T) {
 	setContainerOverride(t, true)
-	os.Unsetenv("PID_FILE")
+	t.Setenv("PID_FILE", "")
 	SetPIDFileOverride("")
+	SetPIDFileEnabled(true)
 	defer SetPIDFileOverride("")
 
 	got := GetPIDFile()
-	want := "/data/" + ProjectName + ".pid"
-	if got != want {
-		t.Errorf("GetPIDFile() in container = %q, want %q", got, want)
+	if got != "" {
+		t.Errorf("GetPIDFile() in container = %q, want empty", got)
+	}
+}
+
+func TestPIDFileCanBeDisabled(t *testing.T) {
+	setContainerOverride(t, false)
+	SetPIDFileEnabled(true)
+	SetPIDFileOverride("/tmp/search-test.pid")
+	t.Cleanup(func() {
+		SetPIDFileEnabled(true)
+		SetPIDFileOverride("")
+	})
+	if got := GetPIDFile(); got != "/tmp/search-test.pid" {
+		t.Fatalf("GetPIDFile() while enabled = %q, want override", got)
+	}
+	SetPIDFileEnabled(false)
+	if got := GetPIDFile(); got != "" {
+		t.Fatalf("GetPIDFile() while disabled = %q, want empty", got)
 	}
 }
 

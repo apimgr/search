@@ -1,5 +1,5 @@
 # Frontend Rules (PART 16)
-<!-- Synchronized with AI.md revision 59c37d25e582. -->
+<!-- Synchronized with AI.md revision c2f65bf274b5. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -13,6 +13,8 @@ Read: `AI.md` PART 16 (Web Frontend).
 - Hardcode a color — use the theme tokens
 - Ship a feature whose core functionality requires JavaScript
 - Let long strings (IPv6, `.onion`, tokens, hashes) overflow — they need `word-break: break-all`
+- Cache or serve an offline navigation copy of a private, authenticated, token-bearing, or independently form-bearing page
+- Allow a service worker `respondWith()` branch to reject or resolve without a real `Response`; every handled request needs a final offline/error response
 
 ## CRITICAL - ALWAYS DO
 - Render server-side with Go templates from `src/server/template`; serve static assets from `src/server/static`
@@ -23,12 +25,18 @@ Read: `AI.md` PART 16 (Web Frontend).
 - Treat JavaScript as progressive enhancement only
 - Justify every `<script>` in a diff with a capability impossible in HTML5 + CSS
 - Support PWA installation and offline behavior, with service worker and manifest responses using `no-cache` and a build-stamp ETag
-- Name service-worker caches with the full asset stamp `{project_version}-{short_commit}`; check page layout without relying on an `overflow-x` backstop
+- Cache only public navigation pages explicitly marked `X-Offline-Cache: public`; use network-first navigation with an 8-second bound, then a cached public page or synthesized 503 page. Keep APIs and non-GET/cross-origin requests outside service-worker interception
+- Cache only successful, non-redirected responses; static assets are cache-first with a final 504 fallback. Version caches with `{project_version}-{short_commit}`, clear old version caches during activation, and keep offline strings separately
+- Keep service-worker and manifest responses `no-cache` with a build-stamp ETag; never require the visitor to clear browser data to recover
+- Check page layout without relying on an `overflow-x` backstop
 - Use the shared `.container` width modifiers and standard page shell, cards, and controls; never add page-specific wrappers or classes
 - Add `Access-Control-Allow-Origin: *` to API endpoints and implement the PART 16 CORS policy for browser requests
+- Apply the same CORS policy to every route: configured/derived origins or `*`; credentials are allowed only for explicit origins, and every permitted request header is named (never `Access-Control-Allow-Headers: *`)
 - Normalize URLs before routing: remove trailing slashes (except `/`) with a 301 while preserving the query string; keep explicit file paths intact
 - Build absolute links with the request-resolved FQDN through `BuildURL(r, path)`; do not read `server.fqdn` as a URL source
 - Keep the specified middleware order, beginning with URL normalization, request ID, path security, and security headers
+- Render Markdown only through Goldmark with raw HTML disabled, then sanitize with the allow-list policy; apply that policy to operator HTML as well
+- Keep public navigation free of server-administration links, dashboards, settings pages, and hints to admin routes
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |

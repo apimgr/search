@@ -36,7 +36,7 @@ func normalizeDriver(driver string) string {
 
 // DB represents a single database connection
 type DB struct {
-	// db is the write handle and remains exposed for existing integrations.
+	// db and readDB are private store handles; integrations receive only Reader.
 	db           *sql.DB
 	readDB       *sql.DB
 	driver       string
@@ -44,6 +44,23 @@ type DB struct {
 	mu           sync.RWMutex
 	ready        bool
 	busyObserver func(time.Duration, string)
+}
+
+// Reader is the read-only database surface exposed to integrations. It keeps
+// the underlying pooled handle private and cannot execute writes.
+type Reader interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+type readStore struct{ db *sql.DB }
+
+func (store readStore) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return store.db.QueryContext(ctx, query, args...)
+}
+
+func (store readStore) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return store.db.QueryRowContext(ctx, query, args...)
 }
 
 // DatabaseManager manages both server and users databases per AI.md PART 24
@@ -136,7 +153,11 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 		// SQLite uses independent read and write pools. The write pool is
 		// single-connection and uses BEGIN IMMEDIATE; every read connection is
 		// query-only. DSN pragmas apply to every connection in each pool.
-		db.dsn = filepath.Join(cfg.DataDir, dbName)
+		dbPath := filepath.Join(cfg.DataDir, dbName)
+		if dbName == "server.db" && cfg.DSN != "" {
+			dbPath = cfg.DSN
+		}
+		db.dsn = dbPath
 		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn)+"&_txlock=immediate")
 		if err != nil {
 			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
@@ -467,6 +488,11 @@ func (db *DB) IsRemote() bool {
 
 // Exec executes a query without returning rows
 func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return db.ExecWithTimeout(ctx, TimeoutWrite, query, args...)
+}
+
+// ExecWithTimeout executes a write with the caller-selected PART 10 timeout.
+func (db *DB) ExecWithTimeout(ctx context.Context, timeout time.Duration, query string, args ...interface{}) (sql.Result, error) {
 	db.mu.RLock()
 	if !db.ready {
 		db.mu.RUnlock()
@@ -474,11 +500,13 @@ func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.
 	}
 	if db.driver != "sqlite" {
 		defer db.mu.RUnlock()
-		return db.db.ExecContext(ctx, query, args...)
+		writeCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return db.db.ExecContext(writeCtx, query, args...)
 	}
 	db.mu.RUnlock()
 	var result sql.Result
-	err := db.Write(ctx, func(tx *sql.Tx) error {
+	err := db.WriteWithTimeout(ctx, timeout, func(tx *sql.Tx) error {
 		var execErr error
 		result, execErr = tx.ExecContext(ctx, query, args...)
 		return execErr
@@ -487,7 +515,13 @@ func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.
 }
 
 // Query executes a query that returns rows
-func (db *DB) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (db *DB) Query(ctx context.Context, query string, args ...interface{}) (*TimedRows, error) {
+	return db.QueryWithTimeout(ctx, TimeoutSimpleQuery, query, args...)
+}
+
+// QueryWithTimeout executes a row query with the caller-selected PART 10
+// timeout class. The deadline remains active until rows are closed.
+func (db *DB) QueryWithTimeout(ctx context.Context, timeout time.Duration, query string, args ...interface{}) (*TimedRows, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -499,11 +533,17 @@ func (db *DB) Query(ctx context.Context, query string, args ...interface{}) (*sq
 	if readDB == nil {
 		readDB = db.db
 	}
-	return readDB.QueryContext(ctx, query, args...)
+	return QueryContext(ctx, readDB, timeout, query, args...)
 }
 
 // QueryRow executes a query that returns a single row
-func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *TimedRow {
+	return db.QueryRowWithTimeout(ctx, TimeoutSimpleQuery, query, args...)
+}
+
+// QueryRowWithTimeout executes a single-row query with the caller-selected
+// PART 10 timeout class. Its deadline remains active until Scan completes.
+func (db *DB) QueryRowWithTimeout(ctx context.Context, timeout time.Duration, query string, args ...interface{}) *TimedRow {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -511,7 +551,7 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *
 	if readDB == nil {
 		readDB = db.db
 	}
-	return readDB.QueryRowContext(ctx, query, args...)
+	return QueryRowContext(ctx, readDB, timeout, query, args...)
 }
 
 // SetBusyObserver configures the callback invoked when a write waited over one second.
@@ -523,11 +563,20 @@ func (db *DB) SetBusyObserver(observer func(time.Duration, string)) {
 
 // Write executes a short write transaction with bounded busy retries.
 func (db *DB) Write(ctx context.Context, fn func(*sql.Tx) error) error {
+	timeout := TimeoutTransaction
+	if db.Driver() == "sqlite" {
+		timeout = TimeoutWrite
+	}
+	return db.WriteWithTimeout(ctx, timeout, fn)
+}
+
+// WriteWithTimeout runs a single write transaction under an explicit budget.
+func (db *DB) WriteWithTimeout(ctx context.Context, timeout time.Duration, fn func(*sql.Tx) error) error {
 	if fn == nil {
 		return errors.New("write callback is required")
 	}
 	var busyWait time.Duration
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var err error
 	for attempt := 0; attempt < 5; attempt++ {
@@ -568,7 +617,7 @@ func (db *DB) Write(ctx context.Context, fn func(*sql.Tx) error) error {
 }
 
 func (db *DB) writeOnce(ctx context.Context, fn func(*sql.Tx) error) error {
-	tx, err := db.Begin(ctx)
+	tx, err := db.beginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -599,8 +648,7 @@ func IsSQLiteBusy(err error) bool {
 	return strings.Contains(message, "SQLITE_BUSY") || strings.Contains(message, "SQLITE_LOCKED") || strings.Contains(message, "DATABASE IS LOCKED")
 }
 
-// Begin starts a transaction
-func (db *DB) Begin(ctx context.Context) (*sql.Tx, error) {
+func (db *DB) beginTx(ctx context.Context, options *sql.TxOptions) (*sql.Tx, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -608,7 +656,7 @@ func (db *DB) Begin(ctx context.Context) (*sql.Tx, error) {
 		return nil, fmt.Errorf("database not ready")
 	}
 
-	return db.db.BeginTx(ctx, nil)
+	return db.db.BeginTx(ctx, options)
 }
 
 // Driver returns the database driver name
@@ -616,23 +664,30 @@ func (db *DB) Driver() string {
 	return db.driver
 }
 
-// SQL returns the underlying *sql.DB connection
-// Use with caution - prefer the DB methods for standard operations
-func (db *DB) SQL() *sql.DB {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return db.db
-}
-
-// ReadSQL returns the pooled, query-only SQLite handle for integrations that
-// still consume database/sql directly.
-func (db *DB) ReadSQL() *sql.DB {
+// Read returns a read-only query surface over the store's read handle.
+func (db *DB) Read(ctx context.Context) Reader {
+	if ctx == nil || ctx.Err() != nil {
+		return nil
+	}
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	if db.readDB != nil {
-		return db.readDB
+		return readStore{db: db.readDB}
 	}
-	return db.db
+	if db.db == nil {
+		return nil
+	}
+	return readStore{db: db.db}
+}
+
+// Stats returns connection-pool statistics without exposing the handle.
+func (db *DB) Stats() sql.DBStats {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if db.db == nil {
+		return sql.DBStats{}
+	}
+	return db.db.Stats()
 }
 
 // SnapshotTo writes a consistent SQLite snapshot through the serialized write
@@ -651,7 +706,9 @@ func (db *DB) SnapshotTo(ctx context.Context, destination string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("check SQLite snapshot destination: %w", err)
 	}
-	if _, err := db.db.ExecContext(ctx, "VACUUM INTO ?", destination); err != nil {
+	snapshotCtx, cancel := context.WithTimeout(ctx, TimeoutBulk)
+	defer cancel()
+	if _, err := db.db.ExecContext(snapshotCtx, "VACUUM INTO ?", destination); err != nil {
 		return fmt.Errorf("create SQLite snapshot: %w", err)
 	}
 	return nil
@@ -675,7 +732,9 @@ func (db *DB) Ping(ctx context.Context) error {
 		return fmt.Errorf("database not ready")
 	}
 
-	return db.db.PingContext(ctx)
+	pingCtx, cancel := context.WithTimeout(ctx, TimeoutSimpleQuery)
+	defer cancel()
+	return db.db.PingContext(pingCtx)
 }
 
 // Probe executes SELECT 1 against the write and read handles under the caller's
@@ -686,12 +745,14 @@ func (db *DB) Probe(ctx context.Context) error {
 	if !db.ready || db.db == nil {
 		return fmt.Errorf("database not ready")
 	}
+	probeCtx, cancel := context.WithTimeout(ctx, TimeoutSimpleQuery)
+	defer cancel()
 	var value int
-	if err := db.db.QueryRowContext(ctx, "SELECT 1").Scan(&value); err != nil {
+	if err := db.db.QueryRowContext(probeCtx, "SELECT 1").Scan(&value); err != nil {
 		return fmt.Errorf("write handle probe: %w", err)
 	}
 	if db.readDB != nil {
-		if err := db.readDB.QueryRowContext(ctx, "SELECT 1").Scan(&value); err != nil {
+		if err := db.readDB.QueryRowContext(probeCtx, "SELECT 1").Scan(&value); err != nil {
 			return fmt.Errorf("read handle probe: %w", err)
 		}
 	}

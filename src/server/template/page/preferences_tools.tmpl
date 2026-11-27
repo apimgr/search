@@ -15,15 +15,15 @@
         <div class="bang-categories">
             <h3>{{t "preferences.available_bangs"}}</h3>
             <div class="category-filter">
-                <button class="filter-btn active" data-category="all">{{t "common.all"}}</button>
+                <button type="button" class="btn btn-secondary filter-btn active" data-category="all">{{t "common.all"}}</button>
                 {{range .Data.categories}}
-                <button class="filter-btn" data-category="{{.}}">{{. | title}}</button>
+                <button type="button" class="btn btn-secondary filter-btn" data-category="{{.}}">{{. | title}}</button>
                 {{end}}
             </div>
 
-            <div class="bang-list" id="bang-list">
+            <div class="hub-list bang-list" id="bang-list">
                 {{range .Data.bangs}}
-                <div class="bang-item" data-category="{{.Category}}">
+                <div class="hub-item bang-item" data-category="{{.Category}}">
                     <span class="bang-shortcut">!{{.Shortcut}}</span>
                     <span class="bang-name">{{.Name}}</span>
                     {{if .Description}}
@@ -40,7 +40,13 @@
         <p class="help-text">{{t "preferences.custom_bangs_help"}}</p>
 
         <div id="custom-bangs-list" class="custom-bangs-list">
-            <!-- Custom bangs will be populated by JavaScript -->
+            <div id="custom-bangs-empty-state" class="empty-state">
+                <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="7" cy="7" r="1"/><circle cx="7" cy="12" r="1"/><circle cx="7" cy="17" r="1"/></svg>
+                <h3 class="empty-state-title">{{t "preferences.custom_bangs_empty"}}</h3>
+                <p class="empty-state-message">{{t "preferences.custom_bangs_help"}}</p>
+                <a class="btn btn-primary" href="#add-custom-bang">{{t "preferences.add_custom_bang"}}</a>
+            </div>
+            <div id="custom-bangs-items"></div>
         </div>
 
         <form id="add-custom-bang" class="add-bang-form">
@@ -48,21 +54,21 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="bang-shortcut">{{t "preferences.shortcut_label"}}</label>
-                    <input type="text" id="bang-shortcut" name="shortcut" placeholder="{{t "preferences.shortcut_placeholder"}}" required pattern="[a-zA-Z0-9_-]+">
+                    <input class="form-input" type="text" id="bang-shortcut" name="shortcut" placeholder="{{t "preferences.shortcut_placeholder"}}" required pattern="[a-zA-Z0-9_-]+">
                 </div>
                 <div class="form-group">
                     <label for="bang-name">{{t "preferences.name_label"}}</label>
-                    <input type="text" id="bang-name" name="name" placeholder="{{t "preferences.name_placeholder"}}" required>
+                    <input class="form-input" type="text" id="bang-name" name="name" placeholder="{{t "preferences.name_placeholder"}}" required>
                 </div>
             </div>
             <div class="form-group">
                 <label for="bang-url">{{t "preferences.url_template_label"}}</label>
-                <input type="text" id="bang-url" name="url" inputmode="url" autocomplete="url" placeholder="{{t "preferences.url_template_placeholder"}}" required>
-                <small>{{t "preferences.url_template_help_prefix"}} <code>{query}</code> {{t "preferences.url_template_help_suffix"}}</small>
+                <input class="form-input" type="text" id="bang-url" name="url" inputmode="url" autocomplete="url" placeholder="{{t "preferences.url_template_placeholder"}}" required>
+                <small class="form-help">{{t "preferences.url_template_help_prefix"}} <code>{query}</code> {{t "preferences.url_template_help_suffix"}}</small>
             </div>
             <div class="form-group">
                 <label for="bang-category">{{t "search.category"}}</label>
-                <input type="text" id="bang-category" name="category" placeholder="{{t "preferences.category_placeholder"}}" value="custom">
+                <input class="form-input" type="text" id="bang-category" name="category" placeholder="{{t "preferences.category_placeholder"}}" value="custom">
             </div>
             <button type="submit" class="btn btn-primary">{{t "preferences.add_bang"}}</button>
         </form>
@@ -82,7 +88,7 @@
             </p>
             <div class="form-group">
                 <label for="custom-engine-name">{{t "preferences.custom_engine_name_optional"}}</label>
-                <input type="text" id="custom-engine-name" placeholder="{{.Config.Server.Title}}">
+                <input class="form-input" type="text" id="custom-engine-name" placeholder="{{.Config.Server.Title}}">
                 <button type="button" id="copy-opensearch" class="btn btn-secondary">{{t "preferences.copy_opensearch_url"}}</button>
             </div>
         </div>

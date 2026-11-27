@@ -6,12 +6,11 @@
     </header>
 
     {{if .Config.Server.Pages.Help.Content}}
-    <section class="section-card page-content markdown" aria-labelledby="help-custom-heading">
+    <section class="section-card markdown" aria-labelledby="help-custom-heading">
         <h2 id="help-custom-heading">{{t "help.getting_started.heading"}}</h2>
         {{.Config.Server.Pages.Help.Content | markdownToHTML}}
     </section>
     {{else}}
-    <div class="page-content">
         {{/* Table of Contents */}}
         <nav class="section-card" aria-labelledby="help-toc-heading">
             <h2 id="help-toc-heading">{{t "help.toc.heading"}}</h2>
@@ -24,7 +23,8 @@
                 <li><a href="#keyboard-shortcuts">{{t "help.toc.keyboard_shortcuts"}}</a></li>
                 <li><a href="#api-docs">{{t "help.toc.api_docs"}}</a></li>
                 <li><a href="#privacy">{{t "help.toc.privacy"}}</a></li>
-                {{if .Config.Server.Tor.Enabled}}<li><a href="#tor-access">{{t "help.toc.tor_access"}}</a></li>{{end}}
+                {{if and .Config.Server.Tor.Enabled .OnionAddress}}<li><a href="#tor-access">{{t "help.toc.tor_access"}}</a></li>{{end}}
+                {{if .I2PAddress}}<li><a href="#i2p-access">{{t "help.i2p.heading"}}</a></li>{{end}}
                 <li><a href="#faq">{{t "help.toc.faq"}}</a></li>
             </ul>
         </nav>
@@ -40,58 +40,58 @@
         <section id="search-categories" class="section-card" aria-labelledby="search-categories-heading">
             <h2 id="search-categories-heading">{{t "help.categories.heading"}}</h2>
             <p>{{t "help.categories.intro"}}</p>
-            <div class="category-grid">
-                <div class="category-item">
-                    <span class="category-icon">🌐</span>
-                    <strong>{{t "help.categories.general.label"}}</strong>
-                    <p>{{t "help.categories.general.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">🖼️</span>
-                    <strong>{{t "help.categories.images.label"}}</strong>
-                    <p>{{t "help.categories.images.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">🎬</span>
-                    <strong>{{t "help.categories.videos.label"}}</strong>
-                    <p>{{t "help.categories.videos.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">📰</span>
-                    <strong>{{t "help.categories.news.label"}}</strong>
-                    <p>{{t "help.categories.news.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">🗺️</span>
-                    <strong>{{t "help.categories.maps.label"}}</strong>
-                    <p>{{t "help.categories.maps.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">📁</span>
-                    <strong>{{t "help.categories.files.label"}}</strong>
-                    <p>{{t "help.categories.files.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">🎵</span>
-                    <strong>{{t "help.categories.music.label"}}</strong>
-                    <p>{{t "help.categories.music.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">💻</span>
-                    <strong>{{t "help.categories.it.label"}}</strong>
-                    <p>{{t "help.categories.it.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">📚</span>
-                    <strong>{{t "help.categories.science.label"}}</strong>
-                    <p>{{t "help.categories.science.description"}}</p>
-                </div>
-                <div class="category-item">
-                    <span class="category-icon">👥</span>
-                    <strong>{{t "help.categories.social.label"}}</strong>
-                    <p>{{t "help.categories.social.description"}}</p>
-                </div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item">
+                    <span>🌐</span>
+                    <span class="hub-title">{{t "help.categories.general.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.general.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>🖼️</span>
+                    <span class="hub-title">{{t "help.categories.images.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.images.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>🎬</span>
+                    <span class="hub-title">{{t "help.categories.videos.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.videos.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>📰</span>
+                    <span class="hub-title">{{t "help.categories.news.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.news.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>🗺️</span>
+                    <span class="hub-title">{{t "help.categories.maps.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.maps.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>📁</span>
+                    <span class="hub-title">{{t "help.categories.files.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.files.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>🎵</span>
+                    <span class="hub-title">{{t "help.categories.music.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.music.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>💻</span>
+                    <span class="hub-title">{{t "help.categories.it.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.it.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>📚</span>
+                    <span class="hub-title">{{t "help.categories.science.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.science.description"}}</span>
+                </li>
+                <li class="hub-item">
+                    <span>👥</span>
+                    <span class="hub-title">{{t "help.categories.social.label"}}</span>
+                    <span class="hub-desc">{{t "help.categories.social.description"}}</span>
+                </li>
+            </ul>
         </section>
 
         {{/* Bang Commands */}}
@@ -100,31 +100,31 @@
             <p>{{t "help.bangs.intro_prefix"}} <code>!shortcut terms</code> {{t "help.bangs.intro_or"}} <code>terms !shortcut</code>{{t "help.bangs.intro_suffix"}}</p>
 
             <h3>{{t "help.bangs.popular_heading"}}</h3>
-            <div class="bang-grid">
-                <div class="bang-item"><code>!g</code> Google</div>
-                <div class="bang-item"><code>!ddg</code> DuckDuckGo</div>
-                <div class="bang-item"><code>!b</code> Bing</div>
-                <div class="bang-item"><code>!br</code> Brave Search</div>
-                <div class="bang-item"><code>!sp</code> Startpage</div>
-                <div class="bang-item"><code>!w</code> Wikipedia</div>
-                <div class="bang-item"><code>!yt</code> YouTube</div>
-                <div class="bang-item"><code>!gh</code> GitHub</div>
-                <div class="bang-item"><code>!so</code> Stack Overflow</div>
-                <div class="bang-item"><code>!rd</code> Reddit</div>
-                <div class="bang-item"><code>!tw</code> Twitter/X</div>
-                <div class="bang-item"><code>!az</code> Amazon</div>
-                <div class="bang-item"><code>!gm</code> Google Maps</div>
-                <div class="bang-item"><code>!osm</code> OpenStreetMap</div>
-                <div class="bang-item"><code>!wa</code> Wolfram Alpha</div>
-                <div class="bang-item"><code>!mdn</code> MDN Web Docs</div>
-                <div class="bang-item"><code>!npm</code> npm</div>
-                <div class="bang-item"><code>!pypi</code> PyPI</div>
-                <div class="bang-item"><code>!gopkg</code> Go Packages</div>
-                <div class="bang-item"><code>!scholar</code> Google Scholar</div>
-                <div class="bang-item"><code>!arxiv</code> arXiv</div>
-                <div class="bang-item"><code>!archive</code> Internet Archive</div>
-                <div class="bang-item"><code>!spot</code> Spotify</div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>!g</code> Google</li>
+                <li class="hub-item"><code>!ddg</code> DuckDuckGo</li>
+                <li class="hub-item"><code>!b</code> Bing</li>
+                <li class="hub-item"><code>!br</code> Brave Search</li>
+                <li class="hub-item"><code>!sp</code> Startpage</li>
+                <li class="hub-item"><code>!w</code> Wikipedia</li>
+                <li class="hub-item"><code>!yt</code> YouTube</li>
+                <li class="hub-item"><code>!gh</code> GitHub</li>
+                <li class="hub-item"><code>!so</code> Stack Overflow</li>
+                <li class="hub-item"><code>!rd</code> Reddit</li>
+                <li class="hub-item"><code>!tw</code> Twitter/X</li>
+                <li class="hub-item"><code>!az</code> Amazon</li>
+                <li class="hub-item"><code>!gm</code> Google Maps</li>
+                <li class="hub-item"><code>!osm</code> OpenStreetMap</li>
+                <li class="hub-item"><code>!wa</code> Wolfram Alpha</li>
+                <li class="hub-item"><code>!mdn</code> MDN Web Docs</li>
+                <li class="hub-item"><code>!npm</code> npm</li>
+                <li class="hub-item"><code>!pypi</code> PyPI</li>
+                <li class="hub-item"><code>!gopkg</code> Go Packages</li>
+                <li class="hub-item"><code>!scholar</code> Google Scholar</li>
+                <li class="hub-item"><code>!arxiv</code> arXiv</li>
+                <li class="hub-item"><code>!archive</code> Internet Archive</li>
+                <li class="hub-item"><code>!spot</code> Spotify</li>
+            </ul>
 
             <h3>{{t "help.bangs.by_category_heading"}}</h3>
             <div class="table-wrapper">
@@ -172,99 +172,99 @@
             <h3>{{t "help.direct.full_page_heading"}} (<code>type:term</code>)</h3>
 
             <h3>{{t "help.direct.network.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>dns:example.com</code><span>{{t "help.direct.network.dns"}}</span></div>
-                <div class="operator-item"><code>whois:example.com</code><span>{{t "help.direct.network.whois"}}</span></div>
-                <div class="operator-item"><code>cert:example.com</code><span>{{t "help.direct.network.cert"}}</span></div>
-                <div class="operator-item"><code>headers:example.com</code><span>{{t "help.direct.network.headers"}}</span></div>
-                <div class="operator-item"><code>asn:AS15169</code><span>{{t "help.direct.network.asn"}}</span></div>
-                <div class="operator-item"><code>subnet:192.168.1.0/24</code><span>{{t "help.direct.network.subnet"}}</span></div>
-                <div class="operator-item"><code>resolve:example.com</code><span>{{t "help.direct.network.resolve"}}</span></div>
-                <div class="operator-item"><code>robots:example.com</code><span>{{t "help.direct.network.robots"}}</span></div>
-                <div class="operator-item"><code>sitemap:example.com</code><span>{{t "help.direct.network.sitemap"}}</span></div>
-                <div class="operator-item"><code>tech:example.com</code><span>{{t "help.direct.network.tech"}}</span></div>
-                <div class="operator-item"><code>feed:example.com</code><span>{{t "help.direct.network.feed"}}</span></div>
-                <div class="operator-item"><code>expand:short.url/x</code><span>{{t "help.direct.network.expand"}}</span></div>
-                <div class="operator-item"><code>safe:example.com</code><span>{{t "help.direct.network.safe"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>dns:example.com</code><span>{{t "help.direct.network.dns"}}</span></li>
+                <li class="hub-item"><code>whois:example.com</code><span>{{t "help.direct.network.whois"}}</span></li>
+                <li class="hub-item"><code>cert:example.com</code><span>{{t "help.direct.network.cert"}}</span></li>
+                <li class="hub-item"><code>headers:example.com</code><span>{{t "help.direct.network.headers"}}</span></li>
+                <li class="hub-item"><code>asn:AS15169</code><span>{{t "help.direct.network.asn"}}</span></li>
+                <li class="hub-item"><code>subnet:192.168.1.0/24</code><span>{{t "help.direct.network.subnet"}}</span></li>
+                <li class="hub-item"><code>resolve:example.com</code><span>{{t "help.direct.network.resolve"}}</span></li>
+                <li class="hub-item"><code>robots:example.com</code><span>{{t "help.direct.network.robots"}}</span></li>
+                <li class="hub-item"><code>sitemap:example.com</code><span>{{t "help.direct.network.sitemap"}}</span></li>
+                <li class="hub-item"><code>tech:example.com</code><span>{{t "help.direct.network.tech"}}</span></li>
+                <li class="hub-item"><code>feed:example.com</code><span>{{t "help.direct.network.feed"}}</span></li>
+                <li class="hub-item"><code>expand:short.url/x</code><span>{{t "help.direct.network.expand"}}</span></li>
+                <li class="hub-item"><code>safe:example.com</code><span>{{t "help.direct.network.safe"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.encoding.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>qr:https://example.com</code><span>{{t "help.direct.encoding.qr"}}</span></div>
-                <div class="operator-item"><code>jwt:token</code><span>{{t "help.direct.encoding.jwt"}}</span></div>
-                <div class="operator-item"><code>html:&lt;b&gt;text&lt;/b&gt;</code><span>{{t "help.direct.encoding.html"}}</span></div>
-                <div class="operator-item"><code>escape:hello &amp; world</code><span>{{t "help.direct.encoding.escape"}}</span></div>
-                <div class="operator-item"><code>ascii:hello</code><span>{{t "help.direct.encoding.ascii"}}</span></div>
-                <div class="operator-item"><code>unicode:U+1F600</code><span>{{t "help.direct.encoding.unicode"}}</span></div>
-                <div class="operator-item"><code>emoji:smile</code><span>{{t "help.direct.encoding.emoji"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>qr:https://example.com</code><span>{{t "help.direct.encoding.qr"}}</span></li>
+                <li class="hub-item"><code>jwt:token</code><span>{{t "help.direct.encoding.jwt"}}</span></li>
+                <li class="hub-item"><code>html:&lt;b&gt;text&lt;/b&gt;</code><span>{{t "help.direct.encoding.html"}}</span></li>
+                <li class="hub-item"><code>escape:hello &amp; world</code><span>{{t "help.direct.encoding.escape"}}</span></li>
+                <li class="hub-item"><code>ascii:hello</code><span>{{t "help.direct.encoding.ascii"}}</span></li>
+                <li class="hub-item"><code>unicode:U+1F600</code><span>{{t "help.direct.encoding.unicode"}}</span></li>
+                <li class="hub-item"><code>emoji:smile</code><span>{{t "help.direct.encoding.emoji"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.dev.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>json:format {"key":"val"}</code><span>{{t "help.direct.dev.json"}}</span></div>
-                <div class="operator-item"><code>yaml:from-json {"key":"val"}</code><span>{{t "help.direct.dev.yaml"}}</span></div>
-                <div class="operator-item"><code>regex:[a-z]+</code><span>{{t "help.direct.dev.regex"}}</span></div>
-                <div class="operator-item"><code>beautify:code</code><span>{{t "help.direct.dev.beautify"}}</span></div>
-                <div class="operator-item"><code>cron:* * * * *</code><span>{{t "help.direct.dev.cron"}}</span></div>
-                <div class="operator-item"><code>chmod:755</code><span>{{t "help.direct.dev.chmod"}}</span></div>
-                <div class="operator-item"><code>timestamp:1700000000</code><span>{{t "help.direct.dev.timestamp"}}</span></div>
-                <div class="operator-item"><code>slug:Hello World</code><span>{{t "help.direct.dev.slug"}}</span></div>
-                <div class="operator-item"><code>case:hello world</code><span>{{t "help.direct.dev.case"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>json:format {"key":"val"}</code><span>{{t "help.direct.dev.json"}}</span></li>
+                <li class="hub-item"><code>yaml:from-json {"key":"val"}</code><span>{{t "help.direct.dev.yaml"}}</span></li>
+                <li class="hub-item"><code>regex:[a-z]+</code><span>{{t "help.direct.dev.regex"}}</span></li>
+                <li class="hub-item"><code>beautify:code</code><span>{{t "help.direct.dev.beautify"}}</span></li>
+                <li class="hub-item"><code>cron:* * * * *</code><span>{{t "help.direct.dev.cron"}}</span></li>
+                <li class="hub-item"><code>chmod:755</code><span>{{t "help.direct.dev.chmod"}}</span></li>
+                <li class="hub-item"><code>timestamp:1700000000</code><span>{{t "help.direct.dev.timestamp"}}</span></li>
+                <li class="hub-item"><code>slug:Hello World</code><span>{{t "help.direct.dev.slug"}}</span></li>
+                <li class="hub-item"><code>case:hello world</code><span>{{t "help.direct.dev.case"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.reference.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>tldr:git</code><span>{{t "help.direct.reference.tldr"}}</span></div>
-                <div class="operator-item"><code>man:grep</code><span>{{t "help.direct.reference.man"}}</span></div>
-                <div class="operator-item"><code>cheat:git</code><span>{{t "help.direct.reference.cheat"}}</span></div>
-                <div class="operator-item"><code>rfc:2616</code><span>{{t "help.direct.reference.rfc"}}</span></div>
-                <div class="operator-item"><code>cve:CVE-2024-1234</code><span>{{t "help.direct.reference.cve"}}</span></div>
-                <div class="operator-item"><code>pkg:express</code><span>{{t "help.direct.reference.pkg"}}</span></div>
-                <div class="operator-item"><code>http:404</code><span>{{t "help.direct.reference.http"}}</span></div>
-                <div class="operator-item"><code>port:443</code><span>{{t "help.direct.reference.port"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>tldr:git</code><span>{{t "help.direct.reference.tldr"}}</span></li>
+                <li class="hub-item"><code>man:grep</code><span>{{t "help.direct.reference.man"}}</span></li>
+                <li class="hub-item"><code>cheat:git</code><span>{{t "help.direct.reference.cheat"}}</span></li>
+                <li class="hub-item"><code>rfc:2616</code><span>{{t "help.direct.reference.rfc"}}</span></li>
+                <li class="hub-item"><code>cve:CVE-2024-1234</code><span>{{t "help.direct.reference.cve"}}</span></li>
+                <li class="hub-item"><code>pkg:express</code><span>{{t "help.direct.reference.pkg"}}</span></li>
+                <li class="hub-item"><code>http:404</code><span>{{t "help.direct.reference.http"}}</span></li>
+                <li class="hub-item"><code>port:443</code><span>{{t "help.direct.reference.port"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.content.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>wiki:python</code><span>{{t "help.direct.content.wiki"}}</span></div>
-                <div class="operator-item"><code>dict:ephemeral</code><span>{{t "help.direct.content.dict"}}</span></div>
-                <div class="operator-item"><code>thesaurus:happy</code><span>{{t "help.direct.content.thesaurus"}}</span></div>
-                <div class="operator-item"><code>slang:yolo</code><span>{{t "help.direct.content.slang"}}</span></div>
-                <div class="operator-item"><code>country:DE</code><span>{{t "help.direct.content.country"}}</span></div>
-                <div class="operator-item"><code>license:MIT</code><span>{{t "help.direct.content.license"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>wiki:python</code><span>{{t "help.direct.content.wiki"}}</span></li>
+                <li class="hub-item"><code>dict:ephemeral</code><span>{{t "help.direct.content.dict"}}</span></li>
+                <li class="hub-item"><code>thesaurus:happy</code><span>{{t "help.direct.content.thesaurus"}}</span></li>
+                <li class="hub-item"><code>slang:yolo</code><span>{{t "help.direct.content.slang"}}</span></li>
+                <li class="hub-item"><code>country:DE</code><span>{{t "help.direct.content.country"}}</span></li>
+                <li class="hub-item"><code>license:MIT</code><span>{{t "help.direct.content.license"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.text.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>lorem:3</code><span>{{t "help.direct.text.lorem"}}</span></div>
-                <div class="operator-item"><code>word:hello world</code><span>{{t "help.direct.text.word"}}</span></div>
-                <div class="operator-item"><code>diff:text1|text2</code><span>{{t "help.direct.text.diff"}}</span></div>
-                <div class="operator-item"><code>useragent:my</code><span>{{t "help.direct.text.useragent"}}</span></div>
-                <div class="operator-item"><code>mime:application/json</code><span>{{t "help.direct.text.mime"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>lorem:3</code><span>{{t "help.direct.text.lorem"}}</span></li>
+                <li class="hub-item"><code>word:hello world</code><span>{{t "help.direct.text.word"}}</span></li>
+                <li class="hub-item"><code>diff:text1|text2</code><span>{{t "help.direct.text.diff"}}</span></li>
+                <li class="hub-item"><code>useragent:my</code><span>{{t "help.direct.text.useragent"}}</span></li>
+                <li class="hub-item"><code>mime:application/json</code><span>{{t "help.direct.text.mime"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.directories.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>directory:linux iso</code><span>{{t "help.direct.directories.linux"}}</span></div>
-                <div class="operator-item"><code>directory:pdf book</code><span>{{t "help.direct.directories.pdf"}}</span></div>
-                <div class="operator-item"><code>directory:mp3 album</code><span>{{t "help.direct.directories.mp3"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>directory:linux iso</code><span>{{t "help.direct.directories.linux"}}</span></li>
+                <li class="hub-item"><code>directory:pdf book</code><span>{{t "help.direct.directories.pdf"}}</span></li>
+                <li class="hub-item"><code>directory:mp3 album</code><span>{{t "help.direct.directories.mp3"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.cache.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>cache:example.com</code><span>{{t "help.direct.cache.cached"}}</span></div>
-                <div class="operator-item"><code>rotl:34</code><span>{{t "help.direct.cache.rotl"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>cache:example.com</code><span>{{t "help.direct.cache.cached"}}</span></li>
+                <li class="hub-item"><code>rotl:34</code><span>{{t "help.direct.cache.rotl"}}</span></li>
+            </ul>
 
             <h3>{{t "help.direct.instant.heading"}}</h3>
-            <div class="operator-grid">
-                <div class="operator-item"><code>2 + 2</code><span>{{t "help.direct.instant.calc"}}</span></div>
-                <div class="operator-item"><code>sqrt(144)</code><span>{{t "help.direct.instant.math"}}</span></div>
-                <div class="operator-item"><code>convert 10 km to miles</code><span>{{t "help.direct.instant.convert"}}</span></div>
-                <div class="operator-item"><code>time in tokyo</code><span>{{t "help.direct.instant.time"}}</span></div>
-                <div class="operator-item"><code>what is my ip</code><span>{{t "help.direct.instant.ip"}}</span></div>
-                <div class="operator-item"><code>#ff5733</code><span>{{t "help.direct.instant.color"}}</span></div>
-            </div>
+            <ul class="hub-list">
+                <li class="hub-item"><code>2 + 2</code><span>{{t "help.direct.instant.calc"}}</span></li>
+                <li class="hub-item"><code>sqrt(144)</code><span>{{t "help.direct.instant.math"}}</span></li>
+                <li class="hub-item"><code>convert 10 km to miles</code><span>{{t "help.direct.instant.convert"}}</span></li>
+                <li class="hub-item"><code>time in tokyo</code><span>{{t "help.direct.instant.time"}}</span></li>
+                <li class="hub-item"><code>what is my ip</code><span>{{t "help.direct.instant.ip"}}</span></li>
+                <li class="hub-item"><code>#ff5733</code><span>{{t "help.direct.instant.color"}}</span></li>
+            </ul>
         </section>
 
         {{/* Search Operators */}}
@@ -336,14 +336,14 @@
         <section id="api-docs" class="section-card" aria-labelledby="api-docs-heading">
             <h2 id="api-docs-heading">{{t "help.api.heading"}}</h2>
             <p>{{t "help.api.intro"}}</p>
-            <div class="api-links">
-                <a href="/server/docs/swagger" class="api-link-card">
-                    <h3>{{t "help.api.openapi_heading"}}</h3>
-                    <p>{{t "help.api.openapi_desc"}}</p>
+            <div class="hub-list">
+                <a href="/server/docs/swagger" class="hub-link">
+                    <span class="hub-title">{{t "help.api.openapi_heading"}}</span>
+                    <span class="hub-desc">{{t "help.api.openapi_desc"}}</span>
                 </a>
-                <a href="/server/docs/graphql" class="api-link-card">
-                    <h3>{{t "help.api.graphql_heading"}}</h3>
-                    <p>{{t "help.api.graphql_desc"}}</p>
+                <a href="/server/docs/graphql" class="hub-link">
+                    <span class="hub-title">{{t "help.api.graphql_heading"}}</span>
+                    <span class="hub-desc">{{t "help.api.graphql_desc"}}</span>
                 </a>
             </div>
 
@@ -404,39 +404,31 @@ curl "{{.ServerURL}}{{.APIBasePath}}/direct/rules/34"</code></pre>
         {{/* Privacy Features */}}
         <section id="privacy" class="section-card" aria-labelledby="privacy-heading">
             <h2 id="privacy-heading">{{t "help.privacy.heading"}}</h2>
-            <ul class="privacy-list">
+            <ul>
                 <li><strong>{{t "help.privacy.no_tracking_label"}}</strong> {{t "help.privacy.no_tracking_text"}}</li>
                 <li><strong>{{t "help.privacy.no_history_label"}}</strong> {{t "help.privacy.no_history_text"}}</li>
                 <li><strong>{{t "help.privacy.sanitized_links_label"}}</strong> {{t "help.privacy.sanitized_links_text"}}</li>
-                <li><strong>{{t "help.privacy.tor_support_label"}}</strong> {{t "help.privacy.tor_support_prefix"}}{{if .Config.Server.Tor.Enabled}} (<a href="#tor-access">{{t "help.privacy.tor_support_see_below"}}</a>){{end}}</li>
+                <li><strong>{{t "help.privacy.tor_support_label"}}</strong> {{t "help.privacy.tor_support_prefix"}}{{if and .Config.Server.Tor.Enabled .OnionAddress}} (<a href="#tor-access">{{t "help.privacy.tor_support_see_below"}}</a>){{end}}</li>
                 <li><strong>{{t "help.privacy.minimal_cookies_label"}}</strong> {{t "help.privacy.minimal_cookies_text"}}</li>
                 <li><strong>{{t "help.privacy.no_js_label"}}</strong> {{t "help.privacy.no_js_text"}}</li>
                 <li><strong>{{t "help.privacy.open_source_label"}}</strong> {{t "help.privacy.open_source_text"}}</li>
             </ul>
         </section>
 
-        {{/* Tor Access - only shown if Tor is enabled */}}
-        {{if .Config.Server.Tor.Enabled}}
+        {{/* An address is populated only while the Tor hidden service is live. */}}
+        {{if and .Config.Server.Tor.Enabled .OnionAddress}}
         <section id="tor-access" class="section-card" aria-labelledby="tor-access-heading">
             <h2 id="tor-access-heading">{{t "help.tor.heading"}}</h2>
             <p>{{t "help.tor.intro"}}</p>
 
-            {{if .OnionAddress}}
             <h3>{{t "help.tor.onion_heading"}}</h3>
-            <div class="onion-address-box">
-                <code id="onion-addr" class="onion-address">{{.OnionAddress}}</code>
-                <button class="btn-copy" data-copy-target="onion-addr" aria-label="{{t "help.tor.copy_aria"}}">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    {{t "help.tor.copy_label"}}
+            <div class="code-block">
+                <code id="onion-addr" class="code-content">{{.OnionAddress}}</code>
+                <button type="button" class="copy-btn" data-copy="{{.OnionAddress}}" aria-label="{{t "help.tor.copy_aria"}}">
+                    <span class="copy-icon">📋</span>
+                    <span class="copy-text" aria-live="polite">{{t "help.tor.copy_label"}}</span>
                 </button>
             </div>
-            {{else}}
-            <p class="tor-note">{{t "help.tor.pending_note"}}</p>
-            {{end}}
-
             <h3>{{t "help.tor.how_to_heading"}}</h3>
             <ol>
                 <li>{{t "help.tor.step_download"}} <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a></li>
@@ -448,17 +440,40 @@ curl "{{.ServerURL}}{{.APIBasePath}}/direct/rules/34"</code></pre>
         </section>
         {{end}}
 
+        {{/* The manager exposes an address only while the I2P provider is live. */}}
+        {{if .I2PAddress}}
+        <section id="i2p-access" class="section-card" aria-labelledby="i2p-access-heading">
+            <h2 id="i2p-access-heading">{{t "help.i2p.heading"}}</h2>
+            <p>{{t "help.i2p.intro"}}</p>
+            <h3>{{t "help.i2p.address_heading"}}</h3>
+            <div class="code-block">
+                <code id="i2p-addr" class="code-content">{{.I2PAddress}}</code>
+                <button type="button" class="copy-btn" data-copy="{{.I2PAddress}}" aria-label="{{t "accessibility.copy_to_clipboard"}}">
+                    <span class="copy-icon">📋</span>
+                    <span class="copy-text" aria-live="polite">{{t "help.tor.copy_label"}}</span>
+                </button>
+            </div>
+            <h3>{{t "help.i2p.how_to_heading"}}</h3>
+            <ol>
+                <li>{{t "help.i2p.step_install"}} <a href="https://geti2p.net/en/download" target="_blank" rel="noopener">I2P</a> {{t "help.i2p.step_or"}} <a href="https://i2pd.website/" target="_blank" rel="noopener">i2pd</a> {{t "help.i2p.step_connect"}}</li>
+                <li>{{t "help.i2p.step_proxy"}} <code>127.0.0.1:4444</code></li>
+                <li>{{t "help.i2p.step_address"}}</li>
+            </ol>
+            <p>{{t "help.i2p.note"}}</p>
+        </section>
+        {{end}}
+
         {{/* FAQ */}}
         <section id="faq" class="section-card" aria-labelledby="faq-heading">
             <h2 id="faq-heading">{{t "help.faq.heading"}}</h2>
-            <div class="faq-list">
+            <div>
                 <details>
                     <summary>{{t "help.faq.q_results_diff"}}</summary>
                     <p>{{t "help.faq.a_results_diff"}}</p>
                 </details>
                 <details>
                     <summary>{{t "help.faq.q_tor_access_summary"}}</summary>
-                    <p>{{t "help.faq.a_tor_access_prefix"}} <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> {{t "help.faq.a_tor_access_suffix"}}{{if .Config.Server.Tor.Enabled}} <a href="#tor-access">{{t "help.faq.a_tor_access_see_section"}}</a>{{end}}</p>
+                    <p>{{t "help.faq.a_tor_access_prefix"}} <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> {{t "help.faq.a_tor_access_suffix"}}{{if and .Config.Server.Tor.Enabled .OnionAddress}} <a href="#tor-access">{{t "help.faq.a_tor_access_see_section"}}</a>{{end}}</p>
                 </details>
                 <details>
                     <summary>{{t "help.faq.q_self_host"}}</summary>
@@ -475,12 +490,18 @@ curl "{{.ServerURL}}{{.APIBasePath}}/direct/rules/34"</code></pre>
             </div>
         </section>
 
+        <section id="troubleshooting" class="section-card" aria-labelledby="troubleshooting-heading">
+            <h2 id="troubleshooting-heading">{{t "help.troubleshooting.heading"}}</h2>
+            <p>{{t "help.troubleshooting.search"}}</p>
+            <p>{{t "help.troubleshooting.access"}}</p>
+            <p>{{t "help.troubleshooting.alerts"}}</p>
+        </section>
+
         {{/* Need Help */}}
         <section class="section-card" aria-labelledby="need-more-heading">
             <h2 id="need-more-heading">{{t "help.need_more.heading"}}</h2>
             <p>{{t "help.need_more.text_prefix"}} <a href="/server/security">{{t "help.need_more.link"}}</a>{{t "help.need_more.text_suffix"}}</p>
         </section>
-    </div>
     {{end}}
     <section class="section-card" aria-labelledby="more-help-heading">
         <h2 id="more-help-heading">{{t "help.more_title"}}</h2>

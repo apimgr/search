@@ -1,5 +1,8 @@
 {{define "content"}}
-    <div class="search-results-page" data-query="{{.Query}}" data-category="{{.Category}}" data-page="{{if .Pagination}}{{.Pagination.CurrentPage}}{{else}}1{{end}}" data-per-page="{{.PerPage}}" data-safe-search="{{.SafeSearch}}" data-lang="{{.Language}}" data-region="{{.Region}}" data-time-range="{{.TimeRange}}" data-time-from="{{.TimeFrom}}" data-time-to="{{.TimeTo}}"{{if .PrefsQuery}} data-prefs="{{.PrefsQuery}}"{{end}}>
+    <div class="container container-lg" data-search-results data-query="{{.Query}}" data-category="{{.Category}}" data-page="{{if .Pagination}}{{.Pagination.CurrentPage}}{{else}}1{{end}}" data-per-page="{{.PerPage}}" data-safe-search="{{.SafeSearch}}" data-lang="{{.Language}}" data-region="{{.Region}}" data-time-range="{{.TimeRange}}" data-time-from="{{.TimeFrom}}" data-time-to="{{.TimeTo}}"{{if .PrefsQuery}} data-prefs="{{.PrefsQuery}}"{{end}}>
+        <header class="page-header">
+            <h1 class="page-title">{{t "search.results_for"}} <q>{{.Query}}</q></h1>
+        </header>
         <div class="search-actions">
             <a class="create-alert-link" href="/alerts/new?q={{urlquery .Query}}&category={{.Category}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}">{{t "alerts.create_title"}}</a>
         </div>
@@ -198,9 +201,11 @@
 
     {{else}}
     <div class="results-list" id="results-container" aria-live="polite"></div>
-    <div class="no-results">
-        <p>{{tf "search.no_results_for" "query" .Query}}</p>
-        <p class="no-results-hint">{{t "search.no_results_hint"}}</p>
+    <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <h2 class="empty-state-title">{{tf "search.no_results_for" "query" .Query}}</h2>
+        <p class="empty-state-message">{{t "search.no_results_hint"}}</p>
+        <a class="btn btn-secondary" href="/search?q={{urlquery .Query}}">{{t "common.clear"}}</a>
     </div>
     {{end}}
 </div>

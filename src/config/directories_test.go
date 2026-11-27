@@ -60,6 +60,7 @@ func TestSetAndGetLogDirOverride(t *testing.T) {
 }
 
 func TestSetAndGetPIDFileOverride(t *testing.T) {
+	setContainerOverride(t, false)
 	SetPIDFileOverride("/test/search.pid")
 	defer SetPIDFileOverride("")
 
@@ -468,6 +469,7 @@ func TestContains(t *testing.T) {
 }
 
 func TestCanonicalDirectoryEnvironmentOverrides(t *testing.T) {
+	setContainerOverride(t, false)
 	t.Run("config directory", func(t *testing.T) {
 		SetConfigDirOverride("")
 		t.Setenv("CONFIG_DIR", "/env/config")
@@ -503,9 +505,25 @@ func TestCanonicalDirectoryEnvironmentOverrides(t *testing.T) {
 			t.Fatalf("GetDatabaseDir() = %q, want /env/database", got)
 		}
 	})
+	t.Run("cache directory", func(t *testing.T) {
+		SetCacheDirOverride("")
+		t.Setenv("CACHE_DIR", "/env/cache")
+		if got := GetCacheDir(); got != "/env/cache" {
+			t.Fatalf("GetCacheDir() = %q, want /env/cache", got)
+		}
+	})
+	t.Run("PID file", func(t *testing.T) {
+		SetPIDFileEnabled(true)
+		SetPIDFileOverride("")
+		t.Setenv("PID_FILE", "/env/search.pid")
+		if got := GetPIDFile(); got != "/env/search.pid" {
+			t.Fatalf("GetPIDFile() = %q, want /env/search.pid", got)
+		}
+	})
 }
 
 func TestCacheAndPIDPathsUseCLIOverrides(t *testing.T) {
+	setContainerOverride(t, false)
 	t.Run("cache", func(t *testing.T) {
 		SetCacheDirOverride("/flag/cache")
 		t.Cleanup(func() { SetCacheDirOverride("") })
@@ -514,6 +532,8 @@ func TestCacheAndPIDPathsUseCLIOverrides(t *testing.T) {
 		}
 	})
 	t.Run("pid file", func(t *testing.T) {
+		SetPIDFileEnabled(true)
+		t.Setenv("PID_FILE", "")
 		SetPIDFileOverride("/flag/search.pid")
 		t.Cleanup(func() { SetPIDFileOverride("") })
 		if got := GetPIDFile(); got != "/flag/search.pid" {

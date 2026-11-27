@@ -1,5 +1,5 @@
 # Binary Rules (PART 7, 8, 32)
-<!-- Synchronized with AI.md revision 59c37d25e582. -->
+<!-- Synchronized with AI.md revision c2f65bf274b5. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 

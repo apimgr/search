@@ -1,5 +1,5 @@
 # Service Rules (PART 23, 24)
-<!-- Synchronized with AI.md revision 59c37d25e582. -->
+<!-- Synchronized with AI.md revision c2f65bf274b5. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -21,9 +21,11 @@ Read: `AI.md` PART 23 (Privilege Escalation & Service), PART 24 (Service Support
 - Implement `--service --install`, `--service --uninstall`, and `--service start|stop|restart|reload`
 - Detect and support systemd, OpenRC, SysVinit, runit, and s6 on Linux; launchd on macOS; Windows Service Control Manager; and rc.d on BSD
 - Use the default scope and path rules from PART 23-24 when choosing between system-wide and user-scoped installation
-- Create the platform-appropriate dedicated service account, home, and owned runtime directories before dropping privileges
+- Create the dedicated `{internal_name}` account/group and owned runtime directories before dropping privileges; UID/GID match within the documented 200–899 range, with a nologin shell and config/data home
 - Cache privilege/path mode at process start; later privilege changes must not silently switch the process between system and user directory trees
 - Keep service start/stop/restart/reload operations aligned with the host manager and return command failures to the operator
+- Detect the running host manager in the documented priority order (OpenRC before SysVinit); an installed but non-running systemd binary does not make the host systemd
+- Preserve staged-update restart behavior: supervised services restart after exit `75`; OpenRC and SysVinit apply the staged update on the next start/restart and notify the operator
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |

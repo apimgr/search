@@ -3,8 +3,26 @@
 # Per AI.md PART 28: Integration testing in a Docker alpine container
 set -eo pipefail
 
-PROJECTNAME=$(basename "$PWD")
-PROJECTORG=$(basename "$(dirname "$PWD")")
+read_idea_value() {
+    [ -r IDEA.md ] || return 0
+    sed -n "/^$1:[[:space:]]*/ { s/^$1:[[:space:]]*//; p; q; }" IDEA.md | tr -d '[:space:]'
+}
+
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || true)
+PROJECTNAME=$(read_idea_value project_name)
+PROJECTORG=$(read_idea_value project_org)
+if [ -z "$PROJECTNAME" ]; then
+    PROJECTNAME=$(printf '%s\n' "$ORIGIN_URL" | sed -E 's|.*/([^/]+)$|\1|; s/\.git$//')
+fi
+if [ -z "$PROJECTORG" ]; then
+    PROJECTORG=$(printf '%s\n' "$ORIGIN_URL" | sed -E 's|.*[:/]([^/:]+)/[^/]+(\.git)?$|\1|')
+fi
+PROJECTNAME=${PROJECTNAME:-$(basename "$PWD")}
+PROJECTORG=${PROJECTORG:-$(basename "$(dirname "$PWD")")}
+IDEA_INTERNAL_NAME=$(read_idea_value internal_name)
+IDEA_INTERNAL_ORG=$(read_idea_value internal_org)
+INTERNAL_NAME=${IDEA_INTERNAL_NAME:-${INTERNAL_NAME:-$PROJECTNAME}}
+INTERNAL_ORG=${IDEA_INTERNAL_ORG:-${INTERNAL_ORG:-$PROJECTORG}}
 if ! command -v docker >/dev/null 2>&1; then
     echo 'ERROR: Docker is required for tests/docker.sh.' >&2
     exit 69
@@ -16,11 +34,11 @@ fi
 TMP_ROOT="$TMP_BASE/$PROJECTORG"
 
 random_suffix() {
-    printf '%08x' "$(((RANDOM << 15) | RANDOM))"
+    head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8
 }
 
 mkdir -p "$TMP_ROOT"
-RUNTIME_DIR=$(mktemp -d "$TMP_ROOT/$PROJECTNAME-XXXXXX")
+RUNTIME_DIR=$(mktemp -d "$TMP_ROOT/$INTERNAL_NAME-XXXXXX")
 mkdir -p "$RUNTIME_DIR/config" "$RUNTIME_DIR/data"
 chmod 700 "$RUNTIME_DIR"
 chmod 755 "$RUNTIME_DIR/config" "$RUNTIME_DIR/data"
@@ -37,12 +55,21 @@ CONTAINER_NAME="$PROJECTNAME-$TEST_SUFFIX"
 NETWORK_NAME="$PROJECTNAME-test-$TEST_SUFFIX"
 
 cleanup() {
+    local cleanup_status=0 cleanup_container
     docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
     docker network rm "$NETWORK_NAME" >/dev/null 2>&1 || true
+    if [ -d "$RUNTIME_DIR" ]; then
+        cleanup_container="$PROJECTNAME-$(random_suffix)"
+        timeout -k 30 "${DOCKER_TIMEOUT:-3600}" docker run --rm --no-healthcheck \
+          --name "$cleanup_container" --network none \
+          -v "$RUNTIME_DIR:/cleanup" alpine:latest sh -c \
+          'chown -R "$1:$2" /cleanup' sh "$(id -u)" "$(id -g)" >/dev/null 2>&1 || cleanup_status=1
+    fi
     case "$RUNTIME_DIR" in
-        "$TMP_ROOT/$PROJECTNAME-"*) rm -rf -- "$RUNTIME_DIR" ;;
+        "$TMP_ROOT/$INTERNAL_NAME-"*) rm -rf -- "$RUNTIME_DIR" || cleanup_status=1 ;;
         *) printf 'Refusing to remove unexpected runtime directory: %s\n' "$RUNTIME_DIR" >&2; return 1 ;;
     esac
+    return "$cleanup_status"
 }
 trap cleanup EXIT INT TERM
 docker network create "$NETWORK_NAME" >/dev/null
@@ -53,6 +80,8 @@ timeout -k 30 "${DOCKER_TIMEOUT:-3600}" docker run --rm -i \
   --network "$NETWORK_NAME" \
   -e PROJECTNAME="$PROJECTNAME" \
   -e PROJECTORG="$PROJECTORG" \
+  -e INTERNAL_NAME="$INTERNAL_NAME" \
+  -e INTERNAL_ORG="$INTERNAL_ORG" \
   -e TOR_WAIT="${TOR_WAIT:-300}" \
   -e I2P_WAIT="${I2P_WAIT:-600}" \
   -e REQUIRE_OVERLAY="${REQUIRE_OVERLAY:-0}" \
@@ -60,16 +89,23 @@ timeout -k 30 "${DOCKER_TIMEOUT:-3600}" docker run --rm -i \
   -v "$RUNTIME_DIR/config:/config" \
   -v "$RUNTIME_DIR/data:/data" \
   alpine:latest sh -s <<'ALPINE'
-set -eu
+set -e
 
 apk add --no-cache curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
 
 mkdir -p "${TMPDIR:-/tmp}/$PROJECTORG"
-TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/$PROJECTORG/$PROJECTNAME-XXXXXX")
-CONFIG_DIR=/config/$PROJECTNAME
+TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/$PROJECTORG/$INTERNAL_NAME-XXXXXX")
+CONFIG_DIR=/config/$INTERNAL_NAME
 SERVER_LOG="$TEST_TMP/server.log"
 BOOTSTRAP_LOG="$TEST_TMP/bootstrap.log"
-trap 'kill "${SERVER_PID:-}" "${BOOTSTRAP_PID:-}" 2>/dev/null || true; rm -rf -- "$TEST_TMP"' EXIT
+cleanup_test() {
+    kill "${SERVER_PID:-}" "${BOOTSTRAP_PID:-}" 2>/dev/null || true
+    case "$TEST_TMP" in
+        "${TMPDIR:-/tmp}/$PROJECTORG/$INTERNAL_NAME-"*) rm -rf -- "$TEST_TMP" ;;
+        *) printf 'Refusing to remove unexpected test directory: %s\n' "$TEST_TMP" >&2; return 1 ;;
+    esac
+}
+trap cleanup_test EXIT INT TERM
 
 chmod +x "/app/$PROJECTNAME"
 if [ -f "/app/$PROJECTNAME-cli" ]; then
@@ -248,8 +284,8 @@ check_overlay() {
         return 1
     fi
     case "$feature" in
-        tor) key_file="/data/$PROJECTNAME/tor/site/hostname" ;;
-        i2p) key_file="/data/$PROJECTNAME/i2p/site/site-keys.dat" ;;
+        tor) key_file="/data/$INTERNAL_NAME/tor/site/hostname" ;;
+        i2p) key_file="/data/$INTERNAL_NAME/i2p/site/site-keys.dat" ;;
     esac
     if [ ! -s "$key_file" ]; then
         printf 'FAILED: %s identity was not persisted to %s\n' "$feature" "$key_file" >&2
@@ -330,9 +366,9 @@ else
 fi
 
 echo '=== Binary Rename Tests ==='
-cp "/app/$PROJECTNAME" /app/renamed-server
-chmod +x /app/renamed-server
-if ! /app/renamed-server --help 2>&1 | grep -q -- 'renamed-server'; then
+cp "/app/$PROJECTNAME" "$TEST_TMP/renamed-server"
+chmod +x "$TEST_TMP/renamed-server"
+if ! server_help=$("$TEST_TMP/renamed-server" --help 2>&1) || [[ "$server_help" != *renamed-server* ]]; then
     echo 'FAILED: server help did not use the renamed binary name'
     exit 1
 fi
@@ -342,9 +378,9 @@ echo '=== CLI Client Tests (if present) ==='
 if [ -f "/app/$PROJECTNAME-cli" ]; then
     "/app/$PROJECTNAME-cli" --version
     "/app/$PROJECTNAME-cli" --help >/dev/null
-    cp "/app/$PROJECTNAME-cli" /app/renamed-cli
-    chmod +x /app/renamed-cli
-    if ! /app/renamed-cli --help 2>&1 | grep -q -- 'renamed-cli'; then
+    cp "/app/$PROJECTNAME-cli" "$TEST_TMP/renamed-cli"
+    chmod +x "$TEST_TMP/renamed-cli"
+    if ! cli_help=$("$TEST_TMP/renamed-cli" --help 2>&1) || [[ "$cli_help" != *renamed-cli* ]]; then
         echo 'FAILED: CLI help did not use the renamed binary name'
         exit 1
     fi
@@ -355,12 +391,13 @@ if [ -f "/app/$PROJECTNAME-cli" ]; then
     cli_status_output=$("/app/$PROJECTNAME-cli" --server "$BASE_URL" --token-file "$TEST_TMP/cli-token" status 2>&1)
     cli_status_code=$?
     set -e
-    if [ "$cli_status_code" -gt 1 ] || ! printf '%s\n' "$cli_status_output" | grep -Eq "status[[:space:]]+$expected_health"; then
+    printf '%s\n' "$cli_status_output" >"$TEST_TMP/cli-status"
+    if [ "$cli_status_code" -gt 1 ] || ! grep -Eq "status[[:space:]]+$expected_health" "$TEST_TMP/cli-status"; then
         printf 'FAILED: CLI status did not report server health %s (exit %s)\n' "$expected_health" "$cli_status_code" >&2
         printf '%s\n' "$cli_status_output" >&2
         exit 1
     fi
-    if [ "$cli_status_code" -eq 1 ] && ! printf '%s\n' "$cli_status_output" | grep -q '^Error:'; then
+    if [ "$cli_status_code" -eq 1 ] && [[ "$cli_status_output" != Error:* && "$cli_status_output" != *$'\nError:'* ]]; then
         echo 'FAILED: CLI status exited unsuccessfully without a reason' >&2
         printf '%s\n' "$cli_status_output" >&2
         exit 1

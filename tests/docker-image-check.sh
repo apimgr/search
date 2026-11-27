@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # @@License : WTFPL
 # Verify the required runtime tools and Tor health contract for a built image.
-set -euo pipefail
+set -eo pipefail
 
-PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel)")
-PROJECT_ORG=$(basename "$(dirname "$(git rev-parse --show-toplevel)")")
+PROJECT_NAME=$(sed -n '/^project_name:[[:space:]]*/ { s/^project_name:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+PROJECT_ORG=$(sed -n '/^project_org:[[:space:]]*/ { s/^project_org:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+INTERNAL_NAME=$(sed -n '/^internal_name:[[:space:]]*/ { s/^internal_name:[[:space:]]*//; p; q; }' IDEA.md | tr -d '[:space:]')
+: "${PROJECT_NAME:?project_name was not resolved from IDEA.md or the repository}"
+: "${PROJECT_ORG:?project_org was not resolved from IDEA.md or the repository}"
+: "${INTERNAL_NAME:?internal_name was not resolved from IDEA.md or the repository}"
 IMAGE=${1:-}
 if [ -z "$IMAGE" ]; then
   echo "Usage: $0 IMAGE" >&2
@@ -20,19 +24,32 @@ app_container="${PROJECT_NAME}-$(random_suffix)"
 tmp_base=${TMPDIR:-/tmp}
 tmp_root="$tmp_base/$PROJECT_ORG"
 mkdir -p "$tmp_root"
-chmod 700 "$tmp_root"
-runtime_dir=$(mktemp -d "$tmp_root/$PROJECT_NAME-image-check-XXXXXX")
+runtime_dir=$(mktemp -d "$tmp_root/$INTERNAL_NAME-XXXXXX")
 chmod 700 "$runtime_dir"
 mkdir -p "$runtime_dir/config" "$runtime_dir/data" "$runtime_dir/database"
 chmod 700 "$runtime_dir/config" "$runtime_dir/data" "$runtime_dir/database"
 cleanup() {
+  local status=$?
+  local cleanup_container
+  trap - EXIT INT TERM
   docker rm -f "$app_container" >/dev/null 2>&1 || true
   case "$runtime_dir" in
-    "$tmp_root/$PROJECT_NAME-image-check-"*) rm -rf -- "$runtime_dir" ;;
-    *) echo "Refusing to remove unexpected image-check directory: $runtime_dir" >&2; return 1 ;;
+    "$tmp_root/$INTERNAL_NAME-"*)
+      cleanup_container="$PROJECT_NAME-$(random_suffix)"
+      if docker run --rm --no-healthcheck --name "$cleanup_container" --user 0:0 --network none \
+        --volume "$runtime_dir:/cleanup" --entrypoint chown "$IMAGE" \
+        -R "$(id -u):$(id -g)" /cleanup; then
+        rm -rf -- "$runtime_dir" || status=1
+      else
+        echo "FAILED: could not restore ownership of image-check directory: $runtime_dir" >&2
+        status=1
+      fi
+      ;;
+    *) echo "Refusing to remove unexpected image-check directory: $runtime_dir" >&2; status=1 ;;
   esac
+  exit "$status"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 docker run --rm --name "$command_check" --entrypoint sh "$IMAGE" -c \
   'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'

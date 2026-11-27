@@ -1,0 +1,2 @@
+# Module SPDX ID reviewer note
+modernc.org/mathutil BSD-3-Clause @apimgr/maintainers reviewed module LICENSE and AUTHORS for v1.7.1 on 2026-11-26

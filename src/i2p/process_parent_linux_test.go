@@ -46,15 +46,34 @@ func TestParentDeathSignalStopsManagedChild(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		err := syscall.Kill(pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return
-		}
-		if err != nil && !errors.Is(err, syscall.EPERM) {
+		stopped, err := linuxProcessStopped(pid)
+		if err != nil {
 			t.Fatalf("check child process %d: %v", pid, err)
+		}
+		if stopped {
+			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
 	_ = syscall.Kill(pid, syscall.SIGKILL)
 	t.Fatalf("managed child %d survived parent exit", pid)
+}
+
+func linuxProcessStopped(pid int) (bool, error) {
+	stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	commEnd := strings.LastIndexByte(string(stat), ')')
+	if commEnd < 0 {
+		return false, errors.New("invalid Linux process stat record")
+	}
+	fields := strings.Fields(string(stat[commEnd+1:]))
+	if len(fields) == 0 {
+		return false, errors.New("Linux process stat record has no state")
+	}
+	return fields[0] == "Z" || fields[0] == "X", nil
 }

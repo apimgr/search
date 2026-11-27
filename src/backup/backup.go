@@ -690,9 +690,9 @@ func (m *Manager) CreateIncrementalAt(filename string, snapshotAt time.Time) (st
 	if err != nil {
 		return "", err
 	}
-	baseSHA, err := hashFile(basePath)
-	if err != nil {
-		return "", fmt.Errorf("hash incremental base: %w", err)
+	baseSHA := base.SHA256
+	if baseSHA == "" {
+		return "", fmt.Errorf("incremental base manifest has no sha256")
 	}
 	archive, metadata, err := m.buildIncrementalArchive(snapshotAt, base, filepath.Base(basePath), baseSHA)
 	if err != nil {
@@ -724,9 +724,9 @@ func (m *Manager) CreateEncryptedIncrementalAt(filename string, snapshotAt time.
 	if err != nil {
 		return "", err
 	}
-	baseSHA, err := hashFile(basePath)
-	if err != nil {
-		return "", fmt.Errorf("hash incremental base: %w", err)
+	baseSHA := base.SHA256
+	if baseSHA == "" {
+		return "", fmt.Errorf("incremental base manifest has no sha256")
 	}
 	archive, metadata, err := m.buildIncrementalArchive(snapshotAt, base, filepath.Base(basePath), baseSHA)
 	if err != nil {
@@ -738,7 +738,7 @@ func (m *Manager) CreateEncryptedIncrementalAt(filename string, snapshotAt time.
 	if err != nil {
 		return "", err
 	}
-	encrypted, err := EncryptBackup(archive, m.password)
+	encrypted, err := EncryptBackupWithBase(archive, m.password, filepath.Base(basePath))
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt incremental backup: %w", err)
 	}
@@ -773,6 +773,92 @@ func (m *Manager) latestFullBackup() (string, *BackupMetadata, error) {
 		return item.Path, metadata, nil
 	}
 	return "", nil, ErrNoFullBackup
+}
+
+// latestFullBackupForDaily selects the newest full by its encrypted header,
+// allowing password changes to be detected without decrypting its manifest.
+func (m *Manager) latestFullBackupForDaily() (string, *BackupMetadata, bool, string, error) {
+	backups, err := m.listBackupFiles()
+	if err != nil {
+		return "", nil, false, "", err
+	}
+	sort.Slice(backups, func(i, j int) bool { return backups[i].CreatedAt.After(backups[j].CreatedAt) })
+	for _, item := range backups {
+		if isIncrementalBackup(item.Filename) {
+			continue
+		}
+		if IsEncrypted(item.Path) {
+			header, headerErr := readBackupHeaderFromFile(item.Path)
+			if headerErr != nil {
+				return item.Path, nil, true, "corrupt_base", nil
+			}
+			if header.BaseName != "" {
+				continue
+			}
+			if m.password == "" {
+				return item.Path, nil, true, "password_changed", nil
+			}
+			keyID, keyErr := BackupEncryptionKeyID(m.password, header)
+			if keyErr != nil {
+				return item.Path, nil, true, "corrupt_base", nil
+			}
+			if keyID != header.KeyID {
+				return item.Path, nil, true, "password_changed", nil
+			}
+		} else if m.password != "" {
+			return item.Path, nil, true, "password_changed", nil
+		}
+		metadata, metadataErr := m.GetMetadata(item.Path)
+		if metadataErr != nil || metadata == nil || metadata.Type == "incremental" || len(metadata.FileManifest) == 0 {
+			return item.Path, nil, true, "corrupt_base", nil
+		}
+		return item.Path, metadata, false, "", nil
+	}
+	return "", nil, true, "", nil
+}
+
+func readBackupHeaderFromFile(path string) (BackupEncryptionHeader, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return BackupEncryptionHeader{}, err
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, backupHeaderFixedLen+backupHeaderMaxBase))
+	closeErr := file.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return BackupEncryptionHeader{}, err
+	}
+	header, _, err := ReadBackupEncryptionHeader(data)
+	return header, err
+}
+
+func (m *Manager) uniqueFullBackupName(filename string, timestamp time.Time) (string, error) {
+	filename = normalizeBackupFilename(filename)
+	for offset := 0; offset <= 24*60*60; offset++ {
+		candidate := filename
+		if offset > 0 || fileExists(filepath.Join(m.backupDir, filename+encryptedExtension(m.password != ""))) {
+			base := strings.TrimSuffix(filename, ".tar.gz")
+			candidate = fmt.Sprintf("%s_%s.tar.gz", base, timestamp.Add(time.Duration(offset)*time.Second).Format("150405"))
+		}
+		path := filepath.Join(m.backupDir, candidate+encryptedExtension(m.password != ""))
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		} else if err != nil {
+			return "", fmt.Errorf("inspect full backup target %s: %w", path, err)
+		}
+	}
+	return "", fmt.Errorf("could not find an unused timestamped full backup name")
+}
+
+func encryptedExtension(encrypted bool) string {
+	if encrypted {
+		return ".enc"
+	}
+	return ""
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func (m *Manager) buildIncrementalArchive(snapshotAt time.Time, base *BackupMetadata, baseName, baseSHA string) ([]byte, *BackupMetadata, error) {
@@ -1540,47 +1626,41 @@ func removeAll(paths map[string]string) {
 
 // List returns all available backups
 func (m *Manager) List() ([]BackupInfo, error) {
-	var backups []BackupInfo
+	backups, err := m.listBackupFiles()
+	if err != nil {
+		return nil, err
+	}
+	for i := range backups {
+		metadata, _ := m.GetMetadata(backups[i].Path)
+		if metadata != nil {
+			backups[i].Version = metadata.Version
+			backups[i].ServerTitle = metadata.ServerTitle
+			backups[i].FileCount = len(metadata.Files)
+		}
+	}
+	return backups, nil
+}
 
+func (m *Manager) listBackupFiles() ([]BackupInfo, error) {
+	var backups []BackupInfo
 	if _, err := os.Stat(m.backupDir); os.IsNotExist(err) {
 		return backups, nil
 	}
-
 	entries, err := os.ReadDir(m.backupDir)
 	if err != nil {
 		return nil, err
 	}
-
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || (!strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.gz.enc")) {
 			continue
 		}
-
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-
-		backupPath := filepath.Join(m.backupDir, entry.Name())
-		metadata, _ := m.GetMetadata(backupPath)
-
-		bi := BackupInfo{
-			Filename:  entry.Name(),
-			Path:      backupPath,
-			Size:      info.Size(),
-			CreatedAt: info.ModTime(),
-		}
-
-		if metadata != nil {
-			bi.Version = metadata.Version
-			bi.ServerTitle = metadata.ServerTitle
-			bi.FileCount = len(metadata.Files)
-		}
-
-		backups = append(backups, bi)
+		backups = append(backups, BackupInfo{Filename: name, Path: filepath.Join(m.backupDir, name), Size: info.Size(), CreatedAt: info.ModTime()})
 	}
-
 	return backups, nil
 }
 
@@ -1741,7 +1821,7 @@ func markKeep(backups []BackupInfo, kept map[string]bool, limit int, matches fun
 // first, followed by a max_total_size size-cap pass that overrides count
 // limits. Incremental backups are excluded entirely from counted retention.
 func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
-	backups, err := m.List()
+	backups, err := m.listBackupFiles()
 	if err != nil {
 		return err
 	}
@@ -1818,12 +1898,27 @@ func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 
 func (m *Manager) retainedIncrementalBases() map[string]bool {
 	protected := make(map[string]bool)
-	backups, err := m.List()
+	backups, err := m.listBackupFiles()
 	if err != nil {
 		return protected
 	}
 	for _, item := range backups {
 		if !isIncrementalBackup(item.Filename) {
+			continue
+		}
+		if IsEncrypted(item.Path) {
+			header, headerErr := readBackupHeaderFromFile(item.Path)
+			if headerErr == nil && header.BaseName != "" {
+				protected[header.BaseName] = true
+				continue
+			}
+			// Keep all full archives if an encrypted incremental cannot safely
+			// identify its base from the cleartext header.
+			for _, candidate := range backups {
+				if !isIncrementalBackup(candidate.Filename) {
+					protected[candidate.Filename] = true
+				}
+			}
 			continue
 		}
 		metadata, err := m.GetMetadata(item.Path)
@@ -1859,7 +1954,7 @@ func (m *Manager) enforceMaxTotalSize(maxTotalSize string) error {
 		return nil
 	}
 
-	backups, err := m.List()
+	backups, err := m.listBackupFiles()
 	if err != nil {
 		return err
 	}
@@ -1884,13 +1979,20 @@ func (m *Manager) enforceMaxTotalSize(maxTotalSize string) error {
 		}
 		if candidate < 0 {
 			for i, b := range backups {
-				if isIncrementalBackup(b.Filename) {
+				if !isIncrementalBackup(b.Filename) {
+					continue
+				}
+				baseName, known := m.incrementalBaseName(b)
+				if known && !protected[baseName] {
 					candidate = i
 					break
 				}
 			}
 		}
 		if candidate < 0 {
+			if len(protected) > 0 {
+				slog.Warn("backup.cap_exceeded_protected_base", "total_bytes", total, "max_total_size_bytes", limitBytes, "protected_bases", protected)
+			}
 			break
 		}
 		b := backups[candidate]
@@ -1904,6 +2006,24 @@ func (m *Manager) enforceMaxTotalSize(maxTotalSize string) error {
 	}
 
 	return nil
+}
+
+func (m *Manager) incrementalBaseName(item BackupInfo) (string, bool) {
+	if IsEncrypted(item.Path) {
+		header, err := readBackupHeaderFromFile(item.Path)
+		if err != nil {
+			return "", false
+		}
+		if header.BaseName == "" {
+			return "", false
+		}
+		return header.BaseName, true
+	}
+	metadata, err := m.GetMetadata(item.Path)
+	if err != nil || metadata == nil || metadata.BaseBackup == "" {
+		return "", false
+	}
+	return metadata.BaseBackup, true
 }
 
 // parseMaxTotalSize resolves a max_total_size setting ("10%", "50G", or a
@@ -2159,6 +2279,19 @@ func (m *Manager) verifyBackup(backupPath string, enforceRestoreLimits bool) (*V
 		result.Errors = append(result.Errors, fmt.Sprintf("manifest verification failed: %v", err))
 	} else {
 		result.ManifestValid = true
+		if isEncrypted {
+			header, headerErr := readBackupHeaderFromFile(backupPath)
+			if headerErr != nil {
+				result.DecryptValid = false
+				result.Errors = append(result.Errors, fmt.Sprintf("invalid encrypted backup header: %v", headerErr))
+			} else if metadata.Type == "incremental" && header.BaseName != metadata.BaseBackup {
+				result.BaseValid = false
+				result.Errors = append(result.Errors, "encrypted header base name does not match incremental manifest")
+			} else if metadata.Type != "incremental" && header.BaseName != "" {
+				result.ManifestValid = false
+				result.Errors = append(result.Errors, "full backup header must not name a base archive")
+			}
+		}
 		if metadata.Type == "incremental" {
 			baseData, baseErr := m.verifyIncrementalBase(backupPath, metadata)
 			if baseErr != nil {
@@ -2213,18 +2346,23 @@ func (m *Manager) verifyIncrementalBase(incrementalPath string, incremental *Bac
 		return nil, fmt.Errorf("%w: invalid base backup name", ErrBaseMissing)
 	}
 	basePath := filepath.Join(filepath.Dir(incrementalPath), incremental.BaseBackup)
+	if IsEncrypted(incrementalPath) {
+		header, err := readBackupHeaderFromFile(incrementalPath)
+		if err != nil || header.BaseName != incremental.BaseBackup {
+			return nil, fmt.Errorf("%w: encrypted header base name does not match manifest", ErrBaseCorrupt)
+		}
+	}
 	if _, err := os.Stat(basePath); err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%w: %s", ErrBaseMissing, incremental.BaseBackup)
 		}
 		return nil, fmt.Errorf("%w: %v", ErrBaseMissing, err)
 	}
-	actualSHA, err := hashFile(basePath)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrBaseCorrupt, err)
-	}
-	if incremental.BaseSHA256 == "" || actualSHA != incremental.BaseSHA256 {
-		return nil, fmt.Errorf("%w: %s checksum mismatch", ErrBaseCorrupt, incremental.BaseBackup)
+	if IsEncrypted(basePath) {
+		header, err := readBackupHeaderFromFile(basePath)
+		if err != nil || header.BaseName != "" {
+			return nil, fmt.Errorf("%w: encrypted base header is invalid for a full archive", ErrBaseCorrupt)
+		}
 	}
 	baseData, err := m.readArchive(basePath)
 	if err != nil {
@@ -2233,6 +2371,9 @@ func (m *Manager) verifyIncrementalBase(incrementalPath string, incremental *Bac
 	baseMetadata, err := m.verifyManifestFromData(baseData)
 	if err != nil || (baseMetadata.Type != "" && baseMetadata.Type != "full") {
 		return nil, fmt.Errorf("%w: base is not a valid full archive", ErrBaseCorrupt)
+	}
+	if incremental.BaseSHA256 == "" || baseMetadata.SHA256 != incremental.BaseSHA256 {
+		return nil, fmt.Errorf("%w: %s manifest checksum mismatch", ErrBaseCorrupt, incremental.BaseBackup)
 	}
 	return baseData, nil
 }
@@ -2521,18 +2662,23 @@ func (m *Manager) CreateDailyPairAndVerify(incrementalName, fullName string, sna
 	if err != nil {
 		return "", "", nil, nil, false, err
 	}
-	basePath, base, err := m.latestFullBackup()
-	skipIncremental := errors.Is(err, ErrNoFullBackup)
-	if err != nil && !skipIncremental {
+	basePath, base, skipIncremental, skipReason, err := m.latestFullBackupForDaily()
+	if err != nil {
 		return "", "", nil, nil, false, err
+	}
+	switch skipReason {
+	case "password_changed":
+		slog.Info("backup password changed; creating a new full and skipping daily incremental", "base", filepath.Base(basePath))
+	case "corrupt_base":
+		slog.Warn("incremental base header is corrupt; creating a new full and skipping daily incremental", "base", filepath.Base(basePath))
 	}
 	var incrementalPath string
 	var incrementalVerify *VerificationResult
 	var incrementalStage, incrementalTarget string
 	if !skipIncremental {
-		baseSHA, hashErr := hashFile(basePath)
-		if hashErr != nil {
-			return "", "", nil, nil, false, fmt.Errorf("hash incremental base: %w", hashErr)
+		baseSHA := base.SHA256
+		if baseSHA == "" {
+			return "", "", nil, nil, false, fmt.Errorf("incremental base manifest has no sha256")
 		}
 		incrementalArchive, _, buildErr := m.buildIncrementalArchiveFromFull(fullArchive, base, filepath.Base(basePath), baseSHA)
 		if buildErr != nil {
@@ -2542,6 +2688,15 @@ func (m *Manager) CreateDailyPairAndVerify(incrementalName, fullName string, sna
 		if err != nil {
 			return "", "", incrementalVerify, nil, false, err
 		}
+	}
+	fullName, err = m.uniqueFullBackupName(fullName, snapshotAt)
+	if err != nil {
+		if incrementalStage != "" {
+			if removeErr := os.Remove(incrementalStage); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("remove staged incremental backup: %w", removeErr))
+			}
+		}
+		return "", "", incrementalVerify, nil, skipIncremental, err
 	}
 	fullStage, fullPath, fullVerify, err := m.stageVerifiedArchive(fullName, fullArchive)
 	if err != nil {
@@ -2585,7 +2740,11 @@ func (m *Manager) stageVerifiedArchive(filename string, archive []byte) (string,
 		if err != nil {
 			return "", "", nil, err
 		}
-		archive, err = EncryptBackup(archive, m.password)
+		baseName := ""
+		if metadata.Type == "incremental" {
+			baseName = metadata.BaseBackup
+		}
+		archive, err = EncryptBackupWithBase(archive, m.password, baseName)
 		if err != nil {
 			return "", "", nil, err
 		}

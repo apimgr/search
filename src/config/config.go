@@ -47,6 +47,20 @@ var (
 	OfficialSite = ""
 )
 
+// SetBuildInfo applies metadata embedded in the server binary to runtime
+// configuration and shared version reporting.
+func SetBuildInfo(versionValue, commitID, buildEpoch, buildDate, officialSite string) {
+	Version = versionValue
+	CommitID = commitID
+	BuildEpoch = buildEpoch
+	BuildDate = buildDate
+	OfficialSite = officialSite
+	version.Version = versionValue
+	version.CommitID = commitID
+	version.BuildEpoch = buildEpoch
+	version.BuildDate = buildDate
+}
+
 // buildEpoch parses the embedded BuildEpoch ldflag; 0 when unset or invalid.
 func buildEpoch() int64 {
 	n, err := strconv.ParseInt(BuildEpoch, 10, 64)
@@ -66,11 +80,13 @@ func init() {
 // debugOverride is set by the --debug CLI flag before config is loaded.
 // It is applied to Config.debugEnabled in Initialize().
 var debugOverride bool
+var debugOverrideSet bool
 
 // SetDebugOverride records the --debug CLI flag state before config is loaded.
 // Call this from applyCliOverrides() when --debug is present.
 func SetDebugOverride(enabled bool) {
 	debugOverride = enabled
+	debugOverrideSet = true
 }
 
 // Config represents the complete application configuration
@@ -87,7 +103,8 @@ type Config struct {
 	i2pEnabledExplicit    bool
 	i2pEnabledOverride    *bool
 	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
-	debugEnabled bool
+	debugEnabled       bool
+	debugOverrideSet   bool
 	// reloadHooks are called after every successful Reload(); guarded by reloadHooksMu
 	reloadHooks   []func(*Config)
 	reloadHooksMu sync.Mutex
@@ -231,6 +248,7 @@ func (c *Config) SetDebug(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.debugEnabled = enabled
+	c.debugOverrideSet = true
 }
 
 // SetPath sets the config file path for reload
@@ -482,7 +500,7 @@ type ServerConfig struct {
 	FQDN string `yaml:"fqdn"`
 	// API version prefix used in /api/{api_version}/ routes
 	APIVersion string `yaml:"api_version"`
-	// PID file path; "true" uses the default platform path, "false" disables
+	// PID file setting; true uses the platform path and false disables it.
 	PIDFile string `yaml:"pidfile"`
 	// Daemonize on start — detach from terminal (false for modern service managers)
 	Daemonize bool `yaml:"daemonize"`
@@ -913,6 +931,7 @@ type EmailEventsConfig struct {
 	UpdateAvailable  bool `yaml:"update_available"`
 	UpdateInstalled  bool `yaml:"update_installed"`
 	UpdateFailed     bool `yaml:"update_failed"`
+	UpdateStaged     bool `yaml:"update_staged"`
 }
 
 // SMTPConfig represents SMTP server configuration
@@ -1106,12 +1125,10 @@ type LDAPConfig struct {
 // PagesConfig represents standard pages configuration
 type PagesConfig struct {
 	About struct {
-		Enabled bool   `yaml:"enabled"`
-		Content string `yaml:"-"`
+		Enabled bool `yaml:"enabled"`
 	} `yaml:"about"`
 	Privacy struct {
-		Enabled bool   `yaml:"enabled"`
-		Content string `yaml:"-"`
+		Enabled bool `yaml:"enabled"`
 	} `yaml:"privacy"`
 	Contact ContactPageConfig `yaml:"contact"`
 	Help    struct {
@@ -1120,8 +1137,7 @@ type PagesConfig struct {
 		MCP     string `yaml:"mcp"`
 	} `yaml:"help"`
 	Terms struct {
-		Enabled bool   `yaml:"enabled"`
-		Content string `yaml:"-"`
+		Enabled bool `yaml:"enabled"`
 	} `yaml:"terms"`
 }
 
@@ -1273,13 +1289,43 @@ type PrivacySharingCondition struct {
 
 // PrivacyRetention describes how long data is kept and which rights apply.
 type PrivacyRetention struct {
-	// Period is a human-readable retention description shown on the privacy
-	// page. Empty falls back to the translated default.
-	Period string `yaml:"period"`
+	// Period accepts operator text shared by all locales or a localized map.
+	// Empty values fall back to the translated default.
+	Period any `yaml:"period"`
 	// ExportAvailable enables the "Export your data" right on the privacy page.
 	ExportAvailable bool `yaml:"export_available"`
 	// DeletionAvailable enables the "Delete your account" right on the privacy page.
 	DeletionAvailable bool `yaml:"deletion_available"`
+}
+
+// PeriodForLanguage resolves operator-provided retention text for one locale.
+// Scalars apply to every language; maps try the requested language, then
+// "default". Empty and unset values leave the translated built-in as fallback.
+func (r PrivacyRetention) PeriodForLanguage(language string) string {
+	switch value := r.Period.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case map[string]interface{}:
+		if text, ok := value[strings.TrimSpace(language)].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+		if text, ok := value["default"].(string); ok {
+			return strings.TrimSpace(text)
+		}
+	case map[string]string:
+		if text := strings.TrimSpace(value[strings.TrimSpace(language)]); text != "" {
+			return text
+		}
+		return strings.TrimSpace(value["default"])
+	case map[interface{}]interface{}:
+		if text, ok := value[strings.TrimSpace(language)].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+		if text, ok := value["default"].(string); ok {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
 }
 
 // PrivacyConsent holds the cookie-consent banner messages. MessageIfSold is
@@ -1820,6 +1866,18 @@ type DatabaseDriverConfig struct {
 	Driver string `yaml:"driver"`
 	// URL: auto-created sqlite path for sqlite driver, or libsql://... for remote
 	URL string `yaml:"url"`
+	// Token is the separate libSQL authentication token when the URL omits authToken.
+	Token string `yaml:"token"`
+	// Pool controls database connection limits.
+	Pool DatabasePoolConfig `yaml:"pool"`
+}
+
+// DatabasePoolConfig defines connection pool limits from AI.md PART 10.
+type DatabasePoolConfig struct {
+	MaxOpen     int    `yaml:"max_open"`
+	MaxIdle     int    `yaml:"max_idle"`
+	MaxLifetime string `yaml:"max_lifetime"`
+	MaxIdleTime string `yaml:"max_idle_time"`
 }
 
 // MaintenanceSelfHealConfig represents maintenance mode and self-healing configuration
@@ -2353,7 +2411,8 @@ func DefaultConfig() *Config {
 						DatabaseError:    true,
 						UpdateAvailable:  false,
 						UpdateInstalled:  true,
-						UpdateFailed:     false,
+						UpdateFailed:     true,
+						UpdateStaged:     true,
 					},
 				},
 			},
@@ -2424,18 +2483,14 @@ func DefaultConfig() *Config {
 			},
 			Pages: PagesConfig{
 				About: struct {
-					Enabled bool   `yaml:"enabled"`
-					Content string `yaml:"-"`
+					Enabled bool `yaml:"enabled"`
 				}{
 					Enabled: true,
-					Content: "",
 				},
 				Privacy: struct {
-					Enabled bool   `yaml:"enabled"`
-					Content string `yaml:"-"`
+					Enabled bool `yaml:"enabled"`
 				}{
 					Enabled: true,
-					Content: "",
 				},
 				Contact: ContactPageConfig{
 					Enabled:        true,
@@ -2533,7 +2588,7 @@ func DefaultConfig() *Config {
 					},
 				},
 				Retention: PrivacyRetention{
-					Period:            "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months.",
+					Period:            "",
 					ExportAvailable:   true,
 					DeletionAvailable: true,
 				},
@@ -2622,7 +2677,6 @@ func DefaultConfig() *Config {
 
 - All data is stored on our servers (not third-party cloud services unless specified)
 - API tokens are stored as SHA-256 hashes (never in plain text)
-- All connections are encrypted (HTTPS/TLS)
 - Regular security audits and updates
 - Access controls and audit logging for operator actions
 `,
@@ -2774,6 +2828,7 @@ func DefaultConfig() *Config {
 				Driver: "sqlite",
 				// Empty = auto-generated from data dir at runtime
 				URL: "",
+				Pool: DatabasePoolConfig{MaxOpen: 25, MaxIdle: 5, MaxLifetime: "5m", MaxIdleTime: "1m"},
 			},
 			Maintenance: MaintenanceSelfHealConfig{
 				SelfHealing: MaintenanceSelfHealingConfig{
@@ -3929,7 +3984,7 @@ func addConfigComments(node *yaml.Node) {
 		"healthz":          "Healthz endpoint configuration (root alias /healthz)",
 		"fqdn":             "Fully qualified domain name (auto-detected from hostname if empty)",
 		"api_version":      "API version prefix used in /api/{api_version}/ routes",
-		"pidfile":          "PID file: true = default platform path, false = disabled, or an explicit path",
+			"pidfile":          "PID file: true = default platform path, false = disabled",
 		"daemonize":        "Daemonize on start (detach from terminal); false for modern service managers",
 		"user":             "System user the binary runs as after privilege drop",
 		"group":            "System group the binary runs as after privilege drop",
@@ -4059,6 +4114,25 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 	if env.BackupDir != "" {
 		SetBackupDirOverride(env.BackupDir)
 	}
+	if env.DatabaseDriver != "" {
+		c.Server.Database.Driver = strings.TrimSpace(env.DatabaseDriver)
+	}
+	if env.DatabaseURL != "" {
+		c.Server.Database.URL = env.DatabaseURL
+		if driver := databaseDriverForURL(env.DatabaseURL); driver != "" {
+			configuredDriver := strings.ToLower(strings.TrimSpace(c.Server.Database.Driver))
+			if driver != "invalid-url" && configuredDriver != "" && configuredDriver != driver {
+				slog.Warn("DATABASE_DRIVER does not match DATABASE_URL scheme; using URL scheme")
+			}
+			c.Server.Database.Driver = driver
+		}
+	}
+	if env.CacheURL != "" {
+		c.Server.Cache.URL = env.CacheURL
+		if cacheType := cacheTypeForURL(env.CacheURL); cacheType != "" {
+			c.Server.Cache.Type = cacheType
+		}
+	}
 
 	// PORT — server port
 	if env.Port != "" {
@@ -4088,11 +4162,46 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 	}
 }
 
+func databaseDriverForURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "invalid-url"
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "libsql", "https":
+		return "libsql"
+	case "file":
+		return "sqlite"
+	default:
+		if parsed.Scheme == "" {
+			if strings.Contains(raw, ";") || strings.Contains(raw, "=") {
+				return "invalid-url"
+			}
+			return "sqlite"
+		}
+		return "invalid-url"
+	}
+}
+
+func cacheTypeForURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "valkey", "valkeys":
+		return "valkey"
+	case "redis", "rediss":
+		return "redis"
+	default:
+		return ""
+	}
+}
+
 // ApplyRuntimeEnv applies runtime environment variable overrides to config.
 // Per AI.md PART 5: Runtime variables are always checked on every startup.
 // NO_COLOR and TERM are checked directly where needed via IsNoColor()/IsDumbTerminal().
-// DATABASE_DRIVER and DATABASE_URL are consumed directly by the database package
-// via GetDatabaseDriver() and GetDatabaseURL().
+// Database and cache connection environment variables are first-run-only.
 func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -4398,6 +4507,25 @@ func PeekServerDaemonize(path string) (bool, bool, error) {
 	return enabled, true, nil
 }
 
+// PeekServerPIDFile reads only server.pidfile from the merged config view for
+// startup PID-file handling before the full configuration is loaded.
+func PeekServerPIDFile(path string) (bool, bool, error) {
+	document, err := earlyMergedConfig(path)
+	if err != nil {
+		return false, false, err
+	}
+	serverNode := mappingValue(document.Content[0], "server")
+	value := mappingValue(serverNode, "pidfile")
+	if value == nil || value.Kind != yaml.ScalarNode {
+		return false, false, nil
+	}
+	var enabled bool
+	if err := value.Decode(&enabled); err != nil {
+		return false, false, nil
+	}
+	return enabled, true, nil
+}
+
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return nil
@@ -4498,9 +4626,20 @@ func Initialize() (*Config, error) {
 		}
 	}
 
-	// Per AI.md PART 5: Runtime env vars (MODE, DOMAIN, DATABASE_DRIVER, DATABASE_URL, SMTP_*)
+	// Per AI.md PART 5: Runtime env vars (MODE, DOMAIN, SMTP_*, I2P_ENABLED)
 	// are always applied on every startup, regardless of whether this is first run.
 	cfg.ApplyRuntimeEnv(env)
+	if !created {
+		if env.DatabaseDriver != "" && !strings.EqualFold(env.DatabaseDriver, cfg.Server.Database.Driver) {
+			slog.Warn("DATABASE_DRIVER is first-run-only; using saved database configuration")
+		}
+		if env.DatabaseURL != "" && env.DatabaseURL != cfg.Server.Database.URL {
+			slog.Warn("DATABASE_URL is first-run-only; using saved database configuration")
+		}
+		if env.CacheURL != "" && env.CacheURL != cfg.Server.Cache.URL {
+			slog.Warn("CACHE_URL is first-run-only; using saved cache configuration")
+		}
+	}
 
 	// Per AI.md PART 5: Init-only env vars (PORT, APPLICATION_NAME, CONFIG_DIR, etc.)
 	// are applied only on first run, then persisted in server.yml.
@@ -4542,9 +4681,10 @@ func Initialize() (*Config, error) {
 
 	normalizeHTTPSMode(cfg)
 
-	// Apply --debug CLI flag state recorded before config was loaded
-	if debugOverride {
-		cfg.debugEnabled = true
+	// Apply an explicitly supplied --debug CLI flag, including --debug=false.
+	if debugOverrideSet {
+		cfg.debugEnabled = debugOverride
+		cfg.debugOverrideSet = true
 	}
 
 	return cfg, nil
@@ -4597,18 +4737,17 @@ func (c *Config) IsProduction() bool {
 }
 
 // IsDebug returns true if debug mode is enabled.
-// Per AI.md PART 6: Priority is --debug CLI flag > DEBUG env var (explicitly
-// set, truthy OR falsy) > MODE=debug default > off. c.debugEnabled is set by
-// the --debug flag, so it wins over both of the lower-priority sources.
+// Per AI.md PART 6: Priority is --debug CLI flag > non-empty DEBUG env var
+// (truthy OR falsy) > MODE=debug default > off. An empty DEBUG is unset.
 func (c *Config) IsDebug() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.debugEnabled {
-		return true
+	if c.debugOverrideSet {
+		return c.debugEnabled
 	}
-	// LookupEnv distinguishes "explicitly set" from "unset": an explicit
-	// DEBUG=false turns debug off even under MODE=debug
-	if v, set := os.LookupEnv("DEBUG"); set {
+	// A non-empty explicit DEBUG=false turns debug off even under MODE=debug.
+	// An empty value is equivalent to unset, so MODE=debug supplies its default.
+	if v, set := os.LookupEnv("DEBUG"); set && strings.TrimSpace(v) != "" {
 		return IsTruthy(v)
 	}
 	return strings.EqualFold(strings.TrimSpace(c.Server.Mode), "debug")
@@ -4691,6 +4830,32 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 	defer c.mu.Unlock()
 
 	var warnings []ValidationWarning
+	pidFileValue := strings.ToLower(strings.TrimSpace(c.Server.PIDFile))
+	if pidFileValue != "true" && pidFileValue != "false" {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.pidfile",
+			Message: "Invalid PID file setting, using default",
+			Default: "true",
+		})
+		c.Server.PIDFile = "true"
+	} else {
+		c.Server.PIDFile = pidFileValue
+	}
+
+	// SMTP TLS modes are part of the config contract; invalid values must not
+	// silently disable transport security or make startup fail.
+	smtpTLS := strings.ToLower(strings.TrimSpace(c.Server.Notifications.Email.SMTP.TLS))
+	switch smtpTLS {
+	case "auto", "starttls", "tls", "none":
+		c.Server.Notifications.Email.SMTP.TLS = smtpTLS
+	default:
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.notifications.email.smtp.tls",
+			Message: "Invalid SMTP TLS mode, using default",
+			Default: "auto",
+		})
+		c.Server.Notifications.Email.SMTP.TLS = "auto"
+	}
 
 	if c.Server.I2P.VirtualPort < 1 || c.Server.I2P.VirtualPort > 65535 {
 		warnings = append(warnings, ValidationWarning{Field: "server.i2p.virtual_port", Message: "Invalid I2P virtual port, using default", Default: 80})
@@ -5123,9 +5288,9 @@ func LogValidationWarnings(warnings []ValidationWarning) {
 		return
 	}
 
-	fmt.Printf("%s  Configuration warnings (%d):\n", display.Emoji("⚠️", "[WARN]"), len(warnings))
+	fmt.Fprintf(os.Stderr, "%s  Configuration warnings (%d):\n", display.Emoji("⚠️", "[WARN]"), len(warnings))
 	for _, w := range warnings {
-		fmt.Printf("   • %s: %s (default: %v)\n", w.Field, w.Message, w.Default)
+		fmt.Fprintf(os.Stderr, "   • %s: %s (default: %v)\n", w.Field, w.Message, w.Default)
 	}
-	fmt.Println()
+	fmt.Fprintln(os.Stderr)
 }

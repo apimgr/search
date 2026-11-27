@@ -29,39 +29,27 @@
         {{end}}
     </div>
 
-    <div class="health-grid">
         {{/* Version & Build per AI.md PART 13 */}}
         <section class="section-card" aria-labelledby="health-version-heading">
             <h2 id="health-version-heading">ℹ️ {{t "health.section.version"}}</h2>
-            <dl class="health-info">
-                <div class="info-row">
+            <dl class="info-list">
                     <dt>{{t "health.version"}}</dt>
                     <dd><code>{{if eq (version) "dev"}}{{t "health.dev_build"}}{{else}}{{version}}{{end}}</code></dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.go_version"}}</dt>
                     <dd><code>{{if .Health.GoVersion}}{{.Health.GoVersion}}{{else}}{{t "health.unknown"}}{{end}}</code></dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.commit"}}</dt>
                     <dd><code>{{if .Health.Build.Commit}}{{.Health.Build.Commit}}{{else}}{{t "health.dev_build"}}{{end}}</code></dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.build_date"}}</dt>
                     <dd>{{if .Health.Build.Date}}{{healthTimestamp .Health.Build.Date}}{{else}}{{t "health.local_build"}}{{end}}</dd>
-                </div>
             </dl>
         </section>
 
         {{/* Runtime per AI.md PART 13 */}}
         <section class="section-card" aria-labelledby="health-runtime-heading">
             <h2 id="health-runtime-heading">⏱️ {{t "health.section.runtime"}}</h2>
-            <dl class="health-info">
-                <div class="info-row">
+            <dl class="info-list">
                     <dt>{{t "health.uptime"}}</dt>
                     <dd>{{healthDuration .Health.Uptime}}</dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.mode"}}</dt>
                     <dd>
                         {{if eq .Health.Mode "production"}}
@@ -72,11 +60,8 @@
                         <span class="badge badge-debug">{{t "health.mode_debug"}}</span>
                         {{end}}
                     </dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.last_check"}}</dt>
                     <dd><time datetime="{{.Health.Timestamp}}">{{healthTimestamp .Health.Timestamp}}</time></dd>
-                </div>
             </dl>
         </section>
 
@@ -84,22 +69,19 @@
         <section class="section-card" aria-labelledby="health-features-heading">
             <h2 id="health-features-heading">🎛️ {{t "health.section.features"}}</h2>
             <ul class="feature-list">
-                <li class="feature-item {{if .Health.Features.Tor.Enabled}}feature-enabled{{else}}feature-disabled{{end}}">
-                    <span class="feature-icon">🧅</span>
-                    <span class="feature-name">{{t "health.tor_hidden_service"}}</span>
+                <li class="{{if .Health.Features.Tor.Enabled}}feature-enabled{{else}}feature-disabled{{end}}">
+                    <span>🧅 {{t "health.tor_hidden_service"}}</span>
                     {{if eq .Health.Features.Tor.Status "healthy"}}
-                    <span class="feature-status status-ok">{{t "health.active"}}</span>
+                    <span class="status status-ok">{{t "health.active"}}</span>
                     {{else if eq .Health.Features.Tor.Status "unavailable"}}
-                    <span class="feature-status status-warning">{{t "health.unavailable"}}</span>
+                    <span class="status status-warning">{{t "health.unavailable"}}</span>
                     {{else if eq .Health.Features.Tor.Status "disabled"}}
-                    <span class="feature-status">{{t "common.disabled"}}</span>
+                    <span class="status">{{t "common.disabled"}}</span>
                     {{else}}
-                    <span class="feature-status status-warning">{{t "health.starting"}}</span>
+                    <span class="status status-warning">{{t "health.starting"}}</span>
                     {{end}}
-                    <span class="feature-state">{{t "health.lifecycle_state"}}: {{if eq .Health.Features.Tor.State "disabled"}}{{t "common.disabled"}}{{else if eq .Health.Features.Tor.State "no_provider"}}{{t "health.no_provider"}}{{else if eq .Health.Features.Tor.State "starting"}}{{t "health.starting"}}{{else if eq .Health.Features.Tor.State "building"}}{{t "health.starting"}}{{else if eq .Health.Features.Tor.State "running"}}{{t "health.active"}}{{else}}{{t "health.unavailable"}}{{end}}</span>
-                </li>
-                {{if .Health.Features.Tor.Hostname}}
-                <li class="feature-detail">
+                    <span>{{t "health.lifecycle_state"}}: {{if eq .Health.Features.Tor.State "disabled"}}{{t "common.disabled"}}{{else if eq .Health.Features.Tor.State "no_provider"}}{{t "health.no_provider"}}{{else if eq .Health.Features.Tor.State "starting"}}{{t "health.starting"}}{{else if eq .Health.Features.Tor.State "building"}}{{t "health.starting"}}{{else if eq .Health.Features.Tor.State "running"}}{{t "health.active"}}{{else}}{{t "health.unavailable"}}{{end}}</span>
+                    {{if .Health.Features.Tor.Hostname}}
                     <div class="code-block">
                         <code class="code-content onion-address">{{.Health.Features.Tor.Hostname}}</code>
                         <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-label="{{t "accessibility.copy_to_clipboard"}}">
@@ -107,37 +89,40 @@
                             <span class="copy-text">{{t "common.copy"}}</span>
                         </button>
                     </div>
-                </li>
-                {{end}}
-
-                <li class="feature-item {{if .Health.Features.I2P.Enabled}}feature-enabled{{else}}feature-disabled{{end}}">
-                    <span class="feature-name">I2P</span>
-                    {{if eq .Health.Features.I2P.Status "healthy"}}
-                    <span class="feature-status status-ok">{{t "health.active"}}</span>
-                    {{else if eq .Health.Features.I2P.Status "unavailable"}}
-                    <span class="feature-status status-warning">{{t "health.unavailable"}}</span>
-                    {{else if eq .Health.Features.I2P.Status "disabled"}}
-                    <span class="feature-status">{{t "common.disabled"}}</span>
-                    {{else}}
-                    <span class="feature-status status-warning">{{t "health.starting"}}</span>
                     {{end}}
-                    <span class="feature-state">{{t "health.lifecycle_state"}}: {{if eq .Health.Features.I2P.State "disabled"}}{{t "common.disabled"}}{{else if eq .Health.Features.I2P.State "no_provider"}}{{t "health.no_provider"}}{{else if eq .Health.Features.I2P.State "starting"}}{{t "health.starting"}}{{else if eq .Health.Features.I2P.State "building"}}{{t "health.starting"}}{{else if eq .Health.Features.I2P.State "running"}}{{t "health.active"}}{{else}}{{t "health.unavailable"}}{{end}}</span>
                 </li>
-                {{if .Health.Features.I2P.Hostname}}
-                <li class="feature-detail">
-                    <code class="code-content">{{.Health.Features.I2P.Hostname}}</code>
+
+                <li class="{{if .Health.Features.I2P.Enabled}}feature-enabled{{else}}feature-disabled{{end}}">
+                    <span>🌐 I2P</span>
+                    {{if eq .Health.Features.I2P.Status "healthy"}}
+                    <span class="status status-ok">{{t "health.active"}}</span>
+                    {{else if eq .Health.Features.I2P.Status "unavailable"}}
+                    <span class="status status-warning">{{t "health.unavailable"}}</span>
+                    {{else if eq .Health.Features.I2P.Status "disabled"}}
+                    <span class="status">{{t "common.disabled"}}</span>
+                    {{else}}
+                    <span class="status status-warning">{{t "health.starting"}}</span>
+                    {{end}}
+                    <span>{{t "health.lifecycle_state"}}: {{if eq .Health.Features.I2P.State "disabled"}}{{t "common.disabled"}}{{else if eq .Health.Features.I2P.State "no_provider"}}{{t "health.no_provider"}}{{else if eq .Health.Features.I2P.State "starting"}}{{t "health.starting"}}{{else if eq .Health.Features.I2P.State "building"}}{{t "health.starting"}}{{else if eq .Health.Features.I2P.State "running"}}{{t "health.active"}}{{else}}{{t "health.unavailable"}}{{end}}</span>
+                    {{if .Health.Features.I2P.Hostname}}
+                    <div class="code-block">
+                        <code class="code-content">{{.Health.Features.I2P.Hostname}}</code>
+                        <button type="button" class="copy-btn" data-copy="{{.Health.Features.I2P.Hostname}}" aria-label="{{t "accessibility.copy_to_clipboard"}}">
+                            <span class="copy-icon">📋</span>
+                            <span class="copy-text">{{t "common.copy"}}</span>
+                        </button>
+                    </div>
+                    {{end}}
                 </li>
-                {{end}}
                 {{if .Health.Features.GeoIP}}
-                <li class="feature-item feature-enabled">
-                    <span class="feature-icon">🌍</span>
-                    <span class="feature-name">{{t "health.geoip"}}</span>
-                    <span class="feature-status status-ok">{{t "common.enabled"}}</span>
+                <li class="feature-enabled">
+                    <span>🌍 {{t "health.geoip"}}</span>
+                    <span class="status status-ok">{{t "common.enabled"}}</span>
                 </li>
                 {{else}}
-                <li class="feature-item">
-                    <span class="feature-name">{{t "health.geoip"}}</span>
-                    <span class="feature-status">{{t "common.disabled"}}</span>
+                <li class="feature-disabled">
+                    <span>🌍 {{t "health.geoip"}}</span>
+                    <span class="status">{{t "common.disabled"}}</span>
                 </li>
                 {{end}}
             </ul>
@@ -148,82 +133,50 @@
         {{/* Component Status per AI.md PART 13 */}}
         <section class="section-card" aria-labelledby="health-checks-heading">
             <h2 id="health-checks-heading">🔧 {{t "health.section.checks"}}</h2>
-            <ul class="component-list">
-                <li class="component-item {{if eq .Health.Checks.Database "ok"}}component-ok{{else if eq .Health.Checks.Database "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Database "ok"}}✓{{else if eq .Health.Checks.Database "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.database"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Database "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Database "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                <li class="component-item {{if eq .Health.Checks.Cache "ok"}}component-ok{{else if eq .Health.Checks.Cache "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Cache "ok"}}✓{{else if eq .Health.Checks.Cache "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.cache"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Cache "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Cache "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                <li class="component-item {{if eq .Health.Checks.Disk "ok"}}component-ok{{else if eq .Health.Checks.Disk "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Disk "ok"}}✓{{else if eq .Health.Checks.Disk "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.disk_space"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Disk "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Disk "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
-                <li class="component-item {{if eq .Health.Checks.Scheduler "ok"}}component-ok{{else if eq .Health.Checks.Scheduler "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Scheduler "ok"}}✓{{else if eq .Health.Checks.Scheduler "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.scheduler"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Scheduler "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
+            <div class="table-wrapper">
+            <table class="data-table">
+                <thead><tr><th scope="col">{{t "health.component_status_heading"}}</th><th scope="col">{{t "health.status"}}</th></tr></thead>
+                <tbody>
+                <tr><td>{{t "health.components.database"}}</td><td><span class="badge status {{if eq .Health.Checks.Database "ok"}}status-ok{{else if eq .Health.Checks.Database "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Health.Checks.Database "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Database "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td>
+                </tr>
+                <tr><td>{{t "health.components.cache"}}</td><td><span class="badge status {{if eq .Health.Checks.Cache "ok"}}status-ok{{else if eq .Health.Checks.Cache "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Health.Checks.Cache "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Cache "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td></tr>
+                <tr><td>{{t "health.components.disk_space"}}</td><td><span class="badge status {{if eq .Health.Checks.Disk "ok"}}status-ok{{else if eq .Health.Checks.Disk "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Health.Checks.Disk "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Disk "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td></tr>
+                <tr><td>{{t "health.components.scheduler"}}</td><td><span class="badge status {{if eq .Health.Checks.Scheduler "ok"}}status-ok{{else if eq .Health.Checks.Scheduler "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Scheduler "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td></tr>
                 {{if .Health.Checks.Tor}}
-                <li class="component-item {{if eq .Health.Checks.Tor "ok"}}component-ok{{else if eq .Health.Checks.Tor "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Tor "ok"}}✓{{else if eq .Health.Checks.Tor "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.tor"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Tor "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Tor "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
+                <tr><td>{{t "health.components.tor"}}</td><td><span class="badge status {{if eq .Health.Checks.Tor "ok"}}status-ok{{else if eq .Health.Checks.Tor "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Health.Checks.Tor "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.Tor "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td></tr>
                 {{end}}
                 {{if .Health.Checks.I2P}}
-                <li class="component-item {{if eq .Health.Checks.I2P "ok"}}component-ok{{else if eq .Health.Checks.I2P "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.I2P "ok"}}✓{{else if eq .Health.Checks.I2P "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">I2P</span>
-                    <span class="component-status">{{if eq .Health.Checks.I2P "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.I2P "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
+                <tr><td>{{t "health.components.i2p"}}</td><td><span class="badge status {{if eq .Health.Checks.I2P "ok"}}status-ok{{else if eq .Health.Checks.I2P "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Health.Checks.I2P "ok"}}{{t "health.component_operational"}}{{else if eq .Health.Checks.I2P "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td></tr>
                 {{end}}
                 {{range .Health.Checks.Extra}}
-                <li class="component-item {{if eq .Status "ok"}}component-ok{{else if eq .Status "degraded"}}component-warning{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Status "ok"}}✓{{else if eq .Status "degraded"}}!{{else}}✕{{end}}</span>
-                    <span class="component-name">{{healthLabel "check" .Key}}</span>
-                    <span class="component-status">{{if eq .Status "ok"}}{{t "health.component_operational"}}{{else if eq .Status "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span>
-                </li>
+                <tr><td>{{healthLabel "check" .Key}}</td><td><span class="badge status {{if eq .Status "ok"}}status-ok{{else if eq .Status "degraded"}}status-warning{{else}}status-error{{end}}">{{if eq .Status "ok"}}{{t "health.component_operational"}}{{else if eq .Status "degraded"}}{{t "health.degraded"}}{{else}}{{t "health.component_error"}}{{end}}</span></td></tr>
                 {{end}}
-            </ul>
+                </tbody>
+            </table>
+            </div>
         </section>
 
         {{/* Statistics per AI.md PART 13 */}}
         <section class="section-card" aria-labelledby="health-stats-heading">
             <h2 id="health-stats-heading">📈 {{t "health.section.stats"}}</h2>
-            <dl class="health-info stats-info">
-                <div class="info-row">
+            <dl class="info-list">
                     <dt>{{t "health.total_requests"}}</dt>
                     <dd>{{healthCount .Health.Stats.RequestsTotal}}</dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.requests_24h"}}</dt>
                     <dd>{{healthCount .Health.Stats.Requests24h}}</dd>
-                </div>
-                <div class="info-row">
                     <dt>{{t "health.active_connections"}}</dt>
                     <dd>{{healthCount .Health.Stats.ActiveConns}}</dd>
-                </div>
                 {{range .Health.Stats.Extra}}
-                <div class="info-row">
                     <dt>{{healthLabel "stat" .Key}}</dt>
                     <dd>{{healthCount .Value}}</dd>
-                </div>
                 {{end}}
             </dl>
         </section>
-    </div>
 
     {{/* Footer */}}
     <footer class="health-footer">
         <p>{{t "health.last_updated"}} <time datetime="{{.Health.Timestamp}}">{{healthTimestamp .Health.Timestamp}}</time></p>
         <p class="auto-refresh">
-            <span class="refresh-indicator"></span>
             {{t "health.auto_refresh_in"}} <span id="countdown">30</span>s
         </p>
     </footer>
