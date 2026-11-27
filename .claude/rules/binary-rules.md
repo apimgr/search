@@ -1,5 +1,5 @@
 # Binary Rules (PART 7, 8, 32)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -27,6 +27,9 @@ Read: `AI.md` PART 7 (Binary Requirements), PART 8 (Server Binary CLI), PART 32 
 - Store client config at `~/.config/{internal_org}/{internal_name}/cli.yml`, dark theme by default
 - Create client configuration with mode 0600; open API access may use an optional owner token, while server token model and precedence follow PART 8
 - Verify downloaded updates against SHA-256 and replace atomically; honor the server's `cli_min_version` requirement
+- On each CLI invocation, auto-update only when `update.auto: true` and the run is non-interactive; interactive runs prompt, while `--update yes` is explicit consent in either mode
+- Keep the first-run wizard inline when a full-screen TUI cannot render (`TERM=dumb` or under 40 columns), and persist the server/token only to the selected `cli.yml` profile unless explicitly set as the default
+- Start-on-login is an opt-in, per-user GUI wizard setting; create only the platform's documented user startup entry and remove it when unchecked
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |

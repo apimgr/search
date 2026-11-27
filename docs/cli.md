@@ -207,6 +207,11 @@ Backups include `server.db` as a consistent SQLite snapshot, including committed
 WAL data. Data files and the optional `{config_dir}/ssl/` tree are omitted unless
 `--include-data` and `--include-ssl` are supplied. Referenced cache TLS files
 and external manually configured server certificates are included automatically.
+The backup copy of `secrets.yml` blanks `server.token` and
+`server.backup.encryption_password`; other configured credentials remain
+available for restoring service configuration. Restore preserves the target
+server's operator token and does not import an archived token. If the target
+has no operator token, it remains blank so startup can generate a new one.
 Restores replace the database together with the archived configuration and data.
 
 ### Update Management

@@ -1,5 +1,5 @@
 # Service Rules (PART 23, 24)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 

@@ -1,5 +1,5 @@
 # API Rules (PART 13, 14, 15)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -19,7 +19,7 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 - Also expose `/api/healthz` as a direct unversioned JSON alias; only expose root `/healthz` when configured, using the same handler
 - Keep the complete public-safe health schema and exact field order from PART 13: project, status/restart state, version/build, runtime, public features, checks, aggregate stats, then IDEA-defined app fields
 - Support the health states `healthy`, `degraded`, `unhealthy`, `restart_required`, `maintenance`, and `shutting_down`; include pending-restart reasons only when present and maintenance self-healing details only during maintenance
-- Keep health check keys stable and public-safe; disabled optional datasets are omitted, checks are cached, and downloaded datasets/upstreams and Tor/I2P cannot make overall health `unhealthy`
+- Keep health check keys stable and public-safe; disabled optional datasets are omitted and checks are cached. Database/disk errors make health `unhealthy`; a dataset at `degraded` makes it `degraded`, while a dataset error makes it `unhealthy` only when registered `critical`; optional downloaded datasets/upstreams and Tor/I2P are never critical
 - Return 200 when healthy; frontend health content negotiation follows PART 14 and API health is JSON by default with supported text output
 - Keep the version in `release.txt`, in the healthz response, and in `--version`, using semantic versioning `MAJOR.MINOR.PATCH`
 - Serve REST under `/api/{api_version}/` with a consistent response envelope and proper HTTP status codes
@@ -34,6 +34,8 @@ Read: `AI.md` PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (S
 - Use one route definition for router registration, OpenAPI, llms.txt, and text serialization; serialize response structs in declared field order and maps by sorted key
 - Keep API CORS on the same configured-origin policy as other routes; `*` never permits credentials, and credentialed browser requests require an explicitly allowed origin
 - Pair user-facing project API features with server-rendered pages; machine-only endpoints and privileged API-project features do not get browser forms without a defined browser credential
+- Apply owner-token scopes on owner resources and management routes: `read` permits GET/HEAD/OPTIONS, `read-write` adds mutation methods, and `global` is required for token management; insufficient scope returns 403 with `WWW-Authenticate: Bearer error="insufficient_scope"`
+- Keep the route inventory explicit and drive router, OpenAPI, `llms.txt`, GraphQL and MCP drift checks from registered routes; internal routes remain absent from public API documents
 - Support Let's Encrypt HTTP-01 and TLS-ALPN-01 (DNS-01 optional) plus manual certificates
 - Support DNS-01 with provider credentials encrypted at rest; validate them at startup and before certificate requests
 - Resolve request hosts only through the documented trusted proxy policy; static FQDN uses DOMAIN, hostname, public IPs, then localhost

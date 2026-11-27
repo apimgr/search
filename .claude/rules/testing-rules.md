@@ -1,5 +1,5 @@
 # Testing & Docs Rules (PART 28, 29, 30)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -32,6 +32,7 @@ Read: `AI.md` PART 28 (Testing & Development), PART 29 (ReadTheDocs Documentatio
 - Require exact key/plural parity across locales and the required language minimum; support RTL and test accessibility against WCAG 2.1 AA
 - Test keyboard use, skip links, labels, focus, theme variants, RTL layout, reduced motion, and non-JavaScript behavior
 - Render every registered page and themed HTTP error status in the page-conformance suite; include all required statuses from 400 through 503
+- Keep `src/main.go` as a thin entry that calls `config.Load(os.Args[1:])` and `app.Run(ctx, cfg)`; unit-test startup orchestration in `src/app`, while the compiled-binary phase checks process behavior
 - Keep docs aligned with every shipped browser, CLI, API, configuration, discovery, and public integration surface
 
 ## KEY DECISIONS (pre-answered)

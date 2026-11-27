@@ -207,13 +207,15 @@ server's production default.
 For local builds, `site.txt` takes precedence as the explicit source for the
 embedded official site URL; otherwise set `OFFICIAL_SITE` in the environment.
 If neither is provided, the URL remains empty and the CLI requires `--server`.
-Set `REGISTRY` to publish `make docker` output outside the default GHCR path.
+`make docker` loads a host-platform image into the local image store and never
+publishes it. `REGISTRY` selects the local image tag prefix; CI/CD publishes
+multi-platform images.
 
 | Make variable | Purpose | Default |
 |---------------|---------|---------|
 | `VERSION` | Local binary version; explicit environment value, then non-empty `release.txt`, then the short Git commit ID | Derived |
 | `OFFICIAL_SITE` | Explicit embedded site URL when `site.txt` is absent | Empty |
-| `REGISTRY` | Container image destination used by `make docker` | `ghcr.io/apimgr/search` |
+| `REGISTRY` | Local image tag prefix used by `make docker` | `ghcr.io/apimgr/search` |
 | `BINDIR` | Local and cross-platform build output directory | `binaries/` |
 
 CI/CD definitions are kept for GitHub Actions (`.github/workflows/`), GitLab

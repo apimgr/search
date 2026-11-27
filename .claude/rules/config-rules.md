@@ -1,5 +1,5 @@
 # Config Rules (PART 5, 6, 12)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -25,6 +25,8 @@ Read: `AI.md` PART 5 (Configuration), PART 6 (Application Modes), PART 12 (Serve
 - Default to production mode; normalize `prod`/`production` and `dev`/`development`
 - Keep operator configuration file-based across `server.yml`, the ordered `yaml.d/` area files, and `secrets.yml`; store credentials only in `secrets.yml`, never in the database or a runtime config API
 - Keep every server setting in its owning `server.yml` or `yaml.d/` area, including Valkey/Redis when used; hot-reload `server.yml`, `yaml.d/`, `secrets.yml`, and watched assets
+- Use canonical nested `server.*` keys for rate limits, CORS, branding/SEO, logs, notifications (including `server.notifications.email.smtp.*`), security headers, and allowed origins
+- `server.logs.audit.group` is system-mode-only and may name an existing group; the server never creates groups, and an unknown group is warned about and treated as empty
 - Use the canonical contact recipient keys only; Tor responses use `server.tor.contact_email`, and test-email recipient defaults to `server.notifications.email.reply_to`
 - Normalize paths and validate all configured values before they are used; persisted port selection is 64000–64999 when the server chooses a first-run port
 - Trust forwarded host/proto/IP headers only from configured trusted proxies; arbitrary clients cannot supply trusted proxy identity

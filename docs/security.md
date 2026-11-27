@@ -8,7 +8,7 @@ Search is designed with security and privacy as primary concerns. This document 
 
 - **Operator token** (`server.token` in `secrets.yml`) — auto-generated on first run; gates operator management endpoints
 - **Per-resource tokens** — for search alerts and webhooks; stored as SHA-256 hashes
-- **Owner and linked tokens** — owner-scoped credentials for a person's resources and their automation clients
+- **Owner and linked tokens** — owner-scoped credentials with persisted `read`, `read-write`, or `global` scope; linked tokens default to `read-write`, and token management requires the primary token's `global` scope
 - **Bearer token authentication** for all protected API access
 - **CSRF protection** on all cookie-authenticated browser forms
 - **Rate limiting** to prevent abuse
@@ -69,6 +69,11 @@ The operator token is auto-generated on first run and stored in `secrets.yml` wi
 ```bash
 chmod 600 /etc/apimgr/search/secrets.yml
 ```
+
+Backups include `secrets.yml` so restored instances retain their credentials,
+but blank `server.token` and `server.backup.encryption_password` in the archive.
+Restore keeps the target instance's operator token; if there is none, startup
+generates a fresh token.
 
 ### Rate Limiting
 

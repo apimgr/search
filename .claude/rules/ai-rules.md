@@ -1,5 +1,5 @@
 # AI Rules (PART 0, 1)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 Read: `AI.md` PART 0 (AI Assistant Rules), PART 1 (Critical Rules).
 
@@ -26,6 +26,7 @@ Read: `AI.md` PART 0 (AI Assistant Rules), PART 1 (Critical Rules).
 - Implement features 100% complete - no stubs, no TODOs, no "future"
 - Return after cross-references - a "See PART X" jump never replaces the rest of the PART/section you were reading; read it, then continue
 - Treat AI.md as read-only and IDEA.md as product intent; a project feature with no AI.md contract needs an explicit SPEC.md contract, while SPEC.md exceptions require the user's approval
+- Preserve verbatim identifiers explicitly required by AI.md, including `config.Load(os.Args[1:])`, `app.Run(ctx, cfg)`, and `LoadCLIConfig()` in their distinct server/client roles
 - Stop and ask before changing product behavior, overriding AI.md, or guessing; do not place implementation exceptions in IDEA.md
 - Treat security as the first requirement: validate input type, length, format, and range on the server; reject unknown fields/keys; sanitize for the output context; never weaken security to make a feature work
 - Preserve an existing mixed-case `internal_name` during migration; lowercase applies only to newly chosen values, because changing a frozen name moves persisted paths and service identities

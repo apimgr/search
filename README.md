@@ -518,7 +518,7 @@ docker run --rm --no-healthcheck \
   -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest go generate ./src/swagger/...
 
-# Build and push Docker image
+# Build and load a host-platform Docker image locally
 make docker
 ```
 
@@ -534,8 +534,9 @@ Forgejo Actions, and Jenkins.
 
 For local builds, `site.txt` sets the embedded official site URL when present;
 otherwise `OFFICIAL_SITE` may be set explicitly. If neither is set, the URL
-remains empty and `search-cli` requires `--server`. Set `REGISTRY` when using
-`make docker` to publish to a registry other than the default GHCR path.
+remains empty and `search-cli` requires `--server`. `make docker` loads a
+host-platform image into the local image store and never publishes it; `REGISTRY`
+selects the local image tag prefix. CI/CD publishes multi-platform images.
 
 ### Project Structure
 

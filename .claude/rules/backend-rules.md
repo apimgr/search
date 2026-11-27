@@ -1,5 +1,5 @@
 # Backend Rules (PART 9, 10, 11, 31)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -7,10 +7,11 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 
 ## CRITICAL - NEVER DO
 - Use bcrypt for login passwords — Argon2id hashes login passwords; the backup password is key material stored in `secrets.yml` as `enc:v1:`, never hashed, and Argon2id only derives the archive key
-- Store a raw API token — hash with SHA-256
+- Store a raw API token — owner tokens use SHA-256 for lookup plus an AES-256-GCM encrypted copy for authorized reveal; never log or back up plaintext token values
 - Hardcode credentials anywhere in the code
 - Build SQL by string concatenation — prepared statements only
 - Keep schema setup self-creating and idempotent; do not add migration files or schema version tracking
+- Make schema migrations additive and idempotent; a failed migration is retried by database self-healing in the same process and on later starts
 - Emit stack traces outside development mode
 - Log sensitive data (tokens, credentials, internal paths, secrets)
 - Trim all text input except password inputs, which are classified only by `type="password"` or the request-model `secret` flag; reject password whitespace without trimming it
@@ -28,9 +29,13 @@ Read: `AI.md` PART 9 (Error Handling & Caching), PART 10 (Database), PART 11 (Se
 - Set all security headers (CSP, X-Frame-Options, …) and enable HSTS whenever SSL is active
 - Enable configurable rate limiting; auto-revoke tokens after the specified number of consecutive authentication failures
 - Compare tokens, password hashes, HMACs, signatures, and credentials in constant time; return identical generic authentication failures and pad response timing
+- Store owner-token scope per row (`read`, `read-write`, `global`); primary tokens are always global, linked tokens are read or read-write, and insufficient scope fails closed
 - Use opaque public resource IDs; never expose sequential database IDs, and never echo credentials in responses or logs
 - Keep private file responses `private, no-store`; serve user-controlled active content only as an attachment with exact content type and `nosniff`
+- Treat `audit.log` as authoritative and append before best-effort insertion into the queryable `audit_log` mirror; mirror failures never lose or block the file event
 - Write audit events to `audit.log` and security events to `security.log` in JSON, with rotation and `debug/info/warn/error` levels
+- Configure `server.logs.audit.group` only with an existing group in system mode; use the documented directory/file group permissions so the group can traverse to `audit.log`
+- Backups blank `server.token` in the backup copy while preserving the key with an empty value; restore retains the target host token or generates one
 - Auto-enable and supervise the dedicated Tor hidden-service process when its binary is available; config at `{config_dir}/tor/torrc`, data at `{data_dir}/tor/`; never use a system Tor daemon
 - Resolve I2P default from runtime: enabled in application containers, opt-in outside containers; support the in-app i2pd model or external SAM router model, using a dedicated loopback backend port
 - Report `features.tor.*` and `features.i2p.*` in the healthz API

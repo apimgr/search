@@ -553,8 +553,14 @@ Primary reveal and rotate responses also return their raw credential as
 `data.owner_token` and set `Cache-Control: no-store`.
 Creating a linked token returns the new raw credential once in
 `data.linked_token`; store it securely because list responses contain masked
-values only. Presenting a valid owner or linked token to an operator-only API
-route returns `403`; missing or invalid credentials return `401`.
+values only. Token objects include their `scope`. A linked token accepts
+`scope: "read"` or `scope: "read-write"` (default `read-write`); primary tokens
+always have `global` scope. `read` allows owner-resource reads, while
+`read-write` also allows writes. Token-management routes require a `global`
+primary token. A valid token below a route's required scope returns `403` with
+`WWW-Authenticate: Bearer error="insufficient_scope"`. Presenting a valid owner
+or linked token to an operator-only API route also returns `403`; missing or
+invalid credentials return `401`.
 Linked-token creation accepts `expires` (`never`, `7d`, `30d`, `90d`, or
 `1y`) or a UTC `expires_on` date (`YYYY-MM-DD`), and rejects requests that
 provide both; the legacy `expires_at` request field is rejected. Omitting both creates a token that never expires. Updates accept

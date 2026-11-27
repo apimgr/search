@@ -1,5 +1,5 @@
 # Makefile Rules (PART 25)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -58,7 +58,7 @@ Read: `AI.md` PART 25 (Makefile — local dev only, NOT CI/CD).
 | `make test` | Run tests (includes i18n key validation) with coverage |
 | `make release` | Create a release |
 | `make beta` | Tag the current `main` commit with the required timestamped beta tag and push it |
-| `make docker` | Build and push the Docker image |
+| `make docker` | Build the host-platform image and load it into the local image store; CI/CD handles publication |
 
 ---
 

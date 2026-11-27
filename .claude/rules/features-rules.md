@@ -1,5 +1,5 @@
 # Feature Rules (PART 17-22)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -12,6 +12,7 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 - Expose a metrics service endpoint without bearer-token authentication
 - Render operator notifications in the public WebUI of an API project
 - Perform a partial restore — restore is atomic, all or nothing
+- Implement offline `--maintenance restore`; AI.md also specifies authenticated online WebUI/API restore while separately prohibiting an API-project restore endpoint and admin WebUI. This template conflict is tracked in the authorized API-template TODO.
 - Allow an unencrypted backup when compliance mode is enabled
 - Store backup passwords or key material in plaintext; derive backup keys with Argon2id
 - Ship an update path with no rollback
@@ -40,6 +41,7 @@ Read: `AI.md` PART 17 (Email & Notifications), PART 18 (Scheduler), PART 19 (Geo
 - Implement `--maintenance backup` and `--maintenance restore {file}` (prompting for the password when encrypted)
 - Implement `--update check`, `--update yes`, `--update branch {name}` across the stable, beta, and devel channels; accept legacy channel names only as aliases and normalize them to devel
 - Keep scheduled update installation off by default; `defer_days` gates scheduled stable/beta updates only, while manual checks always see the newest release for the channel
+- On database recovery, rerun a migration that failed at startup before resuming database-dependent work; report retry exhaustion as specified
 - Only a process started elevated may install an update; stage as the service user, verify the release checksum again as root before replacing the executable, exit `75` for supervisor restart, and retain the old binary on every failure
 
 ## KEY DECISIONS (pre-answered)

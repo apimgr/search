@@ -1,5 +1,5 @@
 # Frontend Rules (PART 16)
-<!-- Synchronized with AI.md revision c2f65bf274b5. -->
+<!-- Synchronized with AI.md revision f5ea82acc67d. -->
 
 ⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
 
@@ -37,6 +37,7 @@ Read: `AI.md` PART 16 (Web Frontend).
 - Keep the specified middleware order, beginning with URL normalization, request ID, path security, and security headers
 - Render Markdown only through Goldmark with raw HTML disabled, then sanitize with the allow-list policy; apply that policy to operator HTML as well
 - Keep public navigation free of server-administration links, dashboards, settings pages, and hints to admin routes
+- Keep toast progress-bar animation durations in stylesheet custom properties populated from `server.notifications.webui`; do not set inline animation duration from the JavaScript toast call
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
