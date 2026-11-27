@@ -27,7 +27,9 @@ mkdir -p "$tmp_root"
 runtime_dir=$(mktemp -d "$tmp_root/$INTERNAL_NAME-XXXXXX")
 chmod 700 "$runtime_dir"
 mkdir -p "$runtime_dir/config" "$runtime_dir/data" "$runtime_dir/database"
-chmod 700 "$runtime_dir/config" "$runtime_dir/data" "$runtime_dir/database"
+chmod 700 "$runtime_dir/config" "$runtime_dir/data"
+# Keep the mounted database root traversable; the service owns /data/db/sqlite.
+chmod 755 "$runtime_dir/database"
 cleanup() {
   local status=$?
   local cleanup_container

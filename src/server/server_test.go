@@ -280,10 +280,14 @@ func assertTextOrder(t *testing.T, body string, markers ...string) {
 	}
 }
 
-func TestCriticalDynamicHealthDegradationIsUnhealthy(t *testing.T) {
+func TestDynamicHealthDegradationDoesNotMarkUnhealthy(t *testing.T) {
 	critical, degraded := aggregateDynamicHealth([]health.Check{{Key: "data_geoip", Critical: true, Status: "degraded"}})
+	if critical || !degraded {
+		t.Fatalf("aggregateDynamicHealth() = (%v, %v), want (false, true)", critical, degraded)
+	}
+	critical, degraded = aggregateDynamicHealth([]health.Check{{Key: "engines", Critical: true, Status: "error"}})
 	if !critical || degraded {
-		t.Fatalf("aggregateDynamicHealth() = (%v, %v), want (true, false)", critical, degraded)
+		t.Fatalf("critical error aggregateDynamicHealth() = (%v, %v), want (true, false)", critical, degraded)
 	}
 	critical, degraded = aggregateDynamicHealth([]health.Check{{Key: "blocklist_ads", Status: "degraded"}})
 	if critical || !degraded {

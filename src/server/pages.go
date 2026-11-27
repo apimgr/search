@@ -1432,12 +1432,16 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 
 func aggregateDynamicHealth(checks []health.Check) (criticalFailure, degraded bool) {
 	for _, check := range checks {
-		if check.Status == "ok" {
+		switch check.Status {
+		case "ok":
 			continue
-		}
-		if check.Critical {
-			criticalFailure = true
-		} else {
+		case "error":
+			if check.Critical {
+				criticalFailure = true
+			} else {
+				degraded = true
+			}
+		case "degraded":
 			degraded = true
 		}
 	}
