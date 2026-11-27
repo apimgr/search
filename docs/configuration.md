@@ -888,10 +888,6 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.debug.runtime_endpoints` | `true` |
 | `server.description` | `Privacy-Respecting Metasearch Engine` |
 | `server.fqdn` | `` |
-| `server.geoip.databases.asn` | `true` |
-| `server.geoip.databases.city` | `true` |
-| `server.geoip.databases.country` | `true` |
-| `server.geoip.dir` | `` |
 | `server.geoip.enabled` | `true` |
 | `server.group` | `search` |
 | `server.healthz.root.enabled` | `false` |

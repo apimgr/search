@@ -146,12 +146,15 @@ temporary output directory and removes them when it exits.
 `tests/docker.sh` creates a project-scoped temporary directory for its config,
 data, and build output, plus an isolated Docker network, then removes them on
 exit. Set `BINDIR` to retain build output in a caller-selected directory. It
+builds and runs the Tor owner SIGKILL check in its Tor-equipped container, and
 checks Tor and I2P bootstrap;
 when outbound network access is unavailable, those checks are skipped unless
 `REQUIRE_OVERLAY=1` is set. `TOR_WAIT` and `I2P_WAIT` set the bootstrap wait
 limits in seconds (defaults: 300 and 600).
 `tests/incus.sh` uses the same temp-output default and a private Incus bridge;
-it removes the temporary build directory, bridge, and test instances on exit.
+it runs the Tor owner SIGKILL check in each Tor-equipped systemd/OpenRC
+container and removes the temporary build directory, bridge, and test instances
+on exit.
 
 ## Pull Request Process
 

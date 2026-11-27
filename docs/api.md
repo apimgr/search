@@ -470,10 +470,6 @@ plain text.
 Look up an explicit IP address. The `.txt` variant returns the same lookup as
 plain text. Private addresses are not resolved to public location data.
 
-#### Presets
-
-`GET /api/v1/server/geoip/presets` lists operator-authored country-list presets. `GET /api/v1/server/geoip/presets/{name}` reads one preset. `POST /api/v1/server/geoip/presets` saves a preset using `name` and either `codes` or `from` (`deny_countries` or `allow_countries`). `DELETE /api/v1/server/geoip/presets/{name}` deletes a preset. All preset operations require the operator bearer token; saving a preset does not apply it.
-
 ### Status & Config
 
 #### `GET /api/v1/server/status`
@@ -599,7 +595,7 @@ version metadata, method headers, and (for named calls) `Mcp-Name`. Legacy
 
 ## GraphQL API
 
-GraphQL is query-only. It exposes read operations that share the REST services and authorization checks, including search, public server information, private alert reads, and operator-authorized status, configuration, GeoIP preset, and scheduler reads. Changes remain available through the corresponding REST routes.
+GraphQL is query-only. It exposes read operations that share the REST services and authorization checks, including search, public server information, private alert reads, and operator-authorized status, configuration, and scheduler reads. Changes remain available through the corresponding REST routes.
 
 GraphQL type and field descriptions are translated for the request language,
 including introspection results.
@@ -634,7 +630,6 @@ including introspection results.
 - `serverStatus` and `serverConfig` use the same operator bearer-token authorization and redacted payloads as their REST endpoints.
 - `alerts` lists alerts for operators only. `alert(manageToken:)` and `alertFeed(rssToken:)` read private data using their corresponding tokens.
 - `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide read-only operator scheduler data.
-- `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists; changes use the REST API.
 
 Search results expose `title`, `url`, `content`, `engine`, `score`, `category`,
 `thumbnail`, `imageUrl`, `imageWidth`, `imageHeight`, `imageFormat`, `fileSize`,

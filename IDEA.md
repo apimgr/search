@@ -173,8 +173,6 @@ The following inventory records the API surface implemented by this project, inc
 | GET | `/api/v1/server/geoip/ips`, `/api/v1/server/geoip/ips.txt` | None | Lookup requester or supplied IP | Optional IP query; returns GeoIP data as JSON or text |
 | GET | `/api/v1/server/geoip/ips/{ip}` | None | Lookup an IP address | IP path; returns GeoIP data |
 | GET | `/api/v1/server/geoip/ips/{ip}.txt` | None | Plain-text IP lookup | IP path; returns GeoIP fields as text |
-| GET, POST | `/api/v1/server/geoip/presets` | Operator bearer token | List or save country-list presets | Preset data on POST; returns presets |
-| GET, DELETE | `/api/v1/server/geoip/presets/{name}` | Operator bearer token | Read or delete a country-list preset | Preset name; returns preset or deletion result |
 | GET | `/api/v1/server/scheduler/tasks` | Operator bearer token | List scheduled tasks | No body; returns task states |
 | GET | `/api/v1/server/scheduler/tasks/{task}` | Operator bearer token | Read a scheduled task | Task ID; returns task state |
 | GET | `/api/v1/server/scheduler/tasks/{task}/history` | Operator bearer token | Read task run history | Task ID; returns recent run history |
