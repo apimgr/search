@@ -1241,6 +1241,7 @@ Example prompt: Search for recent privacy-preserving search engine projects, the
 | `server.tor.contact_email` | `` |
 | `server.tor.expose` | `false` |
 | `server.tor.max_circuits` | `32` |
+| `server.tor.startup_timeout` | `60` |
 | `server.tor.max_monthly_bandwidth` | `100 GB` |
 | `server.tor.max_streams_per_circuit` | `100` |
 | `server.tor.num_intro_points` | `3` |
