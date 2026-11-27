@@ -194,6 +194,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
 | `/api/v1/server/help/mcp` | GET | MCP connection guidance and the currently available tool list |
 | `/api/v1/server/preferences` | GET, POST | Read or update guest preferences |
+| `/api/v1/server/preferences/tools` | GET | Available tools metadata and browser-local storage declaration |
 | `/api/v1/server/preferences/sync` | GET | Export guest preferences as a URL and short code |
 | `/api/v1/server/preferences/sync/import` | GET | Validate and apply guest preferences from query values or a code |
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
@@ -514,6 +515,11 @@ On the HTML preferences form, a non-empty `code` overrides the form values;
 import endpoint when applying a sync code through the API.
 Preferences API calls do not require authentication or CSRF tokens because
 they can write only the caller's guest preference cookies.
+
+`GET /api/v1/server/preferences/tools` returns the public read-only descriptor
+for the tools page: available bangs, categories, and the browser-local storage
+status of custom bangs, filters, and OpenSearch settings. It does not read or
+return visitor-local values.
 
 Owner token management is available through the `/api/v1/server/preferences/tokens`
 routes and requires the primary owner bearer token. The routes list masked

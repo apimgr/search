@@ -148,6 +148,7 @@ The following inventory records the API surface implemented by this project, inc
 | GET | `/api/v1/server/security/thanks` | None | Researcher acknowledgements | No body; returns public acknowledgement entries |
 | GET | `/api/v1/server/auth/check` | Bearer token | Check token validity | No body; returns token kind, never the token |
 | GET, POST | `/api/v1/server/preferences` | None | Read or update client preferences | Preference values; returns normalized preferences |
+| GET | `/api/v1/server/preferences/tools` | None | Describe the preferences tools page | Available bangs and categories plus a declaration that user-defined tool settings remain browser-local; returns no visitor-local values |
 | GET | `/api/v1/server/preferences/sync` | None | Export preferences | No body; returns export data |
 | GET | `/api/v1/server/preferences/sync/import` | None | Import preferences | Query values or a preference code; returns applied values |
 | POST | `/api/v1/server/mcp`, `/api/mcp`, `/mcp` | Bearer token when using private tools | MCP Streamable HTTP endpoint and aliases | MCP protocol JSON; returns protocol response |
@@ -342,7 +343,7 @@ forecast london, temperature paris
 - Current: temp, feels like, conditions, humidity, wind
 - Forecast: 5-day outlook with highs/lows
 - Icon: sun, cloud, rain, snow, etc.
-**Settings**: per-widget units override (metric/imperial) with a third "Use global preference" auto option (default) that follows the user's global units preference from the Preferences page instead of locking to a stored value.
+**Settings**: per-widget units override (metric/imperial) with a third "Use global preference" auto option (default) that follows the user's global units preference from the Preferences page instead of locking to a stored value. The user may opt in to browser geolocation to fill the weather location; location is not requested until the user enables this setting. `uses_geolocation: true` declares this browser capability for the project's Permissions-Policy.
 
 ---
 

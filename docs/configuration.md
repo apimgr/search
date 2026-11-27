@@ -1,12 +1,12 @@
 # Configuration
 
-Search is configured via:
-
-1. Configuration file (`server.yml`)
-2. Environment variables
-3. CLI flags
-
-**Priority**: CLI flags > Environment variables > Config file
+Search stores server settings in `server.yml`, area settings in `yaml.d/`, and
+credentials in `secrets.yml`. Only the named environment variables documented
+below are read; there is no generic environment-variable override for server
+settings. For settings with an explicit command-line flag, that flag takes
+precedence over its matching environment variable and saved configuration.
+Other command-line options apply only to the operation documented in the CLI
+reference.
 
 ## Configuration File
 
@@ -33,6 +33,13 @@ The native configuration roots are `server`, `search`, `engines`, `data`,
 `debug`. The sections below document settings with additional operational
 requirements; the server validates all configuration on load and reports
 invalid values without exposing secrets.
+
+Each successfully parsed configuration source has an owner-only atomic
+`*.last-good` snapshot beside it. If `server.yml`, a `yaml.d/` drop-in, or
+`secrets.yml` is malformed, the loader warns and uses its last-good snapshot.
+Without a snapshot, it uses built-in defaults for `server.yml` and secrets,
+and skips a malformed drop-in. The malformed source is left in place for the
+operator to inspect and correct.
 
 `server.trusted_proxies.additional` accepts IP addresses, CIDR ranges, and DNS
 names for upstream proxies. DNS names are resolved during startup and refreshed
@@ -563,8 +570,10 @@ These are checked at every startup. The matching CLI flag takes precedence.
 | `DATABASE_DIR` | SQLite database directory | platform default |
 | `BACKUP_DIR` | Backup directory (`--backup`) | platform default |
 
-Cache and PID paths are controlled by `--cache` and `--pid`; they do not have
-environment-variable overrides.
+`CACHE_DIR` and `PID_FILE` are read on each startup. The matching `--cache` and
+`--pid` flags take precedence over their environment values. Containers do not
+create or check a server PID file; `server.pidfile: false` disables PID-file
+handling outside containers when no path override is supplied.
 
 ### Init-only variables
 
@@ -615,7 +624,7 @@ Usage: search [options]
 Options:
   --help                 Show help
   --version              Show version
-  --mode MODE            Application mode (production|development)
+  --mode MODE            Application mode (production|development|debug)
   --debug                Enable debug mode
   --daemon               Daemonize (detach from terminal)
   --i2p                  Enable the I2P eepsite
@@ -1139,7 +1148,6 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.security.headers.corp` | `cross-origin` |
 | `server.security.headers.cross_domain_policies` | `none` |
 | `server.security.headers.origin_agent_cluster` | `true` |
-| `server.security.headers.permissions_policy` | `accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), battery=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(self), gyroscope=(), hid=(), idle-detection=(), interest-cohort=(), magnetometer=(), microphone=(), midi=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=(), autoplay=(self), encrypted-media=(self), fullscreen=(self), payment=(self), picture-in-picture=(self), publickey-credentials-get=(self), storage-access=(self), web-share=(self)` |
 | `server.security.headers.referrer_policy` | `strict-origin-when-cross-origin` |
 | `server.security.headers.sec_fetch_validation` | `true` |
 | `server.security.headers.x_content_type_options` | `nosniff` |
@@ -1231,3 +1239,4 @@ Public search tools work without authentication. Create a linked token in Search
 | `tor.contact_email` | `` |
 | `tor.onion_address` | `` |
 | `web.csp.frame_src_extra` | `` |
+| `web.headers.honor_dnt` | `false` |

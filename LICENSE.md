@@ -39,6 +39,13 @@ GeoIP City database attribution: <a href="https://db-ip.com/">IP Geolocation by 
 | github.com/go-acme/lego/v4 | v4.35.2 | MIT | 2015-2019 Sebastian Erhart |
 | github.com/go-chi/chi/v5 | v5.3.0 | MIT | 2015-present Peter Kieltyka, Google Inc. |
 | github.com/go-playground/validator/v10 | v10.30.3 | MIT | 2015 Dean Karn |
+| github.com/gogpu/gg | v0.52.3 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/gogpu | v0.53.0 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/gpucontext | v0.28.0 | MIT | 2026 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/gputypes | v0.5.2 | MIT | 2026 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/naga | v0.18.0 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/ui | v0.1.54 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/wgpu | v0.31.4 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
 | github.com/google/uuid | v1.6.0 | BSD-3-Clause | 2009, 2014 Google Inc. |
 | github.com/graphql-go/graphql | v0.8.1 | MIT | 2015 GraphQL Contributors |
 | github.com/oklog/ulid/v2 | v2.1.1 | Apache-2.0 | 2016 The oklog authors |
