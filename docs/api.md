@@ -205,7 +205,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/server/privacy` | GET | Structured privacy data: summary, cookie categories, sharing, tracking, retention, third parties, CCPA state, and dynamic content |
 | `/api/v1/server/dpo` | GET | Data Protection Officer contact (`name`, `email`, `privacy_url`) |
 | `/api/v1/server/terms` | GET | Terms source (`title`, localized `content`, `format`: `markdown`, `html`, or `text`) |
-| `/api/v1/server/help` | GET | Help content (JSON) |
+| `/api/v1/server/help` | GET | Localized Markdown help (`title`, `content`, `format`, and registry-ordered `pages`) |
 | `/api/v1/server/contact` | GET, POST | Contact information and message submission (JSON) |
 | `/api/v1/server/security` | GET | Security contacts in preference order, expiry, PGP metadata, and public page links |
 | `/api/v1/server/security/policy` | GET | Configured disclosure policy Markdown |

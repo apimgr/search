@@ -501,7 +501,7 @@ make dev
 # Versioned local build for production testing
 make local
 
-# Local plus all 8 release platforms
+# Local builds plus all release platforms (and the optional GUI client artifact)
 make build
 
 # Manual stable release only (requires a stable X.Y.Z version)

@@ -291,6 +291,12 @@ Download the matching client binary from [the latest release](https://github.com
 | FreeBSD amd64 | `search-cli-freebsd-amd64` |
 | FreeBSD arm64 | `search-cli-freebsd-arm64` |
 
+The default CLI is static and portable across Linux distributions. An optional
+native GUI build is published separately for Linux, macOS, and Windows as
+`search-cli-gui-{os}-{arch}[.exe]`; it is dynamically linked and does not
+replace itself through the default CLI's update flow. Download that artifact
+when you want the native GUI. BSD uses the TUI build.
+
 On Unix-like systems, make the downloaded file executable and place it on your
 `PATH`:
 
@@ -372,10 +378,12 @@ search-cli
 
 ### GUI and TUI Modes
 
-The release CLI includes the native GUI on Linux, macOS, and Windows. A local
-display opens the GUI by default; a local terminal, SSH, or Mosh session opens
-the TUI. Set `display.mode: gui` or `display.mode: tui` in `cli.yml` to choose a
-mode explicitly. BSD builds use the TUI because the native GUI backend is not
+The optional `search-cli-gui` release artifact includes the native GUI on
+Linux, macOS, and Windows. The default `search-cli` artifact is static and
+opens the TUI on a local terminal; when GUI support is present, a local display
+opens the GUI by default. SSH and Mosh sessions use the TUI. Set
+`display.mode: gui` or `display.mode: tui` in `cli.yml` to choose a mode
+explicitly. BSD builds use the TUI because the native GUI backend is not
 available there.
 
 The GUI and TUI each provide a screen or view for every server-facing CLI leaf

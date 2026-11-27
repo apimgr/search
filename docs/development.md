@@ -26,7 +26,7 @@ make dev
 # Build a versioned local binary for production testing
 make local
 
-# Build the local binaries plus all eight release platforms
+# Build the local server, CLI, optional local GUI CLI, and release platforms
 make build
 
 # Prepare and publish a stable release (requires X.Y.Z)

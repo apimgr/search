@@ -62,6 +62,13 @@ to `server.yml`, not in the ordinary configuration files.
 
 MCP is always enabled and has no configuration switch.
 
+`server.pages.help.content` accepts a Markdown string for every language or a
+language map. A map uses the request's resolved language, then its `default`
+entry; when neither is available, the built-in help page is used. Invalid
+content is reset to the built-in page with one configuration warning. The
+`/api/v1/server/help` endpoint returns localized Markdown with `title`,
+`content`, `format: markdown`, and the registry-ordered help `pages` list.
+
 ### Branding and operator-authored page content
 
 Place branding settings in `{config_dir}/yaml.d/branding.yml`. The optional
@@ -512,6 +519,15 @@ With `SMTP_TLS=auto` (the default), port 465 uses implicit TLS. Other ports
 connect in plaintext first and use STARTTLS if the server offers it. SMTP
 credentials are sent only after TLS has been established. Explicit `tls`,
 `starttls`, and `none` modes retain their configured behavior.
+An invalid SMTP port value produces one warning and falls back to port `587`.
+
+Email template overrides live in `{config_dir}/template/email/{template}.txt`.
+Each file uses a `Subject:` line, a line containing `---`, and a plain-text body;
+the server reads overrides at send time and falls back to its embedded default
+when an override is missing or invalid. Delete an override to restore the
+default. Run `search --maintenance email test --dry-run` to preview and validate
+all templates without sending, or `search --maintenance email test` to send a
+test message when SMTP is available.
 
 `PID_FILE` is read on each startup. Containers never create or check a server
 PID file, and `server.pidfile: false` disables PID-file handling outside
@@ -1014,11 +1030,11 @@ The table below lists every YAML path emitted by the current `config.DefaultConf
 | `server.pages.help.enabled` | `true` |
 | `server.pages.help.mcp` | `## Search tools
 
-The live tools above are generated from Search's OpenAPI operations. \`getApiV1Search\` and \`postApiV1Search\` search across enabled engines; \`getApiV1Autocomplete\` suggests queries; \`getApiV1Instant\` returns an instant answer; \`getApiV1Categories\` and \`getApiV1Engines\` describe available sources.
+The live tool list above is generated from the API operations available to this request. Every MCP request requires a valid bearer token; create a linked token for the assistant with the scopes it needs. Never send the operator token.
 
-Example prompt: Search for recent privacy-preserving search engine projects, then summarize the distinct results and identify their source engines.
+Use \`getApiV1Search\` or \`postApiV1Search\` to search across enabled engines and filter by category. Use \`getApiV1Autocomplete\` for query suggestions, and \`getApiV1Instant\` for a single instant answer. \`getApiV1Categories\` and \`getApiV1Engines\` describe the available search categories and sources. Tool schemas list each operation's accepted arguments.
 
-Public search tools work without authentication. Create a linked token in Search preferences only when the assistant needs operator-only tools; never use the server operator token.` |
+Example prompt: Search for recent privacy-preserving search engine projects, then summarize the distinct results and identify their source engines.` |
 | `server.pages.privacy.content` | `` |
 | `server.pages.privacy.enabled` | `true` |
 | `server.pages.terms.content` | `` |
@@ -1237,7 +1253,6 @@ Public search tools work without authentication. Create a linked token in Search
 | `server.update.defer_days` | `0` |
 | `server.user` | `search` |
 | `server.web.announcements.enabled` | `true` |
-| `server.web.cookie_consent.enabled` | `false` |
 | `server.web.cookie_consent.message` | `This site uses cookies for functionality and analytics.` |
 | `server.web.cookie_consent.policy_url` | `/server/privacy` |
 | `server.web.cors` | `*` |
@@ -1252,3 +1267,5 @@ Public search tools work without authentication. Create a linked token in Search
 | `tor.onion_address` | `` |
 | `web.csp.frame_src_extra` | `` |
 | `web.headers.honor_dnt` | `false` |
+
+Cookie consent is always enabled because the server uses essential cookies for owner tokens, CSRF protection, and preferences. The legacy `server.web.cookie_consent.enabled` setting is removed during migration.
