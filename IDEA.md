@@ -154,8 +154,8 @@ The following inventory records the API surface implemented by this project, inc
 | POST | `/api/v1/server/mcp`, `/api/mcp`, `/mcp` | Bearer token when using private tools | MCP Streamable HTTP endpoint and aliases | MCP protocol JSON; returns protocol response |
 | GET | `/api/v1/server/swagger` | None | OpenAPI document | No body; returns generated OpenAPI JSON |
 | GET | `/api/swagger` | None | OpenAPI document alias | No body; returns the same OpenAPI JSON |
-| POST | `/api/v1/server/graphql` | Bearer token for private fields | GraphQL endpoint | GraphQL query; returns GraphQL JSON |
-| POST | `/api/graphql` | Bearer token for private fields | GraphQL compatibility alias | GraphQL query; returns the same GraphQL JSON |
+| GET, POST | `/api/v1/server/graphql` | Bearer token for private fields | GraphQL endpoint | Read-only GraphQL queries; GET takes query parameters, POST accepts JSON or the explorer's URL-encoded form (HTML response) |
+| GET, POST | `/api/graphql` | Bearer token for private fields | GraphQL compatibility alias | Same query behavior and responses as the versioned endpoint |
 | GET | `/api/v1/server/preferences/tokens` | Owner token | List linked tokens | No body; returns token metadata, never plaintext tokens |
 | POST | `/api/v1/server/preferences/tokens` | Owner token | Create linked token | Client name/scopes; returns plaintext token once and metadata |
 | POST | `/api/v1/server/preferences/tokens/primary/reveal`, `/api/v1/server/preferences/tokens/primary/rotate` | Owner token | Reveal or rotate primary token | Confirmation fields; returns token once |
@@ -163,7 +163,7 @@ The following inventory records the API surface implemented by this project, inc
 | DELETE | `/api/v1/server/preferences/tokens/{id}` | Owner token | Revoke linked token | Token ID; returns revocation status |
 | POST | `/api/v1/server/preferences/tokens/{id}/reveal` | Owner token | Reveal linked token | Confirmation fields; returns plaintext token once |
 | POST | `/api/v1/server/preferences/tokens/{id}/rotate` | Owner token | Rotate linked token | Confirmation fields; returns replacement plaintext token once |
-| GET | `/api/v1/favicon` | None | Privacy-preserving favicon proxy | URL parameter; returns proxied image |
+| GET | `/api/v1/favicon` | None | Privacy-preserving favicon proxy | URL parameter; returns proxied image; GraphQL exposes the canonical URL and metadata without fetching image bytes |
 | GET, POST | `/api/v1/alerts` | None | List or create accountless alerts | GET filters; POST query/email/webhook settings; returns alert or signed manage link |
 | GET, PATCH, DELETE | `/api/v1/alerts/{token}` | Signed alert token | Read, update or delete an alert | GET reads; PATCH updates; DELETE removes; returns alert state or action result |
 | POST | `/api/v1/alerts/{token}/pause` | Signed alert token | Pause an alert | No body; returns updated alert state |
@@ -221,7 +221,7 @@ The following inventory records the API surface implemented by this project, inc
 
 Preferences persist across sessions without accounts. Visitors edit them from the server-rendered preferences page and can transfer the supported theme, language, search preference values, and Custom CSS on the separate `/server/preferences/sync` page using a sync URL or code. Custom CSS is stored in a browser cookie and is limited to 64 characters to match the sync contract. Bangs, filters, OpenSearch settings, and search history remain local to the browser and are not part of preference export/import. The preferences page links to the tools, sync, and (when owner tokens are enabled) token pages from its More preferences card.
 
-`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, and OpenSearch.” Custom CSS is saved as `search_pref_custom_css`, included in preference sync, and rendered by the server from the main Preferences form. Bangs, filters, and OpenSearch settings remain browser-local and are not included in preference sync.
+`/server/preferences/tools` is a registered preferences page titled “Search tools”. Its description is “Manage custom bangs, filters, and OpenSearch.” The read-only descriptor reports available bangs and categories and states that custom bangs, filters, and OpenSearch settings remain browser-local; the same descriptor is available through GraphQL `preferenceTools`. Custom CSS is saved as `search_pref_custom_css`, included in preference sync, and rendered by the server from the main Preferences form. Bangs, filters, and OpenSearch settings remain browser-local and are not included in preference sync.
 
 The language selector is on `/server/preferences` and lists the supported embedded locales by native name. Automatic language detection is the first option; an explicit language choice is stored in a browser cookie and can be included in a portable preference sync URL or code. The footer shows the active language and links to the preferences language section.
 

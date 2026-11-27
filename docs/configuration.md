@@ -69,6 +69,19 @@ Place branding settings in `{config_dir}/yaml.d/branding.yml`. The optional
 they never replace the built-in About or Privacy text. Content is sanitized
 before rendering, and `header` and `footer` accept HTML only.
 
+`server.branding.logo`, `server.branding.favicon`, and `server.seo.og_image`
+accept an HTTPS URL, a `data:` image URI, or a filename directly inside
+`{config_dir}/assets/`. Remote images are fetched server-side, checked against
+public DNS addresses and the image MIME allowlist, limited to 10 MiB, and
+refreshed after 24 hours. The last good cached copy remains available if a
+refresh fails. Local files are limited to 2 MiB and the supported SVG, PNG,
+ICO, WebP, and JPG formats; remote SVG is rejected. Data URIs are limited to
+256 KiB. The assets directory is private (`0700`) and its files are secured to
+`0600`. The server publishes cached images through its own static route, so
+visitors do not contact the configured image host. Cache files are derived data
+under `{cache_dir}/branding` and are not backed up or synced. With an empty or
+unusable value, the embedded image is used.
+
 ```yaml
 server:
   branding:

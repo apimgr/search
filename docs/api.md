@@ -608,7 +608,8 @@ including introspection results.
 - **Queries** — `GET` accepts a query plus optional JSON `variables` and
   `operationName` URL parameters. `POST` accepts a GraphQL JSON request body;
   the server-rendered explorer also submits a URL-encoded form to the same
-  versioned endpoint and receives the rendered explorer with its result.
+  versioned endpoint and receives the rendered explorer with its result. A
+  GET without `query` returns a short plain-text usage message.
   Both `/api/v1/server/graphql` and `/api/graphql` reject mutations.
 - Requests are limited to 64 KiB, 12 nested field levels, and 100 selected
   fields after fragment expansion. Requests exceeding these limits receive
@@ -626,7 +627,9 @@ including introspection results.
 - `directAnswer(type:, term:)` runs a named direct-answer handler.
 - `health` reports the current application version and uptime.
 - `serverInfo` returns the same public runtime information as `GET /api/v1/info`.
-- `preferences`, `preferencesExport`, and `ownerTokens` expose read-only preference and owner-token data under their documented authorization rules.
+- `preferences`, `preferenceTools`, `preferencesExport`, and `ownerTokens` expose the read-only preferences schema, browser-local tools descriptor, export data, and owner-token data under their documented authorization rules.
+- `serverPage(name:)` returns the REST page data for `about`, `privacy`, `dpo`, `security`, `security/policy`, `security/thanks`, `help`, or `terms`.
+- `favicon(url:)` returns favicon metadata and the canonical, versioned REST URL (including any resolved reverse-proxy path prefix) for the privacy-preserving image proxy; GraphQL never fetches or embeds binary image bytes.
 - `geoIPLookup(ip:)` looks up an explicit IP through the same database and attributed response builder as REST.
 - `serverStatus` and `serverConfig` use the same operator bearer-token authorization and redacted payloads as their REST endpoints.
 - `alerts` lists alerts for operators only. `alert(manageToken:)` and `alertFeed(rssToken:)` read private data using their corresponding tokens.
