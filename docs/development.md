@@ -131,10 +131,18 @@ tests/e2e.sh         # browser end-to-end, on demand
 Set `PWA_SCREENSHOT_DIR=1` when invoking `tests/e2e.sh` to capture the PWA
 install-dialog screenshots. The script writes them under its project-scoped
 temporary output directory and removes them when it exits.
+The browser suite uses an internal-only Docker network; if Docker has exhausted
+its bridge address pools, it falls back to Docker's built-in `none` network,
+which keeps Chromium and the test process isolated from public hosts. Its Go
+test container bind-mounts the project-scoped host temporary directory at
+`/tmp/{PROJECTORG}` and sets `TMPDIR` there, keeping test output outside the
+repository.
 
 `tests/docker.sh` creates a project-scoped temporary directory for its config,
 data, and build output, plus an isolated Docker network, then removes them on
-exit. Set `BINDIR` to retain build output in a caller-selected directory. It
+exit. If Docker cannot allocate a new bridge because its address pools are
+exhausted, the test uses Docker's existing default bridge. Set `BINDIR` to
+retain build output in a caller-selected directory. It
 builds and runs the Tor owner SIGKILL check in its Tor-equipped container, and
 checks Tor and I2P bootstrap;
 when outbound network access is unavailable, those checks are skipped unless

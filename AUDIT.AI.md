@@ -37,5 +37,5 @@ Started: 2026-11-27
 - [x] Homepage fallback SVG had no explicit dimensions and could dominate `/`; bounded bare SVGs and made the configured logo responsive at the required mobile/desktop sizes.
 - [x] Makefile exposed unsupported targets, stripped debug builds, and published releases; aligned it to six targets, debug builds, and local-only release artifacts, with docs updated.
 - [x] Server and CLI build metadata lived outside `main` while CI linker flags targeted stale packages; restored main-package metadata and synchronized runtime consumers across CI and Docker builds.
-- [ ] Component gallery linked to four contexts but rendered only one at a time; also lacked several catalog component variants and the strong-border token.
-- [ ] Service selection defaulted to systemd without detection and did not follow container or no-user-manager behavior on every supported platform.
+- [x] Component gallery already rendered all four contexts; completed the missing full-width button, successful form group, environment badges, and `.toast-removing` catalog coverage and styles. The strong-border token was already present.
+- [x] Linux service-manager detection now honors the AI.md precedence: active systemd/OpenRC, explicit `SVDIR`/`S6_LOGGING`, then application-container markers and supervisor parents. An installed `sv` binary no longer masquerades as an active runit manager.

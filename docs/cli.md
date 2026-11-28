@@ -203,16 +203,24 @@ metadata and owned resources, never token values, hashes, or audit/security
 logs. Deletion removes the owner, tokens, and owned resources in one transaction
 after you confirm the owner ID; `--yes` skips the prompt for automation.
 
-Backups include `server.db` as a consistent SQLite snapshot, including committed
-WAL data. Data files and the optional `{config_dir}/ssl/` tree are omitted unless
-`--include-data` and `--include-ssl` are supplied. Referenced cache TLS files
-and external manually configured server certificates are included automatically.
+With SQLite, backups include `server.db` as a consistent snapshot, including
+committed WAL data. With remote libSQL/Turso, the remote database is backed up
+through its provider; the archive does not contain a database snapshot. In both
+modes, `app_secrets.json` contains every app-secret row, including active
+rotation rows. Data files and the optional `{config_dir}/ssl/` tree are omitted
+unless `--include-data` and `--include-ssl` are supplied. Referenced cache TLS
+files and external manually configured server certificates are included
+automatically.
 The backup copy of `secrets.yml` blanks `server.token` and
 `server.backup.encryption_password`; other configured credentials remain
 available for restoring service configuration. Restore preserves the target
 server's operator token and does not import an archived token. If the target
 has no operator token, it remains blank so startup can generate a new one.
-Restores replace the database together with the archived configuration and data.
+SQLite restores replace the local database together with archived configuration
+and data. A restore into a remote database leaves existing live rows intact and
+applies archived secrets only when its `app_secrets` table is empty. If archived
+and live installation secrets or PGP fingerprints differ, the live remote key
+material remains authoritative and the restore reports the mismatch.
 
 ### Update Management
 
